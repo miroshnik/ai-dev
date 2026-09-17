@@ -45,7 +45,8 @@ allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/est.py *) Bash(gh issue 
 2. `est history --repo <r> [--grep <слово>]` — таблица закрытых задач с
    фактом и текущий k. Если пусто — `est history --all-repos`.
 3. Выбери 2–3 аналога. Порядок признаков: те же метки → тот же тип
-   (fix / feat / refactor / infra / research) → та же подсистема по словам
+   (feat / fix / docs / refactor / perf / test / chore / ci / build /
+   research — как префикс ветки) → та же подсистема по словам
    заголовка → **похожий объём**. Тема без объёма — плохой аналог: при
    сомнении посмотри `gh issue view <k> --json body,closedByPullRequestsReferences`
    и `gh pr view <pr> --json additions,deletions,changedFiles`. Дифф — признак
@@ -106,8 +107,10 @@ workflow внутри сессии — и пишет комментарий:
 
 Без этого покрытие будет `partial`/`none`, и история не накопится:
 
-- ветка / worktree содержит номер задачи (`issue-263-…`, `263-…`), одна
-  ветка — одна задача;
+- одна сессия — одна задача; ветка по конвенции `<type>/<issue>-<slug>`
+  (`feat/263-rakeback-claim-history`, допустим префикс области
+  `backend/fix/263-…`; старое `issue-263-…` тоже распознаётся) — из неё
+  скрипт берёт и номер задачи, и тип для истории;
 - номер задачи (`#263` или ссылка) — в первом промпте сессии **и в задании
   каждому субагенту / агенту workflow**, который делает эту задачу: транскрипты
   субагентов считаются частью сессии, и по номеру в задании их работа
@@ -124,8 +127,9 @@ workflow внутри сессии — и пишет комментарий:
 est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
 est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
 est fact --sweep [--since 90d] [--repo o/r] [--write]
-est estimate <N> [--repo o/r] --hours H --type fix|feat|refactor|infra|research \
+est estimate <N> [--repo o/r] --hours H --type <type> \
     [--analogs a,b[,c]] [--mult 0.5|1|1.5|2] [--note "причина"] [--write]
+# <type> — как префикс ветки: feat fix docs refactor perf test chore ci build research
 ```
 
 Без `--write` всё только печатается — так можно проверить, что скрипт нашёл,

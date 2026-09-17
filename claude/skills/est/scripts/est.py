@@ -33,7 +33,11 @@ FIELD_EST = "Оценка, ч"
 FIELD_FACT = "Факт, ч"
 FIELD_STATUS = "Status"
 
-EST_TYPES = ("fix", "feat", "refactor", "infra", "research")
+# Типы задач = типы conventional commits + research (спайк без кода). Те же слова —
+# префиксы веток: <type>/<issue>-<slug> (допускается префикс области: <area>/<type>/<issue>-<slug>).
+EST_TYPES = ("feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research")
+BRANCH_CONV_RE = re.compile(
+    r"^(?:[\w.-]+/)?(?P<type>" + "|".join(EST_TYPES) + r")/(?P<num>\d{1,6})-", re.I)
 PR_PAGE = 50
 PR_MAX = 500
 ISSUES_MAX = 500            # сколько закрытых issue держим в индексе коммитов-закрывателей
@@ -823,9 +827,19 @@ def branch_has_issue(branch, n):
 
 
 def branch_issue_number(branch):
-    """Номер задачи из ветки вида issue-N / issues/N, если есть."""
+    """Номер задачи из ветки: <type>/N-slug (конвенция) или issue-N / issues/N.
+    Голые числа в других местах (release/2026-09) номером не считаются."""
+    m = BRANCH_CONV_RE.match(branch or "")
+    if m:
+        return int(m.group("num"))
     m = re.search(r"(?:^|[/_-])issues?[/_-]?(\d{1,6})(?:$|[/_-])", branch or "", re.I)
     return int(m.group(1)) if m else None
+
+
+def branch_type(branch):
+    """Тип задачи из ветки <type>/N-slug, если ветка по конвенции."""
+    m = BRANCH_CONV_RE.match(branch or "")
+    return m.group("type").lower() if m else None
 
 
 def closing_re(repo, n):
@@ -1308,6 +1322,8 @@ def fact_comment_body(res, est, kept_lines, manual, cause):
     marker = {"v": 1, "h": h, "manual": manual, "wall": res["wall"], "cov": res["cov"],
               "sessions": res["sessions"], "prompts": res["prompts"], "prs": res["prs"],
               "commits": res["commits"], "diff": res["diff"], "cause": cause}
+    if res.get("type"):
+        marker["type"] = res["type"]   # тип из ветки по конвенции <type>/N-slug
     if res.get("shared"):
         marker["shared"] = {s["unit"]: s["with"] for s in res["shared"]}
     parts = [text] + kept_lines + [f"<!-- fact {json.dumps(marker, ensure_ascii=False)} -->"]
@@ -1423,7 +1439,7 @@ def cmd_history(args):
         else:
             print(f"{'№':>5} | {'оценка':>6} | {'факт':>6} | {'тип':<8} | {'метки':<22} | заголовок")
             for r in rows_fact:
-                typ = (r["est_marker"] or {}).get("type") or ""
+                typ = (r["est_marker"] or {}).get("type") or (r.get("fact_marker") or {}).get("type") or ""
                 labels = ",".join(l for l in r["labels"] if l != "epic")[:22]
                 print(f"{r['number']:>5} | {fmt_h(r['est']):>6} | {fmt_h(r['fact']):>6} | {typ:<8} | {labels:<22} | {r['title'][:70]}")
         if c["n"]:
@@ -1479,6 +1495,7 @@ def fact_for_issue(repo, number, gap, quiet=False):
     res["title"] = issue["title"]
     res["weak_links"] = weak_used
     res["links"] = [{"pr": p["number"], "branch": p["headRefName"], "why": p["why"]} for p in pr_objs]
+    res["type"] = next((branch_type(l["branch"]) for l in res["links"] if branch_type(l["branch"])), None)
     res["closers"] = [c["oid"][:7] for c in closers]
     res["epic"] = False
     return issue, res
