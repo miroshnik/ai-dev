@@ -38,7 +38,8 @@ Claude) — правка действует на них немедленно.
     Тип заводится один раз на организацию
     (`gh api orgs/<org>/issue-types -f name=Эпик -f color=purple -F is_enabled=true`),
     ставится `gh api -X PATCH repos/{owner}/{repo}/issues/<N> -f type=Эпик`
-    (или `gh issue create … --type Эпик`); поиск — `gh issue list --json number,type`.
+    (или `gh issue create … --type Эпик`); поиск —
+    `gh issue list --json number,issueType --jq '.[]|select(.issueType.name=="Эпик")'`.
     В репозиториях личного аккаунта типов нет — там эпик помечаем меткой
     `epic`, это единственное исключение;
   - у эпика есть **короткий префикс** (`Биллинг`, `Импорт`, `API`): с него
