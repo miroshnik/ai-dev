@@ -37,7 +37,7 @@ EST_TYPES = ("fix", "feat", "refactor", "infra", "research")
 PR_PAGE = 50
 PR_MAX = 500
 ISSUES_MAX = 500            # сколько закрытых issue держим в индексе коммитов-закрывателей
-SESSION_CACHE_V = 3         # версия формата кэша транскриптов (сменилась — переразбор)
+SESSION_CACHE_V = 6         # версия формата кэша транскриптов (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента
 PROJECT_META_TTL = 86400    # сутки: кэш id проекта/полей перечитываем
 OPEN_PRS_TTL = 3600         # час: список открытых PR (их ветки — чужие)
 # Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -606,16 +606,21 @@ def _is_human_prompt(r):
     return not txt.startswith(SKIP_PROMPT_PREFIXES)
 
 
-def parse_session_file(path):
-    """Компактная сводка одной сессии (jsonl верхнего уровня)."""
-    ev = []          # [ts, branch, human]
-    prlinks = []     # [ts, pr]
-    commits = []     # [ts, hash]
-    first_refs = None   # номера «#N» в первом человеческом промпте
-    first_urls = []     # «owner/repo#N» из URL issue в первом промпте
-    cwd = None
+def _scan_jsonl(path, acc, subagent):
+    """Разобрать один jsonl (сессия или её субагент) в общий аккумулятор acc.
+
+    Субагенты (<sid>/subagents/**/*.jsonl — Agent/Workflow) — часть той же сессии:
+    их записи идут в таймлайн и дают якоря по коммитам, но «человеческие» промпты
+    в них — это задания от оркестратора, а не от человека, поэтому n_human и
+    первый промпт берём только с верхнего уровня. Зато задание субагенту часто
+    называет задачу («#N» или URL issue): если в нём ровно один номер, все записи
+    этого субагента получают подсказку hint=N — так работа параллельных
+    субагентов в workflow привязывается к своим задачам, а не делится по порядку
+    коммитов.
+    """
     commit_tool_ids = {}
-    n_human = 0
+    hint = ""            # подсказка задачи для записей субагента: "N" или "owner/repo#N"
+    hint_done = not subagent
     with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -627,27 +632,38 @@ def parse_session_file(path):
                 continue
             t = r.get("type")
             ts = parse_ts(r.get("timestamp")) if r.get("timestamp") else None
-            if cwd is None and r.get("cwd"):
-                cwd = r["cwd"]
+            if acc["cwd"] is None and r.get("cwd"):
+                acc["cwd"] = r["cwd"]
             if t == "pr-link":
                 pr = r.get("prNumber")
                 if ts and isinstance(pr, int):
-                    prlinks.append([ts, pr])
+                    acc["prlinks"].append([ts, pr])
                 continue
             if t not in ("user", "assistant"):
                 continue
             if ts is None:
                 continue
-            human = _is_human_prompt(r)
+            human = (not subagent) and _is_human_prompt(r)
             if human:
-                n_human += 1
-            ev.append([ts, r.get("gitBranch") or "", 1 if human else 0])
+                acc["n_human"] += 1
             msg = r.get("message") or {}
             content = msg.get("content")
-            if human and first_refs is None:
+            if not hint_done and t == "user":
+                # первый промпт субагента — задание от оркестратора
                 txt = _text_of_content(content)
-                first_refs = sorted({int(x) for x in ISSUE_REF_RE.findall(txt)})
-                first_urls = sorted({f"{o}#{int(x)}" for o, x in ISSUE_URL_RE.findall(txt)})
+                if txt.strip():
+                    hint_done = True
+                    nums = sorted({int(x) for x in ISSUE_REF_RE.findall(txt)})
+                    urls = sorted({f"{o}#{int(x)}" for o, x in ISSUE_URL_RE.findall(txt)})
+                    if len(urls) == 1 and (not nums or nums == [int(urls[0].split("#")[1])]):
+                        hint = urls[0]
+                    elif len(nums) == 1 and not urls:
+                        hint = str(nums[0])
+            acc["ev"].append([ts, r.get("gitBranch") or "", 1 if human else 0, hint])
+            if human and acc["first_refs"] is None:
+                txt = _text_of_content(content)
+                acc["first_refs"] = sorted({int(x) for x in ISSUE_REF_RE.findall(txt)})
+                acc["first_urls"] = sorted({f"{o}#{int(x)}" for o, x in ISSUE_URL_RE.findall(txt)})
             if not isinstance(content, list):
                 continue
             for b in content:
@@ -658,23 +674,67 @@ def parse_session_file(path):
                     cmd = inp.get("command") if isinstance(inp, dict) else None
                     if isinstance(cmd, str) and "git commit" in cmd:
                         commit_tool_ids[b.get("id")] = True
-                elif t == "user" and b.get("type") == "tool_result" and b.get("tool_use_id") in commit_tool_ids:
+                elif t == "user" and b.get("type") == "tool_result":
+                    # Хеши берём из ЛЮБОГО tool_result, не только после `git commit`: коммит
+                    # часто делает скрипт (проверки + commit + push), и хеш всплывает в его
+                    # выводе. Ложные якоря (старые хеши из git log) отсекает ANCHOR_TOLERANCE —
+                    # хеш должен появиться рядом по времени с authoredDate коммита.
                     txt = _text_of_content(b.get("content"))
                     tur = r.get("toolUseResult")
                     if isinstance(tur, dict):
                         txt += "\n" + str(tur.get("stdout") or "") + "\n" + str(tur.get("stderr") or "")
+                    if b.get("tool_use_id") not in commit_tool_ids and "git" not in txt and len(txt) > 20000:
+                        continue  # огромный вывод без git — не тратим время
                     seen = set()
                     for h in HASH_RE.findall(txt):
-                        if h not in seen and len(seen) < 60:
+                        if h not in seen and len(seen) < 60 and len(acc["commits"]) < 5000:
                             seen.add(h)
-                            commits.append([ts, h])
-    ev.sort(key=lambda e: e[0])
+                            acc["commits"].append([ts, h])
+
+
+def subagent_files(path):
+    """Транскрипты субагентов сессии: <dir>/<sid>/subagents/**/*.jsonl."""
+    sdir = os.path.join(path[:-6], "subagents")
+    if not os.path.isdir(sdir):
+        return []
+    return sorted(glob.glob(os.path.join(sdir, "**", "*.jsonl"), recursive=True))
+
+
+def parse_session_file(path):
+    """Компактная сводка одной сессии: jsonl верхнего уровня + её субагенты."""
+    acc = {
+        "cwd": None, "n_human": 0, "ev": [], "prlinks": [], "commits": [],
+        "first_refs": None, "first_urls": [],
+    }
+    _scan_jsonl(path, acc, subagent=False)
+    subs = subagent_files(path)
+    for sf in subs:
+        try:
+            _scan_jsonl(sf, acc, subagent=True)
+        except OSError:
+            continue
+    acc["ev"].sort(key=lambda e: e[0])
+    acc["prlinks"].sort(key=lambda e: e[0])
+    acc["commits"].sort(key=lambda e: e[0])
     sid = os.path.basename(path)[:-6]
     return {
-        "sid": sid, "cwd": cwd, "n_human": n_human, "ev": ev, "prlinks": prlinks,
-        "commits": commits, "first_refs": first_refs or [], "first_urls": first_urls,
-        "routine": n_human < 3 and not prlinks and not commits,
+        "sid": sid, "cwd": acc["cwd"], "n_human": acc["n_human"], "ev": acc["ev"],
+        "prlinks": acc["prlinks"], "commits": acc["commits"],
+        "first_refs": acc["first_refs"] or [], "first_urls": acc["first_urls"],
+        "n_subagents": len(subs),
+        "routine": acc["n_human"] < 3 and not acc["prlinks"] and not acc["commits"],
     }
+
+
+def session_mtime(path):
+    """mtime сессии с учётом субагентов (их файлы дописываются позже верхнего уровня)."""
+    m = os.path.getmtime(path)
+    for sf in subagent_files(path):
+        try:
+            m = max(m, os.path.getmtime(sf))
+        except OSError:
+            pass
+    return m
 
 
 def transcript_files(repo):
@@ -711,7 +771,7 @@ def load_sessions(repo):
     files = transcript_files(repo)
     for f in files:
         try:
-            mtime = os.path.getmtime(f)
+            mtime = session_mtime(f)
         except OSError:
             continue
         c = cache.get(f)
@@ -899,7 +959,7 @@ def diff_size(pr):
     return pr["additions"] + pr["deletions"]
 
 
-ANCHOR_TOLERANCE = 15 * 60  # хеш в выводе git commit должен быть рядом по времени с authoredDate коммита
+ANCHOR_TOLERANCE = 30 * 60  # хеш в выводе инструмента должен быть рядом по времени с authoredDate коммита
 
 
 def oid_index(prs):
@@ -1027,9 +1087,9 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
             continue
         for _, pr in s["prlinks"]:
             seen_prs.add(pr)
-        for _, b, _ in ev:
-            if b:
-                seen_branches.add(b)
+        for e in ev:
+            if e[1]:
+                seen_branches.add(e[1])
         anchors = []  # (ts, cls, kind, доля)
         for ts, pr in s["prlinks"]:
             anchors.append((ts, "own" if pr in our_prs else "foreign", "pr", pr_w.get(pr, 0.0)))
@@ -1089,8 +1149,18 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
 
         attributed = []  # доля (0 — не наша запись)
         rules = {}
-        for ts, b, human in ev:
+        for e in ev:
+            ts, b, human = e[0], e[1], e[2]
+            hint = e[3] if len(e) > 3 else ""
             w = 0.0
+            if hint:
+                # запись субагента, задание которого называет задачу: своя — целиком,
+                # чужая — не наша, какие бы ветки/окна ни были
+                if hint == str(number) or hint == our_key:
+                    w = 1.0
+                    rules["субагент"] = rules.get("субагент", 0) + 1
+                attributed.append(w)
+                continue
             if is_our_branch(b):
                 w = branch_w(b)
                 rules["ветка"] = rules.get("ветка", 0) + 1
@@ -1109,7 +1179,8 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
         prompts = 0
         s_first = s_last = None
         brs = {}
-        for i, (ts, b, human) in enumerate(ev):
+        for i, e in enumerate(ev):
+            ts, b, human = e[0], e[1], e[2]
             w = attributed[i]
             if human and not w and i + 1 < len(ev) and attributed[i + 1] and ev[i + 1][0] - ts <= gap:
                 prompts += 1
