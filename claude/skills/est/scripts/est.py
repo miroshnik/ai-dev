@@ -854,6 +854,7 @@ def fetch_issue(repo, number):
     q = """
     query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ issue(number:$n){
       id number title state stateReason closedAt createdAt url
+      issueType{name}
       labels(first:20){nodes{name}}
       closedByPullRequestsReferences(first:20){nodes{number repository{nameWithOwner}}}
       timelineItems(first:100,itemTypes:[CROSS_REFERENCED_EVENT,CONNECTED_EVENT]){ nodes{ __typename
@@ -1488,7 +1489,9 @@ def fact_for_issue(repo, number, gap, quiet=False):
             raise EstError(f"#{number} не найден в {repo.full} ни как issue, ни как PR")
         return fact_for_pr(repo, pr, gap)
     labels = [l["name"] for l in issue["labels"]["nodes"]]
-    if "epic" in labels:
+    itype = ((issue.get("issueType") or {}).get("name") or "").lower()
+    # эпик — по типу issue «Эпик»/«Epic»; метка epic — запасной вариант для репо без типов
+    if itype in ("эпик", "epic") or "epic" in labels:
         return fact_for_epic(repo, issue, gap, quiet)
     pr_objs, closers, weak_used = resolve_links(repo, issue)
     res = compute_fact(repo, number, pr_objs, closers, gap)
