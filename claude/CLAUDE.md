@@ -219,9 +219,9 @@ gh issue edit <N> --milestone "Биллинг · 1 · Проектировани
   Планирование эпика (декомпозиция, оценки) — тоже отдельная сессия с
   номером эпика. Правка «на две минуты» в чужой сессии допустима, но её
   время достанется соседней задаче — это осознанная потеря.
-- **Ветка = `<type>/<issue>-<slug>`**: `feat/263-rakeback-claim-history`,
-  `fix/291-vercel-env-db-guards`, `docs/14-erasure-requests`,
-  `research/237-roi-constructor-design`. Один слеш, номер через дефис
+- **Ветка = `<type>/<issue>-<slug>`**: `feat/42-invoice-export`,
+  `fix/57-login-redirect-loop`, `docs/61-api-guide`,
+  `research/73-search-engine-choice`. Один слеш, номер через дефис
   (два слеша дают вложенные refs и папки worktree, а `feat/263` рядом с
   `feat/263/x` git запрещает). `type` — типы conventional commits
   (`feat fix docs refactor perf test chore ci build`) плюс `research`
