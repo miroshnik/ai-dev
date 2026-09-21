@@ -99,7 +99,7 @@ BRANCH_CONV_RE = re.compile(
 PR_PAGE = 50
 PR_MAX = 500
 ISSUES_MAX = 500            # сколько закрытых issue держим в индексе коммитов-закрывателей
-SESSION_CACHE_V = 7         # версия формата кэша транскриптов (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента, 7 = usage (токены)
+SESSION_CACHE_V = 8         # версия формата кэша транскриптов (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента, 7 = usage (токены), 8 = название сессии
 PROJECT_META_TTL = 86400    # сутки: кэш id проекта/полей перечитываем
 OPEN_PRS_TTL = 3600         # час: список открытых PR (их ветки — чужие)
 # Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -696,6 +696,10 @@ def _scan_jsonl(path, acc, subagent):
             ts = parse_ts(r.get("timestamp")) if r.get("timestamp") else None
             if acc["cwd"] is None and r.get("cwd"):
                 acc["cwd"] = r["cwd"]
+            if t == "custom-title" and not subagent:
+                # название сессии; по конвенции «#<номер> <название задачи>» — привязывает всю сессию
+                acc["title"] = str(r.get("customTitle") or "")
+                continue
             if t == "pr-link":
                 pr = r.get("prNumber")
                 if ts and isinstance(pr, int):
@@ -789,7 +793,7 @@ def parse_session_file(path):
     acc = {
         "cwd": None, "n_human": 0, "ev": [], "prlinks": [], "commits": [],
         "first_refs": None, "first_urls": [],
-        "usage": [], "models": [], "_mids": set(),
+        "usage": [], "models": [], "_mids": set(), "title": "",
     }
     _scan_jsonl(path, acc, subagent=False)
     subs = subagent_files(path)
@@ -807,6 +811,9 @@ def parse_session_file(path):
         "prlinks": acc["prlinks"], "commits": acc["commits"],
         "first_refs": acc["first_refs"] or [], "first_urls": acc["first_urls"],
         "usage": acc["usage"], "models": acc["models"],
+        "title": acc["title"],
+        "title_refs": sorted({int(x) for x in ISSUE_REF_RE.findall(acc["title"])}),
+        "title_urls": sorted({f"{o}#{int(x)}" for o, x in ISSUE_URL_RE.findall(acc["title"])}),
         "n_subagents": len(subs),
         "routine": acc["n_human"] < 3 and not acc["prlinks"] and not acc["commits"],
     }
@@ -1230,6 +1237,9 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
         # номер задачи в первом промпте (и только он): от начала сессии до первого чужого якоря
         # или до первого перехода на ветку, которая не наша и не нейтральная
         refs = set(s["first_refs"]) | {int(u.split("#")[1]) for u in s.get("first_urls", []) if u.startswith(repo.full + "#")}
+        t_refs = set(s.get("title_refs") or []) | {int(u.split("#")[1]) for u in s.get("title_urls", []) if u.startswith(repo.full + "#")}
+        if t_refs:
+            refs = t_refs   # сессия названа «#N …» — это явная привязка, она важнее текста первого промпта
         if refs == {number}:
             # (или до первого перехода на ветку, которая не наша и не нейтральная; стартовая ветка
             # сессии допускается, если она не чужая — на ней и делалась задача из первого промпта)
