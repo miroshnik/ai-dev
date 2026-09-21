@@ -32,6 +32,64 @@ PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
 FIELD_EST = "Оценка, ч"
 FIELD_FACT = "Факт, ч"
 FIELD_STATUS = "Status"
+FIELD_TOK = "Токены, млн"       # необязательные поля: есть в проекте — заполняем, нет — пропускаем
+FIELD_USD = "Стоимость, $"
+
+# Публичные API-тарифы Anthropic, $ за 1 млн токенов: (вход, выход, чтение кэша).
+# Запись кэша = вход × 1.25 (TTL 5 мин) или × 2 (TTL 1 ч). Ключ — префикс id модели,
+# берётся самый длинный совпавший. Это API-эквивалент: на подписке эти деньги не списываются,
+# но величина сравнима между задачами. Переопределение/дополнение — ~/.claude/est/prices.json
+# в том же формате: {"<префикс модели>": [вход, выход, чтение_кэша]}.
+PRICES_DATE = "2026-06-24"
+PRICES = {
+    "claude-fable-5-1": (10.0, 50.0, 0.25),
+    "claude-mythos-5-1": (10.0, 50.0, 0.25),
+    "claude-fable-5": (10.0, 50.0, 1.0),
+    "claude-mythos-5": (10.0, 50.0, 1.0),
+    "claude-opus-5": (5.0, 25.0, 0.5),
+    "claude-opus-4-8": (5.0, 25.0, 0.5),
+    "claude-opus-4-7": (5.0, 25.0, 0.5),
+    "claude-opus-4-6": (5.0, 25.0, 0.5),
+    "claude-sonnet-5": (2.0, 10.0, 0.2),
+    "claude-sonnet-4-6": (3.0, 15.0, 0.3),
+    "claude-haiku-4-5": (1.0, 5.0, 0.1),
+}
+FAST_PRICES = {"claude-opus-5": (10.0, 50.0, 1.0)}   # speed=fast; для прочих моделей тариф fast не опубликован
+PRICES_PATH = os.path.join(os.path.expanduser("~"), ".claude", "est", "prices.json")
+_prices_cache = None
+
+
+def price_for(model, fast=False):
+    """(вход, выход, чтение кэша) $/млн для модели или None, если модели нет в прайсе."""
+    global _prices_cache
+    if _prices_cache is None:
+        table = dict(PRICES)
+        try:
+            with open(PRICES_PATH, encoding="utf-8") as f:
+                for k, v in (json.load(f) or {}).items():
+                    if isinstance(v, (list, tuple)) and len(v) == 3:
+                        table[k] = tuple(float(x) for x in v)
+        except (OSError, ValueError):
+            pass
+        _prices_cache = table
+    if fast:
+        for k in sorted(FAST_PRICES, key=len, reverse=True):
+            if model.startswith(k):
+                return FAST_PRICES[k]
+    for k in sorted(_prices_cache, key=len, reverse=True):
+        if model.startswith(k):
+            return _prices_cache[k]
+    return None
+
+
+def usage_cost(model, vals, fast=False):
+    """Стоимость одного ответа модели в $; vals = (вход, выход, запись кэша 5м, запись кэша 1ч, чтение кэша)."""
+    p = price_for(model, fast)
+    if not p:
+        return None
+    pin, pout, pcr = p
+    i, o, cw5, cw1, cr = vals
+    return (i * pin + o * pout + cw5 * pin * 1.25 + cw1 * pin * 2.0 + cr * pcr) / 1e6
 
 # Типы задач = типы conventional commits + research (спайк без кода). Те же слова —
 # префиксы веток: <type>/<issue>-<slug> (допускается префикс области: <area>/<type>/<issue>-<slug>).
@@ -41,7 +99,7 @@ BRANCH_CONV_RE = re.compile(
 PR_PAGE = 50
 PR_MAX = 500
 ISSUES_MAX = 500            # сколько закрытых issue держим в индексе коммитов-закрывателей
-SESSION_CACHE_V = 6         # версия формата кэша транскриптов (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента
+SESSION_CACHE_V = 7         # версия формата кэша транскриптов (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента, 7 = usage (токены)
 PROJECT_META_TTL = 86400    # сутки: кэш id проекта/полей перечитываем
 OPEN_PRS_TTL = 3600         # час: список открытых PR (их ветки — чужие)
 # Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -276,7 +334,7 @@ class Repo:
             raise EstError(f"проект {owner} #{number} не найден")
         fields = {}
         for f in pv["fields"]["nodes"]:
-            if f.get("name") in (FIELD_EST, FIELD_FACT, FIELD_STATUS):
+            if f.get("name") in (FIELD_EST, FIELD_FACT, FIELD_STATUS, FIELD_TOK, FIELD_USD):
                 fields[f["name"]] = {"id": f["id"], "options": {o["name"]: o["id"] for o in f.get("options", [])}}
         missing = [n for n in (FIELD_EST, FIELD_FACT, FIELD_STATUS) if n not in fields]
         if missing:
@@ -663,7 +721,29 @@ def _scan_jsonl(path, acc, subagent):
                         hint = urls[0]
                     elif len(nums) == 1 and not urls:
                         hint = str(nums[0])
-            acc["ev"].append([ts, r.get("gitBranch") or "", 1 if human else 0, hint])
+            # Токены: usage дублируется на каждой записи одного ответа (по блоку контента) —
+            # считаем один раз на message.id.
+            uidx = -1
+            if t == "assistant":
+                u = msg.get("usage")
+                mid = msg.get("id")
+                model = msg.get("model")
+                if isinstance(u, dict) and mid and model and model != "<synthetic>" and mid not in acc["_mids"]:
+                    acc["_mids"].add(mid)
+                    cc = u.get("cache_creation") or {}
+                    cw = int(u.get("cache_creation_input_tokens") or 0)
+                    cw1 = int(cc.get("ephemeral_1h_input_tokens") or 0)
+                    cw5 = int(cc.get("ephemeral_5m_input_tokens") or 0)
+                    if cw1 + cw5 == 0:
+                        cw5 = cw
+                    if model not in acc["models"]:
+                        acc["models"].append(model)
+                    uidx = len(acc["usage"])
+                    acc["usage"].append([mid[-12:], acc["models"].index(model),
+                                         int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0),
+                                         cw5, cw1, int(u.get("cache_read_input_tokens") or 0),
+                                         1 if u.get("speed") == "fast" else 0])
+            acc["ev"].append([ts, r.get("gitBranch") or "", 1 if human else 0, hint, uidx])
             if human and acc["first_refs"] is None:
                 txt = _text_of_content(content)
                 acc["first_refs"] = sorted({int(x) for x in ISSUE_REF_RE.findall(txt)})
@@ -709,6 +789,7 @@ def parse_session_file(path):
     acc = {
         "cwd": None, "n_human": 0, "ev": [], "prlinks": [], "commits": [],
         "first_refs": None, "first_urls": [],
+        "usage": [], "models": [], "_mids": set(),
     }
     _scan_jsonl(path, acc, subagent=False)
     subs = subagent_files(path)
@@ -725,6 +806,7 @@ def parse_session_file(path):
         "sid": sid, "cwd": acc["cwd"], "n_human": acc["n_human"], "ev": acc["ev"],
         "prlinks": acc["prlinks"], "commits": acc["commits"],
         "first_refs": acc["first_refs"] or [], "first_urls": acc["first_urls"],
+        "usage": acc["usage"], "models": acc["models"],
         "n_subagents": len(subs),
         "routine": acc["n_human"] < 3 and not acc["prlinks"] and not acc["commits"],
     }
@@ -1089,6 +1171,9 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
         return "neutral", 0.0
 
     intervals = []          # (a, b) без веса — для объединения между сессиями
+    tok = {"in": 0.0, "out": 0.0, "cw": 0.0, "cr": 0.0}   # токены привязанных ответов (с долей)
+    by_model = {}           # модель → {tok, usd, priced}
+    seen_mids = set()
     raw_total = weighted_total = 0.0
     seen_prs, seen_branches, seen_hashes = set(), set(), set()
     n_sessions = n_prompts = 0
@@ -1194,6 +1279,8 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
         prompts = 0
         s_first = s_last = None
         brs = {}
+        sess_usage = []   # (usage-запись, доля) для привязанных ответов модели
+        s_usage, s_models = s.get("usage") or [], s.get("models") or []
         for i, e in enumerate(ev):
             ts, b, human = e[0], e[1], e[2]
             w = attributed[i]
@@ -1201,6 +1288,8 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
                 prompts += 1
             if not w:
                 continue
+            if len(e) > 4 and 0 <= e[4] < len(s_usage):
+                sess_usage.append((s_usage[e[4]], w))
             prompts += human
             s_first = ts if s_first is None else s_first
             s_last = ts
@@ -1216,6 +1305,23 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
         n_prompts += prompts
         raw_total += sess_raw
         weighted_total += sess_w
+        for u, w in sess_usage:
+            if u[0] in seen_mids:       # возобновлённая сессия копирует историю — не считаем дважды
+                continue
+            seen_mids.add(u[0])
+            model = s_models[u[1]] if u[1] < len(s_models) else "?"
+            vals = (u[2], u[3], u[4], u[5], u[6])
+            tok["in"] += vals[0] * w
+            tok["out"] += vals[1] * w
+            tok["cw"] += (vals[2] + vals[3]) * w
+            tok["cr"] += vals[4] * w
+            m = by_model.setdefault(model, {"tok": 0.0, "usd": 0.0, "priced": True})
+            m["tok"] += sum(vals) * w
+            c = usage_cost(model, vals, bool(u[7]))
+            if c is None:
+                m["priced"] = False
+            else:
+                m["usd"] += c * w
         first_ts = s_first if first_ts is None else min(first_ts, s_first)
         last_ts = s_last if last_ts is None else max(last_ts, s_last)
         details.append({"sid": s["sid"], "start": s_first, "hours": round(sess_w / 3600, 2), "prompts": prompts,
@@ -1260,7 +1366,46 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
         "intervals": merged,
         "details": sorted(details, key=lambda d: d["start"]),
     }
+    res.update(tokens_result(tok, by_model) if cov != "none" else {"tok": None, "usd": None})
     return res
+
+
+def tokens_result(tok, by_model):
+    """Свести токены и стоимость в поля результата: tok (целые), usd, usd_partial, models."""
+    total = sum(tok.values())
+    if total <= 0:
+        return {"tok": None, "usd": None}
+    t = {k: int(round(v)) for k, v in tok.items()}
+    t["total"] = int(round(total))
+    priced = [m for m in by_model.values() if m["priced"]]
+    unpriced = sorted(name for name, m in by_model.items() if not m["priced"])
+    usd = round(sum(m["usd"] for m in by_model.values()), 2) if priced else None
+    models = {name: {"mtok": round(m["tok"] / 1e6, 2), "usd": round(m["usd"], 2) if m["priced"] else None}
+              for name, m in sorted(by_model.items(), key=lambda x: -x[1]["tok"])}
+    return {"tok": t, "usd": usd, "usd_partial": unpriced, "models": models}
+
+
+def fmt_mtok(n):
+    return fmt_h((n or 0) / 1e6, 2)
+
+
+def tokens_txt(res):
+    """«Токены: 12.3 млн (вход … · выход … · запись кэша … · чтение кэша …); стоимость по API-тарифам ≈ $…»."""
+    t = res.get("tok")
+    if not t:
+        return ""
+    s = f"Токены: {fmt_mtok(t['total'])} млн"
+    if "in" in t:
+        s += (f" (вход {fmt_mtok(t['in'])} · выход {fmt_mtok(t['out'])} · запись кэша {fmt_mtok(t['cw'])}"
+              f" · чтение кэша {fmt_mtok(t['cr'])})")
+    if res.get("usd") is not None:
+        s += f"; стоимость по API-тарифам ≈ ${res['usd']:.2f}"
+        ms = [(n, m) for n, m in (res.get("models") or {}).items() if m.get("usd")]
+        if len(ms) > 1:
+            s += " (" + ", ".join(f"{n} ${m['usd']:.2f}" for n, m in ms) + ")"
+    if res.get("usd_partial"):
+        s += f"; без цены (нет в прайсе): {', '.join(res['usd_partial'])}"
+    return s + "."
 
 
 
@@ -1320,9 +1465,16 @@ def fact_comment_body(res, est, kept_lines, manual, cause):
     text += f" {nc} {plural(nc, 'коммит', 'коммита', 'коммитов')}, дифф {diff_txt(res)}."
     if res.get("shared"):
         text += " " + shared_txt(res) + "."
+    if res.get("tok"):
+        text += "\n" + tokens_txt(res)
     marker = {"v": 1, "h": h, "manual": manual, "wall": res["wall"], "cov": res["cov"],
               "sessions": res["sessions"], "prompts": res["prompts"], "prs": res["prs"],
               "commits": res["commits"], "diff": res["diff"], "cause": cause}
+    if res.get("tok"):
+        marker["tok"] = res["tok"]
+        marker["usd"] = res.get("usd")
+        if res.get("models"):
+            marker["models"] = res["models"]
     if res.get("type"):
         marker["type"] = res["type"]   # тип из ветки по конвенции <type>/N-slug
     if res.get("shared"):
@@ -1371,6 +1523,18 @@ def set_number_field(repo, issue, field_name, value):
         # устаревший кэш id проекта/поля — перечитать и повторить один раз
         meta = repo.project_meta(force=True)
         gh_graphql(q, {"p": meta["id"], "i": item_id, "f": meta["fields"][field_name]["id"], "v": float(value)})
+
+
+def set_optional_number_field(repo, issue, field_name, value):
+    """Поставить необязательное числовое поле, если оно есть в проекте (иначе False)."""
+    meta = repo.project_meta()
+    if field_name not in meta["fields"] and not getattr(repo, "_opt_refreshed", False):
+        repo._opt_refreshed = True
+        meta = repo.project_meta(force=True)    # кэш метаданных мог быть старше поля
+    if field_name not in meta["fields"]:
+        return False
+    set_number_field(repo, issue, field_name, value)
+    return True
 
 
 # ----------------------------------------------------------------------------
@@ -1438,11 +1602,14 @@ def cmd_history(args):
         if not rows_fact:
             print("история пуста" + (f" (фильтр «{args.grep}»)" if args.grep else ""))
         else:
-            print(f"{'№':>5} | {'оценка':>6} | {'факт':>6} | {'тип':<8} | {'метки':<22} | заголовок")
+            print(f"{'№':>5} | {'оценка':>6} | {'факт':>6} | {'млн ток':>7} | {'$':>7} | {'тип':<8} | {'метки':<22} | заголовок")
             for r in rows_fact:
                 typ = (r["est_marker"] or {}).get("type") or (r.get("fact_marker") or {}).get("type") or ""
                 labels = ",".join(l for l in r["labels"] if l != "epic")[:22]
-                print(f"{r['number']:>5} | {fmt_h(r['est']):>6} | {fmt_h(r['fact']):>6} | {typ:<8} | {labels:<22} | {r['title'][:70]}")
+                fm = r.get("fact_marker") or {}
+                mt = fmt_mtok((fm.get("tok") or {}).get("total")) if fm.get("tok") else "—"
+                usd = f"{fm['usd']:.2f}" if fm.get("usd") is not None else "—"
+                print(f"{r['number']:>5} | {fmt_h(r['est']):>6} | {fmt_h(r['fact']):>6} | {mt:>7} | {usd:>7} | {typ:<8} | {labels:<22} | {r['title'][:60]}")
         if c["n"]:
             print(f"k = {c['k']} (n={c['n']}, p25–p75 {c['p25']}–{c['p75']}); доля в допуске ×0.5…×2: {int(c['share'] * 100)} %")
         else:
@@ -1532,6 +1699,7 @@ def fact_for_epic(repo, issue, gap, quiet=False):
         page += 1
     rows = {r["number"]: r for r in repo.project_rows()}
     total = 0.0
+    tok_total, usd_total, usd_any = 0, 0.0, False
     parts = []
     missing = 0
     for s in subs:
@@ -1541,9 +1709,16 @@ def fact_for_epic(repo, issue, gap, quiet=False):
             h = row["fact"] + manual
             cov = (row.get("fact_marker") or {}).get("cov") or "поле"
             src = "поле «Факт, ч»" + (f" + вручную {fmt_h(manual)} ч" if manual else "")
+            fm = row.get("fact_marker") or {}
+            s_tok, s_usd = (fm.get("tok") or {}).get("total"), fm.get("usd")
         else:
             _, r = fact_for_issue(repo, s["number"], gap, quiet=True)
             h, cov, src = r["h"], r["cov"], "транскрипты"
+            s_tok, s_usd = (r.get("tok") or {}).get("total"), r.get("usd")
+        tok_total += int(s_tok or 0)
+        if s_usd is not None:
+            usd_total += float(s_usd)
+            usd_any = True
         parts.append({"issue": s["number"], "state": s["state"], "h": h, "cov": cov, "src": src, "title": s["title"]})
         if h is None:
             missing += 1
@@ -1555,6 +1730,8 @@ def fact_for_epic(repo, issue, gap, quiet=False):
         "wall": None, "cov": "full" if subs and missing == 0 else ("partial" if missing < len(subs) else "none"),
         "sessions": 0, "prompts": 0, "prs": [], "commits": 0, "diff": 0, "shared": [], "intervals": [],
         "subtasks": parts, "sub_missing": missing, "details": [], "links": [], "closers": [], "weak_links": False,
+        "tok": {"total": tok_total} if tok_total else None,
+        "usd": round(usd_total, 2) if usd_any else None,
     }
     return issue, res
 
@@ -1568,6 +1745,8 @@ def print_fact(repo, issue, res, est):
         for p in res["subtasks"]:
             print(f"  #{p['issue']:<5} {p['state']:<6} {fmt_h(p['h']):>6} ч  {p['cov']:<7} {p['title'][:50]:<50} [{p['src']}]")
         print(f"факт эпика: {fmt_h(res['h'])} ч (сумма подзадач с фактом), покрытие {res['cov']}")
+        if res.get("tok"):
+            print(tokens_txt(res))
         return
     if res["links"]:
         for l in res["links"]:
@@ -1585,6 +1764,8 @@ def print_fact(repo, issue, res, est):
         raw = f" (без деления: {fmt_h(res['h_raw'])} ч)" if res.get("shared") and res.get("h_raw") is not None else ""
         print(f"факт: {fmt_h(res['h'])} ч активных в Claude Code{raw} ({est_txt}); "
               f"{res['sessions']} сесс., {res['prompts']} промптов, стена {fmt_h(res['wall'], 1)} ч, покрытие {res['cov']}")
+    if res.get("tok"):
+        print(tokens_txt(res))
     print(f"вторичное: PR {', '.join('#%d' % p for p in res['prs']) or 'нет'}; коммитов {res['commits']}; дифф {diff_txt(res)} (без lock/снапшотов/минифицированного)")
     for d in res["details"]:
         brs = ", ".join(f"{b} {h} ч" for b, h in list(d["branches"].items())[:4])
@@ -1603,6 +1784,15 @@ def write_fact(repo, issue, res, est):
     if res["h"] is not None:
         set_number_field(repo, issue, FIELD_FACT, res["h"])
         msg += f", поле «{FIELD_FACT}» = {fmt_h(res['h'])}"
+    extra = ((FIELD_TOK, round(res["tok"]["total"] / 1e6, 2) if res.get("tok") else None),
+             (FIELD_USD, res.get("usd")))
+    for fname, val in extra:
+        if val is None:
+            continue
+        if set_optional_number_field(repo, issue, fname, val):
+            msg += f", «{fname}» = {fmt_h(val)}"
+        else:
+            msg += f" (поля «{fname}» в проекте нет — пропущено)"
     print(msg)
 
 
