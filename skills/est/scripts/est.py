@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-est — оценка задач по истории проекта и факт из транскриптов Claude Code.
+est — оценка задач по истории проекта и факт из транскриптов Claude Code и Codex.
 
 Подкоманды:
   est history  — таблица закрытых задач с фактом, калибровочный коэффициент k
-  est fact     — факт (активные часы в Claude Code) по транскриптам для issue
+  est fact     — факт (активные часы агента) по транскриптам Claude Code и Codex для issue
   est estimate — записать оценку с аналогами и маркером
 
 Только stdlib + CLI `gh`. Источник истины — GitHub (поля проекта «Оценка, ч»,
@@ -31,8 +31,9 @@ EST_DIR = os.environ.get("AI_DEV_CONFIG_DIR") or os.path.join(HOME, ".config", "
 LEGACY_EST_DIR = os.path.join(HOME, ".claude", "est")
 REGISTRY_PATH = os.path.join(EST_DIR, "repos.json")
 CACHE_DIR = os.path.join(EST_DIR, "cache")
-# Транскрипты Claude Code — источник факта (другие агенты — отдельными источниками).
+# Источники факта: транскрипты Claude Code (~/.claude/projects) и сессии Codex (~/.codex/sessions).
 PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
+CODEX_DIRS = [os.path.join(HOME, ".codex", "sessions"), os.path.join(HOME, ".codex", "archived_sessions")]
 
 
 def ensure_config_dir():
@@ -114,7 +115,7 @@ BRANCH_CONV_RE = re.compile(
 PR_PAGE = 50
 PR_MAX = 500
 ISSUES_MAX = 500            # сколько закрытых issue держим в индексе коммитов-закрывателей
-SESSION_CACHE_V = 8         # версия формата кэша транскриптов (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента, 7 = usage (токены), 8 = название сессии
+SESSION_CACHE_V = 9         # версия формата кэша транскриптов (9 = источник claude/codex) (сменилась — переразбор); 4 = + субагенты, 5 = хеши из любых tool_result, 6 = hint субагента, 7 = usage (токены), 8 = название сессии
 PROJECT_META_TTL = 86400    # сутки: кэш id проекта/полей перечитываем
 OPEN_PRS_TTL = 3600         # час: список открытых PR (их ветки — чужие)
 # Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -830,9 +831,160 @@ def parse_session_file(path):
         "title": acc["title"],
         "title_refs": sorted({int(x) for x in ISSUE_REF_RE.findall(acc["title"])}),
         "title_urls": sorted({f"{o}#{int(x)}" for o, x in ISSUE_URL_RE.findall(acc["title"])}),
-        "n_subagents": len(subs),
+        "n_subagents": len(subs), "source": "claude",
         "routine": acc["n_human"] < 3 and not acc["prlinks"] and not acc["commits"],
     }
+
+
+def _codex_text(out):
+    if isinstance(out, str):
+        return out
+    if isinstance(out, list):
+        return " ".join(str(b.get("text") or "") for b in out if isinstance(b, dict))
+    return str(out or "")
+
+
+def parse_codex_file(path):
+    """Сводка сессии Codex (~/.codex/sessions/**/rollout-*.jsonl) в том же формате, что у Claude Code.
+
+    Записи: session_meta (cwd, id), event_msg/item_completed с item.type=UserMessage — человеческий
+    промпт, response_item/{message,custom_tool_call,function_call,*_output} — работа агента (хеши
+    коммитов ищем в выводах инструментов), token_usage_record — токены ответа (раз на response_id),
+    turn_context / thread_settings_applied — модель. Ветки у записей нет — считается нейтральной.
+    """
+    acc = {"cwd": None, "n_human": 0, "ev": [], "prlinks": [], "commits": [],
+           "first_refs": None, "first_urls": [], "usage": [], "models": [], "_mids": set(), "title": ""}
+    sid, model, commit_calls = None, None, {}
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            t = r.get("type")
+            p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            ts = parse_ts(r.get("timestamp")) if r.get("timestamp") else None
+            if t == "session_meta":
+                acc["cwd"] = p.get("cwd") or acc["cwd"]
+                sid = p.get("session_id") or p.get("id") or sid
+                continue
+            if t == "turn_context":
+                model = p.get("model") or model
+                continue
+            if ts is None:
+                continue
+            if t == "event_msg":
+                pt = p.get("type")
+                if pt == "thread_settings_applied":
+                    model = (p.get("thread_settings") or {}).get("model") or model
+                elif pt == "item_completed":
+                    item = p.get("item") or {}
+                    if item.get("type") == "UserMessage":
+                        txt = _codex_text(item.get("content"))
+                        acc["n_human"] += 1
+                        acc["ev"].append([ts, "", 1, "", -1])
+                        if acc["first_refs"] is None:
+                            acc["first_refs"] = sorted({int(x) for x in ISSUE_REF_RE.findall(txt)})
+                            acc["first_urls"] = sorted({f"{o}#{int(x)}" for o, x in ISSUE_URL_RE.findall(txt)})
+                continue
+            if t == "token_usage_record":
+                u = p.get("usage") or {}
+                rid = p.get("response_id") or p.get("turn_id")
+                if rid and rid not in acc["_mids"]:
+                    acc["_mids"].add(rid)
+                    m = model or "codex"
+                    if m not in acc["models"]:
+                        acc["models"].append(m)
+                    cached = int(u.get("cached_input_tokens") or 0)
+                    uidx = len(acc["usage"])
+                    acc["usage"].append([rid[-12:], acc["models"].index(m),
+                                         max(0, int(u.get("input_tokens") or 0) - cached), int(u.get("output_tokens") or 0),
+                                         int(u.get("cache_write_input_tokens") or 0), 0, cached, 0])
+                    acc["ev"].append([ts, "", 0, "", uidx])
+                continue
+            if t != "response_item":
+                continue
+            pt = p.get("type")
+            if pt == "message" and p.get("role") == "assistant":
+                acc["ev"].append([ts, "", 0, "", -1])
+            elif pt in ("custom_tool_call", "function_call"):
+                inp = p.get("input") if pt == "custom_tool_call" else p.get("arguments")
+                if isinstance(inp, str) and "git commit" in inp:
+                    commit_calls[p.get("call_id")] = True
+                acc["ev"].append([ts, "", 0, "", -1])
+            elif pt in ("custom_tool_call_output", "function_call_output"):
+                txt = _codex_text(p.get("output"))
+                acc["ev"].append([ts, "", 0, "", -1])
+                if p.get("call_id") not in commit_calls and "git" not in txt and len(txt) > 20000:
+                    continue
+                seen = set()
+                for h in HASH_RE.findall(txt):
+                    if h not in seen and len(seen) < 60 and len(acc["commits"]) < 5000:
+                        seen.add(h)
+                        acc["commits"].append([ts, h])
+    acc["ev"].sort(key=lambda e: e[0])
+    acc["commits"].sort(key=lambda e: e[0])
+    return {
+        "sid": sid or os.path.basename(path)[:-6], "cwd": acc["cwd"], "n_human": acc["n_human"], "ev": acc["ev"],
+        "prlinks": [], "commits": acc["commits"], "first_refs": acc["first_refs"] or [], "first_urls": acc["first_urls"],
+        "usage": acc["usage"], "models": acc["models"], "title": "", "title_refs": [], "title_urls": [],
+        "n_subagents": 0, "source": "codex",
+        "routine": acc["n_human"] < 3 and not acc["commits"],
+    }
+
+
+def _codex_cwd(path):
+    """cwd из первой записи session_meta."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("type") == "session_meta":
+                    return (r.get("payload") or {}).get("cwd")
+                return None
+    except OSError:
+        return None
+    return None
+
+
+def codex_files(repo):
+    """Сессии Codex, чей cwd — путь репозитория; индекс cwd кэшируется по mtime файла."""
+    files = []
+    for d in CODEX_DIRS:
+        files += glob.glob(os.path.join(d, "**", "*.jsonl"), recursive=True)
+    if not files:
+        return []
+    idx_path = os.path.join(CACHE_DIR, "codex-index.json")
+    idx = load_json(idx_path, {})
+    changed, out = False, []
+    for f in sorted(set(files)):
+        try:
+            m = os.path.getmtime(f)
+        except OSError:
+            continue
+        c = idx.get(f)
+        if not c or c.get("mtime") != m:
+            c = {"mtime": m, "cwd": _codex_cwd(f)}
+            idx[f] = c
+            changed = True
+        if c.get("cwd") and _cwd_matches(c["cwd"], repo.paths):
+            out.append(f)
+    if changed:
+        save_json(idx_path, idx)
+    return out
+
+
+def is_codex_file(path):
+    return any(path.startswith(d.rstrip("/") + "/") for d in CODEX_DIRS)
 
 
 def session_mtime(path):
@@ -877,17 +1029,17 @@ def load_sessions(repo):
     cache = load_json(path, {})
     out = {}
     changed = False
-    files = transcript_files(repo)
+    files = transcript_files(repo) + codex_files(repo)
     for f in files:
         try:
-            mtime = session_mtime(f)
+            mtime = os.path.getmtime(f) if is_codex_file(f) else session_mtime(f)
         except OSError:
             continue
         c = cache.get(f)
         if c and c.get("mtime") == mtime and c.get("v") == SESSION_CACHE_V:
             out[f] = c
             continue
-        s = parse_session_file(f)
+        s = parse_codex_file(f) if is_codex_file(f) else parse_session_file(f)
         s["mtime"] = mtime
         s["v"] = SESSION_CACHE_V
         out[f] = s
@@ -1350,7 +1502,7 @@ def compute_fact(repo, number, pr_objs, closers, gap_min=30):
                 m["usd"] += c * w
         first_ts = s_first if first_ts is None else min(first_ts, s_first)
         last_ts = s_last if last_ts is None else max(last_ts, s_last)
-        details.append({"sid": s["sid"], "start": s_first, "hours": round(sess_w / 3600, 2), "prompts": prompts,
+        details.append({"sid": s["sid"], "src": s.get("source", "claude"), "start": s_first, "hours": round(sess_w / 3600, 2), "prompts": prompts,
                         "rules": rules, "branches": {k: round(v, 2) for k, v in sorted(brs.items(), key=lambda x: -x[1])}})
 
     merged = merge_intervals(intervals)
@@ -1480,7 +1632,7 @@ def fact_comment_body(res, est, kept_lines, manual, cause):
         ratio = f", ×{h / est:.2f}" if est else ""
         est_txt = f"оценка {fmt_h(est)} ч{ratio}" if est else "оценки нет"
         ns, npr = res["sessions"], res["prompts"]
-        text = (f"Факт: {fmt_h(h)} ч активных в Claude Code ({est_txt}). "
+        text = (f"Факт: {fmt_h(h)} ч активных в {agents_txt(res)} ({est_txt}). "
                 f"{ns} {plural(ns, 'сессия', 'сессии', 'сессий')}, {npr} {plural(npr, 'промпт', 'промпта', 'промптов')}, "
                 f"стена {fmt_h(res['wall'], 1)} ч, покрытие {res['cov']}.")
     if res["prs"]:
@@ -1762,6 +1914,15 @@ def fact_for_epic(repo, issue, gap, quiet=False):
     return issue, res
 
 
+def agents_txt(res):
+    """«Claude Code», «Codex» или «Claude Code и Codex» — по источникам привязанных сессий."""
+    srcs = {d.get("src", "claude") for d in (res.get("details") or [])}
+    names = {"claude": "Claude Code", "codex": "Codex"}
+    if not srcs:
+        return "Claude Code"
+    return " и ".join(names.get(s, s) for s in sorted(srcs))
+
+
 def print_fact(repo, issue, res, est):
     print(f"== {repo.full}#{res['issue']}: {res['title']}")
     if res.get("is_pr"):
@@ -1788,7 +1949,7 @@ def print_fact(repo, issue, res, est):
     else:
         est_txt = f"оценка {fmt_h(est)} ч, ×{res['h'] / est:.2f}" if est else "оценки нет"
         raw = f" (без деления: {fmt_h(res['h_raw'])} ч)" if res.get("shared") and res.get("h_raw") is not None else ""
-        print(f"факт: {fmt_h(res['h'])} ч активных в Claude Code{raw} ({est_txt}); "
+        print(f"факт: {fmt_h(res['h'])} ч активных в {agents_txt(res)}{raw} ({est_txt}); "
               f"{res['sessions']} сесс., {res['prompts']} промптов, стена {fmt_h(res['wall'], 1)} ч, покрытие {res['cov']}")
     if res.get("tok"):
         print(tokens_txt(res))
@@ -1796,7 +1957,8 @@ def print_fact(repo, issue, res, est):
     for d in res["details"]:
         brs = ", ".join(f"{b} {h} ч" for b, h in list(d["branches"].items())[:4])
         rules = ", ".join(f"{k}:{v}" for k, v in d["rules"].items())
-        print(f"  сессия {d['sid'][:8]} {fmt_local(d['start'])}: {d['hours']} ч, {d['prompts']} промптов [{rules}] — {brs}")
+        src = " [codex]" if d.get("src") == "codex" else ""
+        print(f"  сессия {d['sid'][:8]}{src} {fmt_local(d['start'])}: {d['hours']} ч, {d['prompts']} промптов [{rules}] — {brs}")
 
 
 def write_fact(repo, issue, res, est):
@@ -2007,7 +2169,7 @@ def cmd_estimate(args):
 # ----------------------------------------------------------------------------
 
 def build_parser():
-    p = argparse.ArgumentParser(prog="est", description="Оценка задач по истории проекта и факт из транскриптов Claude Code.")
+    p = argparse.ArgumentParser(prog="est", description="Оценка задач по истории проекта и факт из транскриптов Claude Code и Codex.")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     h = sub.add_parser("history", help="таблица закрытых задач с фактом и калибровка k")
@@ -2017,7 +2179,7 @@ def build_parser():
     h.add_argument("--last", type=int, help="показать только N последних строк")
     h.set_defaults(func=cmd_history)
 
-    f = sub.add_parser("fact", help="факт по транскриптам Claude Code для issue")
+    f = sub.add_parser("fact", help="факт по транскриптам Claude Code и Codex для issue")
     f.add_argument("number", type=int, nargs="?", help="номер issue")
     f.add_argument("--repo", help="owner/repo (по умолчанию из git remote origin)")
     f.add_argument("--write", action="store_true", help="записать комментарий «Факт» и поле «Факт, ч»")
