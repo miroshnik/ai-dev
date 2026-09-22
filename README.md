@@ -40,6 +40,8 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
 
 - `est` — оценка задач по истории проекта (аналоги с фактом, коэффициент k) и
   факт в активных часах из транскриптов сессий.
+- `ci-wait` — ожидание чеков PR или статуса коммита с исходами
+  PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch`.
 
 Задачи по этому репозиторию — в Issues и проекте `ai-dev`, по правилам из
 `AGENTS.md`.
