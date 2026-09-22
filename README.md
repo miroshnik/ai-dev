@@ -42,6 +42,8 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   факт в активных часах из транскриптов сессий.
 - `ci-wait` — ожидание чеков PR или статуса коммита с исходами
   PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch`.
+- `openspec` — работа по OpenSpec: поэтапный флоу с утверждениями, дельты
+  спек, когда архивировать; `reference.md` — ловушки парсера и валидатора.
 
 Задачи по этому репозиторию — в Issues и проекте `ai-dev`, по правилам из
 `AGENTS.md`.
