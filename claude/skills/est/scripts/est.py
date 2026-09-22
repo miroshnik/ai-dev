@@ -1887,17 +1887,27 @@ def cmd_estimate(args):
         raise EstError(f"--type должен быть одним из: {', '.join(EST_TYPES)}")
     if not (args.hours > 0):
         raise EstError(f"--hours должен быть больше 0, получено {fmt_h(args.hours)}")
-    analogs = []
+    # аналоги: номер issue этого репо (254) или задача другого репо из реестра (owner/repo#254)
+    analogs = []          # int — этот репо; "owner/repo#N" — другой
     if args.analogs:
         for a in args.analogs.split(","):
             a = a.strip().lstrip("#")
-            if a:
-                if not a.isdigit():
-                    raise EstError(f"аналог «{a}» — не номер issue")
-                if int(a) == args.number:
-                    raise EstError(f"аналог #{a} — это сама оцениваемая задача")
-                if int(a) not in analogs:
-                    analogs.append(int(a))
+            if not a:
+                continue
+            m = re.fullmatch(r"([\w.-]+/[\w.-]+)#(\d+)", a)
+            if m and m.group(1) != repo.full:
+                key = f"{m.group(1)}#{int(m.group(2))}"
+                if key not in analogs:
+                    analogs.append(key)
+                continue
+            if m:
+                a = m.group(2)
+            if not a.isdigit():
+                raise EstError(f"аналог «{a}» — не номер issue и не owner/repo#N")
+            if int(a) == args.number:
+                raise EstError(f"аналог #{a} — это сама оцениваемая задача")
+            if int(a) not in analogs:
+                analogs.append(int(a))
     if args.mult not in (0.5, 1, 1.5, 2):
         raise EstError("--mult допускает только 0.5, 1, 1.5 или 2")
     rows, c, level = calib_for_estimate(repo, registry)
@@ -1905,7 +1915,25 @@ def cmd_estimate(args):
     # аналоги: нет в репо — ошибка; есть в репо, но не в проекте — предупреждение, в доверие не входит
     counted = 0
     parts = []
+    other_parts = {}      # owner/repo -> [строки аналогов из другого репо]
+    other_rows = {}       # owner/repo -> {номер: строка проекта}
     for a in analogs:
+        if isinstance(a, str):
+            full, num = a.split("#")
+            num = int(num)
+            if full not in other_rows:
+                if full not in registry:
+                    raise EstError(f"аналог {a}: репозиторий {full} не в реестре {REGISTRY_PATH}")
+                other_rows[full] = {r["number"]: r for r in Repo(full, registry).project_rows()}
+            r = other_rows[full].get(num)
+            if r is None:
+                raise EstError(f"аналог {a} не найден в проекте репозитория {full}")
+            if r["fact"] is None:
+                other_parts.setdefault(full, []).append(f"#{num} (факт неизвестен)")
+            else:
+                counted += 1
+                other_parts.setdefault(full, []).append(f"#{num} (факт {fmt_h(r['fact'])} ч)")
+            continue
         r = by_num.get(a)
         if r is None:
             try:
@@ -1929,7 +1957,9 @@ def cmd_estimate(args):
         conf = "B"
     else:
         conf = "C"
-    analog_txt = ", ".join(parts) if parts else "нет, оценка экспертная"
+    for full, lst in other_parts.items():
+        parts.append(f"из проекта {full}: " + ", ".join(lst))
+    analog_txt = "; ".join(parts) if parts else "нет, оценка экспертная"
     note = f" ({args.note})" if args.note else ""
     k_txt = (f"k={c['k']} (n={c['n']}, уровень «{level}», {'применён' if apply_k else 'не применён'}: {why})"
              if c["n"] else "k: истории нет (не применён)")
