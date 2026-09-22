@@ -8,9 +8,8 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   импорт из своего файла.
 - `claude/CLAUDE.md` — файл Claude Code: импорт `@../AGENTS.md` плюс то, что
   есть только у него. В `~/.claude/CLAUDE.md` — симлинк сюда.
-- `docs/` — командные справочники к правилам (`github-projects.md`,
-  `ci-concurrency.md`); правила ссылаются на них, агент читает по мере
-  надобности.
+- `docs/` — справочники к правилам (`github-projects.md`, `ci-concurrency.md`,
+  `pr-checks.md`); правила ссылаются на них, агент читает по мере надобности.
 - `claude/skills/<name>/` — скиллы по стандарту [Agent Skills](https://agentskills.io):
   `SKILL.md` (frontmatter + процедура) и `scripts/` (детерминированная часть).
   Симлинки — в `~/.claude/skills/`.
