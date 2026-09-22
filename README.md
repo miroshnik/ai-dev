@@ -15,8 +15,18 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   Симлинки — в `~/.claude/skills/` (Claude Code) и `~/.agents/skills/`
   (Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp); без клона —
   `npx skills add miroshnik/ai-dev -g --all`.
-- `install.sh` — ставит симлинки для Claude Code (`~/.claude/CLAUDE.md`,
-  `~/.claude/skills/*`); установщик для остальных агентов — задача #8.
+- `install.sh` — подключает правила и скиллы всем агентам, которые нашёл:
+  Claude Code (`~/.claude/CLAUDE.md`, `~/.claude/skills/*`), Codex
+  (`~/.codex/AGENTS.md`), Gemini CLI (`~/.gemini/GEMINI.md`), Copilot CLI
+  (`~/.copilot/copilot-instructions.md`), OpenCode и Amp (`~/.config/<агент>/AGENTS.md`),
+  скиллы для всех — `~/.agents/skills/*`; Cursor глобального файла не имеет
+  (вставить правила в User Rules один раз). Идемпотентен; чужой непустой файл
+  не трогает. `AI_DEV_PRIVATE=<путь>` дополнительно линкует личную
+  конфигурацию в `~/.config/ai-dev`.
+
+Два способа установки: клон + `./install.sh` (живые симлинки, правки видны
+сразу) или без клона `npx skills add miroshnik/ai-dev -g --all` (копия
+скиллов во все агенты; правила тогда подключаются вручную).
 
 `AGENTS.md` держим компактным: у Codex общий бюджет 32 КиБ на все `AGENTS.md`
 от корня проекта до текущего каталога, лишнее обрезается молча (глобальный
