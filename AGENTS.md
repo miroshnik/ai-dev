@@ -5,7 +5,7 @@
 Канон правил для любого агента: Claude Code, Codex, Gemini CLI, Cursor,
 Copilot, OpenCode, Amp читают `AGENTS.md` сами или через импорт из своего
 файла. Живёт в репозитории **miroshnik/ai-dev** (`~/Projects/ai-dev`) вместе
-со скиллами (`claude/skills/*`); `install.sh` пока ставит симлинки только
+со скиллами (`skills/*`); `install.sh` пока ставит симлинки только
 для Claude Code (`~/.claude/CLAUDE.md`, `~/.claude/skills`), остальные
 агенты подключают `AGENTS.md` по своей документации как глобальный файл
 (установщик для всех — задача №8). Как файл проекта у Codex он не влезет в

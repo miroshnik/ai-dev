@@ -10,9 +10,11 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   есть только у него. В `~/.claude/CLAUDE.md` — симлинк сюда.
 - `docs/` — справочники к правилам (`github-projects.md`, `ci-concurrency.md`,
   `pr-checks.md`); правила ссылаются на них, агент читает по мере надобности.
-- `claude/skills/<name>/` — скиллы по стандарту [Agent Skills](https://agentskills.io):
+- `skills/<name>/` — скиллы по стандарту [Agent Skills](https://agentskills.io):
   `SKILL.md` (frontmatter + процедура) и `scripts/` (детерминированная часть).
-  Симлинки — в `~/.claude/skills/`.
+  Симлинки — в `~/.claude/skills/` (Claude Code) и `~/.agents/skills/`
+  (Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp); без клона —
+  `npx skills add miroshnik/ai-dev -g --all`.
 - `install.sh` — ставит симлинки для Claude Code (`~/.claude/CLAUDE.md`,
   `~/.claude/skills/*`); установщик для остальных агентов — задача #8.
 
@@ -21,7 +23,8 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
 `~/.codex/AGENTS.md` в бюджет не входит).
 
 Всё, что зависит от конкретных репозиториев (какие есть, где лежат, номера
-проектов), живёт в личной локальной конфигурации — в репозитории этого нет.
+проектов), живёт в личной локальной конфигурации `~/.config/ai-dev/` — в
+репозитории этого нет.
 
 Скиллы:
 

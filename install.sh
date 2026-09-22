@@ -10,7 +10,8 @@ link() { # link <путь-в-репо> <путь-в-~/.claude>
   ln -sfn "$here/$1" "$2"; echo "$2 → $here/$1"
 }
 link claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
-for s in "$here"/claude/skills/*/; do
+for s in "$here"/skills/*/; do
   [ -d "$s" ] || continue; n="$(basename "$s")"
-  link "claude/skills/$n" "$HOME/.claude/skills/$n"
+  link "skills/$n" "$HOME/.claude/skills/$n"      # Claude Code
+  link "skills/$n" "$HOME/.agents/skills/$n"      # Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp
 done
