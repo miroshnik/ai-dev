@@ -10,6 +10,9 @@
   `"cleanupPeriodDays": 365`, иначе история чистится раньше, чем нужна.
 - Worktree из приложения Claude Code называет ветку `claude/<slug>-<hash>` —
   переименовать до первого push (`git branch -m <type>/<issue>-<slug>`).
+  Панель сессии показывает ветку worktree, её дифф к `main` и кнопку
+  «Create PR» по состоянию git, а не GitHub: после мержа она актуальна только
+  если чекаут переведён на `origin/main` (правило «Сразу после мержа PR»).
 - Сессию переименовывает инструмент `set_session_title`; скиллы лежат в
   `~/.claude/skills/<name>` (симлинки из `install.sh` на `skills/<name>`),
   переменная `${CLAUDE_SKILL_DIR}` указывает на каталог скилла. В frontmatter `SKILL.md`
