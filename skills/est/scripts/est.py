@@ -1743,17 +1743,9 @@ def calib(rows, last=20):
             "share": round(sum(1 for x in ratios if 0.5 <= x <= 2) / len(ratios), 2), "n_partial": n_partial}
 
 
-def k_decision(k, n):
-    """Правило применения k: n<5 — нет; 5–9 — если |k−1|≥0.25; ≥10 — всегда; k вне 0.5…3 — нет."""
-    if k is None or n == 0:
-        return False, "истории нет"
-    if not (0.5 <= k <= 3):
-        return False, f"k={k} вне 0.5…3 — процедура сломана, не применять"
-    if n < 5:
-        return False, f"n={n} < 5"
-    if n < 10:
-        return (abs(k - 1) >= 0.25), (f"n={n}, |k−1|≥0.25" if abs(k - 1) >= 0.25 else f"n={n}, |k−1|<0.25")
-    return True, f"n={n} ≥ 10"
+def row_type(r):
+    """Тип задачи строки проекта: фактический (из ветки, маркер «Факт»), иначе из маркера «Оценка»."""
+    return (r.get("fact_marker") or {}).get("type") or (r.get("est_marker") or {}).get("type") or ""
 
 
 def cmd_history(args):
@@ -1780,16 +1772,18 @@ def cmd_history(args):
         if not rows_fact:
             print("история пуста" + (f" (фильтр «{args.grep}»)" if args.grep else ""))
         else:
-            print(f"{'№':>5} | {'оценка':>6} | {'факт':>6} | {'млн ток':>7} | {'$':>7} | {'тип':<8} | {'метки':<22} | заголовок")
+            print(f"{'№':>5} | {'оценка':>6} | {'факт':>6} | {'покр.':<7} | {'млн ток':>7} | {'$':>7} | {'тип':<8} | {'метки':<22} | заголовок")
             for r in rows_fact:
-                typ = (r["est_marker"] or {}).get("type") or (r.get("fact_marker") or {}).get("type") or ""
+                typ = row_type(r)
                 labels = ",".join(l for l in r["labels"] if l != "epic")[:22]
                 fm = r.get("fact_marker") or {}
+                cov = fm.get("cov") or "—"
                 mt = fmt_mtok((fm.get("tok") or {}).get("total")) if fm.get("tok") else "—"
                 usd = f"{fm['usd']:.2f}" if fm.get("usd") is not None else "—"
-                print(f"{r['number']:>5} | {fmt_h(r['est']):>6} | {fmt_h(r['fact']):>6} | {mt:>7} | {usd:>7} | {typ:<8} | {labels:<22} | {r['title'][:60]}")
+                print(f"{r['number']:>5} | {fmt_h(r['est']):>6} | {fmt_h(r['fact']):>6} | {cov:<7} | {mt:>7} | {usd:>7} | {typ:<8} | {labels:<22} | {r['title'][:60]}")
         if c["n"]:
-            print(f"k = {c['k']} (n={c['n']}, p25–p75 {c['p25']}–{c['p75']}); доля в допуске ×0.5…×2: {int(c['share'] * 100)} %")
+            units = "" if 0.5 <= c["k"] <= 3 else " — старые оценки и факты не в одних единицах"
+            print(f"k = {c['k']} (n={c['n']} пар «оценка с маркером + факт full», p25–p75 {c['p25']}–{c['p75']}); доля в допуске ×0.5…×2: {int(c['share'] * 100)} %{units}")
         else:
             print("k: нет пар «оценка с маркером est + факт» — калибровка недоступна")
         if c.get("n_partial"):
@@ -2057,14 +2051,25 @@ def cmd_fact(args):
 # Команда estimate
 # ----------------------------------------------------------------------------
 
+SCALE = (0.1, 0.25, 0.5, 1, 1.5, 2, 3, 5, 8, 13)   # ступени оценки, ч; округление к ближайшей
+
+
+def round_scale(h):
+    return min(SCALE, key=lambda s: (abs(s - h), s))
+
+
 def cmd_estimate(args):
+    """Оценка = прогноз по фактам аналогов: часы, токены и стоимость — медианы фактов × поправка.
+    --hours — только экспертная оценка, когда аналогов с фактом нет (доверие C). k справочный."""
     registry = load_registry()
     repo = Repo(resolve_repo(args.repo), registry)
     meta = repo.project_meta()
     if args.type not in EST_TYPES:
         raise EstError(f"--type должен быть одним из: {', '.join(EST_TYPES)}")
-    if not (args.hours > 0):
+    if args.hours is not None and not (args.hours > 0):
         raise EstError(f"--hours должен быть больше 0, получено {fmt_h(args.hours)}")
+    if args.mult not in (0.5, 1, 1.5, 2):
+        raise EstError("--mult допускает только 0.5, 1, 1.5 или 2")
     # аналоги: номер issue этого репо (254) или задача другого репо из реестра (owner/repo#254)
     analogs = []          # int — этот репо; "owner/repo#N" — другой
     if args.analogs:
@@ -2086,15 +2091,28 @@ def cmd_estimate(args):
                 raise EstError(f"аналог #{a} — это сама оцениваемая задача")
             if int(a) not in analogs:
                 analogs.append(int(a))
-    if args.mult not in (0.5, 1, 1.5, 2):
-        raise EstError("--mult допускает только 0.5, 1, 1.5 или 2")
     rows, c, level = calib_for_estimate(repo, registry)
     by_num = {r["number"]: r for r in rows}
-    # аналоги: нет в репо — ошибка; есть в репо, но не в проекте — предупреждение, в доверие не входит
-    counted = 0
-    parts = []
-    other_parts = {}      # owner/repo -> [строки аналогов из другого репо]
-    other_rows = {}       # owner/repo -> {номер: строка проекта}
+    facts, toks, usds = [], [], []
+    parts, other_parts, other_rows = [], {}, {}
+
+    def take(r, label, bucket):
+        fm = r.get("fact_marker") or {}
+        if r["fact"] is None:
+            bucket.append(f"{label} (факт неизвестен)")
+            return
+        cov = fm.get("cov") or "full"
+        if cov != "full":
+            bucket.append(f"{label} (факт {fmt_h(r['fact'])} ч, покрытие {cov} — не учтён)")
+            return
+        facts.append(float(r["fact"]))
+        tt = (fm.get("tok") or {}).get("total")
+        if tt:
+            toks.append(tt / 1e6)
+        if fm.get("usd") is not None:
+            usds.append(float(fm["usd"]))
+        bucket.append(f"{label} (факт {fmt_h(r['fact'])} ч)")
+
     for a in analogs:
         if isinstance(a, str):
             full, num = a.split("#")
@@ -2106,11 +2124,7 @@ def cmd_estimate(args):
             r = other_rows[full].get(num)
             if r is None:
                 raise EstError(f"аналог {a} не найден в проекте репозитория {full}")
-            if r["fact"] is None:
-                other_parts.setdefault(full, []).append(f"#{num} (факт неизвестен)")
-            else:
-                counted += 1
-                other_parts.setdefault(full, []).append(f"#{num} (факт {fmt_h(r['fact'])} ч)")
+            take(r, f"#{num}", other_parts.setdefault(full, []))
             continue
         r = by_num.get(a)
         if r is None:
@@ -2121,45 +2135,78 @@ def cmd_estimate(args):
             print(f"предупреждение: аналог #{a} есть в репо, но не в проекте — факт неизвестен", file=sys.stderr)
             parts.append(f"#{a} (нет в проекте)")
             continue
-        counted += 1
-        if r["fact"] is None:
-            parts.append(f"#{a} (факт неизвестен)")
-        else:
-            parts.append(f"#{a} (факт {fmt_h(r['fact'])} ч)")
-    apply_k, why = k_decision(c["k"], c["n"])
-    same_type = sum(1 for r in rows if r["state"] == "CLOSED" and r["fact"] is not None
-                    and (r["est_marker"] or {}).get("type") == args.type)
-    if counted and same_type >= 5 and apply_k:
-        conf = "A"
-    elif counted >= 2:
-        conf = "B"
-    else:
-        conf = "C"
+        take(r, f"#{a}", parts)
     for full, lst in other_parts.items():
         parts.append(f"из проекта {full}: " + ", ".join(lst))
-    analog_txt = "; ".join(parts) if parts else "нет, оценка экспертная"
+    analog_txt = "; ".join(parts) if parts else "нет"
+
+    expert = args.hours is not None
+    if not facts and not expert:
+        raise EstError("нет аналогов с фактом (покрытие full) — укажи --analogs с фактами или --hours как экспертную оценку")
+    if len(facts) == 1 and not expert:
+        raise EstError("один аналог — не прогноз: добавь второй аналог или --hours")
+    tok_f = usd_f = spread_txt = raw = None
+    if facts:
+        raw = statistics.median(facts) * args.mult
+        h = round_scale(raw)
+        if toks:
+            tok_f = statistics.median(toks) * args.mult
+        if usds:
+            usd_f = statistics.median(usds) * args.mult
+        if min(facts) > 0 and max(facts) / min(facts) > 3:
+            spread_txt = f" Разброс фактов аналогов {fmt_h(min(facts))}…{fmt_h(max(facts))} ч — взята медиана."
+        basis = "прогноз по фактам аналогов"
+        if expert:
+            # экспертные часы поверх прогноза: токены и стоимость масштабируются пропорционально
+            ratio = args.hours / raw if raw > 0 else 1
+            basis = f"экспертная оценка; по аналогам вышло бы {fmt_h(h)} ч, токены и стоимость пересчитаны ×{ratio:.1f}"
+            h = round_scale(args.hours)
+            tok_f = tok_f * ratio if tok_f is not None else None
+            usd_f = usd_f * ratio if usd_f is not None else None
+    else:
+        h = round_scale(args.hours)
+        basis = "экспертная оценка, аналогов с фактом нет"
+    if expert and abs(h - args.hours) > 1e-9:
+        print(f"предупреждение: --hours {fmt_h(args.hours)} округлено к шкале: {fmt_h(h)}", file=sys.stderr)
+    same_type = sum(1 for r in rows if r["state"] == "CLOSED" and r["fact"] is not None
+                    and (r.get("fact_marker") or {}).get("cov", "full") == "full" and row_type(r) == args.type)
+    counted = len(facts)
+    if expert:
+        conf = "C"
+    elif counted >= 3 and same_type >= 5:
+        conf = "A"
+    else:
+        conf = "B"
+    forecast = f"Оценка: {fmt_h(h)} ч"
+    if tok_f is not None:
+        forecast += f", ≈ {fmt_h(tok_f, 2 if tok_f < 1 else 1)} млн токенов"
+    if usd_f is not None:
+        forecast += (f", ≈ ${usd_f:.2f}" if usd_f < 1 else f", ≈ ${usd_f:.0f}")
+    if facts and (len(toks) < len(facts) or len(usds) < len(facts)):
+        forecast += f" (токены и стоимость по {min(len(toks), len(usds))} из {len(facts)} аналогов)"
     note = f" ({args.note})" if args.note else ""
-    k_txt = (f"k={c['k']} (n={c['n']}, уровень «{level}», {'применён' if apply_k else 'не применён'}: {why})"
-             if c["n"] else "k: истории нет (не применён)")
-    text = (f"Оценка: {fmt_h(args.hours)} ч (тип {args.type}, доверие {conf}). "
-            f"Аналоги: {analog_txt}. Поправка: ×{fmt_h(args.mult)}{note}. {k_txt}.")
-    marker = {"v": 1, "h": args.hours, "type": args.type, "analogs": analogs, "mult": args.mult,
-              "k": c["k"], "n": c["n"], "k_applied": bool(apply_k), "conf": conf}
+    mult_txt = f" Поправка: ×{fmt_h(args.mult)}{note}." if facts else ""
+    k_txt = (f"k={c['k']} (n={c['n']}, уровень «{level}»; справочно, к прогнозу не применяется)"
+             if c["n"] else "k: истории нет")
+    text = (f"{forecast} (тип {args.type}, доверие {conf}; {basis}). "
+            f"Аналоги: {analog_txt}.{mult_txt}{spread_txt or ''} {k_txt}.")
+    marker = {"v": 2, "h": h, "raw": round(raw, 2) if raw is not None else None, "type": args.type, "analogs": analogs,
+              "mult": args.mult, "tok": round(tok_f, 2) if tok_f is not None else None,
+              "usd": round(usd_f, 2) if usd_f is not None else None, "expert": expert, "k": c["k"], "n": c["n"], "conf": conf}
     body = text + "\n" + f"<!-- est {json.dumps(marker, ensure_ascii=False)} -->"
     issue = fetch_issue(repo, args.number)
     cur = issue_project_fields(issue, meta)
     print(f"== {repo.full}#{args.number}: {issue['title']}")
     print(f"текущая «{FIELD_EST}»: {fmt_h(cur['est'])}; статус: {cur['status'] or '—'}")
-    if c["n"] and not apply_k and not (0.5 <= (c["k"] or 1) <= 3):
-        print(f"ВНИМАНИЕ: {why}")
-    if args.hours > 13:
-        print("ВНИМАНИЕ: оценка > 13 ч — по протоколу задачу надо дробить на подзадачи")
+    over = raw if (raw is not None and not expert) else (args.hours if expert else None)
+    if over is not None and over > SCALE[-1]:
+        print(f"ВНИМАНИЕ: выходит {fmt_h(over)} ч > 13 — в поле записано {fmt_h(h)}, задачу надо дробить на подзадачи")
     print("комментарий:")
     print(body)
     if args.write:
         what = upsert_comment(repo, issue, "est", body)
-        set_number_field(repo, issue, FIELD_EST, args.hours)
-        print(f"комментарий «Оценка» {what}, поле «{FIELD_EST}» = {fmt_h(args.hours)}")
+        set_number_field(repo, issue, FIELD_EST, h)
+        print(f"комментарий «Оценка» {what}, поле «{FIELD_EST}» = {fmt_h(h)}")
     else:
         print("(без --write ничего не записано)")
 
@@ -2192,9 +2239,9 @@ def build_parser():
     e = sub.add_parser("estimate", help="записать оценку с аналогами и маркером")
     e.add_argument("number", type=int, help="номер issue")
     e.add_argument("--repo", help="owner/repo (по умолчанию из git remote origin)")
-    e.add_argument("--hours", type=float, required=True, help="оценка, ч (уже с учётом поправки и k)")
+    e.add_argument("--hours", type=float, help="экспертная оценка, ч (доверие C): без аналогов — как есть; с аналогами — поверх прогноза, токены и стоимость пересчитываются")
     e.add_argument("--type", required=True, choices=EST_TYPES, help="тип задачи")
-    e.add_argument("--analogs", default="", help="номера аналогов через запятую: 254,260")
+    e.add_argument("--analogs", default="", help="аналоги через запятую: 254,260 или owner/repo#254; часы, токены и стоимость — медианы их фактов")
     e.add_argument("--mult", type=float, default=1, help="поправка: 0.5, 1, 1.5 или 2")
     e.add_argument("--note", default="", help="причина поправки")
     e.add_argument("--write", action="store_true", help="записать комментарий «Оценка» и поле «Оценка, ч»")
