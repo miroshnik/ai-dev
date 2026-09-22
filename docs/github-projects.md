@@ -7,7 +7,7 @@
 
 Ровно три типа: «Задача», «Баг», «Эпик». В новой организации (нужен scope
 `admin:org`): `gh api orgs/<org>/issue-types` — переименовать Task→Задача,
-Bug→Баг (`-X PATCH …/issue-types/<id> -f name=… -F is_enabled=true`), Feature
+Bug→Баг (`gh api -X PUT orgs/<org>/issue-types/<id> -f name=Баг -F is_enabled=true`), Feature
 выключить, добавить Эпик (`-f name=Эпик -f color=purple -F is_enabled=true`).
 
 ```bash
@@ -15,8 +15,6 @@ gh issue create --title "…" --body-file body.md --type Задача
 gh api -X PATCH repos/{owner}/{repo}/issues/<N> -f type=Баг
 gh issue list --json number,issueType --jq '.[]|select(.issueType.name=="Эпик")'
 ```
-
-В репозиториях личного аккаунта типов нет — эпик помечаем меткой `epic`.
 
 ## Приоритет — поле issue `Priority` (организация)
 
@@ -48,8 +46,6 @@ gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocking               # к�
 gh api -X DELETE repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by/$BY_ID
 ```
 
-*Relates to* через API не ставится — только в UI.
-
 ## Проект (GitHub Projects)
 
 ### Проверка
@@ -76,9 +72,10 @@ gh project view <N> --owner <owner> --format json    # id проекта
   `updateProjectV2Field(input:{fieldId:"…",singleSelectOptions:[{name:"Бэклог",color:GRAY,description:""},{name:"В работе",color:YELLOW,description:""},{name:"Готово",color:GREEN,description:""}]})`.
   `View 1` переименовать в `Таблица` (`updateProjectV2View(input:{viewId,name})`),
   `Доска` и `Роадмэп` создать: `createProjectV2View(input:{projectId,name,layout:BOARD_LAYOUT})`
-  / `ROADMAP_LAYOUT`. Группировка доски по `Status` — дефолт; сортировка
-  представлений по `Priority`, поля дат и маркеры milestones у роадмэпа через
-  API не задаются — попросить пользователя настроить один раз в UI.
+  / `ROADMAP_LAYOUT`. Группировка доски по `Status` — дефолт, через API не
+  настраивается (и не нужно); сортировка `Таблица` и `Доска` по `Priority`,
+  поля дат и маркеры milestones у роадмэпа через API не задаются — после
+  создания попросить пользователя настроить их один раз в UI.
 - Числовые поля:
   ```bash
   gh project field-create <N> --owner <owner> --name "Оценка, ч" --data-type NUMBER
