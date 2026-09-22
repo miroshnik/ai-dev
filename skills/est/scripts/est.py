@@ -24,10 +24,25 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 HOME = os.path.expanduser("~")
-EST_DIR = os.path.join(HOME, ".claude", "est")
+# Личное состояние скилла (реестр репозиториев, цены, кэш) — нейтральный к агенту каталог:
+# $AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev. Старый ~/.claude/est переезжает автоматически
+# (см. ensure_config_dir), на его месте остаётся симлинк.
+EST_DIR = os.environ.get("AI_DEV_CONFIG_DIR") or os.path.join(HOME, ".config", "ai-dev")
+LEGACY_EST_DIR = os.path.join(HOME, ".claude", "est")
 REGISTRY_PATH = os.path.join(EST_DIR, "repos.json")
 CACHE_DIR = os.path.join(EST_DIR, "cache")
+# Транскрипты Claude Code — источник факта (другие агенты — отдельными источниками).
 PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
+
+
+def ensure_config_dir():
+    """Создать каталог состояния; перенести ~/.claude/est, если он ещё старый (не симлинк)."""
+    if os.path.isdir(LEGACY_EST_DIR) and not os.path.islink(LEGACY_EST_DIR) and not os.path.exists(EST_DIR):
+        os.makedirs(os.path.dirname(EST_DIR), exist_ok=True)
+        os.rename(LEGACY_EST_DIR, EST_DIR)
+        os.symlink(EST_DIR, LEGACY_EST_DIR)
+        print(f"состояние est перенесено: {LEGACY_EST_DIR} → {EST_DIR} (симлинк оставлен)", file=sys.stderr)
+    os.makedirs(EST_DIR, exist_ok=True)
 
 FIELD_EST = "Оценка, ч"
 FIELD_FACT = "Факт, ч"
@@ -38,7 +53,7 @@ FIELD_USD = "Стоимость, $"
 # Публичные API-тарифы Anthropic, $ за 1 млн токенов: (вход, выход, чтение кэша).
 # Запись кэша = вход × 1.25 (TTL 5 мин) или × 2 (TTL 1 ч). Ключ — префикс id модели,
 # берётся самый длинный совпавший. Это API-эквивалент: на подписке эти деньги не списываются,
-# но величина сравнима между задачами. Переопределение/дополнение — ~/.claude/est/prices.json
+# но величина сравнима между задачами. Переопределение/дополнение — <каталог состояния>/prices.json
 # в том же формате: {"<префикс модели>": [вход, выход, чтение_кэша]}.
 PRICES_DATE = "2026-06-24"
 PRICES = {
@@ -55,7 +70,7 @@ PRICES = {
     "claude-haiku-4-5": (1.0, 5.0, 0.1),
 }
 FAST_PRICES = {"claude-opus-5": (10.0, 50.0, 1.0)}   # speed=fast; для прочих моделей тариф fast не опубликован
-PRICES_PATH = os.path.join(os.path.expanduser("~"), ".claude", "est", "prices.json")
+PRICES_PATH = os.path.join(EST_DIR, "prices.json")
 _prices_cache = None
 
 
@@ -105,7 +120,7 @@ OPEN_PRS_TTL = 3600         # час: список открытых PR (их в�
 # Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
 BASE_BRANCHES = {"main", "master", "develop", "dev", "staging", "production", "release"}
 
-# Реестр репозиториев — личный файл ~/.claude/est/repos.json (в репо скилла не входит).
+# Реестр репозиториев — личный файл <каталог состояния>/repos.json (в репо скилла не входит).
 # Формат: {"owner/repo": {"paths": ["/abs/path/to/checkout", ...],
 #                         "project": {"owner": "<owner>", "number": <N>}}}
 # Без записи репо определяется из git remote origin текущего каталога, проект — по
@@ -251,6 +266,7 @@ def gh_rest(path, method="GET", body=None):
 # ----------------------------------------------------------------------------
 
 def load_registry():
+    ensure_config_dir()
     if not os.path.exists(REGISTRY_PATH):
         save_json(REGISTRY_PATH, DEFAULT_REGISTRY)
         print(f"создан реестр {REGISTRY_PATH}", file=sys.stderr)
