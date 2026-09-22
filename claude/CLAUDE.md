@@ -15,8 +15,7 @@
   `${CLAUDE_SKILL_DIR}` указывает на каталог скилла. В frontmatter `SKILL.md`
   Claude Code читает также `when_to_use`, `argument-hint`, `allowed-tools`.
 - Личная конфигурация (реестр репозиториев `~/.claude/est/repos.json`, цены
-  `~/.claude/est/prices.json`) — только в `~/.claude`, не в репозитории;
-  память Claude — кэш, а не источник правил.
+  `~/.claude/est/prices.json`) — в `~/.claude`, не в репозитории.
 - В worktree репозитория ai-dev канон может загрузиться дважды: из `main`
   через `~/.claude/CLAUDE.md` и из ветки нативно (`AGENTS.md` в корне, Claude
   Code ≥ 2.1.277). При противоречии верить ветке.
