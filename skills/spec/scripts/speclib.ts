@@ -1,7 +1,7 @@
 /**
  * speclib — общее для spec-doc и spec-diff: дерево tests/, модель теста, разбор отчётов
  * раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от `bun test`) и статический разбор
- * исходников тестов (сканер describe/it/test для TS/JS).
+ * исходников тестов (сканер describe/it/test для TS/JS: названия и проза из JSDoc).
  *
  * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
  * зависимостей и без конфигурации под репозиторий: дерево tests/ из правила
@@ -382,20 +382,72 @@ export function parseSource(file: string, source: string): Test[] {
 }
 
 /**
+ * Проза из JSDoc исходника — то, чего не видно из названий. Ключи — JSON цепочки имён,
+ * как у теста: describe — [describes…], it — [describes…, имя].
+ */
+export interface Docs {
+  file: string; // JSDoc в начале файла, до кода: что это за capability или стандарт
+  describes: Map<string, string>; // JSDoc вплотную перед describe
+  tests: Map<string, string>; // JSDoc вплотную перед it / test
+}
+
+/**
+ * Текст JSDoc без скобок комментария и ведущих `*`; строки сохраняются (markdown), пустые по краям
+ * и повторные сняты. Блочные теги (@see, @param…) — не проза: с первого тега всё отброшено.
+ */
+export function jsdocText(comment: string): string {
+  const lines = comment
+    .slice(3, -2)
+    .split("\n")
+    .map((l) => l.replace(/^\s*(?:\*(?= |$))? ?/, "").trimEnd());
+  const tag = lines.findIndex((l) => /^@\w/.test(l));
+  const out: string[] = [];
+  for (const l of tag >= 0 ? lines.slice(0, tag) : lines) if (l || out[out.length - 1]) out.push(l);
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out.join("\n");
+}
+
+/**
  * Сканер без полного парсера: строки, комментарии, скобки; describe с телом-колбэком
  * (после `=>` или `function(...)`) открывает вложенность, it/test — тест. Имя — только
  * строковый литерал первым аргументом (у .each / .for — второго вызова); вызов с
  * выражением вместо имени пропускается.
  */
 export function parseJs(file: string, source: string): Test[] {
+  return scanJs(file, source).tests;
+}
+
+/** JSDoc-проза исходника: у файла, у describe и у it / test (см. `scanJs`). */
+export function parseDocs(file: string, source: string): Docs {
+  return scanJs(file, source).docs;
+}
+
+/**
+ * Один проход сканера — тесты и проза. JSDoc относится к ближайшему коду после него
+ * (комментарии между ними не мешают): вызов describe / it — его проза; первый JSDoc файла,
+ * за которым идёт не вызов (обычно импорты), — проза файла. `//` и блочный комментарий с одной
+ * звёздочкой — не проза.
+ */
+export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs } {
   const s = source;
   const n = s.length;
-  let i = 0;
+  let i = s.startsWith("#!") ? skipLineComment(s, 0) : 0;
   let depth = 0;
   let paren = 0;
   const stack: { name: string; depth: number }[] = []; // describe и глубина фигурных скобок его тела
   let pending: { name: string; paren: number } | null = null; // describe, у которого ещё не найдено тело
   const out: Test[] = [];
+  const docs: Docs = { file: "", describes: new Map(), tests: new Map() };
+  let doc: { text: string } | null = null; // последний JSDoc, пока после него не было кода
+  let fileDoc: { text: string } | null = null; // первый JSDoc до кода
+  let code = false;
+
+  const addDoc = (m: Map<string, string>, chain: string[], text: string): void => {
+    if (!text) return;
+    const k = JSON.stringify(chain);
+    const prev = m.get(k);
+    m.set(k, prev && prev !== text ? prev + "\n\n" + text : text);
+  };
 
   const prevSig = (j: number): string => {
     let k = j - 1;
@@ -414,9 +466,22 @@ export function parseJs(file: string, source: string): Test[] {
       continue;
     }
     if (c === "/" && s.startsWith("/*", i)) {
-      i = skipBlockComment(s, i);
+      const end = skipBlockComment(s, i);
+      if (s.startsWith("/**", i) && !s.startsWith("/**/", i)) {
+        doc = { text: jsdocText(s.slice(i, end)) };
+        if (!code && !fileDoc) fileDoc = doc;
+      }
+      i = end;
       continue;
     }
+    if (WS.includes(c)) {
+      i++;
+      continue;
+    }
+    // код: JSDoc до него — проза этого кода (вызова describe / it), дальше не тянется
+    const d = doc;
+    doc = null;
+    code = true;
     if (c === "'" || c === '"' || c === "`") {
       i = skipString(s, i);
       continue;
@@ -452,6 +517,7 @@ export function parseJs(file: string, source: string): Test[] {
       const m = JS_CALL.exec(s);
       const mods = m ? m[2]!.split(".").filter(Boolean) : [];
       if (m && mods.every((x) => MODS_OK.has(x))) {
+        if (d && d === fileDoc) fileDoc = null; // вплотную к вызову — проза вызова, а не файла
         const kind = m[1]!;
         const p0 = paren;
         let j = m.index + m[0].length;
@@ -473,8 +539,14 @@ export function parseJs(file: string, source: string): Test[] {
         if (q === "'" || q === '"' || q === "`") {
           const end = skipString(s, k);
           const name = unescape(s.slice(k + 1, end - 1));
-          if (DESCRIBE_KINDS.has(kind)) pending = { name, paren: p0 };
-          else out.push(makeTest(file, stack.map((x) => x.name), name));
+          const chain = [...stack.map((x) => x.name), name];
+          if (DESCRIBE_KINDS.has(kind)) {
+            pending = { name, paren: p0 };
+            addDoc(docs.describes, chain, d?.text ?? "");
+          } else {
+            out.push(makeTest(file, chain.slice(0, -1), name));
+            addDoc(docs.tests, chain, d?.text ?? "");
+          }
           i = end;
           continue;
         }
@@ -488,5 +560,6 @@ export function parseJs(file: string, source: string): Test[] {
     }
     i++;
   }
-  return out;
+  docs.file = fileDoc?.text ?? "";
+  return { tests: out, docs };
 }
