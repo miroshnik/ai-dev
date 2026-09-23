@@ -118,7 +118,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 9; // версия формата кэша транскриптов (сменилась — переразбор); 9 = источник claude/codex
+const SESSION_CACHE_V = 10; // версия формата кэша транскриптов (сменилась — переразбор); 10 = промпты без вставок <system-reminder>
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -856,13 +856,22 @@ function textOfContent(c: unknown): string {
   return "";
 }
 
+// Вставка приложения в текст промпта: Claude Code desktop (Code tab) ставит её перед текстом
+// человека. Незакрытая — до конца текста.
+const REMINDER_RE = /<system-reminder>[\s\S]*?(?:<\/system-reminder>|$)/g;
+
+/** Текст промпта без вставок <system-reminder>: по нему решается, человек ли это, и ищется номер задачи. */
+function promptText(c: unknown): string {
+  return textOfContent(c).replace(REMINDER_RE, "");
+}
+
 function isHumanPrompt(r: Any): boolean {
   if (r.type !== "user" || r.isSidechain || r.isMeta) return false;
   const origin = r.origin;
   if (origin && typeof origin === "object" && origin.kind && origin.kind !== "human") return false;
   const c = r.message?.content;
   if (Array.isArray(c) && c.some((b: Any) => b && typeof b === "object" && b.type === "tool_result")) return false;
-  const txt = textOfContent(c).replace(/^\s+/, "");
+  const txt = promptText(c).replace(/^\s+/, "");
   if (!txt) return false;
   return !SKIP_PROMPT_PREFIXES.some((p) => txt.startsWith(p));
 }
@@ -974,7 +983,7 @@ function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
     }
     acc.ev.push([ts, r.gitBranch || "", human ? 1 : 0, hint, uidx]);
     if (human && acc.first_refs === null) {
-      const txt = textOfContent(content);
+      const txt = promptText(content);
       acc.first_refs = refsIn(txt);
       acc.first_urls = urlsIn(txt);
     }
