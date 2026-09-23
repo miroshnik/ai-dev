@@ -1,0 +1,37 @@
+# CI ai-dev: тесты скиллов (bun test), типы, документация спеки не отстала от тестов,
+# дифф спеки в summary PR. Ветки и PR — параллельно, устаревший прогон PR отменяется;
+# прогон main не отменяется (docs/ci-concurrency.md, вариант «CI и деплой в одном workflow»
+# — деплоя здесь нет, но правило то же).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # spec-diff: merge-base с origin/main
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run spec:doc
+      - name: docs/spec не отстал от тестов
+        run: |
+          if [ -n "$(git status --porcelain docs/spec)" ]; then
+            git status --short docs/spec
+            git diff docs/spec
+            echo "::error::docs/spec отстал от тестов — bun run spec:doc и закоммить"
+            exit 1
+          fi
+      - name: Дифф спеки в summary
+        if: github.event_name == 'pull_request'
+        run: bun run spec:diff --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
