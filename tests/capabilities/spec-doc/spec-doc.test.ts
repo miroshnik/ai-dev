@@ -1,3 +1,11 @@
+/**
+ * Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из отчётов раннеров — дерево `tests/`, названия
+ * тестов и их JSDoc.
+ *
+ * Требование существует, пока есть проверяющий его тест, поэтому документацию о поведении не пишут руками: её
+ * собирают из тестов, и разойтись с ними она не может. `docs/spec` коммитится вместе с PR, CI проверяет, что
+ * она не отстала.
+ */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -115,6 +123,10 @@ describe("Отчёт Playwright", () => {
   });
 });
 
+/**
+ * `tests/lib` — фабрики и хелперы, не спека. Тест вне `capabilities/<name>` и `standards/<name>` — без дома:
+ * это сигнал перенести, а не ошибка разбора.
+ */
 describe("Дерево tests/", () => {
   const report = () =>
     vitestReport(dir, {
@@ -145,6 +157,10 @@ describe("Дерево tests/", () => {
   });
 });
 
+/**
+ * Маркер в первой строке отличает сгенерированный файл от рукописного: свои устаревшие файлы скрипт удаляет,
+ * чужие не трогает.
+ */
 describe("Файлы в docs/spec", () => {
   it("пишет README.md, capabilities/<name>.md и standards/<name>.md с маркером", () => {
     const r = doc(
@@ -255,8 +271,8 @@ describe("Отчёт JUnit bun test", () => {
 });
 
 /**
- * Отчёты раннеров комментариев не несут — прозу `spec-doc` берёт из исходников тестов тем же сканером, что `spec-diff`.
- * В документацию идёт только JSDoc; `//` — комментарий для читателя кода.
+ * Отчёты раннеров комментариев не несут — прозу `spec-doc` берёт из исходников тестов тем же сканером, что
+ * `spec-diff`. В документацию идёт только JSDoc; `//` — комментарий для читателя кода.
  */
 describe("Проза из JSDoc", () => {
   const BILLING = "tests/capabilities/billing/invoice.test.ts";
