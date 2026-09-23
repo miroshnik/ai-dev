@@ -1,0 +1,171 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
+import { gitRepo, runScript, tmpDir, writeTree } from "../../lib/spec.ts";
+
+let dir: string;
+let cleanup: () => void;
+let repo: ReturnType<typeof gitRepo>;
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  repo = gitRepo(dir);
+});
+afterEach(() => cleanup());
+
+const ts = (body: string) => `import { describe, it } from "bun:test";\n${body}\n`;
+const BILLING = "tests/capabilities/billing/invoice.test.ts";
+
+function diffFrom(base: string, ...args: string[]) {
+  return runScript("spec-diff", ["--base", base, ...args], dir);
+}
+
+describe("Три списка", () => {
+  it("удалённые идут первыми, потом изменённые, потом добавленные", () => {
+    const base = repo.commit({
+      [BILLING]: ts(`describe("Счета", () => { it("снято", () => {}); it("выставляется счёт", () => {}); });`),
+    });
+    repo.commit({
+      [BILLING]: ts(`describe("Счета", () => { it("выставляется счёт за месяц", () => {}); it("новое", () => {}); });`),
+    });
+    const r = diffFrom(base);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("## Спека (тесты)");
+    expect(r.stdout).toContain("**Удалены (1):**\n\n- `tests/capabilities/billing` · Счета › снято");
+    expect(r.stdout).toContain("**Изменены (1):**\n\n- `tests/capabilities/billing` · Счета › ~~выставляется счёт~~ → выставляется счёт за месяц");
+    expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/capabilities/billing` · Счета › новое");
+    const order = ["Удалены", "Изменены", "Добавлены"].map((w) => r.stdout.indexOf(w));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("без изменений — «Тесты не менялись»", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ "src/app.ts": "export const a = 1;\n" });
+    expect(diffFrom(base).stdout).toContain("Тесты не менялись.");
+  });
+
+  it("пустой список — «нет», а не пропуск раздела", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); it("y", () => {});`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Удалены:** нет.");
+    expect(out).toContain("**Изменены:** нет.");
+    expect(out).toContain("**Добавлены (1):**");
+  });
+});
+
+describe("Переименования", () => {
+  it("непохожее имя в том же describe — удалён и добавлен, не переименование", () => {
+    const base = repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("удаляет черновик", () => {}); });`) });
+    repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("отправляет письмо бухгалтеру", () => {}); });`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Удалены (1):**");
+    expect(out).toContain("**Добавлены (1):**");
+    expect(out).toContain("**Изменены:** нет.");
+  });
+
+  it("переименован describe — изменён, старый describe зачёркнут", () => {
+    const base = repo.commit({ [BILLING]: ts(`describe("Счёт", () => { it("выставляется", () => {}); });`) });
+    repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("выставляется", () => {}); });`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Изменены (1):**\n\n- `tests/capabilities/billing` · ~~Счёт~~ → Счета › выставляется");
+    expect(out).toContain("**Удалены:** нет.");
+  });
+
+  it("переименование в другом файле — не изменение, а удалён и добавлен", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("выставляется счёт", () => {});`) });
+    repo.commit({ [BILLING]: null, "tests/capabilities/billing/other.test.ts": ts(`it("выставляется счёт за месяц", () => {});`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Удалены (1):**");
+    expect(out).toContain("**Добавлены (1):**");
+  });
+});
+
+describe("Идентичность — путь папки, describe, it", () => {
+  it("перенос между файлами одной папки — не изменение", () => {
+    const base = repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("выставляется", () => {}); });`) });
+    repo.commit({ [BILLING]: null, "tests/capabilities/billing/moved.test.ts": ts(`describe("Счета", () => { it("выставляется", () => {}); });`) });
+    expect(diffFrom(base).stdout).toContain("Тесты не менялись.");
+  });
+
+  it("перенос в другую capability — удалён и добавлен", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("выставляется", () => {});`) });
+    repo.commit({ [BILLING]: null, "tests/capabilities/invoicing/a.test.ts": ts(`it("выставляется", () => {});`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("- `tests/capabilities/billing` · выставляется");
+    expect(out).toContain("- `tests/capabilities/invoicing` · выставляется");
+  });
+
+  it("тест в tests/, но вне capabilities/standards — помечен «вне дерева»", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ "tests/unit/a.test.ts": ts(`it("сирота", () => {});`) });
+    expect(diffFrom(base).stdout).toContain("- `tests/unit` · сирота ⚠️ вне дерева");
+  });
+});
+
+describe("База сравнения", () => {
+  it("merge-base: тест, добавленный в main после ветвления, не считается удалённым", () => {
+    repo.commit({ [BILLING]: ts(`it("общий", () => {});`) });
+    repo.git("switch", "-q", "-c", "feature");
+    repo.commit({ [BILLING]: ts(`it("общий", () => {}); it("из ветки", () => {});`) });
+    repo.git("switch", "-q", "main");
+    repo.commit({ "tests/capabilities/other/b.test.ts": ts(`it("из main", () => {});`) });
+    repo.git("switch", "-q", "feature");
+    const out = diffFrom("main").stdout;
+    expect(out).toContain("**Добавлены (1):**\n\n- `tests/capabilities/billing` · из ветки");
+    expect(out).toContain("**Удалены:** нет.");
+    expect(out).toContain("_База: `main (merge-base)`._");
+  });
+
+  it("--no-merge-base сравнивает с веткой как есть", () => {
+    repo.commit({ [BILLING]: ts(`it("общий", () => {});`) });
+    repo.git("switch", "-q", "-c", "feature");
+    repo.commit({ "src/a.ts": "" });
+    repo.git("switch", "-q", "main");
+    repo.commit({ "tests/capabilities/other/b.test.ts": ts(`it("из main", () => {});`) });
+    repo.git("switch", "-q", "feature");
+    expect(diffFrom("main", "--no-merge-base").stdout).toContain("**Удалены (1):**\n\n- `tests/capabilities/other` · из main");
+  });
+
+  it("--worktree видит незакоммиченные и неотслеживаемые тесты", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    writeTree(dir, { [BILLING]: ts(`it("x", () => {}); it("черновик", () => {});`), "src/new.test.ts": ts(`it("вне", () => {});`) });
+    const out = diffFrom(base, "--worktree").stdout;
+    expect(out).toContain("**Добавлены (1):**\n\n- `tests/capabilities/billing` · черновик");
+    expect(out).toContain("**Вне дерева `tests/`** изменены файлы тестов: `src/new.test.ts`.");
+  });
+
+  it("нет такой ревизии — код 2 и подсказка про fetch", () => {
+    repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    const r = diffFrom("origin/nowhere");
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("git fetch origin");
+  });
+});
+
+describe("Вне дерева tests/", () => {
+  it("изменённый файл теста вне tests/ перечисляется по имени", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ "src/sum.test.ts": ts(`it("складывает", () => {});`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Вне дерева `tests/`** изменены файлы тестов: `src/sum.test.ts`.");
+    expect(out).not.toContain("складывает");
+  });
+
+  it("tests/lib не участвует", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ "tests/lib/factory.test.ts": ts(`it("фабрика", () => {});`) });
+    expect(diffFrom(base).stdout).toContain("Тесты не менялись.");
+  });
+});
+
+describe("--json", () => {
+  it("машинный формат с тремя списками и файлами вне дерева", () => {
+    const base = repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("старое", () => {}); });`) });
+    repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("новое", () => {}); });`), "src/a.test.ts": ts(`it("вне", () => {});`) });
+    const r = diffFrom(base, "--json");
+    const j = JSON.parse(r.stdout);
+    expect(j.removed).toEqual([{ file: BILLING, folder: "tests/capabilities/billing", describes: ["Счета"], name: "старое" }]);
+    expect(j.added[0].name).toBe("новое");
+    expect(j.changed).toEqual([]);
+    expect(j.out_of_tree_files).toEqual(["src/a.test.ts"]);
+  });
+});
