@@ -53,10 +53,14 @@ gh api -X DELETE repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by/$BY_ID
 ```bash
 # проект привязан к репо? какие представления? какие поля?
 gh api graphql -f query='{repository(owner:"<owner>",name:"<repo>"){projectsV2(first:5){nodes{number title}}}}'
-gh api graphql -f query='{organization(login:"<owner>"){projectV2(number:<N>){views(first:10){nodes{id name layout}}}}}'   # личный аккаунт — user(login:)
+gh api graphql -f query='{organization(login:"<owner>"){projectV2(number:<N>){views(first:10){nodes{id name layout filter}}}}}'   # личный аккаунт — user(login:)
 gh project field-list <N> --owner <owner> --format json
 gh project view <N> --owner <owner> --format json    # id проекта
 ```
+
+У представлений `filter` пуст: фильтр (например, `iteration:@current` без
+поля Iteration) молча прячет задачи с доски. Снять —
+`updateProjectV2View(input:{viewId,filter:""})`.
 
 ### Создание с нуля
 
