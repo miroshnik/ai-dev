@@ -49,6 +49,12 @@ describe("Три списка", () => {
     expect(diffFrom(base).stdout).toContain("Тесты не менялись.");
   });
 
+  it("`<` в названиях вне code span экранируется — GitHub не съест `<type>` в теле PR", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); describe("<type>/N", () => { it("маркер <!-- est --> и \`<x>\`", () => {}); });`) });
+    expect(diffFrom(base).stdout).toContain("- `tests/capabilities/billing` · \\<type>/N › маркер \\<!-- est --> и `<x>`\n");
+  });
+
   it("пустой список — «нет», а не пропуск раздела", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
     repo.commit({ [BILLING]: ts(`it("x", () => {}); it("y", () => {});`) });

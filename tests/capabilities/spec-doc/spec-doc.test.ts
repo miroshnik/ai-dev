@@ -81,6 +81,19 @@ describe("Отчёт Vitest", () => {
   });
 });
 
+/** Название теста — текст, а не разметка: его куски не должны пропадать при показе на GitHub. */
+describe("Названия в markdown", () => {
+  it("`<` вне code span экранируется — `<type>` и `<!-- … -->` не пропадают как HTML, в code span — как есть", () => {
+    const r = doc(
+      "r.json",
+      vitestReport(dir, { "tests/capabilities/est/a.test.ts": [[["<type>/N-slug"], "маркер <!-- est {…} --> читается, `<x>` — как есть"]] }),
+      "--stdout",
+    );
+    expect(r.stdout).toContain("#### \\<type>/N-slug\n");
+    expect(r.stdout).toContain("- ✅ маркер \\<!-- est {…} --> читается, `<x>` — как есть\n");
+  });
+});
+
 describe("Отчёт Playwright", () => {
   const report = (rootDir: string) =>
     JSON.stringify({
