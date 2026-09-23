@@ -12,6 +12,10 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   `pr-checks.md`); правила ссылаются на них, агент читает по мере надобности.
 - `skills/<name>/` — скиллы по стандарту [Agent Skills](https://agentskills.io):
   `SKILL.md` (frontmatter + процедура) и `scripts/` (детерминированная часть).
+  Скрипты — TypeScript под Bun (`bun script.ts`, без сборки и зависимостей).
+  Тесты скриптов — `bun test` в `tests/`
+  (`bun install`, `bun test`, `bun run typecheck`, `bun run spec:doc` —
+  документация `docs/spec/` из названий тестов).
   Симлинки — в `~/.claude/skills/` (Claude Code) и `~/.agents/skills/`
   (Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp); без клона —
   `npx skills add miroshnik/ai-dev -g --all`.
@@ -44,6 +48,10 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   факт в активных часах из транскриптов сессий.
 - `ci-wait` — ожидание чеков PR или статуса коммита с исходами
   PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch`.
+- `spec` — спецификация из тестов: `spec-doc` строит `docs/spec/` из отчётов
+  раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву
+  `tests/capabilities` и `tests/standards`; `spec-diff` — список удалённых,
+  изменённых и добавленных названий тестов для тела PR.
 
 Задачи по этому репозиторию — в Issues и проекте `ai-dev`, по правилам из
 `AGENTS.md`.
