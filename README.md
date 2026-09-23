@@ -4,7 +4,7 @@
 Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого аккаунта.
 
 - `AGENTS.md` — канон правил (ведение задач в GitHub Issues + Projects,
-  milestones, оценка и факт, CI). Агенты читают его напрямую или через
+  milestones, оценка и факт, спецификация тестами, CI). Агенты читают его напрямую или через
   импорт из своего файла.
 - `claude/CLAUDE.md` — файл Claude Code: импорт `@../AGENTS.md` плюс то, что
   есть только у него. В `~/.claude/CLAUDE.md` — симлинк сюда.
@@ -44,8 +44,6 @@ Code, Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp) и любого акк�
   факт в активных часах из транскриптов сессий.
 - `ci-wait` — ожидание чеков PR или статуса коммита с исходами
   PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch`.
-- `openspec` — работа по OpenSpec: поэтапный флоу с утверждениями, дельты
-  спек, когда архивировать; `reference.md` — ловушки парсера и валидатора.
 
 Задачи по этому репозиторию — в Issues и проекте `ai-dev`, по правилам из
 `AGENTS.md`.
