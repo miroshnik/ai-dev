@@ -198,6 +198,23 @@ describe("Транскрипт Claude Code", () => {
     expect(s.n_subagents).toBe(1);
     expect(s.routine).toBe(false);
   });
+
+  it("вставки <system-reminder> перед текстом промпта вырезаются: промпт человеческий, номер задачи — из текста, а не из вставки; одна вставка — не промпт", () => {
+    // так пишет Claude Code desktop (Code tab): картинка, затем текст, начинающийся со вставки приложения
+    const reminder = (s: string) => `<system-reminder>\n${s}\n</system-reminder>`;
+    const file = path.join(dir, "code-tab.jsonl");
+    writeFileSync(file, jsonl([
+      {
+        type: "user", timestamp: "2026-09-01T10:00:00Z", cwd: "/repo", gitBranch: "main", origin: { kind: "human" },
+        message: { role: "user", content: [{ type: "image", source: { type: "base64", data: "" } }, { type: "text", text: `${reminder("git status: Merge pull request #31")}\n${reminder("worktree")}\n#42 сделай экспорт` }] },
+      },
+      { type: "user", timestamp: "2026-09-01T10:01:00Z", gitBranch: "main", message: { content: [{ type: "text", text: reminder("только вставка") }] } },
+      { type: "user", timestamp: "2026-09-01T10:02:00Z", gitBranch: "main", origin: { kind: "human" }, message: { content: "ещё промпт" } },
+    ]));
+    const s = parseSessionFile(file);
+    expect(s.n_human).toBe(2);
+    expect(s.first_refs).toEqual([42]);
+  });
 });
 
 /** У записей Codex нет ветки — привязка к задаче только по номеру в промпте и хешам коммитов. */
