@@ -196,11 +196,12 @@ const outMark = (t: Test) => (L.classify(t.path)[0] === "out" ? " ⚠️ вне 
 const entry = (t: Test) => `- \`${L.folderOf(t)}\` · ${L.titleOf(t)}${outMark(t)}`;
 
 function changedEntry([o, n]: [Test, Test]): string {
+  const md = (parts: string[]) => parts.map(L.mdText).join(" › ");
   if (sameDescribes(o, n)) {
-    const prefix = n.describes.length ? n.describes.join(" › ") + " › " : "";
-    return `- \`${L.folderOf(n)}\` · ${prefix}~~${o.name}~~ → ${n.name}${outMark(n)}`;
+    const prefix = n.describes.length ? md(n.describes) + " › " : "";
+    return `- \`${L.folderOf(n)}\` · ${prefix}~~${L.mdText(o.name)}~~ → ${L.mdText(n.name)}${outMark(n)}`;
   }
-  return `- \`${L.folderOf(n)}\` · ~~${o.describes.join(" › ")}~~ → ${n.describes.join(" › ")} › ${n.name}${outMark(n)}`;
+  return `- \`${L.folderOf(n)}\` · ~~${md(o.describes)}~~ → ${md(n.describes)} › ${L.mdText(n.name)}${outMark(n)}`;
 }
 
 export function render(baseLabel: string, removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[]): string {

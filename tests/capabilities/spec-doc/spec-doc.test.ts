@@ -1,3 +1,11 @@
+/**
+ * Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из отчётов раннеров — дерево `tests/`, названия
+ * тестов и их JSDoc.
+ *
+ * Требование существует, пока есть проверяющий его тест, поэтому документацию о поведении не пишут руками: её
+ * собирают из тестов, и разойтись с ними она не может. `docs/spec` коммитится вместе с PR, CI проверяет, что
+ * она не отстала.
+ */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -46,12 +54,11 @@ describe("Отчёт Vitest", () => {
     expect(r.stdout).toContain("- ❌ падает — падает");
     expect(r.stdout).toContain("- 📝 потом — todo");
     expect(r.stdout).toContain("- ⏭️ ожидает — пропущен");
-    expect(r.stdout).toContain("4 теста, 3 пропущено, 1 падает");
   });
 
-  it("тест без describe идёт сразу под заголовком capability", () => {
+  it("тест без describe идёт сразу под заголовком capability, без строки с разделом, путём и счётчиком", () => {
     const r = doc("r.json", vitestReport(dir, { "tests/capabilities/billing/a.test.ts": [[[], "верхний"]] }), "--stdout");
-    expect(r.stdout).toContain("`tests/capabilities/billing` · 1 тест\n\n- ✅ верхний");
+    expect(r.stdout).toContain("### billing\n\n- ✅ верхний");
   });
 
   it("абсолютный путь с другой машины приводится по сегменту /tests/", () => {
@@ -71,6 +78,19 @@ describe("Отчёт Vitest", () => {
     );
     expect(r.stdout.match(/#### Счета/g)).toHaveLength(1);
     expect(r.stdout.indexOf("первый")).toBeLessThan(r.stdout.indexOf("второй"));
+  });
+});
+
+/** Название теста — текст, а не разметка: его куски не должны пропадать при показе на GitHub. */
+describe("Названия в markdown", () => {
+  it("`<` вне code span экранируется — `<type>` и `<!-- … -->` не пропадают как HTML, в code span — как есть", () => {
+    const r = doc(
+      "r.json",
+      vitestReport(dir, { "tests/capabilities/est/a.test.ts": [[["<type>/N-slug"], "маркер <!-- est {…} --> читается, `<x>` — как есть"]] }),
+      "--stdout",
+    );
+    expect(r.stdout).toContain("#### \\<type>/N-slug\n");
+    expect(r.stdout).toContain("- ✅ маркер \\<!-- est {…} --> читается, `<x>` — как есть\n");
   });
 });
 
@@ -116,6 +136,10 @@ describe("Отчёт Playwright", () => {
   });
 });
 
+/**
+ * `tests/lib` — фабрики и хелперы, не спека. Тест вне `capabilities/<name>` и `standards/<name>` — без дома:
+ * это сигнал перенести, а не ошибка разбора.
+ */
 describe("Дерево tests/", () => {
   const report = () =>
     vitestReport(dir, {
@@ -146,6 +170,10 @@ describe("Дерево tests/", () => {
   });
 });
 
+/**
+ * Маркер в первой строке отличает сгенерированный файл от рукописного: свои устаревшие файлы скрипт удаляет,
+ * чужие не трогает.
+ */
 describe("Файлы в docs/spec", () => {
   it("пишет README.md, capabilities/<name>.md и standards/<name>.md с маркером", () => {
     const r = doc(
@@ -159,13 +187,26 @@ describe("Файлы в docs/spec", () => {
     expect(r.code).toBe(0);
     const readme = readFileSync(path.join(dir, "docs/spec/README.md"), "utf8");
     expect(readme.startsWith("<!-- spec-doc:")).toBe(true);
-    expect(readme).toContain("- [billing](capabilities/billing.md) — 1 тест");
-    expect(readme).toContain("- [audit](standards/audit.md) — 1 тест");
+    expect(readme).toContain("## Что делает система\n\n- [billing](capabilities/billing.md)\n");
+    expect(readme).toContain("## Как построена\n\n- [audit](standards/audit.md)\n");
     expect(readme).toContain("## Вне дерева\n\n");
     expect(readme).toContain("- `src/x.test.ts` — 1 тест");
     const billing = readFileSync(path.join(dir, "docs/spec/capabilities/billing.md"), "utf8");
-    expect(billing).toContain("# billing\n\nЧто делает система · `tests/capabilities/billing` · 1 тест\n\n## Счета\n\n- ✅ выставляется");
-    expect(readFileSync(path.join(dir, "docs/spec/standards/audit.md"), "utf8")).toContain("Как построена · `tests/standards/audit`");
+    expect(billing).toContain("# billing\n\n## Счета\n\n- ✅ выставляется");
+    expect(readFileSync(path.join(dir, "docs/spec/standards/audit.md"), "utf8")).toContain("# audit\n\n- ✅ каждая мутация пишет аудит");
+  });
+
+  it("в индексе у capability — только счётчики пропущенных и падающих, общего числа тестов нет", () => {
+    doc(
+      "r.json",
+      vitestReport(dir, {
+        "tests/capabilities/billing/a.test.ts": [[[], "ок"], [[], "потом", "todo"], [[], "сломан", "failed"]],
+        "tests/capabilities/login/a.test.ts": [[[], "ок"]],
+      }),
+    );
+    const readme = readFileSync(path.join(dir, "docs/spec/README.md"), "utf8");
+    expect(readme).toContain("- [billing](capabilities/billing.md) — 1 пропущен, 1 падает\n");
+    expect(readme).toContain("- [login](capabilities/login.md)\n");
   });
 
   it("удаляет свой устаревший файл и не трогает чужой", () => {
@@ -237,7 +278,93 @@ describe("Отчёт JUnit bun test", () => {
   it("describe — вложенные testsuite, todo и skip различаются", () => {
     const r = doc("bun.xml", xml, "--stdout");
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("### probe\n\nЧто делает система · `tests/capabilities/probe` · 6 тестов, 2 пропущено, 1 падает\n\n- ✅ верхний без describe\n\n#### Внешний\n\n- ✅ на первом уровне\n\n##### Внутренний\n\n- ✅ глубокий\n- ⏭️ пропущенный #12 — пропущен\n- 📝 потом — todo\n- ❌ test_не питон [1] — падает");
+    expect(r.stdout).toContain("### probe\n\n- ✅ верхний без describe\n\n#### Внешний\n\n- ✅ на первом уровне\n\n##### Внутренний\n\n- ✅ глубокий\n- ⏭️ пропущенный #12 — пропущен\n- 📝 потом — todo\n- ❌ test_не питон [1] — падает");
     expect(r.stdout).not.toContain("Вне дерева");
+  });
+});
+
+/**
+ * Отчёты раннеров комментариев не несут — прозу `spec-doc` берёт из исходников тестов тем же сканером, что
+ * `spec-diff`. В документацию идёт только JSDoc; `//` — комментарий для читателя кода.
+ */
+describe("Проза из JSDoc", () => {
+  const BILLING = "tests/capabilities/billing/invoice.test.ts";
+  const report = () => vitestReport(dir, { [BILLING]: [[["Счета"], "выставляется за месяц"], [["Счета"], "черновик удаляется"]] });
+  const read = (rel: string) => readFileSync(path.join(dir, rel), "utf8");
+  const body = `describe("Счета", () => { it("выставляется за месяц", () => {}); it("черновик удаляется", () => {}); });\n`;
+
+  it("JSDoc в начале файла — абзацы под заголовком capability, первый — описание в индексе; теги не идут", () => {
+    writeTree(dir, {
+      [BILLING]: `/**\n * Биллинг: счета клиентам\n * за месяц.\n *\n * Второй абзац — только в файле capability.\n *\n * @see #12\n */\nimport { describe, it } from "bun:test";\n${body}`,
+    });
+    const r = doc("r.json", report());
+    expect(r.code).toBe(0);
+    expect(read("docs/spec/capabilities/billing.md")).toContain(
+      "# billing\n\nБиллинг: счета клиентам\nза месяц.\n\nВторой абзац — только в файле capability.\n\n## Счета\n\n- ✅ выставляется за месяц",
+    );
+    expect(read("docs/spec/README.md")).toContain("- [billing](capabilities/billing.md) — Биллинг: счета клиентам за месяц.\n");
+    expect(read("docs/spec/capabilities/billing.md")).not.toContain("@see");
+  });
+
+  it("JSDoc перед describe — абзац под подзаголовком, перед it — цитата под строкой теста", () => {
+    writeTree(dir, {
+      [BILLING]: `import { describe, it } from "bun:test";
+/** Счёт — документ на оплату. */
+describe("Счета", () => {
+  /**
+   * Месяц — календарный.
+   *
+   * Неполный — пропорционально дням.
+   */
+  it("выставляется за месяц", () => {});
+  it("черновик удаляется", () => {});
+});
+`,
+    });
+    const r = doc("r.json", report(), "--stdout");
+    expect(r.stdout).toContain(
+      "#### Счета\n\nСчёт — документ на оплату.\n\n- ✅ выставляется за месяц\n  > Месяц — календарный.\n  >\n  > Неполный — пропорционально дням.\n- ✅ черновик удаляется\n",
+    );
+  });
+
+  it("`//`-комментарий и JSDoc, отделённый от вызова кодом, в документацию не попадают", () => {
+    writeTree(dir, {
+      [BILLING]: `// комментарий файла
+import { describe, it } from "bun:test";
+// комментарий describe
+describe("Счета", () => {
+  /** про константу */
+  const x = 1;
+  it("выставляется за месяц", () => {});
+  it("черновик удаляется", () => {});
+});
+`,
+    });
+    const out = doc("r.json", report(), "--stdout").stdout;
+    expect(out).toContain("#### Счета\n\n- ✅ выставляется за месяц\n- ✅ черновик удаляется");
+    expect(out).not.toContain("комментарий");
+    expect(out).not.toContain("про константу");
+  });
+
+  it("JSDoc вплотную к describe в файле без импортов — проза describe, а не capability", () => {
+    writeTree(dir, { [BILLING]: `/** Счёт — документ на оплату. */\n${body}` });
+    const r = doc("r.json", report(), "--stdout");
+    expect(r.stdout).toContain("### billing\n\n#### Счета\n\nСчёт — документ на оплату.\n\n- ✅ выставляется за месяц");
+  });
+
+  it("описание capability из двух файлов — абзацы по порядку путей, в индексе — первый", () => {
+    writeTree(dir, {
+      "tests/capabilities/billing/b.test.ts": `/** Второй файл. */\nimport { it } from "bun:test";\nit("b", () => {});\n`,
+      "tests/capabilities/billing/a.test.ts": `/** Первый файл. */\nimport { it } from "bun:test";\nit("a", () => {});\n`,
+    });
+    doc("r.json", vitestReport(dir, { "tests/capabilities/billing/b.test.ts": [[[], "b"]], "tests/capabilities/billing/a.test.ts": [[[], "a"]] }));
+    expect(read("docs/spec/capabilities/billing.md")).toContain("# billing\n\nПервый файл.\n\nВторой файл.\n\n- ✅ a\n- ✅ b");
+    expect(read("docs/spec/README.md")).toContain("- [billing](capabilities/billing.md) — Первый файл.\n");
+  });
+
+  it("нет исходника (отчёт с другой машины) — документация без прозы, не ошибка", () => {
+    const r = doc("r.json", report(), "--stdout");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("### billing\n\n#### Счета\n\n- ✅ выставляется за месяц");
   });
 });
