@@ -1,0 +1,20 @@
+{
+  "name": "ai-dev",
+  "private": true,
+  "type": "module",
+  "description": "Общие правила и скиллы для агентов; скрипты скиллов — TypeScript под Bun, тесты — bun test в tests/",
+  "engines": {
+    "bun": ">=1.2"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "spec:doc": "bun test --reporter=junit --reporter-outfile=.spec-report.xml && bun skills/spec/scripts/spec-doc.ts .spec-report.xml --strict",
+    "spec:diff": "bun skills/spec/scripts/spec-diff.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
+  }
+}
