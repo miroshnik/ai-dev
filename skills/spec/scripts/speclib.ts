@@ -47,7 +47,18 @@ export function keyOf(t: Test): string {
 }
 
 export function titleOf(t: Test): string {
-  return [...t.describes, t.name].join(" › ");
+  return [...t.describes, t.name].map(mdText).join(" › ");
+}
+
+/**
+ * Имя теста или describe для markdown: `<` вне code span экранируется — иначе GitHub примет
+ * `<type>` или `<!-- … -->` за HTML и молча выбросит. Остальная разметка — как написал автор.
+ */
+export function mdText(s: string): string {
+  return s
+    .split(/(`+[^`]*`+)/)
+    .map((part, i) => (i % 2 ? part : part.replace(/</g, "\\<")))
+    .join("");
 }
 
 // Файлы тестов: *.test.ts / *.spec.ts / *.e2e.ts (и js/jsx/tsx/mjs/cjs…)

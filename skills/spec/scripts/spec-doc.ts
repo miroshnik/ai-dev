@@ -139,8 +139,8 @@ export function attachDocs(groups: Map<string, Group>, root: string): string[] {
 }
 
 function testLine(t: Test): string {
-  let line = `- ${ICON[t.status] ?? "❔"} ${t.name}`;
-  if (t.status === "skipped") line += t.reason ? ` — пропущен: ${t.reason}` : " — пропущен";
+  let line = `- ${ICON[t.status] ?? "❔"} ${L.mdText(t.name)}`;
+  if (t.status === "skipped") line += t.reason ? ` — пропущен: ${L.mdText(t.reason)}` : " — пропущен";
   else if (t.status === "failed") line += " — падает";
   else if (t.status === "todo") line += " — todo";
   if (t.variants > 1) line += ` (${plural(t.variants, "вариант", "варианта", "вариантов")})`;
@@ -163,7 +163,7 @@ function renderNode(g: Group, node: Node, level: number, lines: string[]): void 
   }
   for (const [name, child] of node.children) {
     if (lines[lines.length - 1] !== "") lines.push("");
-    lines.push(heading(level, name), "");
+    lines.push(heading(level, L.mdText(name)), "");
     pushDoc(lines, child.doc);
     renderNode(g, child, level + 1, lines);
   }
