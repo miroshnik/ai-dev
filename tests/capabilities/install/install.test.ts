@@ -31,10 +31,10 @@ beforeEach(() => {
   mkdirSync(home);
   mkdirSync(proj);
   execFileSync("git", ["init", "-q"], { cwd: proj });
-  // PATH — только node, git и npm: агенты на машине определяются по каталогам в HOME, а не по тому, что стоит у раннера
+  // PATH — только node, git, npm и sh: агенты на машине определяются по каталогам в HOME, а не по тому, что стоит у раннера
   const bin = path.join(tmp, "bin");
   mkdirSync(bin);
-  for (const cmd of ["node", "git", "npm", "npx"]) {
+  for (const cmd of ["node", "git", "npm", "npx", "sh"]) {
     symlinkSync(execFileSync("sh", ["-c", `command -v ${cmd}`], { encoding: "utf8" }).trim(), path.join(bin, cmd));
   }
   env = { HOME: home, PATH: bin };
