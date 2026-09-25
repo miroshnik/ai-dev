@@ -30,9 +30,11 @@ export const EST_DIR = process.env.AI_DEV_CONFIG_DIR || path.join(HOME, ".config
 const LEGACY_EST_DIR = path.join(HOME, ".claude", "est");
 export const REGISTRY_PATH = path.join(EST_DIR, "repos.json");
 const CACHE_DIR = path.join(EST_DIR, "cache");
-// Источники факта: транскрипты Claude Code (~/.claude/projects) и сессии Codex (~/.codex/sessions).
+// Источники факта: транскрипты Claude Code (~/.claude/projects), сессии Codex (~/.codex/sessions) и выгрузки
+// событий облачных сессий Claude Code (<каталог состояния>/cloud/<owner>/<repo>/<session>.json, est cloud-import).
 const PROJECTS_DIR = path.join(HOME, ".claude", "projects");
 const CODEX_DIRS = [path.join(HOME, ".codex", "sessions"), path.join(HOME, ".codex", "archived_sessions")];
+export const CLOUD_DIR = path.join(EST_DIR, "cloud");
 
 function ensureConfigDir(): void {
   let legacyDir = false;
@@ -118,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 11; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist)
+const SESSION_CACHE_V = 12; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -373,6 +375,8 @@ export interface PR {
   commits: { oid: string; at: number | null }[];
   commits_total: number;
   files: { path: string; a: number; d: number }[];
+  /** Облачные сессии из трейлера `Claude-Session` коммитов PR — их транскрипт в облаке (est cloud-import). */
+  cloud?: string[];
   why?: string;
 }
 
@@ -452,10 +456,16 @@ export type Recorded = Map<number, Record<string, [number, number][]>>;
 
 const PR_FIELDS = `number title state headRefName baseRefName body mergedAt updatedAt additions deletions changedFiles
         mergeCommit{oid} closingIssuesReferences(first:20){nodes{number}}
-        commits(first:100){totalCount nodes{commit{oid authoredDate}}}
+        commits(first:100){totalCount nodes{commit{oid authoredDate messageBody}}}
         files(first:100){nodes{path additions deletions}}`;
 
-function packPr(p: Any): PR {
+/** Облачные сессии из трейлеров `Claude-Session: https://claude.ai/code/session_…` в тексте коммита. */
+export function cloudSessionsIn(message: string): string[] {
+  return uniqSortedStrs([...String(message ?? "").matchAll(/^Claude-Session:\s*https:\/\/claude\.ai\/code\/(session_[A-Za-z0-9]+)/gm)].map((m) => m[1]!));
+}
+
+export function packPr(p: Any): PR {
+  const commitNodes: Any[] = p.commits?.nodes ?? [];
   return {
     number: p.number,
     title: p.title ?? null,
@@ -473,6 +483,7 @@ function packPr(p: Any): PR {
     commits: (p.commits?.nodes ?? []).map((c: Any) => ({ oid: c.commit.oid, at: parseTs(c.commit.authoredDate) })),
     commits_total: p.commits?.totalCount ?? 0,
     files: (p.files?.nodes ?? []).map((f: Any) => ({ path: f.path, a: f.additions, d: f.deletions })),
+    cloud: uniqSortedStrs(commitNodes.flatMap((c: Any) => cloudSessionsIn(c.commit?.messageBody ?? ""))),
   };
 }
 
@@ -649,7 +660,7 @@ export class Repo implements FactRepo {
     const cache = loadJson<Any>(file, { prs: {} });
     let prs = new Map<number, PR>();
     for (const [k, v] of Object.entries(cache.prs ?? {})) prs.set(Number(k), v as PR);
-    if ([...prs.values()].some((v) => !("baseRefName" in v))) prs = new Map(); // старый формат кэша — перечитать
+    if ([...prs.values()].some((v) => !("baseRefName" in v) || !("cloud" in v))) prs = new Map(); // старый формат кэша — перечитать
     this.defaultBranch = cache.default_branch ?? null;
     const knownMax = prs.size ? Math.max(...[...prs.values()].map((v) => v.updatedAt || 0)) : 0;
     const q = `query($o:String!,$r:String!,$c:String){ repository(owner:$o,name:$r){ defaultBranchRef{name} pullRequests(first:${PR_PAGE},after:$c,states:[MERGED],orderBy:{field:UPDATED_AT,direction:DESC}){ pageInfo{hasNextPage endCursor} nodes{ ${PR_FIELDS} } } } }`;
@@ -947,12 +958,17 @@ function collectHashes(acc: Acc, ts: number, txt: string): void {
  * привязывается к своим задачам, а не делится по порядку коммитов.
  */
 function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
+  scanRecords(jsonlRecords(file), acc, subagent);
+}
+
+/** То же по готовым записям: у облачной сессии они собираются из её событий (parseCloudFile). */
+function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void {
   const commitToolIds = new Set<string>();
   let hint = ""; // подсказка задачи для записей субагента: "N" или "owner/repo#N"
   let hintDone = !subagent;
   let pending: string[] = []; // переименования без времени: время — у следующей записи
   let lastTs: number | null = null;
-  for (const r of jsonlRecords(file)) {
+  for (const r of records) {
     const t = r.type;
     const ts = r.timestamp ? parseTs(r.timestamp) : null;
     if (acc.cwd === null && r.cwd) acc.cwd = r.cwd;
@@ -1193,6 +1209,114 @@ export function parseCodexFile(file: string): Session {
   };
 }
 
+
+/** Выгрузка облачной сессии: то, что сохраняет браузерный сниппет из SKILL.md (раздел «Облачная сессия»). */
+export interface CloudExport {
+  v: number;
+  session: string;
+  repo: string;
+  title?: string;
+  events: Any[];
+}
+
+export function isCloudExport(x: Any): x is CloudExport {
+  return !!x && typeof x === "object" && typeof x.session === "string" && /^session_[A-Za-z0-9]+$/.test(x.session) && typeof x.repo === "string" && /^[^/\s]+\/[^/\s]+$/.test(x.repo) && Array.isArray(x.events);
+}
+
+/**
+ * Сводка облачной сессии Claude Code из её событий (claude.ai/v1/code/sessions/<id>/events) в том же формате, что у
+ * локальной: события assistant/user — это те же записи транскрипта. Ветки у записи нет — её приносит событие
+ * `vcs_state_changed` (при коммите и push), до первого такого события ветка нейтральная; человек — `source: client`;
+ * ответы субагентов (`parent_tool_use_id`) — отдельный поток, как файл субагента у локальной сессии. Название
+ * сессии — из выгрузки: «#N …» привязывает, как у локальной.
+ */
+export function parseCloudFile(file: string): Session {
+  const data = JSON.parse(readFileSync(file, "utf8"));
+  if (!isCloudExport(data)) throw new EstError(`${file}: не выгрузка облачной сессии (нужны session, repo, events)`);
+  const events = [...data.events].sort((a, b) => Number(a.sequence_num) - Number(b.sequence_num));
+  let branch = "";
+  let cwd: string | null = null;
+  const top: Any[] = data.title ? [{ type: "custom-title", customTitle: data.title }] : [];
+  const subs = new Map<string, Any[]>();
+  for (const e of events) {
+    const p = e?.payload ?? {};
+    if (e?.event_type === "system") {
+      if (p.subtype === "init" && p.cwd) cwd = p.cwd;
+      if (p.subtype === "vcs_state_changed" && p.branch) branch = p.branch;
+      continue;
+    }
+    if (e?.event_type !== "user" && e?.event_type !== "assistant") continue;
+    const parent: string | null = p.parent_tool_use_id ?? null;
+    const rec = {
+      type: e.event_type,
+      timestamp: p.timestamp || e.created_at,
+      gitBranch: branch,
+      cwd,
+      message: p.message,
+      toolUseResult: p.tool_use_result,
+      origin: { kind: e.source === "client" && !parent ? "human" : "agent" },
+    };
+    if (!parent) top.push(rec);
+    else {
+      if (!subs.has(parent)) subs.set(parent, []);
+      subs.get(parent)!.push(rec);
+    }
+    // облако сообщает ветку только при коммите — переход на другую ветку виден в выводе git
+    if (e.event_type === "user") branch = gitBranchIn(textOfContent(p.message?.content) + "\n" + String(p.tool_use_result?.stdout ?? "")) ?? branch;
+  }
+  const acc = newAcc();
+  scanRecords(top, acc, false);
+  for (const recs of subs.values()) scanRecords(recs, acc, true);
+  acc.ev.sort(byTs);
+  acc.commits.sort(byTs);
+  return {
+    sid: data.session,
+    cwd: acc.cwd,
+    n_human: acc.n_human,
+    ev: acc.ev,
+    prlinks: [],
+    commits: acc.commits,
+    first_refs: acc.first_refs ?? [],
+    first_urls: acc.first_urls,
+    usage: acc.usage,
+    models: acc.models,
+    title: acc.title,
+    title_refs: refsIn(acc.title),
+    title_urls: urlsIn(acc.title),
+    title_hist: acc.titles,
+    n_subagents: subs.size,
+    source: "cloud",
+    routine: acc.n_human < 3 && !acc.commits.length,
+  };
+}
+
+/** Последняя ветка, на которую перешёл git в этом выводе: `Switched to branch 'x'` или строка коммита `[x abc1234]`. */
+function gitBranchIn(txt: string): string | null {
+  let last: string | null = null;
+  for (const m of txt.matchAll(/Switched to (?:a new )?branch '([^']+)'|^\[([^\s\]]+)(?: \(root-commit\))? [0-9a-f]{7,40}\]/gm)) last = m[1] ?? m[2] ?? last;
+  return last;
+}
+
+/**
+ * Ключ сессии в маркере «Факт» (iv) и в выводе — 8 знаков id: у локальной — начало UUID, у облачной — после префикса
+ * `session_`, общего для всех облачных (иначе их интервалы склеились бы в один ключ).
+ */
+export const sidKey = (sid: string) => sid.replace(/^session_/, "").slice(0, 8);
+
+/** Путь выгрузки облачной сессии в каталоге состояния: по репозиторию, файл — id сессии. */
+export const cloudPath = (repoFull: string, session: string) => path.join(CLOUD_DIR, ...repoFull.split("/"), `${session}.json`);
+
+function cloudFiles(repo: Repo): string[] {
+  const d = path.join(CLOUD_DIR, ...repo.full.split("/"));
+  try {
+    return readdirSync(d).filter((f) => f.endsWith(".json")).map((f) => path.join(d, f)).sort();
+  } catch {
+    return [];
+  }
+}
+
+const isCloudFile = (file: string) => file.startsWith(CLOUD_DIR.replace(/\/+$/, "") + "/");
+
 /** cwd из первой записи session_meta. */
 function codexCwd(file: string): string | null {
   try {
@@ -1284,11 +1408,11 @@ function loadSessions(repo: Repo): Session[] {
   const cache = loadJson<Record<string, Session>>(file, {});
   const out: Record<string, Session> = {};
   let changed = false;
-  const files = transcriptFiles(repo).concat(codexFiles(repo));
+  const files = transcriptFiles(repo).concat(codexFiles(repo), cloudFiles(repo));
   for (const f of files) {
     let mtime: number;
     try {
-      mtime = isCodexFile(f) ? mtimeOf(f) : sessionMtime(f);
+      mtime = isCodexFile(f) || isCloudFile(f) ? mtimeOf(f) : sessionMtime(f);
     } catch {
       continue;
     }
@@ -1297,7 +1421,13 @@ function loadSessions(repo: Repo): Session[] {
       out[f] = c;
       continue;
     }
-    const s = isCodexFile(f) ? parseCodexFile(f) : parseSessionFile(f);
+    let s: Session;
+    try {
+      s = isCodexFile(f) ? parseCodexFile(f) : isCloudFile(f) ? parseCloudFile(f) : parseSessionFile(f);
+    } catch (e) {
+      console.error(`пропущен ${f}: ${(e as Error).message}`);
+      continue;
+    }
     s.mtime = mtime;
     s.v = SESSION_CACHE_V;
     out[f] = s;
@@ -1308,7 +1438,8 @@ function loadSessions(repo: Repo): Session[] {
   const sessions: Session[] = [];
   for (const s of Object.values(out)) {
     if (!s.ev.length || s.routine) continue;
-    if (!cwdMatches(s.cwd, repo.paths)) continue;
+    // облачная сессия работает в своём контейнере (cwd /home/user/…) — к репозиторию её относит каталог выгрузки
+    if (s.source !== "cloud" && !cwdMatches(s.cwd, repo.paths)) continue;
     sessions.push(s);
   }
   return sessions;
@@ -1574,6 +1705,7 @@ export interface Fact {
   iv?: Record<string, [number, number][]>; // интервалы по сессиям (sid, 8 знаков) — в маркер «Факт»
   taken?: { issue: number; h: number }[]; // не засчитано: уже в записанном факте другой задачи
   overlap?: { issue: number; h: number }[]; // засчитано (ветка, субагент, коммит), но есть и в чужом факте
+  cloud_missing?: string[]; // облачные сессии из трейлера коммитов PR, выгрузки которых нет (est cloud-import)
 }
 
 type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, доля)
@@ -1830,7 +1962,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // Запись, уже засчитанная в записанном факте другой задачи этой сессии (маркер хранит интервалы):
     // привязанная только названием или первым промптом — не засчитывается повторно; привязанная веткой,
     // субагентом или своим коммитом — остаётся, но пересечение выводится (чужой факт, вероятно, неверен).
-    const sid8 = s.sid.slice(0, 8);
+    const sid8 = sidKey(s.sid);
     const others: [number, [number, number][]][] = [];
     for (const [n, bySid] of recorded) if (n !== number && bySid[sid8]?.length) others.push([n, bySid[sid8]]);
     if (others.length) {
@@ -1928,6 +2060,10 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   if (nSessions === 0) cov = "none";
   else if (units.length && units.every(Boolean)) cov = "full";
   else cov = "partial";
+  // коммиты PR сделаны в облачной сессии, а её выгрузки нет — часть работы не видна
+  const known = new Set(sessions.map((s) => s.sid));
+  const cloudMissing = uniqSortedStrs(prObjs.flatMap((p) => p.cloud ?? [])).filter((sid) => !known.has(sid));
+  if (cloudMissing.length && cov === "full") cov = "partial";
 
   let diff = prObjs.reduce((s, p) => s + diffSize(p), 0);
   let diffNa = false;
@@ -1958,6 +2094,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     iv,
     taken: hoursByIssue(takenS),
     overlap: hoursByIssue(overlapS),
+    cloud_missing: cloudMissing,
   };
   Object.assign(res, cov !== "none" ? tokensResult(tok, byModel) : { tok: null, usd: null });
   return res;
@@ -2055,6 +2192,7 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   if (res.shared?.length) text += " " + sharedTxt(res) + ".";
   for (const x of res.taken ?? []) text += ` Не засчитано повторно: ${fmtH(x.h)} ч уже в факте #${x.issue}.`;
   for (const x of res.overlap ?? []) text += ` Пересечение с фактом #${x.issue}: ${fmtH(x.h)} ч — пересчитать #${x.issue}.`;
+  for (const sid of res.cloud_missing ?? []) text += ` Облачная сессия https://claude.ai/code/${sid} не импортирована — est cloud-import.`;
   if (res.tok) text += "\n" + tokensTxt(res);
   const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, prs: res.prs, commits: res.commits, diff: res.diff, cause };
   if (res.tok) {
@@ -2069,19 +2207,20 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
     marker.shared = sh;
   }
   if (res.iv && Object.keys(res.iv).length) marker.iv = res.iv; // по ним следующий расчёт видит, что уже засчитано
+  if (res.cloud_missing?.length) marker.cloud_missing = res.cloud_missing;
   return [text, ...keptLines, `<!-- fact ${pyDumps(marker)} -->`].join("\n");
 }
 
 // Облачная сессия Claude Code (claude.ai/code): GitHub — только REST своего репозитория, GraphQL и проекты закрыты
-// прокси сессии, поэтому ни оценки, ни факта там не посчитать. Транскрипт облачной сессии остаётся в облаке —
-// локальный est его тоже не видит. Факт такой задачи — честное «недоступен (облако)» со ссылкой на сессию.
+// прокси сессии, поэтому ни оценки, ни факта там не посчитать — честное «недоступен (облако)» со ссылкой на сессию.
+// Цифру даёт локальная сессия: импорт событий облачной сессии (est cloud-import, parseCloudFile).
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
 const CLOUD_ERR = "облачная сессия Claude Code: GitHub GraphQL и проекты отсюда недоступны — оценка, история и sweep только в локальной сессии (docs/cloud-sessions.md в ai-dev)";
 
 /** Комментарий «Факт» задачи, закрытой из облачной сессии: факт недоступен, маркер с cov none и src cloud. */
 export function cloudFactBody(sessionId: string | undefined): string {
   const sid = sessionId ? "session_" + sessionId.replace(/^(cse|session)_/, "") : null; // env даёт cse_…, ссылка — session_…
-  let text = "Факт недоступен (облако): задача сделана в облачной сессии Claude Code — там est не видит проекта GitHub, а локальный est не видит её транскрипта (покрытие none).";
+  let text = "Факт недоступен (облако): задача сделана в облачной сессии Claude Code — там est не видит проекта GitHub; цифру даст локальная сессия, импортировав события этой сессии (est cloud-import) (покрытие none).";
   if (sid) text += ` Сессия: https://claude.ai/code/${sid}.`;
   return `${text}\n<!-- fact ${pyDumps({ v: 1, h: null, manual: 0, cov: "none", src: "cloud", session: sid })} -->`;
 }
@@ -2384,7 +2523,7 @@ function factForEpic(repo: Repo, issue: Any, gap: number, quiet = false): [Any, 
 /** «Claude Code», «Codex» или «Claude Code и Codex» — по источникам привязанных сессий. */
 function agentsTxt(res: Fact): string {
   const srcs = new Set((res.details ?? []).map((d) => d.src ?? "claude"));
-  const names: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
+  const names: Record<string, string> = { claude: "Claude Code", codex: "Codex", cloud: "облачной сессии Claude Code" };
   if (!srcs.size) return "Claude Code";
   return [...srcs].sort().map((s) => names[s] ?? s).join(" и ");
 }
@@ -2416,10 +2555,11 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
     const brs = Object.entries(d.branches).slice(0, 4).map(([b, h]) => `${b} ${h} ч`).join(", ");
     const rules = Object.entries(d.rules).map(([k, v]) => `${k}:${v}`).join(", ");
     const src = d.src === "codex" ? " [codex]" : "";
-    console.log(`  сессия ${d.sid.slice(0, 8)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
+    console.log(`  сессия ${sidKey(d.sid)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
   }
   for (const x of res.taken ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч по названию/первому промпту уже в факте #${x.issue} — здесь не засчитано; если там ошибка — est fact ${x.issue} --write, потом снова эту задачу`);
   for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
+  for (const sid of res.cloud_missing ?? []) console.log(`ВНИМАНИЕ: часть работы — облачная сессия https://claude.ai/code/${sid}, её события не импортированы: выгрузить браузером и est cloud-import (SKILL.md est, «Облачная сессия»)`);
 }
 
 function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): void {
@@ -2720,14 +2860,37 @@ function cmdEstimate(args: EstimateArgs): void {
 // CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `est — оценка задач по истории проекта и факт из транскриптов Claude Code и Codex.
+const USAGE = `est — оценка задач по истории проекта и факт из транскриптов Claude Code, Codex и облачных сессий.
 
   est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
   est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
   est fact --sweep [--since 90d] [--repo o/r] [--write]
   est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult 0.5|1|1.5|2] [--note "причина"] [--write]
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
+  est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Облачная сессия») в источники факта
   <type> — ${EST_TYPES.join(" ")}`;
+
+/** Выгрузки облачных сессий → каталог состояния; сводка по каждой, чтобы было видно, что легло. */
+function cmdCloudImport(files: string[]): void {
+  const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16);
+  for (const f of files) {
+    let data: Any;
+    try {
+      data = JSON.parse(readFileSync(f, "utf8"));
+    } catch (e) {
+      throw new EstError(`${f}: ${(e as Error).message}`);
+    }
+    if (!isCloudExport(data)) throw new EstError(`${f}: не выгрузка облачной сессии (нужны session, repo, events — сниппет из SKILL.md est)`);
+    const s = parseCloudFile(f);
+    const dst = cloudPath(data.repo, data.session);
+    mkdirSync(path.dirname(dst), { recursive: true });
+    writeFileSync(dst, JSON.stringify(data));
+    const n = data.events.length;
+    const span = s.ev.length ? `${hhmm(s.ev[0]![0])}–${hhmm(s.ev[s.ev.length - 1]![0])} UTC` : "без записей";
+    const title = data.title ? `, «${data.title}»` : "";
+    console.log(`${data.session} (${data.repo}${title}): ${n} ${plural(n, "событие", "события", "событий")}, ${s.n_human} ${plural(s.n_human, "промпт", "промпта", "промптов")}, ${span} → ${dst}`);
+  }
+}
 
 function intArg(v: string | undefined, name: string): number | undefined {
   if (v === undefined) return undefined;
@@ -2749,6 +2912,11 @@ export function main(argv: string[]): number {
     if (!cmd || cmd === "-h" || cmd === "--help") {
       console.log(USAGE);
       return cmd ? 0 : 2;
+    }
+    if (cmd === "cloud-import") {
+      if (!rest.length) throw new EstError("укажите файлы выгрузки облачной сессии");
+      cmdCloudImport(rest);
+      return 0;
     }
     if (cmd === "history") {
       const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, grep: { type: "string" }, "all-repos": { type: "boolean", default: false }, last: { type: "string" } } });
