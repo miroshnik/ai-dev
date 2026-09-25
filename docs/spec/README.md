@@ -14,4 +14,5 @@
 
 ## Как построена
 
+- [cloud-session](standards/cloud-session.md) — Скрипты скиллов, которые ходят в GitHub Projects, в облачной сессии выходят с объяснением, а не сбоем `gh`.
 - [node-runtime](standards/node-runtime.md) — Скрипты скилла `spec` идут под Node ≥ 22.18 без Bun — CI проекта на Node запускает их из копии скилла в проекте.
