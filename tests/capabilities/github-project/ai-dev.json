@@ -1,0 +1,692 @@
+{
+ "RepoState {\"name\":\"ai-dev\",\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "id": "R_kgDOUd0OBQ",
+    "name": "ai-dev",
+    "nameWithOwner": "miroshnik/ai-dev",
+    "owner": {
+     "__typename": "User",
+     "id": "MDQ6VXNlcjgxOTM4Ng==",
+     "login": "miroshnik"
+    },
+    "projectsV2": {
+     "nodes": [
+      {
+       "id": "PVT_kwHOAAyAus4BjsdO",
+       "number": 6,
+       "title": "ai-dev",
+       "url": "https://github.com/users/miroshnik/projects/6",
+       "closed": false
+      }
+     ]
+    }
+   }
+  }
+ },
+ "RepoIssues {\"name\":\"ai-dev\",\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issues": {
+     "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0wOS0yNVQxNDozNzowN1rPAAAAAUzZhFw="
+     },
+     "nodes": [
+      {
+       "id": "I_kwDOUd0OBc8AAAABTNZ9Qw",
+       "number": 42
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+       "number": 45
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABTNmC6w",
+       "number": 46
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABTNmEXA",
+       "number": 47
+      }
+     ]
+    }
+   }
+  }
+ },
+ "ProjectState {\"id\":\"PVT_kwHOAAyAus4BjsdO\"}": {
+  "data": {
+   "node": {
+    "id": "PVT_kwHOAAyAus4BjsdO",
+    "number": 6,
+    "title": "ai-dev",
+    "url": "https://github.com/users/miroshnik/projects/6",
+    "closed": false,
+    "views": {
+     "nodes": [
+      {
+       "id": "PVTV_lAHOAAyAus4BjsdOzgLrw5g",
+       "number": 1,
+       "name": "Таблица",
+       "layout": "TABLE_LAYOUT",
+       "filter": "",
+       "sortByFields": {
+        "nodes": []
+       },
+       "verticalGroupByFields": {
+        "nodes": []
+       }
+      },
+      {
+       "id": "PVTV_lAHOAAyAus4BjsdOzgLrw5k",
+       "number": 2,
+       "name": "Доска",
+       "layout": "BOARD_LAYOUT",
+       "filter": "",
+       "sortByFields": {
+        "nodes": []
+       },
+       "verticalGroupByFields": {
+        "nodes": [
+         {
+          "name": "Status"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PVTV_lAHOAAyAus4BjsdOzgLrw5o",
+       "number": 3,
+       "name": "Роадмэп",
+       "layout": "ROADMAP_LAYOUT",
+       "filter": null,
+       "sortByFields": {
+        "nodes": []
+       },
+       "verticalGroupByFields": {
+        "nodes": []
+       }
+      }
+     ]
+    },
+    "fields": {
+     "nodes": [
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MA",
+       "name": "Title",
+       "dataType": "TITLE",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1ME",
+       "name": "Assignees",
+       "dataType": "ASSIGNEES",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2SingleSelectField",
+       "id": "PVTSSF_lAHOAAyAus4BjsdOzhif1MI",
+       "name": "Status",
+       "dataType": "SINGLE_SELECT",
+       "isIssueField": false,
+       "options": [
+        {
+         "id": "f75ad846",
+         "name": "Бэклог",
+         "color": "GREEN",
+         "description": ""
+        },
+        {
+         "id": "47fc9ee4",
+         "name": "В работе",
+         "color": "YELLOW",
+         "description": ""
+        },
+        {
+         "id": "98236657",
+         "name": "Готово",
+         "color": "PURPLE",
+         "description": ""
+        }
+       ]
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MM",
+       "name": "Labels",
+       "dataType": "LABELS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MQ",
+       "name": "Linked pull requests",
+       "dataType": "LINKED_PULL_REQUESTS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MU",
+       "name": "Milestone",
+       "dataType": "MILESTONE",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MY",
+       "name": "Repository",
+       "dataType": "REPOSITORY",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mg",
+       "name": "Reviewers",
+       "dataType": "REVIEWERS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mk",
+       "name": "Parent issue",
+       "dataType": "PARENT_ISSUE",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mo",
+       "name": "Sub-issues progress",
+       "dataType": "SUB_ISSUES_PROGRESS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Ms",
+       "name": "Created",
+       "dataType": "CREATED",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mw",
+       "name": "Updated",
+       "dataType": "UPDATED",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1M0",
+       "name": "Closed",
+       "dataType": "CLOSED",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1NA",
+       "name": "Оценка, ч",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1NE",
+       "name": "Факт, ч",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhjAgBg",
+       "name": "Токены, млн",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhjAgCc",
+       "name": "Стоимость, $",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      }
+     ]
+    },
+    "workflows": {
+     "nodes": [
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgcYd28",
+       "number": 5,
+       "fullDatabaseId": "119043951",
+       "name": "Auto-add to project",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgb8uXY",
+       "number": 3,
+       "fullDatabaseId": "117225846",
+       "name": "Auto-close issue",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgcYdrg",
+       "number": 4,
+       "fullDatabaseId": "119043768",
+       "name": "Item added to project",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgb8uXQ",
+       "number": 1,
+       "fullDatabaseId": "117225844",
+       "name": "Item closed",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgb8uXU",
+       "number": 2,
+       "fullDatabaseId": "117225845",
+       "name": "Pull request merged",
+       "enabled": true
+      }
+     ]
+    }
+   }
+  }
+ },
+ "ProjectItems {\"id\":\"PVT_kwHOAAyAus4BjsdO\"}": {
+  "data": {
+   "node": {
+    "items": {
+     "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDM1NzE0Mjg1NzE0Mjg1N84PMYLj"
+     },
+     "nodes": [
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg7SAig",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABRoQj_A",
+        "number": 1,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8BiEc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSb-73w",
+        "number": 2,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc3A",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCcYA",
+        "number": 3,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc40",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCdEA",
+        "number": 4,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc7M",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCd5A",
+        "number": 5,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc84",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCenw",
+        "number": 6,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc_A",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCfYA",
+        "number": 7,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdAg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCgIg",
+        "number": 8,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdCY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiChAg",
+        "number": 9,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdD8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiChnQ",
+        "number": 10,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdF4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCijw",
+        "number": 11,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdIA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCjUg",
+        "number": 12,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hh5c",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiHptw",
+        "number": 13,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8JAhU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSjvvPg",
+        "number": 24,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8RCEA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSsq7SA",
+        "number": 26,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8RCFA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSsq71Q",
+        "number": 27,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8R0Cg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABStgBag",
+        "number": 30,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8R8_0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABStoncA",
+        "number": 32,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8SlAg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSuCtbw",
+        "number": 34,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8jI9o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABS-hYtw",
+        "number": 36,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8tJ8o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTJRKvA",
+        "number": 37,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8tJ90",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTJRLcg",
+        "number": 38,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8tTo0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTJcRRA",
+        "number": 39,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xUxM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNZ9Qw",
+        "number": 42,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xgp8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+        "number": 45,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "В работе"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xgsQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNmC6w",
+        "number": 46,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "В работе"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xguM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNmEXA",
+        "number": 47,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "OwnerProjects {\"login\":\"miroshnik\",\"query\":\"ai-dev\"}": {
+  "data": {
+   "repositoryOwner": {
+    "projectsV2": {
+     "nodes": [
+      {
+       "id": "PVT_kwHOAAyAus4BjsdO",
+       "number": 6,
+       "title": "ai-dev",
+       "url": "https://github.com/users/miroshnik/projects/6",
+       "closed": false
+      }
+     ]
+    }
+   }
+  }
+ },
+ "TemplateProject {\"login\":\"miroshnik\",\"number\":6}": {
+  "data": {
+   "repositoryOwner": {
+    "projectV2": {
+     "id": "PVT_kwHOAAyAus4BjsdO",
+     "number": 6,
+     "title": "ai-dev",
+     "url": "https://github.com/users/miroshnik/projects/6",
+     "closed": false
+    }
+   }
+  }
+ }
+}

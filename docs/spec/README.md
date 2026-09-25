@@ -6,6 +6,7 @@
 ## Что делает система
 
 - [est](capabilities/est.md) — Скилл `est`: оценка задачи в активных часах агента по фактам похожих закрытых задач и факт при закрытии — часы, токены и стоимость из транскриптов.
+- [github-project](capabilities/github-project.md) — Скилл `github`, `project check` и `project fix`: проект GitHub репозитория сверяется с каноном `AGENTS.md` по пунктам ✅/❌ и доводится до него.
 - [install](capabilities/install.md) — Установка флоу: `npx github:miroshnik/ai-dev install` ставит общие правила, справочники и все скиллы в проект, с `-g` — на машину.
 - [spec-diff](capabilities/spec-diff.md) — Скрипт `spec-diff` скилла `spec`: раздел «Спека (тесты)» для тела PR — удалённые, изменённые и добавленные названия тестов между базовой веткой и HEAD.
 - [spec-doc](capabilities/spec-doc.md) — Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из отчётов раннеров — дерево `tests/`, названия тестов и их JSDoc.
