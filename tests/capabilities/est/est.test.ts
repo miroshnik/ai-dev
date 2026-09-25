@@ -7,17 +7,17 @@
  * комментарии «Оценка» и «Факт»; агент выбирает аналоги и объясняет расхождения.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudSessionsIn, fmtH, hashMatches, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  cloudPartsIn, cloudSessionsIn, fmtH, hashMatches, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
-import type { FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
+import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
 const EST = fileURLToPath(new URL("../../../skills/est/scripts/est.ts", import.meta.url));
@@ -349,6 +349,46 @@ describe("Облачная сессия: события из claude.ai", () => {
     expect(pr.cloud).toEqual(["session_01Abc"]);
   });
 
+  /**
+   * Облачная сессия считает свою часть сама — по своему транскрипту в контейнере — и отдаёт её в комментарии «Факт
+   * (облако)» маркером `cloud`. Поля проекта из облака не поставить: их ставит локальный `est fact --write` / `--sweep`,
+   * складывая облачную часть с локальной. Выгрузка той же сессии, если импортирована, важнее части.
+   */
+  describe("облачная часть в маркере факта", () => {
+    const part: CloudPart = {
+      session: SESSION, h: 0.2, iv: [[ts("10:00"), ts("10:12")]], prompts: 1,
+      tok: { in: 1, out: 1000, cw: 0, cr: 100000, total: 101001 }, models: { "claude-opus-5-5": { mtok: 0.1, usd: 0.08 } },
+    };
+    const fact = (sessions: Session[], parts: CloudPart[]) => computeFact(stubRepo(sessions, [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], [], 30, parts);
+
+    it("облачная часть считается, как сессия: время, токены, стоимость, покрытие full по трейлеру; в маркере — сохраняется", () => {
+      const res = fact([], [part]);
+      expect(res).toMatchObject({ h: 0.2, cov: "full", sessions: 1, prompts: 1, cloud_missing: [], usd: 0.08 });
+      expect(res.tok.total).toBe(101001);
+      expect(parseMarker(factCommentBody(res, 1, [], 0, null), "fact").cloud).toEqual([part]);
+    });
+
+    it("с локальной работой той же поры — сумма без двойного счёта пересечения", () => {
+      const local = parseCloudFile(exportFile(events()));
+      local.sid = "local-session";
+      local.source = "claude";
+      expect(fact([local], [part]).h).toBe(0.2); // 10:00–10:09 локально и 10:00–10:12 в облаке — это 10:00–10:12
+    });
+
+    it("выгрузка той же сессии импортирована — часть из маркера второй раз не считается", () => {
+      const res = fact([parseCloudFile(exportFile(events()))], [part]);
+      expect(res.h).toBe(0.15);
+      expect(res.sessions).toBe(1);
+    });
+
+    it("части собираются из всех комментариев с маркером факта; по сессии — последняя", () => {
+      const body = (p: CloudPart) => `Факт (облако): …\n<!-- fact ${JSON.stringify({ v: 1, h: p.h, src: "cloud", cloud: [p] })} -->`;
+      const later = { ...part, h: 0.3 };
+      const other = { ...part, session: "session_01Other" };
+      expect(cloudPartsIn([body(part), "просто комментарий", body(other), body(later)])).toEqual([later, other]);
+    });
+  });
+
   it("est cloud-import кладёт выгрузку в личный каталог по репозиторию; не выгрузка — ошибка", () => {
     const env = { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "" };
     const r = spawnSync("bun", [EST, "cloud-import", exportFile(events())], { encoding: "utf8", env });
@@ -619,6 +659,27 @@ describe("Облачная сессия", () => {
     expect(r.stdout).toContain("Факт недоступен (облако): ");
     expect(r.stdout).toContain("Сессия: https://claude.ai/code/session_01Test.");
     expect(parseMarker(r.stdout, "fact")).toMatchObject({ h: null, cov: "none", src: "cloud", session: "session_01Test" });
+  });
+
+  it("est fact в облаке считает часть сессии по её транскрипту в контейнере: «Факт (облако)» с цифрами и маркером части", () => {
+    const cwd = path.join(dir, "repo");
+    mkdirSync(cwd);
+    const proj = path.join(dir, ".claude", "projects", realpathSync(cwd).replace(/[^A-Za-z0-9]/g, "-"));
+    mkdirSync(proj, { recursive: true });
+    const usage = { input_tokens: 1, output_tokens: 1000, cache_read_input_tokens: 100000, cache_creation_input_tokens: 0 };
+    const rec = (hhmm: string, extra: object) => ({ timestamp: `2026-09-01T${hhmm}:00Z`, cwd, gitBranch: "claude/export-x", ...extra });
+    writeFileSync(path.join(proj, "11111111-2222-3333-4444-555555555555.jsonl"), jsonl([
+      rec("10:00", { type: "user", origin: { kind: "human" }, message: { role: "user", content: "#42 сделай экспорт" } }),
+      rec("10:06", { type: "assistant", message: { id: "msg_01", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
+      rec("10:12", { type: "assistant", message: { id: "msg_02", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
+    ]));
+    const r = spawnSync("bun", [EST, "fact", "42"], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Факт (облако): 0.2 ч активных в облачной сессии Claude Code, 1 промпт.");
+    expect(r.stdout).toContain("Сессия: https://claude.ai/code/session_01Test. Поля проекта поставит локальная сессия: est fact 42 --write.");
+    const m = parseMarker(r.stdout, "fact");
+    expect(m).toMatchObject({ h: 0.2, src: "cloud", session: "session_01Test" });
+    expect(m.cloud).toMatchObject([{ session: "session_01Test", h: 0.2, iv: [[ts("10:00"), ts("10:12")]], prompts: 1, tok: { total: 202002 } }]);
   });
 
   it("оценка, история и sweep в облаке — ошибка с объяснением, а не сбой gh", () => {
