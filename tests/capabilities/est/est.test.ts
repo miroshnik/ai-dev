@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudSessionsIn, fmtH, hashMatches, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  cloudSessionsIn, fmtH, hashMatches, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
@@ -330,6 +330,13 @@ describe("Облачная сессия: события из claude.ai", () => {
     expect(res.cov).toBe("partial");
     expect(res.cloud_missing).toEqual([SESSION]);
     expect(factCommentBody(res, 1, [], 0, null)).toContain(`Облачная сессия https://claude.ai/code/${SESSION} не импортирована — est cloud-import.`);
+  });
+
+  // ключ сессии в маркере «Факт» (iv) — 8 знаков; у облачных сессий общий префикс session_ их бы склеил
+  it("ключ облачной сессии в маркере — после префикса session_, локальной — как был", () => {
+    expect(sidKey("session_01EyZM6zcMGdi6EB671Vgzy9")).toBe("01EyZM6z");
+    expect(sidKey("session_01HXRv6nrTK3GBKj38JJ9MLZ")).toBe("01HXRv6n");
+    expect(sidKey("5832ef9f-1111-2222-3333-444444444444")).toBe("5832ef9f");
   });
 
   it("трейлер Claude-Session читается из тела коммита PR", () => {
