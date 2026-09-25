@@ -118,7 +118,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 10; // версия формата кэша транскриптов (сменилась — переразбор); 10 = промпты без вставок <system-reminder>
+const SESSION_CACHE_V = 11; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist)
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -424,9 +424,10 @@ export interface Session {
   first_urls: string[];
   usage: Any[][]; // [mid, model_idx, in, out, cw5, cw1, cr, fast]
   models: string[];
-  title: string;
+  title: string; // последнее название
   title_refs: number[];
   title_urls: string[];
+  title_hist?: [number, string][]; // (время переименования, название) — по порядку в транскрипте
   n_subagents: number;
   source: string;
   routine: boolean;
@@ -443,7 +444,11 @@ export interface FactRepo {
   sessions(): Session[];
   neutralBranches(): Set<string>;
   commitDiff(oid: string): number | null;
+  /** Интервалы уже записанных фактов: issue → sid (8 знаков) → [(начало, конец)]; из маркеров «Факт». */
+  recorded?(): Recorded;
 }
+
+export type Recorded = Map<number, Record<string, [number, number][]>>;
 
 const PR_FIELDS = `number title state headRefName baseRefName body mergedAt updatedAt additions deletions changedFiles
         mergeCommit{oid} closingIssuesReferences(first:20){nodes{number}}
@@ -489,6 +494,7 @@ export class Repo implements FactRepo {
   private closers_: Closers | null = null;
   private sessions_: Session[] | null = null;
   private rows_: Row[] | null = null;
+  private recorded_: Recorded | null = null;
 
   constructor(full: string, registry: Registry) {
     this.full = full;
@@ -557,6 +563,18 @@ export class Repo implements FactRepo {
   projectRows(): Row[] {
     if (this.rows_ === null) this.rows_ = this.projectItems();
     return this.rows_;
+  }
+
+  /** Интервалы записанных фактов (маркер «Факт», поле iv); запись в этом запуске их дополняет. */
+  recorded(): Recorded {
+    if (this.recorded_ === null) {
+      this.recorded_ = new Map();
+      for (const r of this.projectRows()) {
+        const iv = r.fact_marker?.iv;
+        if (iv && typeof iv === "object" && !Array.isArray(iv)) this.recorded_.set(r.number, iv);
+      }
+    }
+    return this.recorded_;
   }
 
   private findProject(): [string, number] {
@@ -888,9 +906,10 @@ interface Acc {
   models: string[];
   mids: Set<string>;
   title: string;
+  titles: [number, string][];
 }
 
-const newAcc = (): Acc => ({ cwd: null, n_human: 0, ev: [], prlinks: [], commits: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "" });
+const newAcc = (): Acc => ({ cwd: null, n_human: 0, ev: [], prlinks: [], commits: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [] });
 
 function* jsonlRecords(file: string): Generator<Any> {
   const text = readFileSync(file, "utf8");
@@ -931,14 +950,25 @@ function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
   const commitToolIds = new Set<string>();
   let hint = ""; // подсказка задачи для записей субагента: "N" или "owner/repo#N"
   let hintDone = !subagent;
+  let pending: string[] = []; // переименования без времени: время — у следующей записи
+  let lastTs: number | null = null;
   for (const r of jsonlRecords(file)) {
     const t = r.type;
     const ts = r.timestamp ? parseTs(r.timestamp) : null;
     if (acc.cwd === null && r.cwd) acc.cwd = r.cwd;
     if (t === "custom-title" && !subagent) {
-      // название сессии; по конвенции «#<номер> <название задачи>» — привязывает всю сессию
-      acc.title = String(r.customTitle || "");
+      // название сессии по конвенции «#<номер> <название задачи>» привязывает к задаче записи с момента
+      // переименования (первое — с начала сессии); Claude Code пишет его без времени
+      const title = String(r.customTitle || "");
+      acc.title = title;
+      if (ts !== null) acc.titles.push([ts, title]);
+      else pending.push(title);
       continue;
+    }
+    if (ts !== null) {
+      for (const title of pending) acc.titles.push([ts, title]);
+      pending = [];
+      lastTs = ts;
     }
     if (t === "pr-link") {
       const pr = r.prNumber;
@@ -1006,6 +1036,8 @@ function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
       }
     }
   }
+  // переименование в самом конце: записей после него нет
+  for (const title of pending) acc.titles.push([lastTs === null ? 0 : lastTs + 1, title]);
 }
 
 /** Транскрипты субагентов сессии: <dir>/<sid>/subagents/**\/*.jsonl. */
@@ -1051,6 +1083,7 @@ export function parseSessionFile(file: string): Session {
     title: acc.title,
     title_refs: refsIn(acc.title),
     title_urls: urlsIn(acc.title),
+    title_hist: acc.titles,
     n_subagents: subs.length,
     source: "claude",
     routine: acc.n_human < 3 && !acc.prlinks.length && !acc.commits.length,
@@ -1526,9 +1559,26 @@ export interface Fact {
   is_pr?: boolean;
   subtasks?: Any[];
   sub_missing?: number;
+  iv?: Record<string, [number, number][]>; // интервалы по сессиям (sid, 8 знаков) — в маркер «Факт»
+  taken?: { issue: number; h: number }[]; // не засчитано: уже в записанном факте другой задачи
+  overlap?: { issue: number; h: number }[]; // засчитано (ветка, субагент, коммит), но есть и в чужом факте
 }
 
 type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, доля)
+
+/**
+ * Окно привязки по времени: [a, z] (z не включительно, если zOpen), только ветка br (null — любая не чужая)
+ * или нейтральная; rule — «якорь» (свой PR/коммит) или «название» / «промпт» (задача названа в названии
+ * сессии или в первом промпте — слабая привязка: уступает уже записанному факту другой задачи).
+ */
+interface Win {
+  a: number;
+  z: number;
+  zOpen: boolean;
+  br: string | null;
+  w: number;
+  rule: string;
+}
 
 export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closers: Closer[], gapMin = 30): Fact {
   const prsAll = repo.prs();
@@ -1634,6 +1684,11 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   let firstTs: number | null = null;
   let lastTs: number | null = null;
   const details: Detail[] = [];
+  const iv: Record<string, [number, number][]> = {};
+  const takenS = new Map<number, number>(); // задача → секунды, отданные её записанному факту
+  const overlapS = new Map<number, number>();
+  const recorded = repo.recorded?.() ?? new Map();
+  const sharedWith = new Set(shared.flatMap((x) => x.with)); // общий PR/коммит: пересечение — это доля, не ошибка
   const ourKey = `${repo.full}#${number}`;
   const cmpAnchor = (a: Anchor, b: Anchor) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0) || a[3] - b[3];
 
@@ -1654,7 +1709,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
 
     // окна по якорям: от предыдущего чужого якоря до своего; внутри окна считаются только
     // записи на ветке якоря или на нейтральной ветке (HEAD/пусто/main…) — чужие ветки нет.
-    const windows: [number, number, string | null, number][] = []; // (start, end, branch|null, доля)
+    const windows: Win[] = [];
     let prevForeign = -1e18;
     for (const [ts, cls, kind, w] of anchors) {
       if (cls === "foreign") {
@@ -1678,38 +1733,51 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
           end = e[0];
         }
       }
-      windows.push([start, end, brAt, w]);
+      windows.push({ a: start, z: end, zOpen: false, br: brAt, w, rule: "якорь" });
     }
-    // номер задачи в первом промпте (и только он): от начала сессии до первого чужого якоря
-    // или до первого перехода на ветку, которая не наша и не нейтральная
+    // Задача названа в названии сессии или в первом промпте. Название действует с момента переименования
+    // (первое — с начала сессии): сессия, которую переименовывали под каждую следующую задачу, отдаёт
+    // записи безномерной ветки той задаче, под чьим названием они сделаны, а не последней. Название без
+    // номера — решает первый промпт; названия нет — первый промпт на всю сессию.
     const urlRefs = (urls: string[]) => urls.filter((u) => u.startsWith(repo.full + "#")).map((u) => parseInt(u.split("#")[1]!, 10));
-    let refs = new Set<number>([...s.first_refs, ...urlRefs(s.first_urls ?? [])]);
-    const tRefs = new Set<number>([...(s.title_refs ?? []), ...urlRefs(s.title_urls ?? [])]);
-    if (tRefs.size) refs = tRefs; // сессия названа «#N …» — это явная привязка, она важнее текста первого промпта
-    if (refs.size === 1 && refs.has(number)) {
-      // (или до первого перехода на ветку, которая не наша и не нейтральная; стартовая ветка
-      // сессии допускается, если она не чужая — на ней и делалась задача из первого промпта)
-      let end = foreignTs.length ? Math.min(...foreignTs) : 1e18;
+    const promptRefs = new Set<number>([...s.first_refs, ...urlRefs(s.first_urls ?? [])]);
+    const titleRefs = (title: string) => new Set<number>([...refsIn(title), ...urlRefs(urlsIn(title))]);
+    let hist: [number, Set<number>][] = [...(s.title_hist ?? [])].sort((x, y) => x[0] - y[0]).map(([t, title]) => [t, titleRefs(title)]);
+    if (!hist.length && s.title) hist = [[-1e18, titleRefs(s.title)]];
+    const segs: { a: number; z: number; refs: Set<number>; rule: string }[] = hist.length
+      ? hist.map(([t, refs], k) => ({ a: k ? t : -1e18, z: k + 1 < hist.length ? hist[k + 1]![0] : 1e18, refs: refs.size ? refs : promptRefs, rule: refs.size ? "название" : "промпт" }))
+      : [{ a: -1e18, z: 1e18, refs: promptRefs, rule: "промпт" }];
+    for (const seg of segs) {
+      if (!(seg.refs.size === 1 && seg.refs.has(number))) continue;
+      // до конца периода, первого чужого якоря в нём или первого перехода на ветку, которая не наша и
+      // не нейтральная (стартовая ветка периода допускается, если она не чужая — на ней и делалась задача)
+      const later = foreignTs.filter((t) => t >= seg.a);
+      let end = Math.min(seg.z, later.length ? Math.min(...later) : 1e18);
+      let zOpen = end === seg.z && seg.z < 1e18; // запись в момент переименования — уже следующей задачи
       let startBranch: string | null = null;
       for (const e of ev) {
+        if (e[0] < seg.a) continue;
         if (e[0] >= end) break;
         const b: string = e[1];
         if (isNeutral(b) || isOurBranch(b)) continue;
         if (isForeignBranch(b) || (startBranch !== null && b !== startBranch)) {
           end = e[0];
+          zOpen = false;
           break;
         }
         startBranch = b;
       }
-      windows.push([-1e18, end, null, 1.0]);
+      windows.push({ a: seg.a, z: end, zOpen, br: null, w: 1.0, rule: seg.rule });
     }
 
     const attributed: number[] = []; // доля (0 — не наша запись)
+    const weak: string[] = []; // правило слабой привязки («название» / «промпт») или ""
     const rules: Record<string, number> = {};
     for (const e of ev) {
       const [ts, b] = [e[0] as number, e[1] as string];
       const hint: string = e.length > 3 ? e[3] : "";
       let w = 0.0;
+      let weakRule = "";
       if (hint) {
         // запись субагента, задание которого называет задачу: своя — целиком,
         // чужая — не наша, какие бы ветки/окна ни были
@@ -1718,19 +1786,51 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
           rules["субагент"] = (rules["субагент"] ?? 0) + 1;
         }
         attributed.push(w);
+        weak.push("");
         continue;
       }
       if (isOurBranch(b)) {
         w = branchW(b);
         rules["ветка"] = (rules["ветка"] ?? 0) + 1;
       } else if (windows.length && !isForeignBranch(b)) {
-        const ws = windows.filter(([a, z, wb]) => a <= ts && ts <= z && (wb === null || b === wb || isNeutral(b))).map((x) => x[3]);
+        const ws = windows.filter((x) => x.a <= ts && (x.zOpen ? ts < x.z : ts <= x.z) && (x.br === null || b === x.br || isNeutral(b)));
         if (ws.length) {
-          w = Math.max(...ws);
-          rules["якорь"] = (rules["якорь"] ?? 0) + 1;
+          w = Math.max(...ws.map((x) => x.w));
+          const anchored = ws.some((x) => x.rule === "якорь");
+          const rule = anchored ? "якорь" : ws[0]!.rule;
+          rules[rule] = (rules[rule] ?? 0) + 1;
+          if (!anchored) weakRule = rule;
         }
       }
       attributed.push(w);
+      weak.push(weakRule);
+    }
+    // Запись, уже засчитанная в записанном факте другой задачи этой сессии (маркер хранит интервалы):
+    // привязанная только названием или первым промптом — не засчитывается повторно; привязанная веткой,
+    // субагентом или своим коммитом — остаётся, но пересечение выводится (чужой факт, вероятно, неверен).
+    const sid8 = s.sid.slice(0, 8);
+    const others: [number, [number, number][]][] = [];
+    for (const [n, bySid] of recorded) if (n !== number && bySid[sid8]?.length) others.push([n, bySid[sid8]]);
+    if (others.length) {
+      const orig = [...attributed];
+      for (let i = 0; i < ev.length; i++) {
+        if (!orig[i]) continue;
+        const t = ev[i]![0] as number;
+        const pair = i > 0 && t - ev[i - 1]![0] <= gap && (orig[i - 1]! > 0 || !!ev[i - 1]![2]);
+        const x = pair ? (ev[i - 1]![0] + t) / 2 : t; // интервал записи — по середине, одиночная — по времени
+        const tol = pair ? 0 : 1; // границы в маркере округлены до секунды
+        const hit = others.find(([, ivs]) => ivs.some(([a, b]) => a - tol <= x && x <= b + tol));
+        if (!hit) continue;
+        const d = pair ? t - ev[i - 1]![0] : 0;
+        const rule = weak[i]!;
+        if (rule) {
+          attributed[i] = 0;
+          takenS.set(hit[0], (takenS.get(hit[0]) ?? 0) + d);
+          if (--rules[rule]! <= 0) delete rules[rule];
+        } else if (!sharedWith.has(hit[0])) {
+          overlapS.set(hit[0], (overlapS.get(hit[0]) ?? 0) + d);
+        }
+      }
     }
     if (!attributed.some((w) => w > 0)) continue;
     // интервал до предыдущей записи считается, только если она тоже наша
@@ -1741,6 +1841,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     let sFirst: number | null = null;
     let sLast: number | null = null;
     const brs: Record<string, number> = {};
+    const sessIv: [number, number][] = [];
     const sessUsage: [Any[], number][] = []; // (usage-запись, доля) для привязанных ответов модели
     const sUsage = s.usage ?? [];
     const sModels = s.models ?? [];
@@ -1757,6 +1858,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       if (i > 0 && ts - ev[i - 1]![0] <= gap && (attributed[i - 1]! || ev[i - 1]![2])) {
         const d = ts - ev[i - 1]![0];
         intervals.push([ev[i - 1]![0], ts]);
+        sessIv.push([ev[i - 1]![0], ts]);
         sessRaw += d;
         sessW += d * w;
         const key = b || "?";
@@ -1764,6 +1866,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
     }
     if (sessRaw < 60 && prompts === 0) continue; // меньше минуты и без промптов (случайный хеш в выводе) — сессией не считаем
+    if (sessIv.length) iv[sid8] = mergeIntervals([...(iv[sid8] ?? []), ...sessIv]).map(([a, b]) => [Math.floor(a), Math.ceil(b)]);
     nSessions++;
     nPrompts += prompts;
     rawTotal += sessRaw;
@@ -1830,9 +1933,17 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     details: [...details].sort((a, b) => a.start - b.start),
     tok: null,
     usd: null,
+    iv,
+    taken: hoursByIssue(takenS),
+    overlap: hoursByIssue(overlapS),
   };
   Object.assign(res, cov !== "none" ? tokensResult(tok, byModel) : { tok: null, usd: null });
   return res;
+}
+
+/** {задача: секунды} → [{issue, h}] по номеру задачи; меньше 0,01 ч не показываем. */
+function hoursByIssue(m: Map<number, number>): { issue: number; h: number }[] {
+  return [...m].sort((a, b) => a[0] - b[0]).map(([issue, sec]) => ({ issue, h: round2(sec / 3600) })).filter((x) => x.h > 0);
 }
 
 /** Свести токены и стоимость в поля результата: tok (целые), usd, usd_partial, models. */
@@ -1920,6 +2031,8 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   const nc = res.commits;
   text += ` ${nc} ${plural(nc, "коммит", "коммита", "коммитов")}, дифф ${diffTxt(res)}.`;
   if (res.shared?.length) text += " " + sharedTxt(res) + ".";
+  for (const x of res.taken ?? []) text += ` Не засчитано повторно: ${fmtH(x.h)} ч уже в факте #${x.issue}.`;
+  for (const x of res.overlap ?? []) text += ` Пересечение с фактом #${x.issue}: ${fmtH(x.h)} ч — пересчитать #${x.issue}.`;
   if (res.tok) text += "\n" + tokensTxt(res);
   const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, prs: res.prs, commits: res.commits, diff: res.diff, cause };
   if (res.tok) {
@@ -1933,6 +2046,7 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
     for (const s of res.shared) sh[s.unit] = s.with;
     marker.shared = sh;
   }
+  if (res.iv && Object.keys(res.iv).length) marker.iv = res.iv; // по ним следующий расчёт видит, что уже засчитано
   return [text, ...keptLines, `<!-- fact ${pyDumps(marker)} -->`].join("\n");
 }
 
@@ -2267,6 +2381,8 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
     const src = d.src === "codex" ? " [codex]" : "";
     console.log(`  сессия ${d.sid.slice(0, 8)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
   }
+  for (const x of res.taken ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч по названию/первому промпту уже в факте #${x.issue} — здесь не засчитано; если там ошибка — est fact ${x.issue} --write, потом снова эту задачу`);
+  for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
 }
 
 function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): void {
@@ -2275,6 +2391,7 @@ function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): void 
   const [manual, cause, kept] = extractKeptLines(existing ? existing.body : "");
   const body = factCommentBody(res, est, kept, manual, cause);
   const what = upsertComment(repo, issue, "fact", body);
+  if (res.iv && Object.keys(res.iv).length) repo.recorded().set(res.issue, res.iv); // следующая задача sweep видит этот факт
   let msg = `комментарий «Факт» ${what}`;
   if (res.h !== null) {
     setNumberField(repo, issue, FIELD_FACT, res.h);
@@ -2356,6 +2473,7 @@ function cmdFact(args: FactArgs): void {
     const out: Any = { ...res, est };
     delete out.details;
     delete out.intervals;
+    delete out.iv;
     console.log(JSON.stringify(out, null, 1));
   } else {
     printFact(repo, res, est);
