@@ -1361,7 +1361,7 @@ export function branchType(branch: string | null | undefined): string | null {
 
 const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function closingRe(repo: Repo, n: number): RegExp {
+function closingRe(repo: Pick<Repo, "owner" | "name">, n: number): RegExp {
   return new RegExp(
     "(?<![\\p{L}\\p{N}_])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|закрывает|закрыт[аоы]?|закрыть|исправляет|решает|устраняет)" +
       `[\\s:]*(?:#|https://github\\.com/${reEscape(repo.owner)}/${reEscape(repo.name)}/issues/)${n}(?!\\d)`,
@@ -1425,8 +1425,11 @@ function issueProjectFields(issue: Any, meta: Meta): IssueFields {
 
 type Closer = { oid: string; at: number | null };
 
+/** Что нужно привязке PR от репозитория: имя, кэш PR и PR по номеру. */
+type LinkRepo = Pick<Repo, "full" | "owner" | "name" | "prs" | "pr">;
+
 /** Issue → PR (сильные и слабые связи) и коммиты-закрыватели. */
-function resolveLinks(repo: Repo, issue: Any): [PR[], Closer[], boolean] {
+export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boolean] {
   const n: number = issue.number;
   const same = (o: Any) => (o?.repository?.nameWithOwner ?? repo.full) === repo.full;
   const strong = new Map<number, string>();
@@ -1465,6 +1468,12 @@ function resolveLinks(repo: Repo, issue: Any): [PR[], Closer[], boolean] {
     else if (mention.test(p.body)) add(weak, num, "упоминание в теле PR");
   }
   for (const num of strong.keys()) weak.delete(num);
+  // Упоминание в PR, который закрывает другие задачи, — чужая работа: иначе задача без своего PR получает его
+  // время (с делением, хотя факт той задачи уже записан) и тип по его ветке.
+  for (const num of [...weak.keys()]) {
+    const p = repo.pr(num);
+    if (p && p.closing.length && !p.closing.includes(n)) weak.delete(num);
+  }
   // Слабые связи используем только если сильных нет
   const [use, weakUsed] = strong.size ? [strong, false] : [weak, weak.size > 0];
   const prObjs: PR[] = [];
@@ -1701,7 +1710,15 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     for (const [, pr] of s.prlinks) seenPrs.add(pr);
     for (const e of ev) if (e[1]) seenBranches.add(e[1]);
     const anchors: Anchor[] = [];
-    for (const [ts, pr] of s.prlinks) anchors.push([ts, ourPrs.has(pr) ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0]);
+    for (const [ts, pr] of s.prlinks) {
+      const own = ourPrs.has(pr);
+      // Claude Code повторяет pr-link привязанного к сессии PR и после мержа — это статус приложения, а не работа:
+      // после мержа он не якорь ни для своей задачи (иначе она заберёт время следующих), ни для чужой (иначе
+      // оборвёт окно следующей задачи, под которую переименовали сессию)
+      const mergedAt = prsAll.get(pr)?.mergedAt ?? null;
+      if (mergedAt !== null && ts > mergedAt) continue;
+      anchors.push([ts, own ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0]);
+    }
     for (const [ts, h] of s.commits) {
       const [cls, w] = hashClass(h, ts);
       if (cls === "own") seenHashes.add(h);
@@ -1712,6 +1729,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
 
     // окна по якорям: от предыдущего чужого якоря до своего; внутри окна считаются только
     // записи на ветке якоря или на нейтральной ветке (HEAD/пусто/main…) — чужие ветки нет.
+    // Переименование сессии — тоже граница: до него сессия работала над задачей из прежнего названия.
+    const renames = [...(s.title_hist ?? [])].map((t) => t[0]).sort((x, y) => x - y).slice(1); // первое — с начала сессии
     const windows: Win[] = [];
     let prevForeign = -1e18;
     for (const [ts, cls, kind, w] of anchors) {
@@ -1719,7 +1738,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         prevForeign = ts;
         continue;
       }
-      const start = prevForeign;
+      const start = Math.max(prevForeign, ...renames.filter((t) => t <= ts));
       let end = ts;
       let brAt = "";
       for (const e of ev) {
@@ -1728,7 +1747,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
       if (kind === "pr") {
         // хвост после pr-link: пока ветка та же и нет чужого якоря (правки после ревью)
-        const later = foreignTs.filter((t) => t > ts);
+        const later = [...foreignTs, ...renames].filter((t) => t > ts);
         const nxtForeign = later.length ? Math.min(...later) : 1e18;
         for (const e of ev) {
           if (e[0] <= ts) continue;

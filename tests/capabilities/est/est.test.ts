@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  fmtH, hashMatches, mergeIntervals, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, roundScale, usageCost,
+  fmtH, hashMatches, mergeIntervals, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks, roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { tmpDir } from "../../lib/spec.ts";
@@ -263,6 +263,39 @@ const pr77 = (): PR => ({
 });
 
 /**
+ * PR задачи: сильные связи (закрыл, `Closes #N`, номер в ветке, связан вручную) и — только если сильных нет —
+ * слабые, упоминания. Упоминание в PR, который закрывает другие задачи, — не работа над этой: иначе задача без
+ * своего PR получает чужой PR, его время и тип.
+ */
+describe("Привязка PR к задаче", () => {
+  const pr = (number: number, closing: number[], body: string, headRefName = "feat/1-x"): PR => ({ ...pr77(), number, closing, body, headRefName });
+  const repo = (prs: PR[]) => ({ full: "o/r", owner: "o", name: "r", prs: () => new Map(prs.map((p) => [p.number, p])), pr: (n: number) => prs.find((p) => p.number === n) ?? null });
+  const issue = (number: number, refs: number[] = []) => ({
+    number,
+    closedByPullRequestsReferences: { nodes: [] },
+    timelineItems: { nodes: refs.map((n) => ({ __typename: "CrossReferencedEvent", source: { __typename: "PullRequest", number: n } })) },
+  });
+
+  it("PR закрывает другую задачу и лишь упоминает эту — к ней не привязывается", () => {
+    const [prs, , weak] = resolveLinks(repo([pr(51, [47], "Closes #47\n\nсоздана #50")]), issue(50, [51]));
+    expect(prs.map((p) => p.number)).toEqual([]);
+    expect(weak).toBe(false);
+  });
+
+  it("PR без закрываемых задач, упоминающий задачу, — слабая связь, когда сильных нет", () => {
+    const [prs, , weak] = resolveLinks(repo([pr(60, [], "продолжение #50")]), issue(50, [60]));
+    expect(prs.map((p) => [p.number, p.why])).toEqual([[60, "упоминание"]]);
+    expect(weak).toBe(true);
+  });
+
+  it("сильная связь — Closes #N или номер в ветке — важнее упоминаний", () => {
+    const [prs, , weak] = resolveLinks(repo([pr(61, [], "Closes #50"), pr(62, [], "см. #50"), pr(63, [], "", "fix/50-x")]), issue(50, [62]));
+    expect(prs.map((p) => [p.number, p.why])).toEqual([[61, "Closes #50 в теле PR"], [63, "номер в ветке"]]);
+    expect(weak).toBe(false);
+  });
+});
+
+/**
  * Факт — активные часы: записи, привязанные к задаче, и паузы между ними не длиннее gap (30 мин); общий PR на
  * несколько задач делится поровну.
  */
@@ -359,6 +392,34 @@ describe("Сессия ведёт несколько задач подряд", (
     const all = [f41, f42, f43].flatMap((f) => f.intervals);
     const len = (iv: [number, number][]) => iv.reduce((a, [x, y]) => a + y - x, 0);
     expect(len(mergeIntervals(all))).toBe(len(all));
+  });
+
+  // Claude Code повторяет pr-link привязанного к сессии PR и после мержа — это статус приложения, не работа над PR
+  it("pr-link смёрженного PR прошлой задачи, повторённый после мержа, не обрывает время следующей задачи", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", "fix/41-export", "сделай #41"), work("10:06", "fix/41-export"), prLink("10:10", 101), work("10:12", "fix/41-export"),
+      rename("#44 Исследование"),
+      prompt("10:18", "HEAD", "теперь #44"), prLink("10:20", 101), work("10:24", "HEAD"), prLink("10:26", 101), work("10:30", "HEAD"),
+    ]));
+    const merged = { ...prs[0]!, mergedAt: ts("10:14") };
+    const f44 = computeFact(stubRepo([parseSessionFile(file)], [merged]), 44, [], []);
+    expect(f44.h).toBe(0.2); // 10:18–10:30 под «#44»
+    expect(f44.details[0]!.rules).toEqual({ название: 3 }); // промпт и две записи работы; pr-link — не запись работы
+  });
+
+  it("окно своего PR не тянется назад через переименование: записи на HEAD под прошлым названием остаются прошлой задаче", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", "HEAD", "сделай #41"), work("10:06", "HEAD"), work("10:12", "HEAD"),
+      rename("#45 Отчёт"),
+      prompt("10:18", "HEAD", "теперь #45"), work("10:24", "fix/45-report"), prLink("10:30", 105), work("10:30", "fix/45-report"),
+    ]));
+    const p105 = pr(105, "fix/45-report", 45);
+    const f45 = computeFact(stubRepo([parseSessionFile(file)], [p105]), 45, [{ ...p105, why: "закрыл issue" }], []);
+    expect(f45.h).toBe(0.2); // 10:18–10:30; 10:00–10:12 — время #41
   });
 
   it("маркер факта хранит интервалы по сессиям — по ним следующий расчёт видит, что уже засчитано", () => {
