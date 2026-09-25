@@ -2,7 +2,17 @@
   "name": "ai-dev",
   "private": true,
   "type": "module",
-  "description": "Общие правила и скиллы для агентов; скрипты скиллов — TypeScript под Bun, тесты — bun test в tests/",
+  "description": "Общие правила и скиллы для агентов; установка — npx github:miroshnik/ai-dev install; скрипты скиллов — TypeScript под Bun, тесты — bun test в tests/",
+  "bin": {
+    "ai-dev": "bin/ai-dev.mjs"
+  },
+  "files": [
+    "bin",
+    "AGENTS.md",
+    "claude",
+    "docs/*.md",
+    "skills"
+  ],
   "engines": {
     "bun": ">=1.2"
   },
