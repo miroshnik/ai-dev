@@ -5,7 +5,7 @@
  * Сверка и исправление — одна функция: каждое расхождение несёт свой шаг, поэтому `check` и `fix` не расходятся.
  * Что умеет API, `fix` делает сам; чего в API нет (workflow, сортировка, колонки доски) — шаг UI со ссылкой;
  * удаление и переименование в проекте с задачами и настройки организации — только с `--confirm`. Ответы GitHub —
- * записанные с проекта ai-dev (`ai-dev.json`), `gh` подменён: мутации меняют запись так, как это сделал бы GitHub.
+ * записанные с проекта ai-dev (`tests/lib/github-ai-dev.json`), `gh` подменён: мутации меняют запись так, как это сделал бы GitHub.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "bun:test";
@@ -14,7 +14,7 @@ import { main } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 
-const REC: Recording = JSON.parse(readFileSync(new URL("./ai-dev.json", import.meta.url), "utf8"));
+const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.json", import.meta.url), "utf8"));
 const REPO = "miroshnik/ai-dev";
 const PROJECT_URL = "https://github.com/users/miroshnik/projects/6";
 

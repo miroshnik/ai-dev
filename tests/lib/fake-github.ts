@@ -42,10 +42,64 @@ export class FakeGitHub {
       if (!handler) throw new Error(`fake gh: мутация ${op} не поддержана`);
       return JSON.stringify({ data: handler(variables.input) });
     }
+    if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
+    if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
     const key = keyOf(op, variables);
     if (!(key in this.rec)) throw new Error(`fake gh: нет записи ${key}`);
     return JSON.stringify(this.rec[key]);
   };
+
+  // --- задачи: записанные IssueRef, элементы проекта — из текущего состояния проектов ---
+
+  private issueKey(number: number): string {
+    const [owner, name] = this.repo.nameWithOwner.split("/");
+    return keyOf("IssueRef", { owner, name, number });
+  }
+  /** Задача по номеру (записанная или созданная в тесте); нет — undefined. */
+  issue(number: number): Any {
+    return this.rec[this.issueKey(number)]?.data.repository.issue ?? undefined;
+  }
+  private allIssues(): Any[] {
+    return Object.entries(this.rec)
+      .filter(([k, v]) => k.startsWith("IssueRef ") && v.data.repository.issue)
+      .map(([, v]) => v.data.repository.issue);
+  }
+  private issueRef(number: number): Any {
+    const i = this.issue(number);
+    if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
+    const out = structuredClone(i);
+    out.projectItems = { nodes: this.allProjects().flatMap((p) => this.items(p.id).filter((it: Any) => it.content?.id === i.id).map((it: Any) => ({ id: it.id, project: { id: p.id }, status: it.status ?? null }))) };
+    return { data: { repository: { issue: out } } };
+  }
+  // поиск GitHub по заголовку: подстрока в кавычках, is:open — только открытые
+  private search(q: string): Any {
+    const phrase = /"([^"]*)"/.exec(q)?.[1] ?? "";
+    const nodes = this.allIssues().filter((i) => i.title.includes(phrase) && (!q.includes("is:open") || i.state === "OPEN"));
+    return { data: { search: { nodes: nodes.map((i) => ({ number: i.number, title: i.title, state: i.state })) } } };
+  }
+  get taskContext(): Any {
+    return this.find("TaskContext").data.repository;
+  }
+  milestone(title: string): Any {
+    const m = { id: this.id("MI"), title };
+    this.taskContext.milestones.nodes.push(m);
+    return m;
+  }
+  /** Поставить задаче Status в проекте (как будто его поставили раньше). */
+  status(number: number, name: string | null): void {
+    this.item(number).status = name === null ? null : { name };
+  }
+  /** Закрыть задачу в записи — без мутации, как будто её закрыли раньше. */
+  closed(number: number, reason = "COMPLETED"): void {
+    const i = this.issue(number);
+    Object.assign(i, { state: "CLOSED", stateReason: reason });
+    for (const x of this.allIssues()) for (const sub of x.subIssues.nodes) if (sub.number === number) sub.state = "CLOSED";
+    const it = this.item(number);
+    if (it) Object.assign(it.content, { state: "CLOSED", stateReason: reason });
+  }
+  setPriority(number: number, name: string | null): void {
+    this.issue(number).issueFieldValues = { nodes: name === null ? [] : [{ __typename: "IssueFieldSingleSelectValue", name, field: { name: "Priority" } }] };
+  }
 
   // --- доступ к записанному состоянию ---
 
@@ -140,11 +194,72 @@ export class FakeGitHub {
     this.rec[keyOf("OwnerProjects", { login: this.repo.owner.login, query: this.repo.name })] = { data: { repositoryOwner: { projectsV2: { nodes: [] } } } };
   }
 
+  // Задачу, добавленную в проект, «Item added to project» сразу ставит в Бэклог — если он включён; повторное
+  // добавление возвращает тот же элемент.
+  private addItem(projectId: string, issue: Any): string {
+    const have = this.items(projectId).find((it: Any) => it.content?.id === issue.id);
+    if (have) return have.id;
+    const added = this.project(projectId).workflows.nodes.some((w: Any) => w.name === "Item added to project" && w.enabled);
+    const it = { id: this.id("PVTI"), content: { __typename: "Issue", id: issue.id, number: issue.number, state: issue.state ?? "OPEN", stateReason: issue.stateReason ?? null }, status: added ? { name: "Бэклог" } : null };
+    this.items(projectId).push(it);
+    return it.id;
+  }
+
   private statusName(p: Any, optionId: string): string {
     return p.fields.nodes.find((f: Any) => f.name === "Status").options.find((o: Any) => o.id === optionId).name;
   }
 
   private handlers = {
+    CreateIssue: (input: Any) => {
+      const number = Math.max(...this.allIssues().map((i) => i.number), ...this.openIssues.map((i: Any) => i.number)) + 1;
+      const id = `I_fake${number}`;
+      const owner = this.repo.owner;
+      const type = owner.issueTypes?.nodes.find((t: Any) => t.id === input.issueTypeId);
+      const labels = (input.labelIds ?? []).map((lid: Any) => (lid === this.taskContext.label?.id ? "epic" : lid));
+      const prio = owner.issueFields?.nodes.flatMap((f: Any) => (f.options ?? []).map((o: Any) => ({ f, o }))).find((x: Any) => input.issueFields?.some((v: Any) => v.singleSelectOptionId === x.o.id));
+      const parent = input.parentIssueId ? this.allIssues().find((i) => i.id === input.parentIssueId) : null;
+      const node = {
+        id,
+        number,
+        title: input.title,
+        state: "OPEN",
+        stateReason: null,
+        url: `https://github.com/${this.repo.nameWithOwner}/issues/${number}`,
+        issueType: type ? { name: type.name } : null,
+        labels: { nodes: labels.map((name: string) => ({ name })) },
+        parent: parent ? { id: parent.id, number: parent.number } : null,
+        subIssues: { nodes: [] },
+        projectItems: { nodes: [] },
+        issueFieldValues: { nodes: prio ? [{ __typename: "IssueFieldSingleSelectValue", name: prio.o.name, field: { name: prio.f.name } }] : [] },
+      };
+      this.rec[this.issueKey(number)] = { data: { repository: { issue: node } } };
+      this.openIssues.push({ id, number });
+      if (parent) parent.subIssues.nodes.push({ number, state: "OPEN" });
+      const items = (input.projectV2Ids ?? []).map((pid: string) => ({ id: this.addItem(pid, node), project: { id: pid } }));
+      return { createIssue: { issue: { id, number, title: node.title, url: node.url, projectItems: { nodes: items } } } };
+    },
+    CreateLabel: ({ name }: Any) => {
+      const id = this.id("LA");
+      this.taskContext.label = { id };
+      return { createLabel: { label: { id, name } } };
+    },
+    AddBlockedBy: ({ issueId }: Any) => ({ addBlockedBy: { issue: { id: issueId } } }),
+    SetIssueField: ({ issueId, issueFields }: Any) => {
+      const i = this.allIssues().find((x) => x.id === issueId);
+      const opt = this.repo.owner.issueFields.nodes.flatMap((f: Any) => f.options ?? []).find((o: Any) => o.id === issueFields[0].singleSelectOptionId);
+      i.issueFieldValues = { nodes: [{ __typename: "IssueFieldSingleSelectValue", name: opt.name, field: { name: "Priority" } }] };
+      return { setIssueFieldValue: { issue: { id: issueId } } };
+    },
+    // Закрытую задачу «Item closed» (если включён) переводит в «Готово».
+    CloseIssue: ({ issueId, stateReason }: Any) => {
+      const i = this.allIssues().find((x) => x.id === issueId);
+      this.closed(i.number, stateReason);
+      for (const p of this.allProjects()) {
+        const on = p.workflows.nodes.some((w: Any) => w.name === "Item closed" && w.enabled);
+        for (const it of this.items(p.id)) if (it.content?.id === issueId && on) it.status = { name: "Готово" };
+      }
+      return { closeIssue: { issue: { id: issueId, state: "CLOSED" } } };
+    },
     LinkProject: ({ projectId }: Any) => {
       this.repo.projectsV2.nodes.push(this.ref(this.project(projectId)));
       return { linkProjectV2ToRepository: { repository: { id: this.repo.id } } };
@@ -214,13 +329,9 @@ export class FakeGitHub {
       it.status = { name: this.statusName(this.project(projectId), value.singleSelectOptionId) };
       return { updateProjectV2ItemFieldValue: { projectV2Item: { id: itemId } } };
     },
-    // Задачу, добавленную в проект, «Item added to project» сразу ставит в Бэклог — если он включён.
     AddItem: ({ projectId, contentId }: Any) => {
-      const issue = this.openIssues.find((i: Any) => i.id === contentId);
-      const added = this.project(projectId).workflows.nodes.some((w: Any) => w.name === "Item added to project" && w.enabled);
-      const it = { id: this.id("PVTI"), content: { __typename: "Issue", id: issue.id, number: issue.number, state: "OPEN", stateReason: null }, status: added ? { name: "Бэклог" } : null };
-      this.items(projectId).push(it);
-      return { addProjectV2ItemById: { item: { id: it.id } } };
+      const issue = this.allIssues().find((i) => i.id === contentId) ?? this.openIssues.find((i: Any) => i.id === contentId);
+      return { addProjectV2ItemById: { item: { id: this.addItem(projectId, issue) } } };
     },
     DeleteItem: ({ projectId, itemId }: Any) => {
       const nodes = this.items(projectId);
@@ -258,7 +369,12 @@ export function asOrg(rec: Recording, org = "acme"): Recording {
     id: "O_fake",
     login: org,
     issueTypes: { nodes: [{ id: "IT_1", name: "Задача", isEnabled: true }, { id: "IT_2", name: "Баг", isEnabled: true }, { id: "IT_3", name: "Feature", isEnabled: false }, { id: "IT_4", name: "Эпик", isEnabled: true }] },
-    issueFields: { nodes: [{ __typename: "IssueFieldSingleSelect", id: "IFSS_priority", name: "Priority" }] },
+    issueFields: { nodes: [{ __typename: "IssueFieldSingleSelect", id: "IFSS_priority", name: "Priority", options: ["Urgent", "High", "Medium", "Low"].map((name) => ({ id: `IFO_${name.toLowerCase()}`, name })) }] },
   };
+  // в организации эпик — тип issue, а не метка
+  for (const [k, v] of Object.entries(out)) {
+    const i = k.startsWith("IssueRef ") ? v.data.repository.issue : null;
+    if (i) i.issueType = { name: i.labels.nodes.some((l: Any) => l.name === "epic") ? "Эпик" : "Задача" };
+  }
   return out;
 }

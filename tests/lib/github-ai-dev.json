@@ -30,7 +30,7 @@
     "issues": {
      "pageInfo": {
       "hasNextPage": false,
-      "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0wOS0yNVQxNDozNzowN1rPAAAAAUzZhFw="
+      "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0wOS0yNVQxNTowOTo0MlrPAAAAAUzfeSg="
      },
      "nodes": [
       {
@@ -42,12 +42,12 @@
        "number": 45
       },
       {
-       "id": "I_kwDOUd0OBc8AAAABTNmC6w",
-       "number": 46
-      },
-      {
        "id": "I_kwDOUd0OBc8AAAABTNmEXA",
        "number": 47
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABTN95KA",
+       "number": 49
       }
      ]
     }
@@ -300,7 +300,7 @@
     "items": {
      "pageInfo": {
       "hasNextPage": false,
-      "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDM1NzE0Mjg1NzE0Mjg1N84PMYLj"
+      "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDM0NDgyNzU4NjIwNjg5Ns4PMdyf"
      },
      "nodes": [
       {
@@ -634,11 +634,11 @@
         "__typename": "Issue",
         "id": "I_kwDOUd0OBc8AAAABTNmC6w",
         "number": 46,
-        "state": "OPEN",
-        "stateReason": null
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
        },
        "status": {
-        "name": "В работе"
+        "name": "Готово"
        }
       },
       {
@@ -647,6 +647,19 @@
         "__typename": "Issue",
         "id": "I_kwDOUd0OBc8AAAABTNmEXA",
         "number": 47,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "В работе"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8x3J8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTN95KA",
+        "number": 49,
         "state": "OPEN",
         "stateReason": null
        },
@@ -685,6 +698,231 @@
      "title": "ai-dev",
      "url": "https://github.com/users/miroshnik/projects/6",
      "closed": false
+    }
+   }
+  }
+ },
+ "TaskContext {\"name\":\"ai-dev\",\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "label": {
+     "id": "LA_kwDOUd0OBc8AAAAC3XsoCw"
+    },
+    "milestones": {
+     "nodes": []
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"ai-dev\",\"number\":42,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNZ9Qw",
+     "number": 42,
+     "title": "est · облачная часть задачи: покрытие partial по трейлеру Claude-Session, импорт событий облачной сессии",
+     "state": "OPEN",
+     "stateReason": null,
+     "url": "https://github.com/miroshnik/ai-dev/issues/42",
+     "issueType": null,
+     "labels": {
+      "nodes": [
+       {
+        "name": "вопросы"
+       }
+      ]
+     },
+     "parent": null,
+     "subIssues": {
+      "nodes": []
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xUxM",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Бэклог"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"ai-dev\",\"number\":45,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+     "number": 45,
+     "title": "GitHub · Скилл github: проект и задачи по канону одной командой",
+     "state": "OPEN",
+     "stateReason": null,
+     "url": "https://github.com/miroshnik/ai-dev/issues/45",
+     "issueType": null,
+     "labels": {
+      "nodes": [
+       {
+        "name": "epic"
+       }
+      ]
+     },
+     "parent": null,
+     "subIssues": {
+      "nodes": [
+       {
+        "number": 46,
+        "state": "CLOSED"
+       },
+       {
+        "number": 47,
+        "state": "OPEN"
+       }
+      ]
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xgp8",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "В работе"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"ai-dev\",\"number\":46,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNmC6w",
+     "number": 46,
+     "title": "GitHub · Проект по канону — github project check и fix",
+     "state": "CLOSED",
+     "stateReason": "COMPLETED",
+     "url": "https://github.com/miroshnik/ai-dev/issues/46",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": {
+      "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+      "number": 45
+     },
+     "subIssues": {
+      "nodes": []
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xgsQ",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Готово"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"ai-dev\",\"number\":47,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNmEXA",
+     "number": 47,
+     "title": "GitHub · Задача одной командой — github task",
+     "state": "OPEN",
+     "stateReason": null,
+     "url": "https://github.com/miroshnik/ai-dev/issues/47",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": {
+      "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+      "number": 45
+     },
+     "subIssues": {
+      "nodes": []
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xguM",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "В работе"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"ai-dev\",\"number\":49,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTN95KA",
+     "number": 49,
+     "title": "Стандарт · облачная сессия — скрипты скиллов с Projects v2 выходят с объяснением",
+     "state": "OPEN",
+     "stateReason": null,
+     "url": "https://github.com/miroshnik/ai-dev/issues/49",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": null,
+     "subIssues": {
+      "nodes": []
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8x3J8",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Бэклог"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
     }
    }
   }
