@@ -21,6 +21,11 @@ jobs:
         with:
           fetch-depth: 0 # spec-diff: merge-base с origin/main
       - uses: oven-sh/setup-bun@v2
+      # нижняя граница для скриптов spec: CI проектов на Node зовёт их без Bun (tests/standards/node-runtime)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+          package-manager-cache: false
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run spec:doc

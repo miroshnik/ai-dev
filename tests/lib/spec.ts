@@ -16,9 +16,9 @@ export interface Run {
   stderr: string;
 }
 
-/** Запустить spec-doc / spec-diff как пользователь: `bun <скрипт>.ts …`. */
-export function runScript(name: "spec-doc" | "spec-diff", args: string[], cwd: string): Run {
-  const r = spawnSync("bun", [path.join(SCRIPTS, name + ".ts"), ...args], { cwd, encoding: "utf8" });
+/** Запустить spec-doc / spec-diff как пользователь: `bun <скрипт>.ts …` или `node <скрипт>.ts …` (CI проекта без Bun). */
+export function runScript(name: "spec-doc" | "spec-diff", args: string[], cwd: string, runtime: "bun" | "node" = "bun"): Run {
+  const r = spawnSync(runtime, [path.join(SCRIPTS, name + ".ts"), ...args], { cwd, encoding: "utf8" });
   if (r.error) throw r.error;
   return { code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };
 }

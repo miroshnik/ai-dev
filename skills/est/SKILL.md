@@ -18,8 +18,8 @@ Codex), а не сообщается по памяти. Скрипт `scripts/es
 «+ вручную: N ч» в комментарий «Факт».
 
 Запуск: `bun <каталог скилла>/scripts/est.ts <подкоманда> …` (Bun, без зависимостей) — каталог
-скилла тот, где лежит этот файл (`~/.claude/skills/est`, `~/.agents/skills/est`
-или клон ai-dev; у Claude Code — `${CLAUDE_SKILL_DIR}`); ниже сокращённо `est`. `--repo owner/repo` можно опустить, если работаешь в
+скилла тот, где лежит этот файл (`~/.claude/skills/est`, `~/.agents/skills/est`,
+`.agents/skills/est` проекта или клон ai-dev; у Claude Code — `${CLAUDE_SKILL_DIR}`); ниже сокращённо `est`. `--repo owner/repo` можно опустить, если работаешь в
 каталоге репозитория. Реестр репозиториев (какие есть, где лежат локально,
 номер проекта) — личный файл `~/.config/ai-dev/repos.json` (или
 `$AI_DEV_CONFIG_DIR/repos.json`; старый `~/.claude/est` переезжает сам), в скилл не входит;

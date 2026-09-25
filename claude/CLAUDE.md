@@ -1,9 +1,8 @@
-@../AGENTS.md
-
 # Claude Code
 
-Правила выше — общие для всех агентов (`AGENTS.md`). Здесь только то, что
-есть у Claude Code:
+Общие правила — `AGENTS.md`. Здесь только то, что есть у Claude Code; оба
+файла установка кладёт в `.claude/rules/` (`ai-dev.md` и `ai-dev-claude.md`),
+Claude Code грузит их сам, при любом `CLAUDE.md` проекта.
 
 - Транскрипты сессий (`~/.claude/projects/<путь-через-дефисы>*/`) — источник
   факта для скилла `est`; в `~/.claude/settings.json` должно стоять
@@ -14,12 +13,20 @@
   «Create PR» по состоянию git, а не GitHub: после мержа она актуальна только
   если чекаут переведён на `origin/main` (правило «Сразу после мержа PR»).
 - Сессию переименовывает инструмент `set_session_title`; скиллы лежат в
-  `~/.claude/skills/<name>` (симлинки из `install.sh` на `skills/<name>`),
-  переменная `${CLAUDE_SKILL_DIR}` указывает на каталог скилла. В frontmatter `SKILL.md`
-  Claude Code читает также `when_to_use`, `argument-hint`, `allowed-tools`.
+  `.claude/skills/<name>` проекта и `~/.claude/skills/<name>` (симлинки на
+  `.agents/skills/<name>`), переменная `${CLAUDE_SKILL_DIR}` указывает на
+  каталог скилла. Скилл с тем же именем на машине главнее проектного. В
+  frontmatter `SKILL.md` Claude Code читает также `when_to_use`,
+  `argument-hint`, `allowed-tools`.
+- Облачная сессия (claude.ai/code) видит только репозиторий: правила и скиллы
+  там есть, только если они установлены в проект.
+- Установка и в проект, и на машину — правила грузятся дважды: из
+  `.claude/rules` проекта (версия, закреплённая коммитом) и из
+  `~/.claude/rules` (последняя установка или клон). При противоречии верить
+  машинной, проектную обновить: `npx -y github:miroshnik/ai-dev install`.
 - Личная конфигурация скилла `est` (реестр репозиториев, цены, кэш) — в
   `~/.config/ai-dev/` (или `$AI_DEV_CONFIG_DIR`), не в репозитории; старый
   `~/.claude/est` переезжает сам, на его месте остаётся симлинк.
 - В worktree репозитория ai-dev канон может загрузиться дважды: из `main`
-  через `~/.claude/CLAUDE.md` и из ветки нативно (`AGENTS.md` в корне, Claude
-  Code ≥ 2.1.277). При противоречии верить ветке.
+  через `~/.claude/rules` и из ветки нативно (`AGENTS.md` в корне). При
+  противоречии верить ветке.
