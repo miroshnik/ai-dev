@@ -156,6 +156,9 @@ describe("Установка на машину (-g)", () => {
   it("--link из клона — симлинки на клон вместо копий: правка в клоне видна сразу", () => {
     mkdirSync(path.join(home, ".claude"));
     expect(install(["-g", "--link"]).code).toBe(0);
+    // клон вне HOME — ссылка абсолютная: относительная ломается, если путь к HOME идёт через симлинк
+    // (macOS: /var → /private/var, а HOME=/var/… здесь)
+    expect(path.isAbsolute(readlinkSync(path.join(home, ".agents/ai-dev")))).toBe(true);
     expect(realpathSync(path.join(home, ".agents/ai-dev"))).toBe(realpathSync(REPO));
     expect(realpathSync(path.join(home, ".agents/skills/spec"))).toBe(realpathSync(path.join(REPO, "skills/spec")));
     expect(realpathSync(path.join(home, ".claude/rules/ai-dev.md"))).toBe(realpathSync(path.join(REPO, "AGENTS.md")));
