@@ -135,10 +135,10 @@ function installSkills(root, linkMode, claude) {
       mkdirSync(path.dirname(dst), { recursive: true });
       cpSync(path.join(SRC, "skills", name), dst, { recursive: true });
     }
-    if (claude) link(dst, path.join(root, ".claude/skills", name), root);
     installed.push(name);
   }
-  if (!linkMode) note(`${path.relative(root, path.join(root, ".agents/skills"))}/ ← ${installed.join(", ")}`);
+  if (!linkMode) note(`.agents/skills/ ← ${installed.join(", ")}`);
+  if (claude) for (const name of installed) link(path.join(root, ".agents/skills", name), path.join(root, ".claude/skills", name), root);
   for (const name of before.filter((n) => !names.includes(n))) {
     remove(path.join(root, ".agents/skills", name));
     if (lstat(path.join(root, ".claude/skills", name))?.isSymbolicLink()) rmSync(path.join(root, ".claude/skills", name));
