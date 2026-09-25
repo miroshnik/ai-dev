@@ -255,20 +255,37 @@
     "workflows": {
      "nodes": [
       {
+       "id": "PWF_lAHOAAyAus4BjsdOzgcYd28",
+       "number": 5,
+       "fullDatabaseId": "119043951",
+       "name": "Auto-add to project",
+       "enabled": true
+      },
+      {
        "id": "PWF_lAHOAAyAus4BjsdOzgb8uXY",
        "number": 3,
+       "fullDatabaseId": "117225846",
        "name": "Auto-close issue",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgcYdrg",
+       "number": 4,
+       "fullDatabaseId": "119043768",
+       "name": "Item added to project",
        "enabled": true
       },
       {
        "id": "PWF_lAHOAAyAus4BjsdOzgb8uXQ",
        "number": 1,
+       "fullDatabaseId": "117225844",
        "name": "Item closed",
        "enabled": true
       },
       {
        "id": "PWF_lAHOAAyAus4BjsdOzgb8uXU",
        "number": 2,
+       "fullDatabaseId": "117225845",
        "name": "Pull request merged",
        "enabled": true
       }

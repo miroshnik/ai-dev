@@ -39,32 +39,44 @@ const byOp = (fake: FakeGitHub, op: string) => fake.mutations.filter((m) => m.op
 function fake(rec: Recording = REC): FakeGitHub {
   return new FakeGitHub(rec);
 }
-/** Эталон, настроенный в UI: все три workflow канона включены. */
-function allWorkflows(f: FakeGitHub): FakeGitHub {
-  for (const name of ["Item added to project", "Auto-add to project"]) f.enableWorkflow(name);
+/** Проект, у которого в UI не настраивали «Item added to project» и «Auto-add to project» — как ai-dev до fix. */
+function unconfigured(f: FakeGitHub = fake()): FakeGitHub {
+  for (const name of ["Item added to project", "Auto-add to project"]) f.unconfigure(name);
   return f;
 }
+const wfUrl = (f: FakeGitHub, name: string) => `${f.project().url}/workflows/${f.workflow(name).fullDatabaseId}`;
 
 describe("check — сверка с каноном по пунктам", () => {
-  it("проект ai-dev как записан: всё по канону, кроме двух ненастроенных workflow — ❌ с ними, код 1", () => {
+  it("проект ai-dev как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются", () => {
     const r = check(fake());
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(0);
     expect(r.out).toStartWith(`Проект ${REPO}: ${PROJECT_URL}`);
-    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "❌", Закрытые: "✅", Открытые: "✅" });
+    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅" });
+    expect(r.out).toContain("➖ Priority и типы issue — в личном аккаунте их нет");
+  });
+
+  // ненастроенного workflow в API нет вовсе — у нового проекта в списке только «Item closed» и два про PR
+  it("workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «не настроен», код 1", () => {
+    const r = check(unconfigured());
+    expect(r.code).toBe(1);
+    expect(marks(r.out)).toMatchObject({ Workflow: "❌", Закрытые: "✅" });
     expect(r.out).toContain("· «Item added to project» не настроен");
     expect(r.out).toContain("· «Auto-add to project» не настроен");
   });
 
-  it("все workflow включены — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются", () => {
-    const r = check(allWorkflows(fake()));
-    expect(r.code).toBe(0);
-    expect(Object.values(marks(r.out))).not.toContain("❌");
-    expect(r.out).toContain("➖ Priority и типы issue — в личном аккаунте их нет");
+  // выключенный workflow есть в списке с enabled: false — ссылка ведёт прямо на него
+  it("выключенный «Item closed» — ❌ «выключен», отличается от ненастроенного", () => {
+    const f = fake();
+    f.workflow("Item closed").enabled = false;
+    const r = check(f);
+    expect(marks(r.out).Workflow).toBe("❌");
+    expect(r.out).toMatch(/^   · «Item closed» выключен$/m);
+    expect(fix(f).out).toContain(`«Item closed»: Edit → Set value → Status: Готово → Save and turn on workflow — ${wfUrl(f, "Item closed")}`);
   });
 
   // фильтр вроде iteration:@current без поля Iteration молча прячет задачи с доски
   it("фильтр, чужой вид, доска не по Status и лишнее представление — ❌ представлений с каждой причиной", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.view("Доска").filter = "iteration:@current";
     f.view("Доска").verticalGroupByFields.nodes = [];
     f.view("Роадмэп").layout = "TABLE_LAYOUT";
@@ -78,7 +90,7 @@ describe("check — сверка с каноном по пунктам", () => {
   });
 
   it("чужие варианты Status, недостающее числовое поле и своё поле сверх канона — ❌", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.field("Status").options[0].name = "Todo";
     f.project().fields.nodes = f.project().fields.nodes.filter((x: { name: string }) => x.name !== "Токены, млн");
     f.project().fields.nodes.push({ __typename: "ProjectV2IterationField", id: "PVTIF_1", name: "Iteration", dataType: "ITERATION" });
@@ -90,14 +102,15 @@ describe("check — сверка с каноном по пунктам", () => {
   });
 
   it("закрытая не в Готово, закрытая без выполнения в проекте, открытая вне проекта и без Status — ❌", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.item(1).status = { name: "В работе" };
     f.item(3).content.stateReason = "NOT_PLANNED";
+    f.item(3).status = { name: "В работе" };
     f.items().splice(f.items().indexOf(f.item(47)), 1);
     f.item(42).status = null;
     const r = check(f);
     expect(marks(r.out)).toMatchObject({ Закрытые: "❌", Открытые: "❌" });
-    expect(r.out).toContain("· не в «Готово»: #1");
+    expect(r.out).toMatch(/^   · не в «Готово»: #1$/m); // закрытая без выполнения в «Готово» не нужна — её убирают
     expect(r.out).toContain("· закрыты без выполнения, но в проекте: #3");
     expect(r.out).toContain("· не в проекте: #47");
     expect(r.out).toContain("· без Status: #42");
@@ -122,7 +135,7 @@ describe("check — сверка с каноном по пунктам", () => {
 
 describe("fix — довести до канона", () => {
   it("исправимое через API исправляет сам и сверяет заново: все ✅, код 0", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.view("Доска").filter = "iteration:@current";
     f.project().views.nodes = f.project().views.nodes.filter((v: { name: string }) => v.name !== "Роадмэп");
     f.project().fields.nodes = f.project().fields.nodes.filter((x: { name: string }) => x.name !== "Токены, млн");
@@ -143,34 +156,34 @@ describe("fix — довести до канона", () => {
   });
 
   it("закрытая задача не в Готово — ставит Готово и просит проверить цель «Item closed» в UI", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.item(1).status = { name: "В работе" };
     const r = fix(f);
     expect(f.item(1).status).toEqual({ name: "Готово" });
     expect(marks(r.out).Закрытые).toBe("✅");
-    expect(r.out).toContain(`«Item closed»: проверить Set value → Status: Готово → Save — ${PROJECT_URL}/workflows/${f.workflow("Item closed").number}`);
+    expect(r.out).toContain(`«Item closed»: проверить Set value → Status: Готово, иначе Edit → Готово → Save — ${wfUrl(f, "Item closed")}`);
     expect(r.code).toBe(1);
   });
 
-  it("workflow — шаги UI со ссылкой на workflow проекта, API их не включает", () => {
-    const f = fake();
+  it("ненастроенные workflow — шаги UI со ссылкой на список workflow проекта, API их не включает", () => {
+    const f = unconfigured();
     const r = fix(f);
     expect(r.code).toBe(1);
     expect(f.mutations).toEqual([]);
     expect(r.out).toContain("Шаги в UI — браузером сессии, без браузера — пользователю; затем снова check:");
-    expect(r.out).toContain(`1. «Item added to project»: Set value → Status: Бэклог → Save and turn on workflow — ${PROJECT_URL}/workflows`);
-    expect(r.out).toContain(`2. «Auto-add to project»: репозиторий ${REPO}, фильтр is:issue → Save and turn on workflow — ${PROJECT_URL}/workflows`);
+    expect(r.out).toMatch(new RegExp(`^1\\. «Item added to project»: Edit → Set value → Status: Бэклог → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
+    expect(r.out).toMatch(new RegExp(`^2\\. «Auto-add to project»: Edit → репозиторий ai-dev, фильтр is:issue is:open \\(Enter\\) → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
   });
 
   it("доска не по Status — шаг UI со ссылкой на представление", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.view("Доска").verticalGroupByFields.nodes = [];
     const r = fix(f);
     expect(r.out).toContain(`«Доска»: View options → Column by → Status → Save — ${PROJECT_URL}/views/${f.view("Доска").number}`);
   });
 
   it("в проекте с задачами удаление и переименование — только с --confirm, до него списком на подтверждение", () => {
-    const f = allWorkflows(fake());
+    const f = fake();
     f.project().title = "AI dev";
     f.repo.projectsV2.nodes[0].title = "AI dev";
     f.project().views.nodes.push({ ...structuredClone(f.view("Таблица")), id: "PVTV_extra", number: 9, name: "Мои задачи" });
@@ -205,9 +218,7 @@ describe("fix — довести до канона", () => {
   });
 
   it("проекта нет — копирует эталон под владельца репозитория и привязывает; из шагов остаётся только auto-add", () => {
-    const f = fake();
-    f.enableWorkflow("Item added to project"); // эталон: «Item added» настроен, auto-add копия не переносит
-    f.enableWorkflow("Auto-add to project");
+    const f = fake(); // эталон: все workflow настроены, auto-add копия не переносит
     const template = f.project();
     f.unlinkAll();
     const r = fix(f);
@@ -216,7 +227,7 @@ describe("fix — довести до канона", () => {
     expect(copy.id).not.toBe(template.id);
     expect(byOp(f, "AddItem").map((i) => i.contentId)).toEqual(f.openIssues.map((i: { id: string }) => i.id));
     expect(marks(r.out)).toMatchObject({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "❌", Открытые: "✅" });
-    expect(r.out).toContain(`1. «Auto-add to project»: репозиторий ${REPO}, фильтр is:issue → Save and turn on workflow — ${copy.url}/workflows`);
+    expect(r.out).toContain(`1. «Auto-add to project»: Edit → репозиторий ai-dev, фильтр is:issue is:open (Enter) → Save and turn on workflow — ${copy.url}/workflows`);
     expect(r.out).not.toContain("2. ");
   });
 
@@ -241,7 +252,7 @@ describe("fix — довести до канона", () => {
 describe("Организация: Priority и типы issue", () => {
   const ORG = "acme/ai-dev";
   const ORG_URL = "https://github.com/orgs/acme/projects/6";
-  const org = () => allWorkflows(fake(asOrg(REC)));
+  const org = () => fake(asOrg(REC));
 
   it("поле issue Priority не подключено — fix подключает; Таблица и Доска не по Priority — шаги UI", () => {
     const f = org();
@@ -255,6 +266,14 @@ describe("Организация: Priority и типы issue", () => {
     expect(r.out).toContain(`«Доска»: View options → Sort by → Priority → Save — ${ORG_URL}/views/${f.view("Доска").number}`);
     for (const name of ["Таблица", "Доска"]) f.view(name).sortByFields.nodes = [{ direction: "ASC", field: { name: "Priority" } }];
     expect(check(f, ORG).code).toBe(0);
+  });
+
+  it("другое поле issue организации в проекте — лишнее, как своё поле", () => {
+    const f = org();
+    f.project().fields.nodes.push({ __typename: "ProjectV2SingleSelectField", id: "PVTSSF_effort", name: "Effort", dataType: "SINGLE_SELECT", isIssueField: true, options: [] });
+    const r = check(f, ORG);
+    expect(marks(r.out).Поля).toBe("❌");
+    expect(r.out).toContain("· лишнее «Effort» (SINGLE_SELECT, поле issue)");
   });
 
   it("своё поле проекта Priority вместо поля issue — замена только с --confirm", () => {

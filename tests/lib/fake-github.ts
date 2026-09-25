@@ -83,11 +83,10 @@ export class FakeGitHub {
   workflow(name: string): Any {
     return this.project().workflows.nodes.find((w: Any) => w.name === name);
   }
-  enableWorkflow(name: string): void {
-    const wf = this.project().workflows.nodes;
-    const w = wf.find((x: Any) => x.name === name);
-    if (w) w.enabled = true;
-    else wf.push({ id: this.id("PWF"), number: wf.length + 1, name, enabled: true });
+  /** Workflow, который ни разу не настраивали: в API его нет вовсе. */
+  unconfigure(name: string): void {
+    const p = this.project();
+    p.workflows.nodes = p.workflows.nodes.filter((w: Any) => w.name !== name);
   }
 
   // --- новый проект, как его создаёт GitHub ---
@@ -123,7 +122,7 @@ export class FakeGitHub {
           { __typename: "ProjectV2SingleSelectField", id: this.id("PVTSSF"), name: "Status", dataType: "SINGLE_SELECT", isIssueField: false, options: ["Todo:GREEN", "In Progress:YELLOW", "Done:PURPLE"].map((s) => ({ id: this.id("opt"), name: s.split(":")[0], color: s.split(":")[1], description: "" })) },
         ],
       },
-      workflows: { nodes: ["Item closed", "Pull request merged", "Auto-close issue"].map((name, i) => ({ id: this.id("PWF"), number: i + 1, name, enabled: true })) },
+      workflows: { nodes: ["Item closed", "Pull request merged", "Auto-close issue"].map((name, i) => ({ id: this.id("PWF"), number: i + 1, fullDatabaseId: String(900 + this.seq), name, enabled: true })) },
     };
     this.register(node);
     return node;
