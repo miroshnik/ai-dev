@@ -120,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 11; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist)
+const SESSION_CACHE_V = 12; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -1261,6 +1261,8 @@ export function parseCloudFile(file: string): Session {
       if (!subs.has(parent)) subs.set(parent, []);
       subs.get(parent)!.push(rec);
     }
+    // облако сообщает ветку только при коммите — переход на другую ветку виден в выводе git
+    if (e.event_type === "user") branch = gitBranchIn(textOfContent(p.message?.content) + "\n" + String(p.tool_use_result?.stdout ?? "")) ?? branch;
   }
   const acc = newAcc();
   scanRecords(top, acc, false);
@@ -1287,6 +1289,19 @@ export function parseCloudFile(file: string): Session {
     routine: acc.n_human < 3 && !acc.commits.length,
   };
 }
+
+/** Последняя ветка, на которую перешёл git в этом выводе: `Switched to branch 'x'` или строка коммита `[x abc1234]`. */
+function gitBranchIn(txt: string): string | null {
+  let last: string | null = null;
+  for (const m of txt.matchAll(/Switched to (?:a new )?branch '([^']+)'|^\[([^\s\]]+)(?: \(root-commit\))? [0-9a-f]{7,40}\]/gm)) last = m[1] ?? m[2] ?? last;
+  return last;
+}
+
+/**
+ * Ключ сессии в маркере «Факт» (iv) и в выводе — 8 знаков id: у локальной — начало UUID, у облачной — после префикса
+ * `session_`, общего для всех облачных (иначе их интервалы склеились бы в один ключ).
+ */
+export const sidKey = (sid: string) => sid.replace(/^session_/, "").slice(0, 8);
 
 /** Путь выгрузки облачной сессии в каталоге состояния: по репозиторию, файл — id сессии. */
 export const cloudPath = (repoFull: string, session: string) => path.join(CLOUD_DIR, ...repoFull.split("/"), `${session}.json`);
@@ -1947,7 +1962,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // Запись, уже засчитанная в записанном факте другой задачи этой сессии (маркер хранит интервалы):
     // привязанная только названием или первым промптом — не засчитывается повторно; привязанная веткой,
     // субагентом или своим коммитом — остаётся, но пересечение выводится (чужой факт, вероятно, неверен).
-    const sid8 = s.sid.slice(0, 8);
+    const sid8 = sidKey(s.sid);
     const others: [number, [number, number][]][] = [];
     for (const [n, bySid] of recorded) if (n !== number && bySid[sid8]?.length) others.push([n, bySid[sid8]]);
     if (others.length) {
@@ -2540,7 +2555,7 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
     const brs = Object.entries(d.branches).slice(0, 4).map(([b, h]) => `${b} ${h} ч`).join(", ");
     const rules = Object.entries(d.rules).map(([k, v]) => `${k}:${v}`).join(", ");
     const src = d.src === "codex" ? " [codex]" : "";
-    console.log(`  сессия ${d.sid.slice(0, 8)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
+    console.log(`  сессия ${sidKey(d.sid)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
   }
   for (const x of res.taken ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч по названию/первому промпту уже в факте #${x.issue} — здесь не засчитано; если там ошибка — est fact ${x.issue} --write, потом снова эту задачу`);
   for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
