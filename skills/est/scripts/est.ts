@@ -959,8 +959,11 @@ function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
     if (t === "custom-title" && !subagent) {
       // название сессии по конвенции «#<номер> <название задачи>» привязывает к задаче записи с момента
       // переименования (первое — с начала сессии); Claude Code пишет его без времени
+      // Claude Code повторяет запись по ходу сессии — период открывает только смена названия
       const title = String(r.customTitle || "");
+      const prev = pending.length ? pending[pending.length - 1] : acc.titles.length ? acc.titles[acc.titles.length - 1]![1] : null;
       acc.title = title;
+      if (title === prev) continue;
       if (ts !== null) acc.titles.push([ts, title]);
       else pending.push(title);
       continue;
