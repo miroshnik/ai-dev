@@ -439,6 +439,26 @@ export interface Session {
   v?: number;
 }
 
+/**
+ * Часть факта, посчитанная облачной сессией по своему транскрипту в контейнере (`est fact <N>` в облаке) и отданная
+ * маркером `cloud` комментария «Факт»: поля проекта из облака не поставить — их ставит локальный расчёт, складывая части.
+ */
+export interface CloudPart {
+  session: string;
+  h: number;
+  iv: [number, number][];
+  prompts: number;
+  tok: { in: number; out: number; cw: number; cr: number; total: number } | null;
+  models: Record<string, { mtok: number; usd: number | null }>;
+}
+
+/** Части облака из всех комментариев с маркером «Факт»: по сессии — последняя, порядок — первого появления. */
+export function cloudPartsIn(bodies: string[]): CloudPart[] {
+  const by = new Map<string, CloudPart>();
+  for (const b of bodies) for (const p of parseMarker(b, "fact")?.cloud ?? []) if (p && typeof p.session === "string") by.set(p.session, p);
+  return [...by.values()];
+}
+
 /** Подмножество Repo, нужное расчёту факта (в тестах — стаб без GitHub). */
 export interface FactRepo {
   full: string;
@@ -1379,8 +1399,13 @@ function sessionMtime(file: string): number {
 }
 
 function transcriptFiles(repo: Repo): string[] {
+  return transcriptFilesIn(repo.paths);
+}
+
+/** Транскрипты Claude Code по каталогам работы: ~/.claude/projects/<путь-через-дефисы>*\/*.jsonl. */
+function transcriptFilesIn(paths: string[]): string[] {
   const files: string[] = [];
-  for (const p of repo.paths) {
+  for (const p of paths) {
     const enc = encodePath(p);
     let dirs: string[];
     try {
@@ -1706,6 +1731,7 @@ export interface Fact {
   taken?: { issue: number; h: number }[]; // не засчитано: уже в записанном факте другой задачи
   overlap?: { issue: number; h: number }[]; // засчитано (ветка, субагент, коммит), но есть и в чужом факте
   cloud_missing?: string[]; // облачные сессии из трейлера коммитов PR, выгрузки которых нет (est cloud-import)
+  cloud_parts?: CloudPart[]; // части, посчитанные облачными сессиями (маркер cloud) — хранятся в маркере при перезаписи
 }
 
 type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, доля)
@@ -1724,7 +1750,7 @@ interface Win {
   rule: string;
 }
 
-export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closers: Closer[], gapMin = 30): Fact {
+export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closers: Closer[], gapMin = 30, parts: CloudPart[] = []): Fact {
   const prsAll = repo.prs();
   const openPrs = repo.openPrs().items;
   const cidx = repo.closers();
@@ -2048,21 +2074,54 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     details.push({ sid: s.sid, src: s.source ?? "claude", start: sFirst!, hours: round2(sessW / 3600), prompts, rules, branches });
   }
 
+  // Части облака (их посчитала сама облачная сессия) — как ещё одна сессия; сессия с импортированной выгрузкой
+  // считается по выгрузке, её часть — нет.
+  const known = new Set(sessions.map((s) => s.sid));
+  const partsUsed = parts.filter((p) => !known.has(p.session) && p.h > 0);
+  for (const p of partsUsed) {
+    const piv: [number, number][] = (p.iv ?? []).map(([a, b]) => [a, b]);
+    intervals.push(...piv);
+    rawTotal += piv.reduce((acc, [a, b]) => acc + (b - a), 0);
+    weightedTotal += p.h * 3600;
+    iv[sidKey(p.session)] = piv;
+    nSessions++;
+    nPrompts += p.prompts || 0;
+    if (p.tok) {
+      tok.in += p.tok.in || 0;
+      tok.out += p.tok.out || 0;
+      tok.cw += p.tok.cw || 0;
+      tok.cr += p.tok.cr || 0;
+    }
+    for (const [model, m] of Object.entries(p.models ?? {})) {
+      if (!byModel.has(model)) byModel.set(model, { tok: 0.0, usd: 0.0, priced: true });
+      const bm = byModel.get(model)!;
+      bm.tok += (m.mtok || 0) * 1e6;
+      if (m.usd === null) bm.priced = false;
+      else bm.usd += m.usd;
+    }
+    const pFirst = piv.length ? Math.min(...piv.map((x) => x[0])) : null;
+    const pLast = piv.length ? Math.max(...piv.map((x) => x[1])) : null;
+    if (pFirst !== null) firstTs = firstTs === null ? pFirst : Math.min(firstTs, pFirst);
+    if (pLast !== null) lastTs = lastTs === null ? pLast : Math.max(lastTs, pLast);
+    details.push({ sid: p.session, src: "cloud", start: pFirst ?? 0, hours: p.h, prompts: p.prompts || 0, rules: { "часть облака": 1 }, branches: {} });
+  }
+  const partSids = new Set(partsUsed.map((p) => p.session));
+
   const merged = mergeIntervals(intervals);
   const activeRaw = merged.reduce((s, [a, b]) => s + (b - a), 0); // без двойного счёта между сессиями
   const overlap = rawTotal > 0 ? activeRaw / rawTotal : 1.0;
   const active = (weightedTotal * overlap) / 3600;
 
   // покрытие
-  const prSeen = (p: PR) => seenPrs.has(p.number) || (!!p.headRefName && seenBranches.has(p.headRefName)) || [...seenHashes].some((h) => hashMatches(h, p.commits.map((c) => c.oid)));
+  const prSeen = (p: PR) =>
+    seenPrs.has(p.number) || (!!p.headRefName && seenBranches.has(p.headRefName)) || [...seenHashes].some((h) => hashMatches(h, p.commits.map((c) => c.oid))) || (p.cloud ?? []).some((sid) => partSids.has(sid));
   const units = [...prObjs.map(prSeen), ...closers.map((c) => [...seenHashes].some((h) => hashMatches(h, [c.oid])))];
   let cov: Fact["cov"];
   if (nSessions === 0) cov = "none";
   else if (units.length && units.every(Boolean)) cov = "full";
   else cov = "partial";
-  // коммиты PR сделаны в облачной сессии, а её выгрузки нет — часть работы не видна
-  const known = new Set(sessions.map((s) => s.sid));
-  const cloudMissing = uniqSortedStrs(prObjs.flatMap((p) => p.cloud ?? [])).filter((sid) => !known.has(sid));
+  // коммиты PR сделаны в облачной сессии, а ни её выгрузки, ни её части нет — часть работы не видна
+  const cloudMissing = uniqSortedStrs(prObjs.flatMap((p) => p.cloud ?? [])).filter((sid) => !known.has(sid) && !partSids.has(sid));
   if (cloudMissing.length && cov === "full") cov = "partial";
 
   let diff = prObjs.reduce((s, p) => s + diffSize(p), 0);
@@ -2095,6 +2154,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     taken: hoursByIssue(takenS),
     overlap: hoursByIssue(overlapS),
     cloud_missing: cloudMissing,
+    cloud_parts: parts,
   };
   Object.assign(res, cov !== "none" ? tokensResult(tok, byModel) : { tok: null, usd: null });
   return res;
@@ -2208,6 +2268,7 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   }
   if (res.iv && Object.keys(res.iv).length) marker.iv = res.iv; // по ним следующий расчёт видит, что уже засчитано
   if (res.cloud_missing?.length) marker.cloud_missing = res.cloud_missing;
+  if (res.cloud_parts?.length) marker.cloud = res.cloud_parts; // посчитала облачная сессия — без них пересчёт её потеряет
   return [text, ...keptLines, `<!-- fact ${pyDumps(marker)} -->`].join("\n");
 }
 
@@ -2218,8 +2279,50 @@ const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
 const CLOUD_ERR = "облачная сессия Claude Code: GitHub GraphQL и проекты отсюда недоступны — оценка, история и sweep только в локальной сессии (docs/cloud-sessions.md в ai-dev)";
 
 /** Комментарий «Факт» задачи, закрытой из облачной сессии: факт недоступен, маркер с cov none и src cloud. */
-export function cloudFactBody(sessionId: string | undefined): string {
-  const sid = sessionId ? "session_" + sessionId.replace(/^(cse|session)_/, "") : null; // env даёт cse_…, ссылка — session_…
+/** id облачной сессии для ссылки: env даёт cse_…, ссылка — session_…. */
+const cloudSid = (sessionId: string | undefined) => (sessionId ? "session_" + sessionId.replace(/^(cse|session)_/, "") : null);
+
+/**
+ * Часть факта этой облачной сессии — по её транскрипту в контейнере (каталог работы — корень git). Без GitHub:
+ * привязка — ветка `<type>/<N>-…`, первый промпт «#N», задание субагенту; PR и коммиты отсюда не видны.
+ */
+function cloudOwnPart(number: number, session: string, gap: number): CloudPart | null {
+  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  const cwd = top.status === 0 && top.stdout.trim() ? top.stdout.trim() : process.cwd();
+  const sessions = transcriptFilesIn([cwd]).map((f) => parseSessionFile(f)).filter((x) => x.ev.length); // рутинную не отбрасываем: облачная сессия — часто один промпт
+  if (!sessions.length) return null;
+  const stub: FactRepo = {
+    full: "cloud",
+    prs: () => new Map(),
+    openPrs: () => ({ at: 0, items: {} }),
+    closers: () => ({ oid: {}, pr: {} }),
+    sessions: () => sessions,
+    neutralBranches: () => new Set(["main", "master"]),
+    commitDiff: () => null,
+  };
+  const res = computeFact(stub, number, [], [], gap);
+  if (!res.h) return null;
+  const t = res.tok;
+  return {
+    session,
+    h: res.h,
+    iv: (res.intervals ?? []).map(([a, b]) => [Math.floor(a), Math.ceil(b)] as [number, number]),
+    prompts: res.prompts,
+    tok: t ? { in: t.in, out: t.out, cw: t.cw, cr: t.cr, total: t.total } : null,
+    models: res.models ?? {},
+  };
+}
+
+export function cloudFactBody(sessionId: string | undefined, part: CloudPart | null = null, number?: number): string {
+  const sid = cloudSid(sessionId);
+  if (sid && part) {
+    const usds = Object.values(part.models).map((m) => m.usd);
+    const usd = usds.length && usds.every((u) => u !== null) ? round2(usds.reduce((a, u) => a + (u as number), 0)) : null;
+    let text = `Факт (облако): ${fmtH(part.h)} ч активных в облачной сессии Claude Code, ${part.prompts} ${plural(part.prompts, "промпт", "промпта", "промптов")}.`;
+    if (part.tok) text += ` Токены: ${fmtMtok(part.tok.total)} млн${usd !== null ? `, по API-тарифам ≈ $${usd.toFixed(2)}` : ""}.`;
+    text += ` Сессия: https://claude.ai/code/${sid}. Поля проекта поставит локальная сессия: est fact ${number ?? "<N>"} --write.`;
+    return `${text}\n<!-- fact ${pyDumps({ v: 1, h: part.h, manual: 0, cov: "cloud", src: "cloud", session: sid, cloud: [part] })} -->`;
+  }
   let text = "Факт недоступен (облако): задача сделана в облачной сессии Claude Code — там est не видит проекта GitHub; цифру даст локальная сессия, импортировав события этой сессии (est cloud-import) (покрытие none).";
   if (sid) text += ` Сессия: https://claude.ai/code/${sid}.`;
   return `${text}\n<!-- fact ${pyDumps({ v: 1, h: null, manual: 0, cov: "none", src: "cloud", session: sid })} -->`;
@@ -2419,7 +2522,8 @@ function factForIssue(repo: Repo, number: number, gap: number, quiet = false): [
   // эпик — по типу issue «Эпик»/«Epic»; метка epic — запасной вариант для репо без типов
   if (itype === "эпик" || itype === "epic" || labels.includes("epic")) return factForEpic(repo, issue, gap, quiet);
   const [prObjs, closers, weakUsed] = resolveLinks(repo, issue);
-  const res = computeFact(repo, number, prObjs, closers, gap);
+  const parts = cloudPartsIn(issue.comments.nodes.map((c: Any) => c.body));
+  const res = computeFact(repo, number, prObjs, closers, gap, parts);
   res.title = issue.title;
   res.weak_links = weakUsed;
   res.links = prObjs.map((p) => ({ pr: p.number, branch: p.headRefName, why: p.why! }));
@@ -2602,10 +2706,15 @@ function cmdFact(args: FactArgs): void {
   if (args.sweep && args.number !== undefined) throw new EstError("номер issue и --sweep несовместимы: либо одно, либо другое");
   if (isCloud()) {
     if (args.number === undefined) throw new EstError(CLOUD_ERR);
+    const sid = cloudSid(process.env.CLAUDE_CODE_REMOTE_SESSION_ID);
+    const part = sid ? cloudOwnPart(args.number, sid, args.gap) : null;
+    const what = part
+      ? `часть факта этой сессии посчитана по её транскрипту (${fmtH(part.h)} ч); поля проекта отсюда не поставить — их поставит локальная сессия (est fact ${args.number} --write или --sweep)`
+      : "факт этой сессии не посчитать: транскрипт не привязан к задаче (ветка <type>/<N>-… или «#N» в первом промпте) — локальная сессия импортирует события (est cloud-import)";
     console.log(
-      `облачная сессия Claude Code: GitHub GraphQL и поля проекта отсюда недоступны — факт не посчитать и не записать${args.write ? " (--write ничего не пишет)" : ""}.\n` +
+      `облачная сессия Claude Code: GitHub GraphQL и поля проекта отсюда недоступны — ${what}${args.write ? " (--write ничего не пишет)" : ""}.\n` +
         `Запиши комментарий ниже в issue #${args.number} инструментом GitHub; «Готово» ставит workflow проекта «Item closed», иначе — пользователь.\n\n` +
-        cloudFactBody(process.env.CLAUDE_CODE_REMOTE_SESSION_ID),
+        cloudFactBody(process.env.CLAUDE_CODE_REMOTE_SESSION_ID, part, args.number),
     );
     return;
   }
