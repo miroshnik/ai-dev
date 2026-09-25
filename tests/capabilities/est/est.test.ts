@@ -394,6 +394,21 @@ describe("Сессия ведёт несколько задач подряд", (
     expect(len(mergeIntervals(all))).toBe(len(all));
   });
 
+  // Claude Code повторяет pr-link привязанного к сессии PR и после мержа — это статус приложения, не работа над PR
+  it("pr-link смёрженного PR прошлой задачи, повторённый после мержа, не обрывает время следующей задачи", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", "fix/41-export", "сделай #41"), work("10:06", "fix/41-export"), prLink("10:10", 101), work("10:12", "fix/41-export"),
+      rename("#44 Исследование"),
+      prompt("10:18", "HEAD", "теперь #44"), prLink("10:20", 101), work("10:24", "HEAD"), prLink("10:26", 101), work("10:30", "HEAD"),
+    ]));
+    const merged = { ...prs[0]!, mergedAt: ts("10:14") };
+    const f44 = computeFact(stubRepo([parseSessionFile(file)], [merged]), 44, [], []);
+    expect(f44.h).toBe(0.2); // 10:18–10:30 под «#44»
+    expect(f44.details[0]!.rules).toEqual({ название: 4 });
+  });
+
   it("маркер факта хранит интервалы по сессиям — по ним следующий расчёт видит, что уже засчитано", () => {
     const body = factCommentBody(fact(session(), 42), null, [], 0, null);
     expect(parseMarker(body, "fact").iv).toEqual({ "33333333": [[ts("10:18"), ts("10:24")], [ts("10:36"), ts("10:48")]] });
