@@ -43,7 +43,8 @@ Cursor глобального файла не имеет (вставить пр�
   milestones, оценка и факт, спецификация тестами, CI).
 - `claude/CLAUDE.md` — то, что есть только у Claude Code.
 - `docs/` — справочники к правилам (`github-projects.md`, `ci-concurrency.md`,
-  `pr-checks.md`); правила ссылаются на них, агент читает по мере надобности.
+  `pr-checks.md`, `cloud-sessions.md`); правила ссылаются на них, агент
+  читает по мере надобности.
 - `skills/<name>/` — скиллы по стандарту [Agent Skills](https://agentskills.io):
   `SKILL.md` (frontmatter + процедура) и `scripts/` (детерминированная часть).
   Скрипты — TypeScript под Bun (`bun script.ts`, без сборки и зависимостей).

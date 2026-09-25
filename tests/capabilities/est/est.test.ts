@@ -423,7 +423,7 @@ describe("Комментарий «Факт»", () => {
 });
 
 describe("CLI", () => {
-  const run = (...args: string[]) => spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev") } });
+  const run = (...args: string[]) => spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "" } });
 
   it("без команды — справка и код 2, неизвестная команда — ошибка", () => {
     expect(run().status).toBe(2);
@@ -439,5 +439,31 @@ describe("CLI", () => {
     expect(run("estimate", "1", "--repo", "o/r").stderr).toContain("--type обязателен");
     expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("укажите номер issue");
     expect(run("fact", "--repo", "o/r", "--bogus").status).toBe(2);
+  });
+});
+
+/**
+ * В облачной сессии Claude Code (claude.ai/code) GitHub доступен только через REST своего репозитория: GraphQL и
+ * проекты закрыты, поэтому est ни оценки, ни факта там не посчитает. Факт облачной сессии — честное «недоступен
+ * (облако)»: est печатает готовый комментарий, агент записывает его инструментом GitHub.
+ */
+describe("Облачная сессия", () => {
+  const cloud = (...args: string[]) =>
+    spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+
+  it("est fact печатает комментарий «Факт недоступен (облако)» со ссылкой на сессию и маркером факта — в GitHub не ходит", () => {
+    const r = cloud("fact", "42");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Факт недоступен (облако): ");
+    expect(r.stdout).toContain("Сессия: https://claude.ai/code/session_01Test.");
+    expect(parseMarker(r.stdout, "fact")).toMatchObject({ h: null, cov: "none", src: "cloud", session: "session_01Test" });
+  });
+
+  it("оценка, история и sweep в облаке — ошибка с объяснением, а не сбой gh", () => {
+    for (const args of [["estimate", "42", "--type", "feat", "--hours", "1"], ["history"], ["fact", "--sweep"]]) {
+      const r = cloud(...args);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("облачная сессия");
+    }
   });
 });
