@@ -16,7 +16,7 @@ import { tmpDir, writeTree } from "../../lib/spec.ts";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const BIN = path.join(REPO, "bin/ai-dev.mjs");
-const SKILLS = ["ci-wait", "est", "spec"];
+const SKILLS = ["ci-wait", "est", "github", "spec"];
 
 let tmp: string;
 let cleanup: () => void;
