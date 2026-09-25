@@ -409,6 +409,19 @@ describe("Сессия ведёт несколько задач подряд", (
     expect(f44.details[0]!.rules).toEqual({ название: 3 }); // промпт и две записи работы; pr-link — не запись работы
   });
 
+  it("окно своего PR не тянется назад через переименование: записи на HEAD под прошлым названием остаются прошлой задаче", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", "HEAD", "сделай #41"), work("10:06", "HEAD"), work("10:12", "HEAD"),
+      rename("#45 Отчёт"),
+      prompt("10:18", "HEAD", "теперь #45"), work("10:24", "fix/45-report"), prLink("10:30", 105), work("10:30", "fix/45-report"),
+    ]));
+    const p105 = pr(105, "fix/45-report", 45);
+    const f45 = computeFact(stubRepo([parseSessionFile(file)], [p105]), 45, [{ ...p105, why: "закрыл issue" }], []);
+    expect(f45.h).toBe(0.2); // 10:18–10:30; 10:00–10:12 — время #41
+  });
+
   it("маркер факта хранит интервалы по сессиям — по ним следующий расчёт видит, что уже засчитано", () => {
     const body = factCommentBody(fact(session(), 42), null, [], 0, null);
     expect(parseMarker(body, "fact").iv).toEqual({ "33333333": [[ts("10:18"), ts("10:24")], [ts("10:36"), ts("10:48")]] });
