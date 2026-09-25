@@ -1,5 +1,6 @@
 {
   "name": "ai-dev",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "description": "Общие правила и скиллы для агентов; установка — npx github:miroshnik/ai-dev install; скрипты скиллов — TypeScript под Bun, тесты — bun test в tests/",
