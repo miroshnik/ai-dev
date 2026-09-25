@@ -25,6 +25,10 @@ export class FakeGitHub {
   mutations: { op: string; input: Any }[] = [];
   /** Операция → текст ошибки GraphQL: мутация падает, как без прав у токена. */
   failing: Record<string, string> = {};
+  /** Ответ createIssue ещё не показывает элемент проекта, хотя проект задачу уже добавил (гонка на стороне GitHub). */
+  createIssueHidesItems = false;
+  /** Номер задачи → сколько следующих чтений IssueRef ещё не покажут её элементы проекта. */
+  issueRefLag: Record<number, number> = {};
   private seq = 0;
 
   constructor(recording: Recording) {
@@ -40,7 +44,13 @@ export class FakeGitHub {
       if (this.failing[op]) return JSON.stringify({ data: null, errors: [{ message: this.failing[op] }] });
       const handler = (this.handlers as Any)[op];
       if (!handler) throw new Error(`fake gh: мутация ${op} не поддержана`);
-      return JSON.stringify({ data: handler(variables.input) });
+      try {
+        return JSON.stringify({ data: handler(variables.input) });
+      } catch (e) {
+        // как GitHub: data с null в поле мутации и ошибка рядом
+        if (e instanceof GitHubError) return JSON.stringify({ data: { [e.field]: null }, errors: [{ type: "UNPROCESSABLE", message: e.message }] });
+        throw e;
+      }
     }
     if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
@@ -68,6 +78,12 @@ export class FakeGitHub {
     const i = this.issue(number);
     if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
     const out = structuredClone(i);
+    const lag = this.issueRefLag[number] ?? 0;
+    if (lag > 0) {
+      this.issueRefLag[number] = lag - 1;
+      out.projectItems = { nodes: [] };
+      return { data: { repository: { issue: out } } };
+    }
     out.projectItems = { nodes: this.allProjects().flatMap((p) => this.items(p.id).filter((it: Any) => it.content?.id === i.id).map((it: Any) => ({ id: it.id, project: { id: p.id }, status: it.status ?? null }))) };
     return { data: { repository: { issue: out } } };
   }
@@ -236,7 +252,7 @@ export class FakeGitHub {
       this.openIssues.push({ id, number });
       if (parent) parent.subIssues.nodes.push({ number, state: "OPEN" });
       const items = (input.projectV2Ids ?? []).map((pid: string) => ({ id: this.addItem(pid, node), project: { id: pid } }));
-      return { createIssue: { issue: { id, number, title: node.title, url: node.url, projectItems: { nodes: items } } } };
+      return { createIssue: { issue: { id, number, title: node.title, url: node.url, projectItems: { nodes: this.createIssueHidesItems ? [] : items } } } };
     },
     CreateLabel: ({ name }: Any) => {
       const id = this.id("LA");
@@ -329,8 +345,10 @@ export class FakeGitHub {
       it.status = { name: this.statusName(this.project(projectId), value.singleSelectOptionId) };
       return { updateProjectV2ItemFieldValue: { projectV2Item: { id: itemId } } };
     },
+    // Задача уже в проекте — GitHub отвечает ошибкой, а не тем же элементом.
     AddItem: ({ projectId, contentId }: Any) => {
       const issue = this.allIssues().find((i) => i.id === contentId) ?? this.openIssues.find((i: Any) => i.id === contentId);
+      if (this.items(projectId).some((it: Any) => it.content?.id === contentId)) throw new GitHubError("addProjectV2ItemById", "Content already exists in this project");
       return { addProjectV2ItemById: { item: { id: this.addItem(projectId, issue) } } };
     },
     DeleteItem: ({ projectId, itemId }: Any) => {
@@ -355,6 +373,15 @@ export class FakeGitHub {
   }
   private allViews(): Any[] {
     return this.allProjects().flatMap((p) => p.views.nodes);
+  }
+}
+
+/** Ошибка GitHub на мутацию: поле мутации в data — null, текст — в errors. */
+class GitHubError extends Error {
+  field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.field = field;
   }
 }
 

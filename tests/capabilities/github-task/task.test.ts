@@ -16,10 +16,11 @@ const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.
 const REPO = "miroshnik/ai-dev";
 const ORG = "acme/ai-dev";
 
+let pauses = 0;
 function task(f: FakeGitHub, args: string[], repo = REPO) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {} });
+  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, sleep: () => void pauses++ });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const byOp = (f: FakeGitHub, op: string) => f.mutations.filter((m) => m.op === op).map((m) => m.input);
@@ -151,6 +152,42 @@ describe("task new в организации: тип issue и Priority", () => {
     expect(task(f, ["new", "--title", "Экспорт", "--type", "Баг"], ORG).err).toContain("в организации нет включённого типа «Баг» — github project fix");
     expect(task(f, ["new", "--title", "Экспорт", "--priority", "P1"], ORG).err).toContain("--priority: Urgent, High, Medium, Low");
     expect(f.mutations).toEqual([]);
+  });
+});
+
+/**
+ * GitHub добавляет задачу в проект не мгновенно для чтения: ответ createIssue и чтение задачи могут ещё не показывать
+ * элемент, а повторное добавление отвечает «Content already exists». Статус всё равно ставится — по элементу, который
+ * станет виден после короткой паузы.
+ */
+describe("Гонка с элементом проекта", () => {
+  it("createIssue ещё не показывает элемент, добавление — «уже есть»: task new всё равно ставит Бэклог", () => {
+    const f = new FakeGitHub(REC);
+    f.createIssueHidesItems = true;
+    const r = task(f, ["new", "--title", "Экспорт"]);
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
+    expect(r.out).toContain("+ проект «ai-dev»: Status «Бэклог»");
+  });
+
+  it("задачу проект уже добавил, а чтение её ещё не показывает: task status перечитывает с паузой и ставит статус", () => {
+    const f = new FakeGitHub(REC);
+    f.issueRefLag[49] = 2; // не видно при первом чтении и при первом перечитывании после «уже есть»
+    pauses = 0;
+    const r = task(f, ["status", "49", "В работе"]);
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"]]);
+    expect(pauses).toBe(2);
+    expect(r.out).toContain("+ #49: Status «В работе»");
+    expect(r.out).not.toContain("добавлена в проект");
+  });
+
+  it("элемент так и не виден — понятная ошибка с тем, что повторить, а не падение", () => {
+    const f = new FakeGitHub(REC);
+    f.issueRefLag[49] = 100;
+    const r = task(f, ["status", "49", "В работе"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("#49 уже в проекте, но элемент не виден — повторить: github task status 49");
   });
 });
 
