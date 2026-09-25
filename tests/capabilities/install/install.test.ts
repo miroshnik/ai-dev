@@ -31,10 +31,10 @@ beforeEach(() => {
   mkdirSync(home);
   mkdirSync(proj);
   execFileSync("git", ["init", "-q"], { cwd: proj });
-  // PATH — только node и git: агенты на машине определяются по каталогам в HOME, а не по тому, что стоит у раннера
+  // PATH — только node, git и npm: агенты на машине определяются по каталогам в HOME, а не по тому, что стоит у раннера
   const bin = path.join(tmp, "bin");
   mkdirSync(bin);
-  for (const cmd of ["node", "git"]) {
+  for (const cmd of ["node", "git", "npm", "npx"]) {
     symlinkSync(execFileSync("sh", ["-c", `command -v ${cmd}`], { encoding: "utf8" }).trim(), path.join(bin, cmd));
   }
   env = { HOME: home, PATH: bin };
@@ -97,6 +97,18 @@ describe("Установка в проект", () => {
     const r = install();
     expect(read(path.join(proj, ".agents/skills/spec/SKILL.md"))).toBe("свой spec");
     expect(r.stderr).toContain(".agents/skills/spec");
+  });
+
+  /** npx ставит пакет из GitHub в node_modules — так же, как пакет из `npm pack`: только файлы из `files`. */
+  it("через npx из пакета ai-dev: bin из node_modules ставит правила и скиллы", () => {
+    const pack = spawnSync("npm", ["pack", "--pack-destination", tmp, "--silent"], { cwd: REPO, env: { ...env, npm_config_cache: path.join(tmp, "npm") }, encoding: "utf8" });
+    expect(pack.status).toBe(0);
+    const tgz = path.join(tmp, pack.stdout.trim().split("\n").pop()!);
+    const r = spawnSync("npx", ["-y", `--package=${tgz}`, "ai-dev", "install"], { cwd: proj, env: { ...env, npm_config_cache: path.join(tmp, "npm") }, encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(read(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
+    expect(existsSync(path.join(proj, ".agents/ai-dev/docs/github-projects.md"))).toBe(true);
+    expect(existsSync(path.join(proj, ".agents/skills/spec/scripts/package.json"))).toBe(true);
   });
 
   it("корень установки — корень git-репозитория, даже при запуске из подкаталога", () => {
