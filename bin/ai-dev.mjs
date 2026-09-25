@@ -62,7 +62,9 @@ function onPath(cmd) {
 }
 
 /**
- * Относительный симлинк dst → target. Заменяет симлинк и пустой файл; чужой файл или каталог — предупреждение.
+ * Симлинк dst → target: внутри root — относительный (в проекте его коммитят), вне — абсолютный (относительный
+ * ломается, если путь к root идёт через симлинк: macOS /var → /private/var). Заменяет симлинк и пустой файл;
+ * чужой файл или каталог — предупреждение.
  * @param {string} target @param {string} dst @param {string} root
  */
 function link(target, dst, root) {
@@ -73,7 +75,8 @@ function link(target, dst, root) {
   }
   if (st?.isSymbolicLink()) rmSync(dst);
   mkdirSync(path.dirname(dst), { recursive: true });
-  symlinkSync(path.relative(path.dirname(dst), target), dst);
+  const inRoot = !path.relative(root, target).startsWith("..");
+  symlinkSync(inRoot ? path.relative(path.dirname(dst), target) : target, dst);
   note(`${path.relative(root, dst)} → ${path.relative(root, target)}`);
   return true;
 }
