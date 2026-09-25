@@ -64,7 +64,11 @@ export interface Io {
   out: (line: string) => void;
   err: (line: string) => void;
   env: Record<string, string | undefined>;
+  /** Пауза перед перечитыванием (GitHub показывает добавленное не сразу); в тестах — без ожидания. */
+  sleep?: (ms: number) => void;
 }
+
+const pause = (ms: number) => void Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 export interface ProjectRef {
   id: string;
@@ -274,7 +278,8 @@ function mutationQuery(op: string): string {
   return `mutation ${op}($input: ${inputType}!) { ${field}(input: $input) { ${select} } }`;
 }
 
-export function graphql(io: Io, query: string, variables: Record<string, unknown>): Any {
+/** Запрос GraphQL; частичные данные с ошибками — предупреждение, а у мутации (strict) — ошибка: её результат не получен. */
+export function graphql(io: Io, query: string, variables: Record<string, unknown>, strict = false): Any {
   const out = io.gh(["api", "graphql", "--input", "-"], JSON.stringify({ query, variables }));
   let res: Any;
   try {
@@ -283,13 +288,13 @@ export function graphql(io: Io, query: string, variables: Record<string, unknown
     throw new GhError(`gh api graphql: ответ не JSON: ${out.slice(0, 200)}`);
   }
   const errors: string[] = (res.errors ?? []).map((e: Any) => e.message ?? String(e));
-  if (errors.length && !res.data) throw new GhError(`GraphQL: ${errors.join("; ")}`);
+  if (errors.length && (!res.data || strict)) throw new GhError(`GraphQL: ${errors.join("; ")}`);
   if (errors.length) io.err(`предупреждение GraphQL: ${errors.join("; ")}`);
   return res.data;
 }
 
 function mutate(io: Io, m: Mutation): Any {
-  return graphql(io, mutationQuery(m.op), { input: m.input });
+  return graphql(io, mutationQuery(m.op), { input: m.input }, true);
 }
 
 /** Реальный `gh`: код возврата ≠ 0 — исключение с stderr. */
@@ -723,18 +728,31 @@ function taskContext(io: Io, slug: string): TaskCtx {
 }
 
 const isEpic = (i: Issue, org: boolean) => (org ? i.type === "Эпик" : i.labels.includes(EPIC_LABEL.name));
-const itemIn = (ctx: TaskCtx, i: Issue) => i.items.find((it) => it.projectId === ctx.project.id) ?? null;
+const itemIn = (ctx: TaskCtx, i: Pick<Issue, "items">) => i.items.find((it) => it.projectId === ctx.project.id) ?? null;
 
 function setStatus(io: Io, ctx: TaskCtx, itemId: string, name: string): void {
   const optionId = ctx.status.options!.find((o) => o.name === name)!.id;
   mutate(io, { op: "SetItemStatus", input: { projectId: ctx.project.id, itemId, fieldId: ctx.status.id, value: { singleSelectOptionId: optionId } } });
 }
 
-/** Элемент задачи в проекте; нет — добавить (addProjectV2ItemById идемпотентен). */
-function ensureItem(io: Io, ctx: TaskCtx, i: Issue): { id: string; added: boolean } {
+/**
+ * Элемент задачи в проекте; нет — добавить. Проект мог уже добавить задачу сам (projectV2Ids в createIssue, auto-add),
+ * а чтение ещё не показывает: addProjectV2ItemById тогда отвечает «Content already exists» — перечитываем с паузой.
+ */
+function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "items">): { id: string; added: boolean } {
   const it = itemIn(ctx, i);
   if (it) return { id: it.id, added: false };
-  return { id: mutate(io, { op: "AddItem", input: { projectId: ctx.project.id, contentId: i.id } }).addProjectV2ItemById.item.id, added: true };
+  try {
+    return { id: mutate(io, { op: "AddItem", input: { projectId: ctx.project.id, contentId: i.id } }).addProjectV2ItemById.item.id, added: true };
+  } catch (e) {
+    if (!/already exists/i.test((e as Error).message)) throw e;
+  }
+  for (let k = 0; k < 5; k++) {
+    (io.sleep ?? pause)(1000);
+    const again = itemIn(ctx, loadIssue(io, ctx.slug, i.number));
+    if (again) return { id: again.id, added: false };
+  }
+  throw new GhError(`#${i.number} уже в проекте, но элемент не виден — повторить: github task status ${i.number} <статус>`);
 }
 
 /** Префикс эпика — часть заголовка до « · »: с него начинаются заголовки эпика и всех подзадач. */
@@ -809,7 +827,8 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   const created = mutate(io, { op: "CreateIssue", input }).createIssue.issue;
 
   // Status ставим сами, не дожидаясь workflow «Item added to project».
-  const item = (created.projectItems?.nodes ?? []).find((it: Any) => it.project.id === ctx.project.id)?.id ?? mutate(io, { op: "AddItem", input: { projectId: ctx.project.id, contentId: created.id } }).addProjectV2ItemById.item.id;
+  const listed = (created.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: null }));
+  const item = ensureItem(io, ctx, { id: created.id, number: created.number, items: listed }).id;
   setStatus(io, ctx, item, BACKLOG);
   done.push(`проект ${q(ctx.project.title)}: ${STATUS} ${q(BACKLOG)}`);
   if (priority) done.push(`${PRIORITY} ${q(priority.name)}`);
