@@ -7,14 +7,15 @@
  * комментарии «Оценка» и «Факт»; агент выбирает аналоги и объясняет расхождения.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  fmtH, hashMatches, mergeIntervals, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks, roundScale, usageCost,
+  cloudSessionsIn, fmtH, hashMatches, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { tmpDir } from "../../lib/spec.ts";
@@ -260,6 +261,94 @@ const pr77 = (): PR => ({
   number: 77, title: "feat: экспорт", state: "MERGED", headRefName: "feat/42-export", baseRefName: "main", body: "Closes #42",
   mergedAt: ts("11:00"), updatedAt: ts("11:00"), additions: 10, deletions: 2, changedFiles: 1, mergeCommit: "ffffffffffffffffffffffffffffffffffffffff",
   closing: [42], commits: [{ oid: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0", at: ts("10:06") }], commits_total: 1, files: [{ path: "src/a.ts", a: 10, d: 2 }],
+});
+
+/**
+ * Облачная сессия Claude Code (claude.ai/code): её транскрипт — события сессии, выгруженные из claude.ai браузером
+ * (`est cloud-import`). Это ещё один источник факта, как Codex: те же записи, ветки, промпты, токены и хеши, только
+ * ветка приходит событием `vcs_state_changed`, а человек — это `source: client`. Коммит PR с трейлером
+ * `Claude-Session`, чья сессия не импортирована, — покрытие partial со ссылкой на сессию: часть работы не видна.
+ */
+describe("Облачная сессия: события из claude.ai", () => {
+  const SESSION = "session_01CloudTest";
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00.000Z`;
+  let seq = 0;
+  const event = (hhmm: string, event_type: string, payload: object, source = "worker") => ({ created_at: at(hhmm), event_id: `e${++seq}`, event_type, payload, sequence_num: String(seq), source });
+  const usage = { input_tokens: 2, output_tokens: 100, cache_creation_input_tokens: 500, cache_read_input_tokens: 10000, cache_creation: { ephemeral_1h_input_tokens: 500, ephemeral_5m_input_tokens: 0 } };
+  const assistant = (hhmm: string, id: string, parent: string | null = null) =>
+    event(hhmm, "assistant", { type: "assistant", message: { id, model: "claude-opus-5-5", role: "assistant", content: [{ type: "text", text: "…" }], usage }, parent_tool_use_id: parent, timestamp: at(hhmm) });
+  const prompt = (hhmm: string, text: string, parent: string | null = null) => event(hhmm, "user", { type: "user", message: { role: "user", content: text }, parent_tool_use_id: parent }, parent ? "worker" : "client");
+  const toolResult = (hhmm: string, text: string, parent: string | null = null) =>
+    event(hhmm, "user", { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: text }] }, parent_tool_use_id: parent, timestamp: at(hhmm) });
+  const vcs = (hhmm: string, branch: string) => event(hhmm, "system", { type: "system", subtype: "vcs_state_changed", kind: "commit", branch, cwd: "/home/user/r" });
+  const OID = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+  const events = () => [
+    event("10:00", "system", { type: "system", subtype: "init", cwd: "/home/user/r" }),
+    prompt("10:00", "сделай #42"),
+    assistant("10:02", "msg_01AAAAAAAAAAAA"), assistant("10:02", "msg_01AAAAAAAAAAAA"), // тот же ответ дважды
+    toolResult("10:04", "[fix/42-export a1b2c3d] fix: экспорт"), vcs("10:04", "fix/42-export"),
+    assistant("10:06", "msg_01BBBBBBBBBBBB"),
+    prompt("10:07", "проверь #42 экспорт", "toolu_sub"), assistant("10:08", "msg_01CCCCCCCCCCCC", "toolu_sub"),
+  ];
+  // выгрузка — как её сохраняет браузер: события новые сверху, как отдаёт API
+  const exportFile = (evs: object[]) => {
+    const f = path.join(dir, `${SESSION}.json`);
+    writeFileSync(f, JSON.stringify({ v: 1, session: SESSION, repo: "o/r", title: "Экспорт", branch: "fix/42-export", events: [...evs].reverse() }));
+    return f;
+  };
+  const cloudPr = (): PR => ({ ...pr77(), commits: [{ oid: OID, at: ts("10:04") }], cloud: [SESSION] });
+
+  it("события → сессия: человек — клиент, ветка — из vcs_state_changed (до неё нейтральная), токены раз на ответ, хеши из выводов, субагент — в таймлайне", () => {
+    const s = parseCloudFile(exportFile(events()));
+    expect(s).toMatchObject({ sid: SESSION, source: "cloud", cwd: "/home/user/r", n_human: 1, first_refs: [42], commits: [[ts("10:04"), "a1b2c3d"]] });
+    expect(s.usage.map((u) => [u[0], u[5]])).toEqual([["AAAAAAAAAAAA", 500], ["BBBBBBBBBBBB", 500], ["CCCCCCCCCCCC", 500]]);
+    expect(s.ev.map((e) => [e[0], e[1]])).toEqual([
+      [ts("10:00"), ""], [ts("10:02"), ""], [ts("10:02"), ""], [ts("10:04"), ""], [ts("10:06"), "fix/42-export"], [ts("10:07"), "fix/42-export"], [ts("10:08"), "fix/42-export"],
+    ]);
+    expect(s.ev.filter((e) => e[3]).map((e) => e[3])).toEqual(["42", "42"]); // задание субагента называет задачу
+  });
+
+  it("облачная сессия считается в факт наравне с локальной — покрытие full, агент назван", () => {
+    const s = parseCloudFile(exportFile(events()));
+    const res = computeFact(stubRepo([s], [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], []);
+    expect(res.h).toBe(0.13); // 10:00–10:08: задача названа в первом промпте
+    expect(res.cov).toBe("full");
+    expect(res.cloud_missing).toEqual([]);
+    expect(factCommentBody(res, 1, [], 0, null)).toContain("активных в облачной сессии Claude Code");
+  });
+
+  it("коммит PR с трейлером Claude-Session, чья сессия не импортирована, — покрытие partial и ссылка на сессию", () => {
+    const local = parseCloudFile(exportFile(events()));
+    local.sid = "local-session"; // та же работа, но как будто локальная — а облачной части нет
+    local.source = "claude";
+    const res = computeFact(stubRepo([local], [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], []);
+    expect(res.cov).toBe("partial");
+    expect(res.cloud_missing).toEqual([SESSION]);
+    expect(factCommentBody(res, 1, [], 0, null)).toContain(`Облачная сессия https://claude.ai/code/${SESSION} не импортирована — est cloud-import.`);
+  });
+
+  it("трейлер Claude-Session читается из тела коммита PR", () => {
+    expect(cloudSessionsIn("fix: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01Abc\n")).toEqual(["session_01Abc"]);
+    expect(cloudSessionsIn("fix: без трейлера")).toEqual([]);
+    const pr = packPr({ number: 7, commits: { totalCount: 2, nodes: [
+      { commit: { oid: "a".repeat(40), authoredDate: at("10:00"), messageBody: "Claude-Session: https://claude.ai/code/session_01Abc" } },
+      { commit: { oid: "b".repeat(40), authoredDate: at("10:05"), messageBody: "" } },
+    ] } });
+    expect(pr.cloud).toEqual(["session_01Abc"]);
+  });
+
+  it("est cloud-import кладёт выгрузку в личный каталог по репозиторию; не выгрузка — ошибка", () => {
+    const env = { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "" };
+    const r = spawnSync("bun", [EST, "cloud-import", exportFile(events())], { encoding: "utf8", env });
+    expect(r.status).toBe(0);
+    const stored = path.join(dir, "ai-dev", "cloud", "o", "r", `${SESSION}.json`);
+    expect(JSON.parse(readFileSync(stored, "utf8")).session).toBe(SESSION);
+    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 9 событий, 1 промпт, 10:00–10:08 UTC → ${stored}`);
+    writeFileSync(path.join(dir, "bad.json"), JSON.stringify({ data: [] }));
+    const bad = spawnSync("bun", [EST, "cloud-import", path.join(dir, "bad.json")], { encoding: "utf8", env });
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toContain("не выгрузка облачной сессии");
+  });
 });
 
 /**
