@@ -62,10 +62,31 @@ gh project view <N> --owner <owner> --format json    # id проекта
 поля Iteration) молча прячет задачи с доски. Снять —
 `updateProjectV2View(input:{viewId,filter:""})`.
 
-Встроенный workflow проекта «Item closed» включён и ставит `Status` =
-«Готово» (Project → Workflows; через API не настраивается — проверить в UI,
-не так — попросить пользователя). На нём держится статус задач, закрытых из
-облачной сессии: поля проекта ей недоступны (`docs/cloud-sessions.md`).
+Встроенные workflow проекта **«Item added to project» → `Бэклог`** и
+**«Item closed» → `Готово`** включены — страховка статуса, когда ставить его
+некому (облачная сессия, другой агент, закрытие из UI GitHub). На «Item
+closed» держится статус задач, закрытых из облачной сессии: поля проекта ей
+недоступны (`docs/cloud-sessions.md`). API отдаёт у workflow только `name` и
+`enabled`: включить его и прочитать, какой статус он ставит, нельзя.
+Workflow, которого нет в списке, ни разу не настраивался — он выключен (у
+нового проекта в списке только «Item closed», «Pull request merged» и
+«Auto-close issue»). Цель «Item closed» видна по результату: закрытая
+задача в проекте не в `Готово` — workflow выключен или указывает на
+удалённый вариант `Status` (после замены вариантов, раздел ниже).
+
+```bash
+# workflow: true — включён, false или строки нет — выключен (личный аккаунт — user(login:))
+gh api graphql -f query='{organization(login:"<owner>"){projectV2(number:<N>){workflows(first:20){nodes{name enabled}}}}}' \
+  --jq '.data.organization.projectV2.workflows.nodes[]|"\(.enabled) \(.name)"'
+# закрытые задачи в проекте не в «Готово» — номера; пусто — «Item closed» работает
+gh api graphql -f query='{organization(login:"<owner>"){projectV2(number:<N>){items(last:100){nodes{content{... on Issue{number state}} status:fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}' \
+  --jq '.data.organization.projectV2.items.nodes[]|select(.content.state=="CLOSED" and .status.name!="Готово")|.content.number'
+```
+
+Выключен или ставит не то — включает пользователь, только в UI: проект →
+⋯ → Workflows → «Item added to project» (Set value: `Status` → `Бэклог`) и
+«Item closed» (`Status` → `Готово`) → Save and turn on workflow. Закрытым
+задачам не в `Готово` статус ставит агент.
 
 ### Создание с нуля
 
@@ -84,7 +105,9 @@ gh project view <N> --owner <owner> --format json    # id проекта
   / `ROADMAP_LAYOUT`. Группировка доски по `Status` — дефолт, через API не
   настраивается (и не нужно); сортировка `Таблица` и `Доска` по `Priority`,
   поля дат и маркеры milestones у роадмэпа через API не задаются — после
-  создания попросить пользователя настроить их один раз в UI.
+  создания попросить пользователя настроить их один раз в UI, вместе с
+  workflow «Item added to project» → `Бэклог` и «Item closed» → `Готово`
+  (замена вариантов `Status` оставляет «Item closed» на удалённом `Done`).
 - Числовые поля:
   ```bash
   gh project field-create <N> --owner <owner> --name "Оценка, ч" --data-type NUMBER
