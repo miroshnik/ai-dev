@@ -285,6 +285,8 @@ describe("Облачная сессия: события из claude.ai", () => {
   const events = () => [
     event("10:00", "system", { type: "system", subtype: "init", cwd: "/home/user/r" }),
     prompt("10:00", "сделай #42"),
+    // вставка от облака (текст скилла) — не человек, хоть и сообщение user верхнего уровня
+    event("10:01", "user", { type: "user", message: { role: "user", content: [{ type: "text", text: "Base directory for this skill: … #7" }] }, parent_tool_use_id: null }),
     assistant("10:02", "msg_01AAAAAAAAAAAA"), assistant("10:02", "msg_01AAAAAAAAAAAA"), // тот же ответ дважды
     toolResult("10:04", "[fix/42-export a1b2c3d] fix: экспорт"), vcs("10:04", "fix/42-export"),
     assistant("10:06", "msg_01BBBBBBBBBBBB"),
@@ -303,7 +305,7 @@ describe("Облачная сессия: события из claude.ai", () => {
     expect(s).toMatchObject({ sid: SESSION, source: "cloud", cwd: "/home/user/r", n_human: 1, first_refs: [42], commits: [[ts("10:04"), "a1b2c3d"]] });
     expect(s.usage.map((u) => [u[0], u[5]])).toEqual([["AAAAAAAAAAAA", 500], ["BBBBBBBBBBBB", 500], ["CCCCCCCCCCCC", 500]]);
     expect(s.ev.map((e) => [e[0], e[1]])).toEqual([
-      [ts("10:00"), ""], [ts("10:02"), ""], [ts("10:02"), ""], [ts("10:04"), ""], [ts("10:06"), "fix/42-export"], [ts("10:07"), "fix/42-export"], [ts("10:08"), "fix/42-export"],
+      [ts("10:00"), ""], [ts("10:01"), ""], [ts("10:02"), ""], [ts("10:02"), ""], [ts("10:04"), ""], [ts("10:06"), "fix/42-export"], [ts("10:07"), "fix/42-export"], [ts("10:08"), "fix/42-export"],
     ]);
     expect(s.ev.filter((e) => e[3]).map((e) => e[3])).toEqual(["42", "42"]); // задание субагента называет задачу
   });
@@ -343,7 +345,7 @@ describe("Облачная сессия: события из claude.ai", () => {
     expect(r.status).toBe(0);
     const stored = path.join(dir, "ai-dev", "cloud", "o", "r", `${SESSION}.json`);
     expect(JSON.parse(readFileSync(stored, "utf8")).session).toBe(SESSION);
-    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 9 событий, 1 промпт, 10:00–10:08 UTC → ${stored}`);
+    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 10 событий, 1 промпт, 10:00–10:08 UTC → ${stored}`);
     writeFileSync(path.join(dir, "bad.json"), JSON.stringify({ data: [] }));
     const bad = spawnSync("bun", [EST, "cloud-import", path.join(dir, "bad.json")], { encoding: "utf8", env });
     expect(bad.status).toBe(1);
