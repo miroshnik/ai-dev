@@ -1729,6 +1729,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
 
     // окна по якорям: от предыдущего чужого якоря до своего; внутри окна считаются только
     // записи на ветке якоря или на нейтральной ветке (HEAD/пусто/main…) — чужие ветки нет.
+    // Переименование сессии — тоже граница: до него сессия работала над задачей из прежнего названия.
+    const renames = [...(s.title_hist ?? [])].map((t) => t[0]).sort((x, y) => x - y).slice(1); // первое — с начала сессии
     const windows: Win[] = [];
     let prevForeign = -1e18;
     for (const [ts, cls, kind, w] of anchors) {
@@ -1736,7 +1738,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         prevForeign = ts;
         continue;
       }
-      const start = prevForeign;
+      const start = Math.max(prevForeign, ...renames.filter((t) => t <= ts));
       let end = ts;
       let brAt = "";
       for (const e of ev) {
@@ -1745,7 +1747,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
       if (kind === "pr") {
         // хвост после pr-link: пока ветка та же и нет чужого якоря (правки после ревью)
-        const later = foreignTs.filter((t) => t > ts);
+        const later = [...foreignTs, ...renames].filter((t) => t > ts);
         const nxtForeign = later.length ? Math.min(...later) : 1e18;
         for (const e of ev) {
           if (e[0] <= ts) continue;
