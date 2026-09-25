@@ -62,6 +62,11 @@ gh project view <N> --owner <owner> --format json    # id проекта
 поля Iteration) молча прячет задачи с доски. Снять —
 `updateProjectV2View(input:{viewId,filter:""})`.
 
+Встроенный workflow проекта «Item closed» включён и ставит `Status` =
+«Готово» (Project → Workflows; через API не настраивается — проверить в UI,
+не так — попросить пользователя). На нём держится статус задач, закрытых из
+облачной сессии: поля проекта ей недоступны (`docs/cloud-sessions.md`).
+
 ### Создание с нуля
 
 - Проще всего скопировать уже настроенный проект:
