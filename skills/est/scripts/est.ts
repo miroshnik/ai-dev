@@ -2053,6 +2053,20 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   return [text, ...keptLines, `<!-- fact ${pyDumps(marker)} -->`].join("\n");
 }
 
+// Облачная сессия Claude Code (claude.ai/code): GitHub — только REST своего репозитория, GraphQL и проекты закрыты
+// прокси сессии, поэтому ни оценки, ни факта там не посчитать. Транскрипт облачной сессии остаётся в облаке —
+// локальный est его тоже не видит. Факт такой задачи — честное «недоступен (облако)» со ссылкой на сессию.
+const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
+const CLOUD_ERR = "облачная сессия Claude Code: GitHub GraphQL и проекты отсюда недоступны — оценка, история и sweep только в локальной сессии (docs/cloud-sessions.md в ai-dev)";
+
+/** Комментарий «Факт» задачи, закрытой из облачной сессии: факт недоступен, маркер с cov none и src cloud. */
+export function cloudFactBody(sessionId: string | undefined): string {
+  const sid = sessionId ? "session_" + sessionId.replace(/^(cse|session)_/, "") : null; // env даёт cse_…, ссылка — session_…
+  let text = "Факт недоступен (облако): задача сделана в облачной сессии Claude Code — там est не видит проекта GitHub, а локальный est не видит её транскрипта (покрытие none).";
+  if (sid) text += ` Сессия: https://claude.ai/code/${sid}.`;
+  return `${text}\n<!-- fact ${pyDumps({ v: 1, h: null, manual: 0, cov: "none", src: "cloud", session: sid })} -->`;
+}
+
 const diffTxt = (res: Fact) => (res.diff_na ? "н/д (без PR)" : `${res.diff} строк`);
 
 /** «общий коммит a9e2854 с #7, #8 (доля 1/3)». */
@@ -2152,6 +2166,7 @@ interface HistoryArgs {
 }
 
 function cmdHistory(args: HistoryArgs): void {
+  if (isCloud()) throw new EstError(CLOUD_ERR);
   const registry = loadRegistry();
   const repos = args.allRepos ? Object.keys(registry) : [resolveRepo(args.repo)];
   const now = nowTs();
@@ -2426,6 +2441,15 @@ function cmdFact(args: FactArgs): void {
   const registry = loadRegistry();
   if (args.gap < 1) throw new EstError(`--gap должен быть ≥ 1 минуты, получено ${args.gap}`);
   if (args.sweep && args.number !== undefined) throw new EstError("номер issue и --sweep несовместимы: либо одно, либо другое");
+  if (isCloud()) {
+    if (args.number === undefined) throw new EstError(CLOUD_ERR);
+    console.log(
+      `облачная сессия Claude Code: GitHub GraphQL и поля проекта отсюда недоступны — факт не посчитать и не записать${args.write ? " (--write ничего не пишет)" : ""}.\n` +
+        `Запиши комментарий ниже в issue #${args.number} инструментом GitHub; «Готово» ставит workflow проекта «Item closed», иначе — пользователь.\n\n` +
+        cloudFactBody(process.env.CLAUDE_CODE_REMOTE_SESSION_ID),
+    );
+    return;
+  }
   const repo = new Repo(resolveRepo(args.repo), registry);
   const meta = repo.projectMeta();
   if (args.sweep) {
@@ -2517,6 +2541,7 @@ interface EstimateArgs {
  * --hours — только экспертная оценка, когда аналогов с фактом нет (доверие C). k справочный.
  */
 function cmdEstimate(args: EstimateArgs): void {
+  if (isCloud()) throw new EstError(CLOUD_ERR);
   const registry = loadRegistry();
   const repo = new Repo(resolveRepo(args.repo), registry);
   const meta = repo.projectMeta();
