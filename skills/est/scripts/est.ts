@@ -1468,6 +1468,12 @@ export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boole
     else if (mention.test(p.body)) add(weak, num, "упоминание в теле PR");
   }
   for (const num of strong.keys()) weak.delete(num);
+  // Упоминание в PR, который закрывает другие задачи, — чужая работа: иначе задача без своего PR получает его
+  // время (с делением, хотя факт той задачи уже записан) и тип по его ветке.
+  for (const num of [...weak.keys()]) {
+    const p = repo.pr(num);
+    if (p && p.closing.length && !p.closing.includes(n)) weak.delete(num);
+  }
   // Слабые связи используем только если сильных нет
   const [use, weakUsed] = strong.size ? [strong, false] : [weak, weak.size > 0];
   const prObjs: PR[] = [];
