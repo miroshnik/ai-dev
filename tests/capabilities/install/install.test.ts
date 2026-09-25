@@ -53,7 +53,7 @@ describe("Установка в проект", () => {
   it("правила, справочники и все скиллы — копией в .agents, Claude Code получает их симлинками из .claude", () => {
     expect(install().code).toBe(0);
     expect(read(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
-    expect(existsSync(path.join(proj, ".agents/ai-dev/docs/github-projects.md"))).toBe(true);
+    expect(existsSync(path.join(proj, ".agents/ai-dev/docs/ci-concurrency.md"))).toBe(true);
     expect(isLink(path.join(proj, ".agents/ai-dev"))).toBe(false);
     for (const s of SKILLS) {
       expect(read(path.join(proj, ".agents/skills", s, "SKILL.md"))).toBe(read(path.join(REPO, "skills", s, "SKILL.md")));
@@ -107,7 +107,7 @@ describe("Установка в проект", () => {
     const r = spawnSync("npx", ["-y", `--package=${tgz}`, "ai-dev", "install"], { cwd: proj, env: { ...env, npm_config_cache: path.join(tmp, "npm") }, encoding: "utf8" });
     expect(r.status).toBe(0);
     expect(read(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
-    expect(existsSync(path.join(proj, ".agents/ai-dev/docs/github-projects.md"))).toBe(true);
+    expect(existsSync(path.join(proj, ".agents/ai-dev/docs/ci-concurrency.md"))).toBe(true);
     expect(existsSync(path.join(proj, ".agents/skills/spec/scripts/package.json"))).toBe(true);
   });
 

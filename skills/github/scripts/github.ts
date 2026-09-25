@@ -1,16 +1,20 @@
 #!/usr/bin/env bun
 /**
- * github — проект GitHub репозитория по канону AGENTS.md (раздел «Проект (GitHub Projects)»).
+ * github — проект и задачи GitHub репозитория по канону AGENTS.md (раздел «Ведение задач»).
  *
  * Подкоманды:
  *   github project check — сверка с каноном по пунктам ✅/❌
  *   github project fix   — довести до канона: API, шаги UI со ссылками, удаление и переименование — с --confirm
+ *   github task new      — задача одной командой: тип или метка, проект и Бэклог, Priority, эпик, blocked by, milestone
+ *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
+ *   github task drop     — закрыть без выполнения и убрать из проекта
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
  */
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,9 +31,14 @@ export const VIEWS = [
 ] as const;
 export const STATUS = "Status";
 export const STATUS_OPTIONS = ["Бэклог", "В работе", "Готово"] as const;
-export const [BACKLOG, , DONE] = STATUS_OPTIONS;
+export const [BACKLOG, IN_PROGRESS, DONE] = STATUS_OPTIONS;
 export const NUMBER_FIELDS = ["Оценка, ч", "Факт, ч", "Токены, млн", "Стоимость, $"] as const;
 export const PRIORITY = "Priority";
+/** Варианты Priority от самого срочного; новой задаче — Medium, эпику — не ниже самой срочной подзадачи. */
+export const PRIORITIES = ["Urgent", "High", "Medium", "Low"] as const;
+export const DEFAULT_PRIORITY = "Medium";
+/** В личном аккаунте типов issue нет — эпик помечается меткой, это единственное исключение. */
+export const EPIC_LABEL = { name: "epic", color: "8250DF", description: "Эпик: большая задача с подзадачами" };
 export const ISSUE_TYPES = ["Задача", "Баг", "Эпик"] as const;
 export const WORKFLOW_ADDED = "Item added to project";
 export const WORKFLOW_CLOSED = "Item closed";
@@ -110,7 +119,7 @@ interface Owner {
   id: string;
   login: string;
   issueTypes: { id: string; name: string; isEnabled: boolean }[];
-  issueFields: { id: string; name: string }[];
+  issueFields: { id: string; name: string; options: { id: string; name: string }[] }[];
 }
 export interface State {
   repo: { id: string; name: string; nameWithOwner: string; owner: Owner; linked: ProjectRef[] };
@@ -154,7 +163,7 @@ export const Q = {
       __typename id login
       ... on Organization {
         issueTypes(first: 50) { nodes { id name isEnabled } }
-        issueFields(first: 50) { nodes { __typename ... on IssueFieldSingleSelect { id name } } }
+        issueFields(first: 50) { nodes { __typename ... on IssueFieldSingleSelect { id name options { id name } } } }
       }
     }
     projectsV2(first: 20) { nodes { ${REF} } }
@@ -194,6 +203,28 @@ export const Q = {
     }
   }
 }`,
+  IssueRef: `query IssueRef($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      id number title state stateReason url
+      issueType { name }
+      labels(first: 20) { nodes { name } }
+      parent { id number }
+      subIssues(first: 100) { nodes { number state } }
+      projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: "${STATUS}") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } }
+      issueFieldValues(first: 20) { nodes { __typename ... on IssueFieldSingleSelectValue { name field { ... on IssueFieldSingleSelect { name } } } } }
+    }
+  }
+}`,
+  TaskContext: `query TaskContext($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    label(name: "${EPIC_LABEL.name}") { id }
+    milestones(first: 100, states: OPEN) { nodes { id title } }
+  }
+}`,
+  IssueSearch: `query IssueSearch($q: String!) {
+  search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
+}`,
   ProjectItems: `query ProjectItems($id: ID!, $after: String) {
   node(id: $id) {
     ... on ProjectV2 {
@@ -229,6 +260,11 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   DeleteItem: ["deleteProjectV2Item", "DeleteProjectV2ItemInput", "deletedItemId"],
   CreateIssueType: ["createIssueType", "CreateIssueTypeInput", "issueType { id }"],
   UpdateIssueType: ["updateIssueType", "UpdateIssueTypeInput", "issueType { id }"],
+  CreateIssue: ["createIssue", "CreateIssueInput", "issue { id number title url projectItems(first: 10) { nodes { id project { id } } } }"],
+  CreateLabel: ["createLabel", "CreateLabelInput", "label { id }"],
+  AddBlockedBy: ["addBlockedBy", "AddBlockedByInput", "issue { id }"],
+  SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
+  CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
 };
 
 function mutationQuery(op: string): string {
@@ -286,13 +322,13 @@ function pages<T>(fetch: (after: string | null) => { pageInfo: { hasNextPage: bo
 
 const ref = (p: Any): ProjectRef => ({ id: p.id, number: p.number, title: p.title, url: p.url, closed: !!p.closed });
 
-export function loadState(io: Io, slug: string): State {
+function loadRepo(io: Io, slug: string): State["repo"] {
   const [owner, name] = slug.split("/") as [string, string];
   const data = graphql(io, Q.RepoState, { owner, name });
   const r = data?.repository;
   if (!r) throw new GhError(`репозиторий ${slug} не найден или нет доступа`);
   const o = r.owner;
-  const repo: State["repo"] = {
+  return {
     id: r.id,
     name: r.name,
     nameWithOwner: r.nameWithOwner,
@@ -301,19 +337,27 @@ export function loadState(io: Io, slug: string): State {
       id: o.id,
       login: o.login,
       issueTypes: (o.issueTypes?.nodes ?? []).filter(Boolean),
-      issueFields: (o.issueFields?.nodes ?? []).filter((f: Any) => f && f.name),
+      issueFields: (o.issueFields?.nodes ?? []).filter((f: Any) => f && f.name).map((f: Any) => ({ id: f.id, name: f.name, options: f.options ?? [] })),
     },
     linked: (r.projectsV2?.nodes ?? []).filter(Boolean).map(ref),
   };
+}
+
+/** Проект репозитория: привязанный с названием = имя репозитория, иначе первый открытый привязанный. */
+const mainProject = (repo: State["repo"]) => repo.linked.find((p) => p.title === repo.name && !p.closed) ?? repo.linked.find((p) => !p.closed) ?? null;
+
+export function loadState(io: Io, slug: string): State {
+  const [owner, name] = slug.split("/") as [string, string];
+  const repo = loadRepo(io, slug);
   const openIssues = pages<{ id: string; number: number }>((after) => graphql(io, Q.RepoIssues, { owner, name, after }).repository.issues);
-  const main = repo.linked.find((p) => p.title === repo.name && !p.closed) ?? repo.linked.find((p) => !p.closed) ?? null;
+  const main = mainProject(repo);
   return { repo, project: main ? loadProject(io, main.id) : null, openIssues };
 }
 
-function loadProject(io: Io, id: string): Project {
+function loadProject(io: Io, id: string, withItems = true): Project {
   const p = graphql(io, Q.ProjectState, { id }).node;
   if (!p) throw new GhError(`проект ${id} не найден или нет доступа (нужен scope project: gh auth refresh -s project)`);
-  const items = pages<Any>((after) => graphql(io, Q.ProjectItems, { id, after }).node.items);
+  const items = withItems ? pages<Any>((after) => graphql(io, Q.ProjectItems, { id, after }).node.items) : [];
   return {
     ...ref(p),
     views: p.views.nodes.map((v: Any) => ({
@@ -622,18 +666,243 @@ export function cmdFix(io: Io, slug: string, opts: { confirm: boolean; template:
 }
 
 // ----------------------------------------------------------------------------
+// Задачи
+// ----------------------------------------------------------------------------
+
+interface Issue {
+  id: string;
+  number: number;
+  title: string;
+  state: string;
+  stateReason: string | null;
+  url: string;
+  type: string | null;
+  labels: string[];
+  parent: { id: string; number: number } | null;
+  subIssues: { number: number; state: string }[];
+  items: { id: string; projectId: string; status: string | null }[];
+  priority: string | null;
+}
+
+function loadIssue(io: Io, slug: string, number: number): Issue {
+  const [owner, name] = slug.split("/");
+  const i = graphql(io, Q.IssueRef, { owner, name, number })?.repository?.issue;
+  if (!i) throw new GhError(`задачи #${number} в ${slug} нет`);
+  return {
+    id: i.id,
+    number: i.number,
+    title: i.title,
+    state: i.state,
+    stateReason: i.stateReason ?? null,
+    url: i.url,
+    type: i.issueType?.name ?? null,
+    labels: (i.labels?.nodes ?? []).map((l: Any) => l.name),
+    parent: i.parent ? { id: i.parent.id, number: i.parent.number } : null,
+    subIssues: i.subIssues?.nodes ?? [],
+    items: (i.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: it.status?.name ?? null })),
+    priority: (i.issueFieldValues?.nodes ?? []).find((v: Any) => v?.field?.name === PRIORITY)?.name ?? null,
+  };
+}
+
+interface TaskCtx {
+  slug: string;
+  repo: State["repo"];
+  project: Project;
+  status: Field;
+}
+
+/** Репозиторий и его проект со Status по канону: без них задачу по канону не завести — сначала project fix. */
+function taskContext(io: Io, slug: string): TaskCtx {
+  const repo = loadRepo(io, slug);
+  const main = mainProject(repo);
+  if (!main) throw new GhError(`к ${slug} не привязан проект — сначала github project fix`);
+  const project = loadProject(io, main.id, false);
+  const status = project.fields.find((f) => f.name === STATUS && f.options);
+  if (!status || STATUS_OPTIONS.some((n) => !status.options!.some((o) => o.name === n))) throw new GhError(`${STATUS} проекта не по канону — сначала github project fix`);
+  return { slug, repo, project, status };
+}
+
+const isEpic = (i: Issue, org: boolean) => (org ? i.type === "Эпик" : i.labels.includes(EPIC_LABEL.name));
+const itemIn = (ctx: TaskCtx, i: Issue) => i.items.find((it) => it.projectId === ctx.project.id) ?? null;
+
+function setStatus(io: Io, ctx: TaskCtx, itemId: string, name: string): void {
+  const optionId = ctx.status.options!.find((o) => o.name === name)!.id;
+  mutate(io, { op: "SetItemStatus", input: { projectId: ctx.project.id, itemId, fieldId: ctx.status.id, value: { singleSelectOptionId: optionId } } });
+}
+
+/** Элемент задачи в проекте; нет — добавить (addProjectV2ItemById идемпотентен). */
+function ensureItem(io: Io, ctx: TaskCtx, i: Issue): { id: string; added: boolean } {
+  const it = itemIn(ctx, i);
+  if (it) return { id: it.id, added: false };
+  return { id: mutate(io, { op: "AddItem", input: { projectId: ctx.project.id, contentId: i.id } }).addProjectV2ItemById.item.id, added: true };
+}
+
+/** Префикс эпика — часть заголовка до « · »: с него начинаются заголовки эпика и всех подзадач. */
+export function epicPrefix(title: string): string | null {
+  const i = title.indexOf(" · ");
+  return i > 0 ? title.slice(0, i) : null;
+}
+
+export interface NewTask {
+  title: string;
+  body: string;
+  type: string;
+  epic?: number;
+  milestone?: string;
+  blockedBy: number[];
+  priority?: string;
+}
+
+export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
+  const [owner, name] = slug.split("/");
+  const ctx = taskContext(io, slug);
+  const org = ctx.repo.owner.org;
+
+  // Всё проверяется до создания: задача не должна появиться наполовину.
+  if (!(ISSUE_TYPES as readonly string[]).includes(o.type)) throw new GhError(`--type: ${ISSUE_TYPES.join(", ")}`);
+  const issueType = org ? ctx.repo.owner.issueTypes.find((t) => t.name === o.type && t.isEnabled) : undefined;
+  if (org && !issueType) throw new GhError(`в организации нет включённого типа ${q(o.type)} — github project fix`);
+  if (!org && o.priority) throw new GhError("в личном аккаунте полей issue нет — приоритет не ведём, --priority не нужен");
+  let priority: { fieldId: string; optionId: string; name: string } | null = null;
+  if (org) {
+    const f = ctx.repo.owner.issueFields.find((x) => x.name === PRIORITY);
+    if (!f) throw new GhError(`в организации нет поля issue ${PRIORITY} — github project fix`);
+    const want = o.priority ?? DEFAULT_PRIORITY;
+    const opt = f.options.find((x) => x.name === want);
+    if (!opt) throw new GhError(`--priority: ${f.options.map((x) => x.name).join(", ")}`);
+    priority = { fieldId: f.id, optionId: opt.id, name: want };
+  }
+  let title = o.title.trim();
+  const epic = o.epic === undefined ? null : loadIssue(io, slug, o.epic);
+  if (epic) {
+    if (!isEpic(epic, org)) throw new GhError(`#${epic.number} — не эпик (${org ? "тип не «Эпик»" : `нет метки ${EPIC_LABEL.name}`})`);
+    if (epic.state !== "OPEN") throw new GhError(`эпик #${epic.number} закрыт`);
+    const prefix = epicPrefix(epic.title);
+    if (prefix && !title.startsWith(`${prefix} · `)) title = `${prefix} · ${title}`;
+  }
+  const blockers = o.blockedBy.map((n) => loadIssue(io, slug, n));
+  const needCtx = !!o.milestone || (!org && o.type === "Эпик");
+  const repoCtx = needCtx ? graphql(io, Q.TaskContext, { owner, name }).repository : null;
+  const milestone = o.milestone ? (repoCtx.milestones.nodes as { id: string; title: string }[]).find((m) => m.title === o.milestone) : undefined;
+  if (o.milestone && !milestone) throw new GhError(`открытого milestone ${q(o.milestone)} нет`);
+  const dup = (graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${title.replaceAll('"', "")}"` }).search.nodes as Any[]).find((x) => x?.title === title);
+  if (dup) throw new GhError(`открытая задача с таким заголовком уже есть: #${dup.number}`);
+
+  const done: string[] = [];
+  const input: Record<string, unknown> = { repositoryId: ctx.repo.id, title, body: o.body, projectV2Ids: [ctx.project.id] };
+  if (issueType) {
+    input.issueTypeId = issueType.id;
+    done.push(`тип ${q(o.type)}`);
+  }
+  if (!org && o.type === "Эпик") {
+    let labelId: string | undefined = repoCtx.label?.id;
+    if (!labelId) {
+      labelId = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...EPIC_LABEL } }).createLabel.label.id as string;
+      done.push(`создана метка ${q(EPIC_LABEL.name)}`);
+    }
+    input.labelIds = [labelId];
+    done.push(`метка ${q(EPIC_LABEL.name)} — тип в личном аккаунте`);
+  }
+  if (milestone) input.milestoneId = milestone.id;
+  if (epic) input.parentIssueId = epic.id;
+  if (priority) input.issueFields = [{ fieldId: priority.fieldId, singleSelectOptionId: priority.optionId }];
+  const created = mutate(io, { op: "CreateIssue", input }).createIssue.issue;
+
+  // Status ставим сами, не дожидаясь workflow «Item added to project».
+  const item = (created.projectItems?.nodes ?? []).find((it: Any) => it.project.id === ctx.project.id)?.id ?? mutate(io, { op: "AddItem", input: { projectId: ctx.project.id, contentId: created.id } }).addProjectV2ItemById.item.id;
+  setStatus(io, ctx, item, BACKLOG);
+  done.push(`проект ${q(ctx.project.title)}: ${STATUS} ${q(BACKLOG)}`);
+  if (priority) done.push(`${PRIORITY} ${q(priority.name)}`);
+  if (epic) done.push(`подзадача эпика #${epic.number}`);
+  for (const b of blockers) {
+    if (b.state !== "OPEN") {
+      done.push(`#${b.number} закрыта — не блокирует, пропущена`);
+      continue;
+    }
+    mutate(io, { op: "AddBlockedBy", input: { issueId: created.id, blockingIssueId: b.id } });
+    done.push(`blocked by #${b.number}`);
+  }
+  if (milestone) done.push(`milestone ${q(milestone.title)}`);
+  // эпик — не ниже самой срочной открытой подзадачи
+  if (epic && priority) {
+    const rank = (p: string | null) => (p === null ? PRIORITIES.length : (PRIORITIES as readonly string[]).indexOf(p));
+    if (rank(priority.name) < rank(epic.priority)) {
+      mutate(io, { op: "SetIssueField", input: { issueId: epic.id, issueFields: [{ fieldId: priority.fieldId, singleSelectOptionId: priority.optionId }] } });
+      done.push(`${PRIORITY} эпика #${epic.number}: ${epic.priority ?? "—"} → ${priority.name}`);
+    }
+  }
+
+  io.out(`Создана #${created.number} ${created.title} — ${created.url}`);
+  for (const d of done) io.out(`+ ${d}`);
+  if (o.type === "Эпик") io.out("Дальше: эпик не оценивается — его «Оценка, ч» = сумма оценок подзадач.");
+  else io.out(`Дальше: оценка — скилл est (est estimate ${created.number} --type <тип ветки> --analogs …)${epic ? `; «Оценка, ч» эпика #${epic.number} — пересчитать суммой подзадач` : ""}.`);
+  return 0;
+}
+
+export function cmdTaskStatus(io: Io, slug: string, number: number, status: string): number {
+  if (!(STATUS_OPTIONS as readonly string[]).includes(status)) throw new GhError(`статус: ${STATUS_OPTIONS.join(", ")}`);
+  const ctx = taskContext(io, slug);
+  const issue = loadIssue(io, slug, number);
+  const item = ensureItem(io, ctx, issue);
+  setStatus(io, ctx, item.id, status);
+  io.out(`+ #${issue.number}: ${STATUS} ${q(status)}${item.added ? " (добавлена в проект)" : ""}`);
+  if (!issue.parent) return 0;
+  const epic = loadIssue(io, slug, issue.parent.number);
+  const epicStatus = itemIn(ctx, epic)?.status ?? null;
+  if (status === IN_PROGRESS && epic.state === "OPEN" && (epicStatus === null || epicStatus === BACKLOG)) {
+    setStatus(io, ctx, ensureItem(io, ctx, epic).id, IN_PROGRESS);
+    io.out(`+ эпик #${epic.number}: ${STATUS} ${q(IN_PROGRESS)} — взята первая подзадача`);
+  }
+  if (status === IN_PROGRESS && epic.state === "CLOSED") io.out(`Дальше: эпик #${epic.number} закрыт, а подзадача снова в работе — переоткрыть его (и его milestone, если закрыт).`);
+  if (status === DONE && epic.state === "OPEN" && epic.subIssues.length && epic.subIssues.every((x) => x.state === "CLOSED")) {
+    io.out(`Дальше: все подзадачи эпика #${epic.number} закрыты — закрыть эпик и поставить ему ${q(DONE)}.`);
+  }
+  return 0;
+}
+
+export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: number): number {
+  const ctx = taskContext(io, slug);
+  const issue = loadIssue(io, slug, number);
+  if (issue.state === "CLOSED" && issue.stateReason === "COMPLETED") throw new GhError(`#${number} закрыта как выполненная — drop только для невыполненных`);
+  const dup = duplicateOf === undefined ? null : loadIssue(io, slug, duplicateOf);
+  if (issue.state === "OPEN") {
+    mutate(io, { op: "CloseIssue", input: { issueId: issue.id, stateReason: dup ? "DUPLICATE" : "NOT_PLANNED", ...(dup ? { duplicateIssueId: dup.id } : {}) } });
+    io.out(`+ #${number} закрыта: ${dup ? `дубль #${dup.number}` : "not planned"}`);
+  }
+  // закрытую без выполнения «Item closed» запишет в «Готово» — в проекте ей не место
+  const item = itemIn(ctx, issue);
+  if (item) {
+    mutate(io, { op: "DeleteItem", input: { projectId: ctx.project.id, itemId: item.id } });
+    io.out(`+ #${number} убрана из проекта ${q(ctx.project.title)}`);
+  }
+  if (issue.parent) io.out(`Дальше: «Оценка, ч» эпика #${issue.parent.number} — пересчитать суммой оставшихся подзадач.`);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `github — проект GitHub репозитория по канону AGENTS.md
+const USAGE = `github — проект и задачи GitHub репозитория по канону AGENTS.md
 
   github project check [--repo owner/repo]
   github project fix   [--repo owner/repo] [--confirm] [--template owner/N | none]
+  github task new      --title "…" [--body "…" | --body-file F] [--type Задача|Баг|Эпик] [--epic N]
+                       [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] [--repo owner/repo]
+  github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
+  github task drop     <N> [--duplicate-of M] [--repo owner/repo]
 
 check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌.
 fix   — исправляет через API; шаги UI печатает со ссылками; удаление и переименование в проекте
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
-        Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.`;
+        Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
+task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).`;
+
+const issueNumber = (s: string | undefined, what: string): number => {
+  const m = /^#?(\d+)$/.exec((s ?? "").trim());
+  if (!m) throw new GhError(`${what}: ожидается номер задачи, а не «${s ?? ""}»`);
+  return Number(m[1]);
+};
 
 function detectRepo(): string {
   const r = spawnSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" });
@@ -649,17 +918,54 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    if (group !== "project" || (cmd !== "check" && cmd !== "fix")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check или project fix`);
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop"] };
+    if (!known[group]?.includes(cmd ?? "")) {
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix или task new|status|drop`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true") {
       io.err("облачная сессия: GitHub Projects ей недоступны (Projects v2 — 403, docs/cloud-sessions.md) — проект проверяет и чинит локальная сессия");
       return 2;
     }
+    const repoOf = (v: string | undefined) => {
+      const slug = v ?? detectRepo();
+      if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new GhError(`неверный --repo «${slug}», ожидается owner/repo`);
+      return slug;
+    };
+    if (group === "task") {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: {
+          repo: { type: "string" },
+          title: { type: "string" },
+          body: { type: "string" },
+          "body-file": { type: "string" },
+          type: { type: "string", default: "Задача" },
+          epic: { type: "string" },
+          milestone: { type: "string" },
+          "blocked-by": { type: "string" },
+          priority: { type: "string" },
+          "duplicate-of": { type: "string" },
+        },
+      });
+      const slug = repoOf(values.repo);
+      if (cmd === "new") {
+        if (positionals.length) throw new GhError(`лишние аргументы: ${positionals.join(" ")}`);
+        if (!values.title?.trim()) throw new GhError("--title обязателен");
+        if (values.body !== undefined && values["body-file"]) throw new GhError("--body или --body-file, не оба");
+        const body = values["body-file"] ? readFileSync(values["body-file"], "utf8") : (values.body ?? "");
+        const blockedBy = (values["blocked-by"] ?? "").split(",").filter((x) => x.trim()).map((x) => issueNumber(x, "--blocked-by"));
+        const epic = values.epic === undefined ? undefined : issueNumber(values.epic, "--epic");
+        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type!, epic, milestone: values.milestone, blockedBy, priority: values.priority });
+      }
+      const number = issueNumber(positionals[0], `task ${cmd}`);
+      if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));
+      if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
+      return cmdTaskDrop(io, slug, number, values["duplicate-of"] === undefined ? undefined : issueNumber(values["duplicate-of"], "--duplicate-of"));
+    }
     const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, confirm: { type: "boolean", default: false }, template: { type: "string", default: DEFAULT_TEMPLATE } } });
-    const slug = values.repo ?? detectRepo();
-    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new GhError(`неверный --repo «${slug}», ожидается owner/repo`);
+    const slug = repoOf(values.repo);
     const template = values.template === "none" ? null : values.template!;
     if (template && !/^[\w.-]+\/\d+$/.test(template)) throw new GhError(`неверный --template «${template}», ожидается owner/N или none`);
     return cmd === "check" ? cmdCheck(io, slug) : cmdFix(io, slug, { confirm: values.confirm!, template });
