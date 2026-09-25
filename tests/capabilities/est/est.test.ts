@@ -241,7 +241,9 @@ describe("Транскрипт Codex", () => {
   });
 });
 
-function stubRepo(sessions: Session[], prs: PR[], closingPr: Record<string, number[]> = {}): FactRepo {
+type Recorded = Map<number, Record<string, [number, number][]>>;
+
+function stubRepo(sessions: Session[], prs: PR[], closingPr: Record<string, number[]> = {}, recorded: Recorded = new Map()): FactRepo {
   return {
     full: "o/r",
     prs: () => new Map(prs.map((p) => [p.number, p])),
@@ -250,6 +252,7 @@ function stubRepo(sessions: Session[], prs: PR[], closingPr: Record<string, numb
     sessions: () => sessions,
     neutralBranches: () => new Set(["main"]),
     commitDiff: () => null,
+    recorded: () => recorded,
   };
 }
 
@@ -308,6 +311,89 @@ describe("Расчёт факта по сессиям", () => {
     const res = computeFact(stubRepo([s], []), 42, [], [], 30);
     expect(res.h).toBe(0.25); // 10 + 5 минут, без двух часов паузы
     expect(res.wall).toBe(2.1);
+  });
+});
+
+/**
+ * Одна сессия может вести несколько задач подряд: её переименовывают под каждую следующую. Записи на ветке без
+ * номера задачи (её назвал инструмент worktree) достаются задаче из названия сессии на момент записи: первое
+ * название действует с начала сессии, каждое следующее — с переименования. Одна запись — одной задаче.
+ */
+describe("Сессия ведёт несколько задач подряд", () => {
+  const SID = "33333333-4444-5555-6666-777777777777";
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+  const work = (hhmm: string, gitBranch: string) => ({ type: "assistant", timestamp: at(hhmm), cwd: "/repo", gitBranch, message: { content: [{ type: "text", text: "…" }] } });
+  const prompt = (hhmm: string, gitBranch: string, text: string) => ({ type: "user", timestamp: at(hhmm), cwd: "/repo", gitBranch, origin: { kind: "human" }, message: { role: "user", content: text } });
+  // так пишет переименование Claude Code: без времени — оно берётся у следующей записи
+  const rename = (customTitle: string) => ({ type: "custom-title", customTitle, sessionId: SID });
+  const prLink = (hhmm: string, prNumber: number) => ({ type: "pr-link", timestamp: at(hhmm), prNumber });
+  const WT = "claude/festive-kilby-1a2b3c"; // ветка worktree без номера задачи
+
+  function session(): Session {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", WT, "сделай #41, потом #42 и #43"), work("10:06", WT), work("10:12", WT),
+      rename("#42 Импорт"),
+      prompt("10:18", WT, "теперь импорт"), work("10:24", WT),
+      work("10:30", "fix/41-export"), work("10:33", "fix/41-export"), prLink("10:36", 101),
+      work("10:36", "fix/42-import"), work("10:42", "fix/42-import"), prLink("10:48", 102), work("10:48", "fix/42-import"),
+      rename("#43 Отчёт"),
+      prompt("10:54", "fix/43-report", "теперь отчёт"), work("11:00", "fix/43-report"), prLink("11:06", 103), work("11:06", "fix/43-report"),
+    ]));
+    return parseSessionFile(file);
+  }
+  const pr = (number: number, headRefName: string, issue: number): PR => ({ ...pr77(), number, headRefName, closing: [issue], commits: [], body: `Closes #${issue}` });
+  const prs = [pr(101, "fix/41-export", 41), pr(102, "fix/42-import", 42), pr(103, "fix/43-report", 43)];
+  const fact = (s: Session, n: number, recorded?: Recorded) => computeFact(stubRepo([s], prs, {}, recorded), n, [{ ...prs.find((p) => p.closing[0] === n)!, why: "закрыл issue" }], []);
+
+  it("записи безномерной ветки достаются задаче из названия на момент записи, а не из последнего; ни одна не засчитана двум задачам", () => {
+    const s = session();
+    const [f41, f42, f43] = [fact(s, 41), fact(s, 42), fact(s, 43)] as const;
+    expect(f41.h).toBe(0.25); // 10:00–10:12 на ветке worktree под «#41» + 10:30–10:33 на своей ветке
+    expect(f41.details[0]!.rules).toEqual({ название: 3, ветка: 2 });
+    expect(f42.h).toBe(0.3); // 10:18–10:24 на ветке worktree под «#42» + 10:36–10:48 на своей ветке
+    expect(f42.details[0]!.rules).toEqual({ название: 2, ветка: 3 });
+    expect(f43.h).toBe(0.2); // только своя ветка: под «#43» на ветке worktree уже не работали
+    expect(f43.details[0]!.rules).toEqual({ ветка: 3 });
+    const all = [f41, f42, f43].flatMap((f) => f.intervals);
+    const len = (iv: [number, number][]) => iv.reduce((a, [x, y]) => a + y - x, 0);
+    expect(len(mergeIntervals(all))).toBe(len(all));
+  });
+
+  it("маркер факта хранит интервалы по сессиям — по ним следующий расчёт видит, что уже засчитано", () => {
+    const body = factCommentBody(fact(session(), 42), null, [], 0, null);
+    expect(parseMarker(body, "fact").iv).toEqual({ "33333333": [[ts("10:18"), ts("10:24")], [ts("10:36"), ts("10:48")]] });
+  });
+
+  it("запись, уже засчитанная в записанном факте другой задачи той же сессии, по названию повторно не засчитывается — комментарий называет ту задачу", () => {
+    // факт #42 записан до исправления и забрал записи 10:00–10:12, сделанные под «#41»
+    const recorded: Recorded = new Map([[42, { "33333333": [[ts("10:00"), ts("10:12")]] }]]);
+    const f41 = fact(session(), 41, recorded);
+    expect(f41.h).toBe(0.05); // осталась своя ветка, 10:30–10:33
+    expect(f41.taken).toEqual([{ issue: 42, h: 0.2 }]);
+    expect(factCommentBody(f41, null, [], 0, null)).toContain("Не засчитано повторно: 0.2 ч уже в факте #42.");
+  });
+
+  it("повтор той же записи названия не начинает новый период — переход на другую ветку без номера по-прежнему закрывает окно", () => {
+    // Claude Code повторяет запись custom-title по ходу сессии, не только при переименовании
+    const file = path.join(dir, SID + ".jsonl");
+    const OTHER = "claude/brave-noether-9z8y7x";
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", WT, "сделай #41"), work("10:06", WT), rename("#41 Экспорт"), work("10:12", WT),
+      work("10:18", OTHER), rename("#41 Экспорт"), work("10:24", OTHER), work("10:30", OTHER),
+    ]));
+    const f41 = fact(parseSessionFile(file), 41);
+    expect(f41.h).toBe(0.3); // 10:00–10:18: окно закрыла первая запись на другой ветке
+  });
+
+  it("запись на своей ветке остаётся своей и при пересечении с записанным фактом другой задачи — только предупреждение", () => {
+    const recorded: Recorded = new Map([[43, { "33333333": [[ts("10:30"), ts("10:33")]] }]]);
+    const f41 = fact(session(), 41, recorded);
+    expect(f41.h).toBe(0.25);
+    expect(f41.overlap).toEqual([{ issue: 43, h: 0.05 }]);
+    expect(factCommentBody(f41, null, [], 0, null)).toContain("Пересечение с фактом #43: 0.05 ч — пересчитать #43.");
   });
 });
 
