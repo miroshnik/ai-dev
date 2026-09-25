@@ -62,7 +62,7 @@ describe("Скрипты spec под Node без Bun", () => {
     expect(node.stdout).toBe(bun.stdout);
   });
 
-  /** `npx skills add` кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev. */
+  /** Установка флоу кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev. */
   it("копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений", () => {
     writeTree(dir, { [BILLING]: source("выставляется за месяц") });
     writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [BILLING]: [[["Счета"], "выставляется за месяц"]] }));

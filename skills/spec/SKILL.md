@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Спецификация из тестов — два детерминированных скрипта. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD. Когда — перед созданием PR (раздел «Спека» в тело PR, обновлённый docs/spec в коммит); в CI на PR и main (проверка, что docs/spec не отстал); когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
-allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
+description: Спецификация из тестов — два детерминированных скрипта. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD. Когда — перед созданием PR (раздел «Спека» в тело PR, обновлённый docs/spec в коммит); в CI на PR и main (проверка, что docs/spec не отстал); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
 # spec — документация из названий тестов, дифф спеки в PR
@@ -20,8 +20,10 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 без сборки, зависимостей нет (скрипты используют только `node:`-API и идут и
 под Node ≥ 22.18). Каталог скилла — тот, где лежит этот
 файл (`${CLAUDE_SKILL_DIR}` у Claude Code, `~/.claude/skills/spec`,
-`~/.agents/skills/spec` или клон ai-dev). Корень репозитория — `git toplevel`
-(или `--root DIR`); дерево — `tests/` в корне.
+`~/.agents/skills/spec`, `.agents/skills/spec` проекта или клон ai-dev). Корень репозитория — `git toplevel`
+(или `--root DIR`); дерево — `tests/` в корне. В репозитории, подключённом по
+разделу «Подключение в репозиторий», — его `spec:doc` и `spec:diff`, а не
+скрипты из каталога скилла: там версия, закреплённая за CI.
 
 ## Когда что
 
@@ -31,6 +33,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | В CI на PR и `main` | прогон → `spec-doc --strict` → `git status --porcelain docs/spec` пуст; на PR ещё `spec-diff` в summary |
 | Просят документацию, «что делает система» | `spec-doc <отчёт> --stdout` — один документ, файлы не трогаются |
 | Спрашивают, какие требования снял PR | `spec-diff` — список «Удалены» идёт первым |
+| Проект переходит на тест-спек | раздел «Подключение в репозиторий»: установка флоу, скрипты под Node, workflow |
 
 ## Отчёты для spec-doc
 
@@ -44,7 +47,10 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | Playwright | `PLAYWRIGHT_JSON_OUTPUT_NAME=.spec-playwright.json playwright test --reporter=json` |
 
 Отчёты — временные файлы, в `.gitignore`. Отчёт из CI с чужими абсолютными
-путями годится: путь приводится по сегменту `/tests/`.
+путями годится: путь приводится по сегменту `/tests/`. Шарды склеивает сам
+раннер (blob-отчёты → один JSON, раздел «Подключение в репозиторий»); отчёты
+шардов по отдельности не передавать — Playwright делит файл между шардами, и
+порядок тестов в файле зависел бы от порядка отчётов.
 
 ## spec-doc
 
@@ -168,31 +174,126 @@ capabilities/standards помечены `⚠️ вне дерева`; измен
 
 ## Подключение в репозиторий
 
-1. Скрипты раннера в `package.json`:
+Скрипты берутся из копии скилла в самом проекте и идут под Node — Bun проекту
+на Node не нужен. Копию ставит установка флоу ai-dev, и она коммитится: агент
+перед PR и CI зовут одни и те же `spec:doc` / `spec:diff` проекта над одними и
+теми же файлами, поэтому `docs/spec`, собранный локально, совпадает с
+проверкой в CI. Почему копия, а не подмодуль, чекаут в workflow или пакет —
+`reference.md`.
+
+1. **Установка** в корне проекта, результат (`.agents/`, `.claude/`, блок в
+   `AGENTS.md`) — в коммит:
+   ```bash
+   npx -y github:miroshnik/ai-dev install
+   ```
+   - `.agents/` и `.claude/` исключить из линтеров и форматтеров проекта
+     (`ignores` в ESLint, `.prettierignore`, `include` в tsconfig): там код и
+     Markdown ai-dev.
+   - Обновление — та же команда отдельным PR, потом отчёты и `spec:doc`;
+     поменялся формат — новый `docs/spec` едет в том же PR.
+2. **Скрипты** в `package.json` — через `node`: Node ≥ 22.18 стирает типы сам,
+   `scripts/package.json` скилла задаёт ESM при любом `type` проекта. Отчёты —
+   те, что есть в проекте:
    ```json
-   "spec:doc": "vitest run --reporter=default --reporter=json --outputFile.json=.spec-report.json && bun <путь к скиллу>/scripts/spec-doc.ts .spec-report.json --strict",
-   "spec:diff": "bun <путь к скиллу>/scripts/spec-diff.ts"
+   "spec:doc": "node .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json --strict",
+   "spec:diff": "node .agents/skills/spec/scripts/spec-diff.ts"
    ```
-   В CI скилла на машине нет — чекаут ai-dev рядом (репозиторий публичный):
-   `actions/checkout` с `repository: miroshnik/ai-dev` и `path: .ai-dev`, путь
-   `.ai-dev/skills/spec/scripts/…`. Локально — `${CLAUDE_SKILL_DIR}` или
-   `~/.agents/skills/spec`.
-2. `docs/spec/` коммитится вместе с PR: дифф документации виден ревьюеру как
-   дифф требований, коммитов от бота нет. `.spec-report.json` — в `.gitignore`.
-3. CI (на PR и на `main`; `fetch-depth: 0` — merge-base нужна история):
+   Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
+   spec-doc»). В `.gitignore`: `.spec-*.json`, `vitest-blob/`, `blob-report/`,
+   `playwright-blob/`.
+3. **`docs/spec/` коммитится вместе с PR:** дифф документации виден ревьюеру
+   как дифф требований, коммитов от бота нет.
+4. **CI.** Шарды пишут blob-отчёты, отдельная job `spec` после всех шардов
+   склеивает их средствами раннеров (`vitest --merge-reports`,
+   `playwright merge-reports` — все проекты Playwright в одном отчёте) и
+   проверяет, что `docs/spec` не отстал. Упал тест — `spec` не запускается:
+   сверять документацию с красным прогоном незачем. `spec-diff` — своя лёгкая
+   job: ей нужны git-история и Node, не тесты, поэтому раздел в summary есть и
+   при красных тестах. Фрагмент для pnpm (в `package.json` —
+   `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
+   разделу правил «CI: параллельные задачи»:
    ```yaml
-   - run: bun run spec:doc
-   - name: docs/spec не отстал
-     run: |
-       if [ -n "$(git status --porcelain docs/spec)" ]; then
-         git status --short docs/spec; git diff docs/spec
-         echo "::error::docs/spec отстал от тестов — bun run spec:doc и закоммить"; exit 1
-       fi
-   - name: Дифф спеки в summary
-     if: github.event_name == 'pull_request'
-     run: bun run spec:diff --base origin/${{ github.base_ref }} >> "$GITHUB_STEP_SUMMARY"
+   on:
+     pull_request:
+     push:
+       branches: [main]
+
+   concurrency:
+     group: ci-${{ github.event.pull_request.number || github.ref }}
+     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+   jobs:
+     unit:
+       runs-on: ubuntu-latest
+       strategy:
+         fail-fast: false
+         matrix: { shard: [1, 2, 3] }
+       steps:
+         - uses: actions/checkout@v7
+         - uses: pnpm/action-setup@v6
+         - uses: actions/setup-node@v7
+           with: { node-version: 24, cache: pnpm }
+         - run: pnpm install --frozen-lockfile
+         - run: >-
+             pnpm exec vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+             --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
+         - uses: actions/upload-artifact@v7
+           with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
+
+     e2e:
+       runs-on: ubuntu-latest
+       strategy:
+         fail-fast: false
+         matrix: { shard: [1, 2] }
+       steps:
+         - uses: actions/checkout@v7
+         - uses: pnpm/action-setup@v6
+         - uses: actions/setup-node@v7
+           with: { node-version: 24, cache: pnpm }
+         - run: pnpm install --frozen-lockfile
+         - run: pnpm exec playwright install --with-deps
+         - run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=dot,blob
+         - uses: actions/upload-artifact@v7
+           with: { name: 'playwright-blob-${{ matrix.shard }}', path: blob-report/, retention-days: 1 }
+
+     spec:
+       needs: [unit, e2e]
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v7
+         - uses: pnpm/action-setup@v6
+         - uses: actions/setup-node@v7
+           with: { node-version: 24, cache: pnpm }
+         - run: pnpm install --frozen-lockfile
+         - uses: actions/download-artifact@v8
+           with: { pattern: vitest-blob-*, path: vitest-blob, merge-multiple: true }
+         - uses: actions/download-artifact@v8
+           with: { pattern: playwright-blob-*, path: playwright-blob, merge-multiple: true }
+         - run: pnpm exec vitest --merge-reports=vitest-blob --reporter=json --outputFile.json=.spec-report.json
+         - run: pnpm exec playwright merge-reports --reporter=json playwright-blob
+           env: { PLAYWRIGHT_JSON_OUTPUT_NAME: .spec-playwright.json }
+         - run: pnpm spec:doc
+         - name: docs/spec не отстал от тестов
+           run: |
+             if [ -n "$(git status --porcelain docs/spec)" ]; then
+               git status --short docs/spec; git diff docs/spec
+               echo "::error::docs/spec отстал от тестов — прогон с отчётами, pnpm spec:doc и закоммить"; exit 1
+             fi
+
+     spec-diff:
+       if: github.event_name == 'pull_request'
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v7
+           with: { fetch-depth: 0 } # merge-base с базовой веткой
+         - uses: actions/setup-node@v7
+           with: { node-version: 24, package-manager-cache: false }
+         - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
    ```
-   Рабочий пример — `.github/workflows/ci.yml` в ai-dev.
+   Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
+   `spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами из
+   таблицы выше, `spec:doc`, проверка. ai-dev сам на Bun — его
+   `.github/workflows/ci.yml` образцом для проекта на Node не служит.
 
 ## Ограничения, о которых надо знать
 
