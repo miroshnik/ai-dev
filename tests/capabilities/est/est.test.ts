@@ -406,7 +406,7 @@ describe("Сессия ведёт несколько задач подряд", (
     const merged = { ...prs[0]!, mergedAt: ts("10:14") };
     const f44 = computeFact(stubRepo([parseSessionFile(file)], [merged]), 44, [], []);
     expect(f44.h).toBe(0.2); // 10:18–10:30 под «#44»
-    expect(f44.details[0]!.rules).toEqual({ название: 4 });
+    expect(f44.details[0]!.rules).toEqual({ название: 3 }); // промпт и две записи работы; pr-link — не запись работы
   });
 
   it("маркер факта хранит интервалы по сессиям — по ним следующий расчёт видит, что уже засчитано", () => {

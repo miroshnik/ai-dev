@@ -1710,7 +1710,15 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     for (const [, pr] of s.prlinks) seenPrs.add(pr);
     for (const e of ev) if (e[1]) seenBranches.add(e[1]);
     const anchors: Anchor[] = [];
-    for (const [ts, pr] of s.prlinks) anchors.push([ts, ourPrs.has(pr) ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0]);
+    for (const [ts, pr] of s.prlinks) {
+      const own = ourPrs.has(pr);
+      // Claude Code повторяет pr-link привязанного к сессии PR и после мержа — это статус приложения, а не работа:
+      // после мержа он не якорь ни для своей задачи (иначе она заберёт время следующих), ни для чужой (иначе
+      // оборвёт окно следующей задачи, под которую переименовали сессию)
+      const mergedAt = prsAll.get(pr)?.mergedAt ?? null;
+      if (mergedAt !== null && ts > mergedAt) continue;
+      anchors.push([ts, own ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0]);
+    }
     for (const [ts, h] of s.commits) {
       const [cls, w] = hashClass(h, ts);
       if (cls === "own") seenHashes.add(h);
