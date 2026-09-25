@@ -291,6 +291,8 @@ describe("Облачная сессия: события из claude.ai", () => {
     toolResult("10:04", "[fix/42-export a1b2c3d] fix: экспорт"), vcs("10:04", "fix/42-export"),
     assistant("10:06", "msg_01BBBBBBBBBBBB"),
     prompt("10:07", "проверь #42 экспорт", "toolu_sub"), assistant("10:08", "msg_01CCCCCCCCCCCC", "toolu_sub"),
+    // переход на другую ветку облако событием не сообщает — его видно в выводе git
+    toolResult("10:09", "Switched to a new branch 'feat/43-report'"), assistant("10:10", "msg_01DDDDDDDDDDDD"),
   ];
   // выгрузка — как её сохраняет браузер: события новые сверху, как отдаёт API
   const exportFile = (evs: object[]) => {
@@ -300,12 +302,13 @@ describe("Облачная сессия: события из claude.ai", () => {
   };
   const cloudPr = (): PR => ({ ...pr77(), commits: [{ oid: OID, at: ts("10:04") }], cloud: [SESSION] });
 
-  it("события → сессия: человек — клиент, ветка — из vcs_state_changed (до неё нейтральная), токены раз на ответ, хеши из выводов, субагент — в таймлайне", () => {
+  it("события → сессия: человек — клиент, ветка — из vcs_state_changed и вывода git (до них нейтральная), токены раз на ответ, хеши из выводов, субагент — в таймлайне", () => {
     const s = parseCloudFile(exportFile(events()));
     expect(s).toMatchObject({ sid: SESSION, source: "cloud", cwd: "/home/user/r", n_human: 1, first_refs: [42], commits: [[ts("10:04"), "a1b2c3d"]] });
-    expect(s.usage.map((u) => [u[0], u[5]])).toEqual([["AAAAAAAAAAAA", 500], ["BBBBBBBBBBBB", 500], ["CCCCCCCCCCCC", 500]]);
+    expect(s.usage.map((u) => [u[0], u[5]])).toEqual([["AAAAAAAAAAAA", 500], ["BBBBBBBBBBBB", 500], ["DDDDDDDDDDDD", 500], ["CCCCCCCCCCCC", 500]]);
     expect(s.ev.map((e) => [e[0], e[1]])).toEqual([
       [ts("10:00"), ""], [ts("10:01"), ""], [ts("10:02"), ""], [ts("10:02"), ""], [ts("10:04"), ""], [ts("10:06"), "fix/42-export"], [ts("10:07"), "fix/42-export"], [ts("10:08"), "fix/42-export"],
+      [ts("10:09"), "fix/42-export"], [ts("10:10"), "feat/43-report"],
     ]);
     expect(s.ev.filter((e) => e[3]).map((e) => e[3])).toEqual(["42", "42"]); // задание субагента называет задачу
   });
@@ -313,7 +316,7 @@ describe("Облачная сессия: события из claude.ai", () => {
   it("облачная сессия считается в факт наравне с локальной — покрытие full, агент назван", () => {
     const s = parseCloudFile(exportFile(events()));
     const res = computeFact(stubRepo([s], [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], []);
-    expect(res.h).toBe(0.13); // 10:00–10:08: задача названа в первом промпте
+    expect(res.h).toBe(0.15); // 10:00–10:09: задача названа в первом промпте; с 10:10 — чужая ветка
     expect(res.cov).toBe("full");
     expect(res.cloud_missing).toEqual([]);
     expect(factCommentBody(res, 1, [], 0, null)).toContain("активных в облачной сессии Claude Code");
@@ -345,7 +348,7 @@ describe("Облачная сессия: события из claude.ai", () => {
     expect(r.status).toBe(0);
     const stored = path.join(dir, "ai-dev", "cloud", "o", "r", `${SESSION}.json`);
     expect(JSON.parse(readFileSync(stored, "utf8")).session).toBe(SESSION);
-    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 10 событий, 1 промпт, 10:00–10:08 UTC → ${stored}`);
+    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 12 событий, 1 промпт, 10:00–10:10 UTC → ${stored}`);
     writeFileSync(path.join(dir, "bad.json"), JSON.stringify({ data: [] }));
     const bad = spawnSync("bun", [EST, "cloud-import", path.join(dir, "bad.json")], { encoding: "utf8", env });
     expect(bad.status).toBe(1);
