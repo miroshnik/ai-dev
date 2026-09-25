@@ -375,6 +375,19 @@ describe("Сессия ведёт несколько задач подряд", (
     expect(factCommentBody(f41, null, [], 0, null)).toContain("Не засчитано повторно: 0.2 ч уже в факте #42.");
   });
 
+  it("повтор той же записи названия не начинает новый период — переход на другую ветку без номера по-прежнему закрывает окно", () => {
+    // Claude Code повторяет запись custom-title по ходу сессии, не только при переименовании
+    const file = path.join(dir, SID + ".jsonl");
+    const OTHER = "claude/brave-noether-9z8y7x";
+    writeFileSync(file, jsonl([
+      rename("#41 Экспорт"),
+      prompt("10:00", WT, "сделай #41"), work("10:06", WT), rename("#41 Экспорт"), work("10:12", WT),
+      work("10:18", OTHER), rename("#41 Экспорт"), work("10:24", OTHER), work("10:30", OTHER),
+    ]));
+    const f41 = fact(parseSessionFile(file), 41);
+    expect(f41.h).toBe(0.3); // 10:00–10:18: окно закрыла первая запись на другой ветке
+  });
+
   it("запись на своей ветке остаётся своей и при пересечении с записанным фактом другой задачи — только предупреждение", () => {
     const recorded: Recorded = new Map([[43, { "33333333": [[ts("10:30"), ts("10:33")]] }]]);
     const f41 = fact(session(), 41, recorded);
