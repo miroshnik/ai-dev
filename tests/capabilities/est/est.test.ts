@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  fmtH, hashMatches, mergeIntervals, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, roundScale, usageCost,
+  fmtH, hashMatches, mergeIntervals, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks, roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { tmpDir } from "../../lib/spec.ts";
@@ -260,6 +260,39 @@ const pr77 = (): PR => ({
   number: 77, title: "feat: экспорт", state: "MERGED", headRefName: "feat/42-export", baseRefName: "main", body: "Closes #42",
   mergedAt: ts("11:00"), updatedAt: ts("11:00"), additions: 10, deletions: 2, changedFiles: 1, mergeCommit: "ffffffffffffffffffffffffffffffffffffffff",
   closing: [42], commits: [{ oid: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0", at: ts("10:06") }], commits_total: 1, files: [{ path: "src/a.ts", a: 10, d: 2 }],
+});
+
+/**
+ * PR задачи: сильные связи (закрыл, `Closes #N`, номер в ветке, связан вручную) и — только если сильных нет —
+ * слабые, упоминания. Упоминание в PR, который закрывает другие задачи, — не работа над этой: иначе задача без
+ * своего PR получает чужой PR, его время и тип.
+ */
+describe("Привязка PR к задаче", () => {
+  const pr = (number: number, closing: number[], body: string, headRefName = "feat/1-x"): PR => ({ ...pr77(), number, closing, body, headRefName });
+  const repo = (prs: PR[]) => ({ full: "o/r", owner: "o", name: "r", prs: () => new Map(prs.map((p) => [p.number, p])), pr: (n: number) => prs.find((p) => p.number === n) ?? null });
+  const issue = (number: number, refs: number[] = []) => ({
+    number,
+    closedByPullRequestsReferences: { nodes: [] },
+    timelineItems: { nodes: refs.map((n) => ({ __typename: "CrossReferencedEvent", source: { __typename: "PullRequest", number: n } })) },
+  });
+
+  it("PR закрывает другую задачу и лишь упоминает эту — к ней не привязывается", () => {
+    const [prs, , weak] = resolveLinks(repo([pr(51, [47], "Closes #47\n\nсоздана #50")]), issue(50, [51]));
+    expect(prs.map((p) => p.number)).toEqual([]);
+    expect(weak).toBe(false);
+  });
+
+  it("PR без закрываемых задач, упоминающий задачу, — слабая связь, когда сильных нет", () => {
+    const [prs, , weak] = resolveLinks(repo([pr(60, [], "продолжение #50")]), issue(50, [60]));
+    expect(prs.map((p) => [p.number, p.why])).toEqual([[60, "упоминание"]]);
+    expect(weak).toBe(true);
+  });
+
+  it("сильная связь — Closes #N или номер в ветке — важнее упоминаний", () => {
+    const [prs, , weak] = resolveLinks(repo([pr(61, [], "Closes #50"), pr(62, [], "см. #50"), pr(63, [], "", "fix/50-x")]), issue(50, [62]));
+    expect(prs.map((p) => [p.number, p.why])).toEqual([[61, "Closes #50 в теле PR"], [63, "номер в ветке"]]);
+    expect(weak).toBe(false);
+  });
 });
 
 /**

@@ -1361,7 +1361,7 @@ export function branchType(branch: string | null | undefined): string | null {
 
 const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function closingRe(repo: Repo, n: number): RegExp {
+function closingRe(repo: Pick<Repo, "owner" | "name">, n: number): RegExp {
   return new RegExp(
     "(?<![\\p{L}\\p{N}_])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|закрывает|закрыт[аоы]?|закрыть|исправляет|решает|устраняет)" +
       `[\\s:]*(?:#|https://github\\.com/${reEscape(repo.owner)}/${reEscape(repo.name)}/issues/)${n}(?!\\d)`,
@@ -1425,8 +1425,11 @@ function issueProjectFields(issue: Any, meta: Meta): IssueFields {
 
 type Closer = { oid: string; at: number | null };
 
+/** Что нужно привязке PR от репозитория: имя, кэш PR и PR по номеру. */
+type LinkRepo = Pick<Repo, "full" | "owner" | "name" | "prs" | "pr">;
+
 /** Issue → PR (сильные и слабые связи) и коммиты-закрыватели. */
-function resolveLinks(repo: Repo, issue: Any): [PR[], Closer[], boolean] {
+export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boolean] {
   const n: number = issue.number;
   const same = (o: Any) => (o?.repository?.nameWithOwner ?? repo.full) === repo.full;
   const strong = new Map<number, string>();
