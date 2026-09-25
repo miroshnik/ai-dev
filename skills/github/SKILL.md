@@ -77,7 +77,9 @@ scope `project` (`gh auth refresh -s project`); типы issue организа�
 - **Workflow:** ссылка ведёт на настроенный workflow
   (`<проект>/workflows/<fullDatabaseId>`) или на список `<проект>/workflows`,
   где ненастроенный выбирается в меню слева. Edit → настройка → **Save and
-  turn on workflow**; справа вверху появится `On`.
+  turn on workflow**; справа вверху появится `On`. В Set value
+  `A value is required` — вариант `Status`, на который смотрел workflow,
+  удалён (варианты заменяли без id): выбрать заново.
   - «Item added to project»: триггер `issue, pull request` (по умолчанию),
     Set value → `Status: Бэклог`.
   - «Item closed»: Set value → `Status: Готово`.
@@ -87,8 +89,10 @@ scope `project` (`gh auth refresh -s project`); типы issue организа�
     вернётся в проект. Уже существующие задачи auto-add не добавляет — их
     добавляет `fix`.
 - **Сортировка по Priority, колонки доски:** представление → кнопка `View`
-  справа → `Sort by: Priority` / `Column by: Status` → сохранить изменения
-  представления (`Save`).
+  справа → `Sort by: Priority` / `Column by: Status` → `Save view` →
+  диалог «Save display options for …?» → `Save`. Escape закрывает диалог
+  без сохранения: сортировка остаётся только в URL (`?sortedBy…`), а
+  маркер несохранённого у вкладки врёт — итог проверяет `check`.
 - **Поля issue организации** (`Priority` нет в организации) — настройки
   организации по ссылке из шага, затем снова `fix`.
 
