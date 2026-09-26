@@ -23,7 +23,7 @@ let cleanup: () => void;
 beforeEach(() => ({ dir, cleanup } = tmpDir()));
 afterEach(() => cleanup());
 
-const BILLING = "tests/capabilities/billing/invoice.test.ts";
+const BILLING = "tests/capabilities/billing/billing.test.ts";
 const source = (...names: string[]) =>
   `/** Биллинг: счета клиентам за месяц. */\nimport { describe, it } from "vitest";\n` +
   `describe("Счета", () => { ${names.map((n) => `it("${n}", () => {});`).join(" ")} });\n`;
@@ -47,7 +47,7 @@ describe("Скрипты spec под Node без Bun", () => {
     const node = runScript("spec-doc", ["r.json", "--root", dir, "--out", "spec-node", "--strict"], dir, "node");
     expect([bun.code, node.code]).toEqual([0, 0]);
     const out = readTree(path.join(dir, "spec-node"));
-    expect(out["capabilities/billing.md"]).toContain("Биллинг: счета клиентам за месяц.\n\n## Счета\n\n- ✅ выставляется за месяц");
+    expect(out["capabilities/billing.md"]).toContain("Биллинг: счета клиентам за месяц.\n\n## Счета\n\n<details><summary>✅ 1 тест</summary>\n\n- ✅ выставляется за месяц");
     expect(out).toEqual(readTree(path.join(dir, "spec-bun")));
   });
 
