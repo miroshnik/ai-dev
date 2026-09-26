@@ -183,7 +183,79 @@ describe("Вне дерева tests/", () => {
   });
 });
 
+/**
+ * Проект, который переходит на тест-спек, переносит тесты в дерево: на базе их в `tests/` нет, и без сопоставления
+ * каждый выглядел бы новым требованием, а PR с тысячами тестов не влез бы в тело PR. Тест, который на базе жил в
+ * файле вне дерева и там исчез, а в дереве появился с той же цепочкой describe и именем, — перенесён.
+ */
+describe("Перенос в дерево tests/", () => {
+  const SUM = ts(`describe("Сумма", () => { it("складывает", () => {}); it("вычитает", () => {}); });`);
+
+  it("тест с тем же describe и именем из файла вне дерева — перенесён, а не добавлен; сводка по папкам", () => {
+    const base = repo.commit({ "src/sum.test.ts": SUM, "e2e/login.spec.ts": ts(`it("входит", () => {});`) });
+    repo.commit({
+      "src/sum.test.ts": null,
+      "e2e/login.spec.ts": null,
+      "tests/capabilities/math/sum.test.ts": SUM,
+      "tests/capabilities/auth/login.e2e.ts": ts(`it("входит", () => {});`),
+    });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Добавлены:** нет.");
+    expect(out).toContain(
+      "**Перенесены в дерево (3):** названия те же, что вне `tests/` на базе; из 2 файлов.\n\n" +
+        "- `tests/capabilities/auth` — 1 тест из 1 файла\n" +
+        "- `tests/capabilities/math` — 2 теста из 1 файла\n",
+    );
+    expect(out).not.toContain("складывает");
+    expect(out).not.toContain("Вне дерева");
+  });
+
+  it("тест, переименованный при переносе, — добавлен, а файл-источник — в списке вне дерева", () => {
+    const base = repo.commit({ "src/sum.test.ts": SUM });
+    repo.commit({
+      "src/sum.test.ts": null,
+      "tests/capabilities/math/sum.test.ts": ts(`describe("Сумма", () => { it("складывает", () => {}); it("вычитает числа", () => {}); });`),
+    });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Перенесены в дерево (1):**");
+    expect(out).toContain("**Добавлены (1):**\n\n- `tests/capabilities/math` · Сумма › вычитает числа");
+    expect(out).toContain("**Вне дерева `tests/`** изменены файлы тестов: `src/sum.test.ts`.");
+  });
+
+  // Сторож от перекоррекции: сопоставление берёт только тесты, исчезнувшие из файла вне дерева, иначе копия
+  // спряталась бы под видом переноса.
+  it("тест, оставшийся и вне дерева, — копия: в дереве он добавлен", () => {
+    const base = repo.commit({ "src/sum.test.ts": SUM });
+    repo.commit({ "src/sum.test.ts": SUM + "// тронут\n", "tests/capabilities/math/sum.test.ts": SUM });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Добавлены (2):**");
+    expect(out).not.toContain("Перенесены");
+    expect(out).toContain("**Вне дерева `tests/`** изменены файлы тестов: `src/sum.test.ts`.");
+  });
+
+  it("--worktree: перенос до коммита тоже сворачивается", () => {
+    const base = repo.commit({ "src/sum.test.ts": SUM });
+    repo.git("rm", "-q", "src/sum.test.ts");
+    writeTree(dir, { "tests/capabilities/math/sum.test.ts": SUM });
+    const out = diffFrom(base, "--worktree").stdout;
+    expect(out).toContain("**Перенесены в дерево (2):**");
+    expect(out).toContain("**Добавлены:** нет.");
+    expect(out).not.toContain("Вне дерева");
+  });
+});
+
 describe("--json", () => {
+  it("перенесённые — с исходным и новым путём", () => {
+    const base = repo.commit({ "src/sum.test.ts": ts(`describe("Сумма", () => { it("складывает", () => {}); });`) });
+    repo.commit({ "src/sum.test.ts": null, "tests/capabilities/math/sum.test.ts": ts(`describe("Сумма", () => { it("складывает", () => {}); });`) });
+    const j = JSON.parse(diffFrom(base, "--json").stdout);
+    expect(j.moved).toEqual([
+      { from: "src/sum.test.ts", file: "tests/capabilities/math/sum.test.ts", folder: "tests/capabilities/math", describes: ["Сумма"], name: "складывает" },
+    ]);
+    expect(j.added).toEqual([]);
+    expect(j.out_of_tree_files).toEqual([]);
+  });
+
   it("машинный формат с тремя списками и файлами вне дерева", () => {
     const base = repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("старое", () => {}); });`) });
     repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("новое", () => {}); });`), "src/a.test.ts": ts(`it("вне", () => {});`) });
