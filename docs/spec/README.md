@@ -17,3 +17,4 @@
 
 - [cloud-session](standards/cloud-session.md) — Скрипты скиллов, которые ходят в GitHub Projects, в облачной сессии выходят с объяснением, а не сбоем `gh`.
 - [node-runtime](standards/node-runtime.md) — Скрипты скилла `spec` идут под Node ≥ 22.18 без Bun — CI проекта на Node запускает их из копии скилла в проекте.
+- [spawn-timeout](standards/spawn-timeout.md) — Тест, который запускает процессы (git, node, bun), держит таймаут `SPAWN_TIMEOUT`, а не 5 с bun по умолчанию, — чтобы нагрузка машины не роняла зелёные тесты.
