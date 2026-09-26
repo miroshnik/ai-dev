@@ -222,6 +222,16 @@ describe("Перенос в дерево tests/", () => {
     expect(out).toContain("**Вне дерева `tests/`** изменены файлы тестов: `src/sum.test.ts`.");
   });
 
+  it("одинаковые тесты двух файлов, перенесённые в одну папку, — оба перенесены, файлы не по имени", () => {
+    const same = ts(`describe("Расстояние", () => { it("пустое остаётся пустым", () => {}); });`);
+    const base = repo.commit({ "src/a.test.ts": same, "src/b.test.ts": same });
+    repo.commit({ "src/a.test.ts": null, "src/b.test.ts": null, "tests/capabilities/api/a.test.ts": same, "tests/capabilities/api/b.test.ts": same });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("- `tests/capabilities/api` — 2 теста из 2 файлов");
+    expect(out).toContain("**Добавлены:** нет.");
+    expect(out).not.toContain("Вне дерева");
+  });
+
   // Сторож от перекоррекции: сопоставление берёт только тесты, исчезнувшие из файла вне дерева, иначе копия
   // спряталась бы под видом переноса.
   it("тест, оставшийся и вне дерева, — копия: в дереве он добавлен", () => {
