@@ -37,7 +37,7 @@ function skillScripts(): { path: string; text: string }[] {
   });
 }
 
-describe("Облачная сессия в скриптах с Projects v2", () => {
+describe("Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть", () => {
   it("скрипты скиллов ai-dev, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md", () => {
     const scripts = skillScripts();
     // правило не пустое: под него попадают est и github

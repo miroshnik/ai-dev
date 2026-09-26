@@ -1,11 +1,11 @@
 /**
- * Скилл `github`, `project check` и `project fix`: проект GitHub репозитория сверяется с каноном `AGENTS.md` по
- * пунктам ✅/❌ и доводится до него.
+ * Скилл `github`, `project check` и `project fix`: проект GitHub любого репозитория устроен одинаково — по канону
+ * `AGENTS.md`, и агент приводит его к канону одной командой.
  *
- * Сверка и исправление — одна функция: каждое расхождение несёт свой шаг, поэтому `check` и `fix` не расходятся.
- * Что умеет API, `fix` делает сам; чего в API нет (workflow, сортировка, колонки доски) — шаг UI со ссылкой;
- * удаление и переименование в проекте с задачами и настройки организации — только с `--confirm`. Ответы GitHub —
- * записанные с проекта ai-dev (`tests/lib/github-ai-dev.json`), `gh` подменён: мутации меняют запись так, как это сделал бы GitHub.
+ * Руками проекты расходятся: где-то выключен «Item closed», где-то фильтр прячет задачи с доски, и задачи ведутся
+ * мимо канона. `check` показывает каждое расхождение пунктом ✅/❌, `fix` исправляет то, что умеет API, чего в API
+ * нет — оставляет шагом UI со ссылкой, а удаление и настройки организации делает только после подтверждения.
+ * Сверка и исправление — одна функция, поэтому `check` и `fix` не расходятся.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "bun:test";
@@ -14,6 +14,7 @@ import { main } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 
+// Ответы GitHub — записанные с проекта ai-dev, `gh` подменён: мутации меняют запись так, как это сделал бы GitHub
 const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.json", import.meta.url), "utf8"));
 const REPO = "miroshnik/ai-dev";
 const PROJECT_URL = "https://github.com/users/miroshnik/projects/6";
@@ -46,7 +47,7 @@ function unconfigured(f: FakeGitHub = fake()): FakeGitHub {
 }
 const wfUrl = (f: FakeGitHub, name: string) => `${f.project().url}/workflows/${f.workflow(name).fullDatabaseId}`;
 
-describe("check — сверка с каноном по пунктам", () => {
+describe("check показывает каждое расхождение с каноном отдельным пунктом", () => {
   it("проект ai-dev как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются", () => {
     const r = check(fake());
     expect(r.code).toBe(0);
@@ -133,7 +134,7 @@ describe("check — сверка с каноном по пунктам", () => {
   });
 });
 
-describe("fix — довести до канона", () => {
+describe("fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения", () => {
   it("исправимое через API исправляет сам и сверяет заново: все ✅, код 0", () => {
     const f = fake();
     f.view("Доска").filter = "iteration:@current";
@@ -249,7 +250,7 @@ describe("fix — довести до канона", () => {
   });
 });
 
-describe("Организация: Priority и типы issue", () => {
+describe("В организации сверяются ещё поле Priority и типы issue", () => {
   const ORG = "acme/ai-dev";
   const ORG_URL = "https://github.com/orgs/acme/projects/6";
   const org = () => fake(asOrg(REC));

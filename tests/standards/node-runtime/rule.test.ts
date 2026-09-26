@@ -39,7 +39,7 @@ function readTree(root: string): Record<string, string> {
   );
 }
 
-describe("Скрипты spec под Node без Bun", () => {
+describe("Под Node без Bun скрипты spec пишут то же, что под Bun", () => {
   it("spec-doc пишет тот же docs/spec, что под Bun", () => {
     writeTree(dir, { [BILLING]: source("выставляется за месяц") });
     writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [BILLING]: [[["Счета"], "выставляется за месяц"]] }));

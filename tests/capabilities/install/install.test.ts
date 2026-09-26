@@ -1,10 +1,10 @@
 /**
- * Установка флоу: `npx github:miroshnik/ai-dev install` ставит общие правила, справочники и все скиллы в проект,
- * с `-g` — на машину.
+ * Установка флоу: одна команда `npx github:miroshnik/ai-dev install` даёт проекту — или, с `-g`, машине — общие
+ * правила, справочники и все скиллы ai-dev для любого агента.
  *
- * В проекте всё копией в `.agents/` (коммитится: облачная сессия и CI видят ровно эту версию), Claude Code
- * получает симлинки из `.claude/`, остальные агенты — ссылку в `AGENTS.md` проекта. На машине — `~/.agents/` и
- * агенты, которые на ней есть.
+ * В проекте всё ложится копией в `.agents/` и коммитится: облачная сессия и CI видят ровно ту версию, что агент
+ * у разработчика. Claude Code получает симлинки из `.claude/`, остальные агенты — ссылку в `AGENTS.md` проекта. На
+ * машине — `~/.agents/` и агенты, которые на ней есть.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
@@ -49,7 +49,7 @@ function install(args: string[] = [], cwd = proj, extra: Record<string, string> 
 const read = (p: string) => readFileSync(p, "utf8");
 const isLink = (p: string) => lstatSync(p).isSymbolicLink();
 
-describe("Установка в проект", () => {
+describe("В проект — копия, которую видят облачная сессия и CI", () => {
   it("правила, справочники и все скиллы — копией в .agents, Claude Code получает их симлинками из .claude", () => {
     expect(install().code).toBe(0);
     expect(read(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
@@ -119,7 +119,7 @@ describe("Установка в проект", () => {
   });
 });
 
-describe("Установка на машину (-g)", () => {
+describe("На машину (-g) — всем агентам, что на ней есть", () => {
   it("правила и скиллы — в ~/.agents; агентам, что есть на машине, — симлинки, отсутствующим каталоги не создаются", () => {
     mkdirSync(path.join(home, ".claude"));
     mkdirSync(path.join(home, ".codex"));
@@ -172,7 +172,7 @@ describe("Установка на машину (-g)", () => {
   });
 });
 
-describe("Ошибки", () => {
+describe("Неверный вызов — код 2 с объяснением", () => {
   it("--link без -g — код 2: в проект коммитится копия, не ссылка на локальный клон", () => {
     const r = install(["--link"]);
     expect(r.code).toBe(2);
