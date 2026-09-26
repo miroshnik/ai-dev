@@ -7,43 +7,31 @@
  * машине — `~/.agents/` и агенты, которые на ней есть.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { tmpDir, writeTree } from "../../lib/spec.ts";
+import { aiDev, REPO, sandbox, SPAWN_TIMEOUT, type Sandbox } from "../../lib/ai-dev.ts";
+import { writeTree } from "../../lib/spec.ts";
 
-const REPO = fileURLToPath(new URL("../../../", import.meta.url));
-const BIN = path.join(REPO, "bin/ai-dev.mjs");
+setDefaultTimeout(SPAWN_TIMEOUT);
+
 const SKILLS = ["ci-wait", "est", "github", "spec"];
 
+let sb: Sandbox;
 let tmp: string;
-let cleanup: () => void;
 let home: string;
 let proj: string;
 let env: Record<string, string>;
 
 beforeEach(() => {
-  ({ dir: tmp, cleanup } = tmpDir());
-  home = path.join(tmp, "home");
-  proj = path.join(tmp, "proj");
-  mkdirSync(home);
-  mkdirSync(proj);
-  execFileSync("git", ["init", "-q"], { cwd: proj });
-  // PATH — только node, git, npm и sh: агенты на машине определяются по каталогам в HOME, а не по тому, что стоит у раннера
-  const bin = path.join(tmp, "bin");
-  mkdirSync(bin);
-  for (const cmd of ["node", "git", "npm", "npx", "sh"]) {
-    symlinkSync(execFileSync("sh", ["-c", `command -v ${cmd}`], { encoding: "utf8" }).trim(), path.join(bin, cmd));
-  }
-  env = { HOME: home, PATH: bin };
+  sb = sandbox();
+  ({ tmp, home, proj, env } = sb);
 });
-afterEach(() => cleanup());
+afterEach(() => sb.cleanup());
 
 function install(args: string[] = [], cwd = proj, extra: Record<string, string> = {}) {
-  const r = spawnSync("node", [BIN, "install", ...args], { cwd, env: { ...env, ...extra }, encoding: "utf8" });
-  return { code: r.status, stdout: r.stdout, stderr: r.stderr };
+  return aiDev(sb, ["install", ...args], { cwd, env: extra });
 }
 
 const read = (p: string) => readFileSync(p, "utf8");
@@ -111,6 +99,24 @@ describe("В проект — копия, которую видят облачн
     expect(existsSync(path.join(proj, ".agents/skills/spec/scripts/package.json"))).toBe(true);
   });
 
+  it("в .agents/ai-dev.json — SHA ai-dev, из которого поставлено: у клона — его HEAD", () => {
+    install();
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" }).trim();
+    expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).sha).toBe(head);
+  });
+
+  /** npx ставит пакет из GitHub архивом, без `.git`: коммит виден только в `resolved` lock-файла npm рядом с пакетом. */
+  it("из пакета npx — SHA из resolved в lock-файле npm", () => {
+    const nm = path.join(tmp, "npx/node_modules");
+    const pkg = path.join(nm, "ai-dev");
+    for (const rel of ["package.json", "bin", "AGENTS.md", "claude", "docs", "skills"]) cpSync(path.join(REPO, rel), path.join(pkg, rel), { recursive: true });
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const resolved = `git+ssh://git@github.com/miroshnik/ai-dev.git#${sha}`;
+    writeFileSync(path.join(nm, ".package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: { "node_modules/ai-dev": { version: "0.0.0", resolved } } }));
+    expect(aiDev(sb, ["install"], { bin: path.join(pkg, "bin/ai-dev.mjs") }).code).toBe(0);
+    expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).sha).toBe(sha);
+  });
+
   it("корень установки — корень git-репозитория, даже при запуске из подкаталога", () => {
     mkdirSync(path.join(proj, "src/app"), { recursive: true });
     expect(install([], path.join(proj, "src/app")).code).toBe(0);
@@ -164,6 +170,28 @@ describe("На машину (-g) — всем агентам, что на ней
     expect(realpathSync(path.join(home, ".claude/rules/ai-dev.md"))).toBe(realpathSync(path.join(REPO, "AGENTS.md")));
   });
 
+  /** Хук проверяет флоу в начале каждой сессии Claude Code; что он делает — capability `update`. */
+  it("с Claude Code — хук SessionStart в ~/.claude/settings.json запускает check --hook; свои настройки и хуки на месте, повторная установка хук не дублирует", () => {
+    const mine = { hooks: [{ type: "command", command: "echo мой хук" }] };
+    writeTree(home, { ".claude/settings.json": JSON.stringify({ model: "opus", hooks: { SessionStart: [mine], Stop: [mine] } }) });
+    install(["-g"]);
+    install(["-g"]);
+    const s = JSON.parse(read(path.join(home, ".claude/settings.json")));
+    expect(s.model).toBe("opus");
+    expect(s.hooks.Stop).toEqual([mine]);
+    expect(s.hooks.SessionStart[0]).toEqual(mine);
+    const ours = s.hooks.SessionStart.filter((g: { hooks: { command: string }[] }) => g.hooks.some((h) => h.command.includes("ai-dev check --hook")));
+    expect(ours).toHaveLength(1);
+    expect(ours[0].matcher).toContain("startup");
+    expect(ours[0].hooks[0].timeout).toBeGreaterThan(0);
+  });
+
+  it("без Claude Code на машине — хука нет, ~/.claude не создаётся", () => {
+    mkdirSync(path.join(home, ".codex"));
+    expect(install(["-g"]).code).toBe(0);
+    expect(existsSync(path.join(home, ".claude"))).toBe(false);
+  });
+
   it("AI_DEV_PRIVATE — ~/.config/ai-dev становится симлинком на личную конфигурацию", () => {
     const priv = path.join(tmp, "private");
     mkdirSync(priv);
@@ -180,8 +208,8 @@ describe("Неверный вызов — код 2 с объяснением", (
   });
 
   it("неизвестная команда — код 2 и справка", () => {
-    const r = spawnSync("node", [BIN, "instal"], { cwd: proj, env, encoding: "utf8" });
-    expect(r.status).toBe(2);
+    const r = aiDev(sb, ["instal"]);
+    expect(r.code).toBe(2);
     expect(r.stderr).toContain("install");
   });
 });
