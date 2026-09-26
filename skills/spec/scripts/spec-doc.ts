@@ -2,9 +2,11 @@
 /**
  * spec-doc — документация из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
  * от bun test): раздел на папку tests/capabilities/<name> («Что делает система») и
- * tests/standards/<name> («Как построена»), describe → подзаголовок, it → строка со статусом.
- * Проза — из JSDoc исходников тестов: у файла — под заголовком папки (первый абзац — в индексе),
- * у describe — под подзаголовком, у it — под строкой теста; исходника нет — без прозы.
+ * tests/standards/<name> («Как построена»). Страница — рассказ: шапка главного файла папки
+ * (<name>.test.ts, у стандарта — rule.test.ts) под заголовком (первый абзац — в индексе), describe →
+ * раздел с прозой из своего JSDoc, тесты раздела свёрнуты в <details> со счётчиком. Разделы идут в
+ * порядке главного файла, остальные файлы — следом по пути. Шапка другого файла папки в документацию
+ * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
  * tests/lib пропускается; тесты вне дерева попадают в раздел «Вне дерева» — это сигнал.
  *
  *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict]
@@ -28,7 +30,8 @@ const SUBDIR: Record<string, string> = { capability: "capabilities", standard: "
 const INTRO =
   "Сгенерировано из дерева `tests/`, названий тестов и их JSDoc (скилл `spec`, `spec-doc`). Руками не править: правка — в тестах.";
 
-// doc — абзацы прозы из JSDoc (из нескольких файлов — по порядку путей, повтор один раз)
+// doc — абзацы прозы из JSDoc: у группы — шапка главного файла, у describe из нескольких файлов —
+// по порядку файлов (главный первым), повтор один раз
 type Node = { tests: Test[]; children: Map<string, Node>; doc: string[] };
 type Group = { kind: Kind; name: string; tests: Test[]; tree: Node; doc: string[]; testDocs: Map<string, string[]> };
 
@@ -63,13 +66,26 @@ function findRoot(root?: string): string {
 const newNode = (): Node => ({ tests: [], children: new Map(), doc: [] });
 const testKey = (t: Test): string => JSON.stringify([...t.describes, t.name]);
 
+/** Имя главного файла папки без расширений: у capability — имя папки, у стандарта — `rule`. */
+const mainName = (kind: Kind, name: string): string => (kind === "standard" ? "rule" : name);
+
+/** Главный файл папки (`<name>.test.ts`, `<name>.e2e.ts`…) — в нём рассказ, с него начинается страница. */
+function isMain(file: string): boolean {
+  const [kind, name] = L.classify(file);
+  if ((kind !== "capability" && kind !== "standard") || name === null) return false;
+  const parts = file.split("/");
+  return parts.length === 4 && parts[3]!.split(".")[0] === mainName(kind, name);
+}
+
 /** → группы по (вид, имя), тесты вне дерева по файлам, файлы tests/lib. */
 export function build(tests: Test[]): { groups: Map<string, Group>; out: Map<string, Test[]>; libFiles: Set<string> } {
   const groups = new Map<string, Group>();
   const out = new Map<string, Test[]>();
   const libFiles = new Set<string>();
-  // файлы по пути; внутри файла — порядок отчёта (порядок объявления)
-  const sorted = [...tests].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  // главный файл папки первым — порядок его describe и есть порядок рассказа; дальше файлы по пути;
+  // внутри файла — порядок отчёта (порядок объявления)
+  const rank = (t: Test): string => (isMain(t.path) ? "0" : "1") + t.path;
+  const sorted = [...tests].sort((a, b) => (rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0));
   for (const t of sorted) {
     const [kind, name] = L.classify(t.path);
     if (kind === "lib") {
@@ -100,14 +116,17 @@ const addOnce = (list: string[], text: string): void => {
 };
 
 /**
- * Проза из JSDoc исходников группы (отчёты комментариев не несут): файл — абзацы группы,
- * describe — узла дерева, it — теста. Describe без тестов в отчёте (имя из it.each с
- * подстановкой) прозу теряет. Возвращает файлы, которых нет на диске, — они без прозы.
+ * Проза из JSDoc исходников группы (отчёты комментариев не несут): шапка главного файла — абзацы
+ * группы, describe — узла дерева, it — теста. Describe без тестов в отчёте (имя из it.each с
+ * подстановкой) прозу теряет. Возвращает файлы, которых нет на диске (они без прозы), и файлы с
+ * шапкой вне главного — рассказ пишется в одном месте, их шапка в документацию не идёт.
  */
-export function attachDocs(groups: Map<string, Group>, root: string): string[] {
+export function attachDocs(groups: Map<string, Group>, root: string): { missing: string[]; misplaced: string[] } {
   const missing: string[] = [];
+  const misplaced: string[] = [];
   for (const g of groups.values()) {
-    for (const file of [...new Set(g.tests.map((t) => t.path))].sort()) {
+    // порядок файлов — как в build: главный первым
+    for (const file of [...new Set(g.tests.map((t) => t.path))]) {
       let source: string;
       try {
         source = readFileSync(path.join(root, file), "utf8");
@@ -116,7 +135,8 @@ export function attachDocs(groups: Map<string, Group>, root: string): string[] {
         continue;
       }
       const docs = L.parseDocs(file, source);
-      addOnce(g.doc, docs.file);
+      if (docs.file && isMain(file) && !g.doc.length) g.doc.push(docs.file);
+      else if (docs.file) misplaced.push(file);
       for (const [key, text] of docs.describes) {
         let node: Node | undefined = g.tree;
         for (const d of JSON.parse(key) as string[]) node = node?.children.get(d);
@@ -128,7 +148,7 @@ export function attachDocs(groups: Map<string, Group>, root: string): string[] {
       }
     }
   }
-  return missing;
+  return { missing, misplaced };
 }
 
 function testLine(t: Test): string {
@@ -147,15 +167,27 @@ function pushDoc(lines: string[], doc: string[]): void {
   if (doc.length) lines.push(doc.join("\n\n"), "");
 }
 
-// Проза теста — цитатой внутри пункта списка: список остаётся плотным, строка теста — строкой
-function renderNode(g: Group, node: Node, level: number, lines: string[]): void {
-  for (const t of node.tests) {
+/**
+ * Тесты раздела — свёрнутым блоком со счётчиком: рассказ читается заголовками и прозой, проверку
+ * открывают по клику. Есть пропущенные или падающие — они в строке-заголовке, блок раскрыт.
+ * Проза теста — цитатой внутри пункта списка: список остаётся плотным, строка теста — строкой.
+ */
+function renderTests(g: Group, tests: Test[], lines: string[]): void {
+  if (!tests.length) return;
+  const problems = problemsLine(tests);
+  const icon = tests.some((t) => t.status === "failed") ? ICON.failed : problems ? ICON.skipped : ICON.passed;
+  lines.push(`<details${problems ? " open" : ""}><summary>${icon} ${countsLine(tests)}</summary>`, "");
+  for (const t of tests) {
     lines.push(testLine(t));
     const doc = g.testDocs.get(testKey(t));
     if (doc?.length) lines.push(...doc.join("\n\n").split("\n").map((l) => (l ? "  > " + l : "  >")));
   }
+  lines.push("", "</details>", "");
+}
+
+function renderNode(g: Group, node: Node, level: number, lines: string[]): void {
+  renderTests(g, node.tests, lines);
   for (const [name, child] of node.children) {
-    if (lines[lines.length - 1] !== "") lines.push("");
     lines.push(heading(level, L.mdText(name)), "");
     pushDoc(lines, child.doc);
     renderNode(g, child, level + 1, lines);
@@ -288,7 +320,7 @@ export function main(argv: string[]): number {
   }
   tests = L.mergeTests(tests);
   const { groups, out, libFiles } = build(tests);
-  const missing = attachDocs(groups, root);
+  const { missing, misplaced } = attachDocs(groups, root);
 
   if (values.stdout) {
     process.stdout.write(renderStdout(groups, out));
@@ -308,7 +340,11 @@ export function main(argv: string[]): number {
   );
   for (const file of [...out.keys()].sort()) console.error(`spec-doc: вне дерева: ${file} (${testsWord(out.get(file)!.length)})`);
   if (missing.length) console.error(`spec-doc: нет исходников (${missing.length}) — проза из JSDoc не взята: ${missing.join(", ")}`);
-  return out.size && values.strict ? 1 : 0;
+  for (const file of misplaced) {
+    const [kind, name] = L.classify(file);
+    console.error(`spec-doc: шапка вне главного файла ${mainName(kind, name!)}.* — в документацию не идёт: ${file}`);
+  }
+  return (out.size || misplaced.length) && values.strict ? 1 : 0;
 }
 
 if (import.meta.main) {

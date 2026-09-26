@@ -268,9 +268,16 @@ export function diff(
   added = added.filter((a) => !movedKeys.has(L.keyOf(a)));
   // 1) тот же файл и describe, похожее имя — переименован тест
   const changed = pair(removed, added, (r, a) => r.path === a.path && sameDescribes(r, a), (r, a) => ratio(r.name, a.name), RENAME_RATIO);
-  // 2) тот же файл и имя, другой describe — переименован describe
+  // 2) та же папка и имя, другой describe — переименован describe или тест переложен в другой раздел,
+  // в том числе из другого файла папки: текст требования тот же, сменился раздел
   changed.push(
-    ...pair(removed, added, (r, a) => r.path === a.path && r.name === a.name, (r, a) => ratio(r.describes.join(" › "), a.describes.join(" › ")), 0),
+    ...pair(
+      removed,
+      added,
+      (r, a) => L.folderOf(r) === L.folderOf(a) && r.name === a.name,
+      (r, a) => ratio(r.describes.join(" › "), a.describes.join(" › ")),
+      0,
+    ),
   );
   return { removed, changed, added, moved };
 }
