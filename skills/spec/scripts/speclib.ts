@@ -61,6 +61,17 @@ export function mdText(s: string): string {
     .join("");
 }
 
+/** «1 тест», «2 теста», «5 тестов»: число и форма слова по правилам русского. */
+export function plural(n: number, one: string, few: string, many: string): string {
+  const n10 = n % 10;
+  const n100 = n % 100;
+  if (n10 === 1 && n100 !== 11) return `${n} ${one}`;
+  if (n10 >= 2 && n10 <= 4 && !(n100 >= 12 && n100 <= 14)) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+export const testsWord = (n: number) => plural(n, "тест", "теста", "тестов");
+
 // Файлы тестов: *.test.ts / *.spec.ts / *.e2e.ts (и js/jsx/tsx/mjs/cjs…)
 const TEST_FILE = /\.(test|spec|e2e)\.[cm]?[jt]sx?$/;
 

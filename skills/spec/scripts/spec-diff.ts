@@ -3,7 +3,8 @@
  * spec-diff — дифф спеки: названия тестов (путь папки + describe + it) между базовой веткой
  * и HEAD по статическому разбору файлов на двух ревизиях (git cat-file, без прогонов и
  * чекаутов). Печатает markdown-раздел для тела PR: удалены (первыми), изменены (переименованы
- * в том же файле), добавлены; плюс файлы тестов, изменённые вне дерева tests/.
+ * в том же файле), добавлены, перенесены в дерево (тест исчез из файла вне tests/ и появился в
+ * дереве под тем же именем — сводкой по папкам); плюс файлы тестов, изменённые вне дерева tests/.
  *
  *   bun spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json]
  *
@@ -11,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
@@ -45,9 +46,14 @@ const wanted = (rel: string) => L.isTestFile(rel) && L.classify(rel)[0] !== "lib
  * с сотнями файлов тестов это два процесса вместо сотен.
  */
 function testsAtRev(rev: string, top: string, prefix: string): Map<string, string> {
-  const files = new Map<string, string>();
   const list = gitText(["ls-tree", "-r", "--name-only", "-z", rev, "--", prefix + L.TESTS], top);
   const paths = list.split("\0").filter((p) => p && p.startsWith(prefix) && wanted(p.slice(prefix.length)));
+  return filesAtRev(rev, top, prefix, paths);
+}
+
+/** {путь относительно корня: исходник} для путей от корня git на ревизии; нет файла — нет и ключа. */
+function filesAtRev(rev: string, top: string, prefix: string, paths: string[]): Map<string, string> {
+  const files = new Map<string, string>();
   if (!paths.length) return files;
   const buf = git(["cat-file", "--batch"], top, paths.map((p) => `${rev}:${p}\n`).join(""));
   // ответ на объект: `<sha> <type> <size>\n<содержимое>\n`; нет объекта — `<rev>:<path> missing\n`
@@ -113,6 +119,60 @@ function outOfTreeFiles(base: string, head: string, top: string, prefix: string,
   return [...out].sort();
 }
 
+/** Тест вне дерева на базе, исчезнувший из своего файла: кандидат в перенесённые. */
+export interface Moved {
+  test: Test; // тест в дереве, путь — новый
+  from: string; // файл вне дерева на базе
+}
+
+/**
+ * Тесты файлов вне дерева, изменённых в PR: на базе были, в том же файле на HEAD их нет (файл удалён
+ * или тест из него убран). Только они могут считаться перенесёнными: тест, оставшийся на месте, —
+ * источник копии, а не переноса. `count` — сколько тестов было в файле на базе.
+ */
+function outOfTreePool(
+  base: string,
+  head: string,
+  top: string,
+  root: string,
+  prefix: string,
+  outFiles: string[],
+  worktree: boolean,
+): { pool: Test[]; count: Map<string, number>; gone: Set<string> } {
+  const pool: Test[] = [];
+  const count = new Map<string, number>();
+  const gone = new Set<string>();
+  if (!outFiles.length) return { pool, count, gone };
+  const baseFiles = filesAtRev(base, top, prefix, outFiles.map((f) => prefix + f));
+  let headFiles: Map<string, string>;
+  if (worktree) {
+    headFiles = new Map();
+    for (const f of outFiles) {
+      const full = path.join(root, f);
+      if (existsSync(full)) headFiles.set(f, readFileSync(full, "utf8"));
+    }
+  } else {
+    headFiles = filesAtRev(head, top, prefix, outFiles.map((f) => prefix + f));
+  }
+  const nameKey = (t: Test) => JSON.stringify([t.describes, t.name]);
+  for (const f of outFiles) {
+    const src = baseFiles.get(f);
+    if (src === undefined) continue;
+    const baseTests = parseFiles(new Map([[f, src]]), "база");
+    count.set(f, baseTests.length);
+    if (!headFiles.has(f)) gone.add(f);
+    const left = new Map<string, number>();
+    for (const t of parseFiles(new Map([[f, headFiles.get(f) ?? ""]]), "HEAD")) left.set(nameKey(t), (left.get(nameKey(t)) ?? 0) + 1);
+    for (const t of baseTests) {
+      const k = nameKey(t);
+      const n = left.get(k) ?? 0;
+      if (n > 0) left.set(k, n - 1);
+      else pool.push(t);
+    }
+  }
+  return { pool, count, gone };
+}
+
 /** Похожесть строк по Ratcliff/Obershelp (как difflib.SequenceMatcher.ratio без эвристик). */
 export function ratio(a: string, b: string): number {
   if (!a.length && !b.length) return 1;
@@ -176,20 +236,49 @@ function pair(
 
 const sameDescribes = (r: Test, a: Test) => r.describes.length === a.describes.length && r.describes.every((d, i) => d === a.describes[i]);
 
-export function diff(baseTests: Test[], headTests: Test[]): { removed: Test[]; changed: [Test, Test][]; added: Test[] } {
+export function diff(
+  baseTests: Test[],
+  headTests: Test[],
+  pool: Test[] = [],
+): { removed: Test[]; changed: [Test, Test][]; added: Test[]; moved: Moved[] } {
   const b = new Map<string, Test>();
   const h = new Map<string, Test>();
   for (const t of baseTests) if (!b.has(L.keyOf(t))) b.set(L.keyOf(t), t);
   for (const t of headTests) if (!h.has(L.keyOf(t))) h.set(L.keyOf(t), t);
   const removed = [...b.entries()].filter(([k]) => !h.has(k)).map(([, t]) => t);
-  const added = [...h.entries()].filter(([k]) => !b.has(k)).map(([, t]) => t);
+  let added = [...h.entries()].filter(([k]) => !b.has(k)).map(([, t]) => t);
+  // 0) то же имя и describe, что у теста, исчезнувшего вне дерева, — перенесён в дерево, а не новый.
+  // Точное совпадение, без похожести: переименованный при переносе тест честно «добавлен».
+  const from = new Map<string, Test[]>();
+  for (const t of pool) {
+    const k = JSON.stringify([t.describes, t.name]);
+    from.set(k, [...(from.get(k) ?? []), t]);
+  }
+  const moved: Moved[] = [];
+  added = added.filter((a) => {
+    const src = from.get(JSON.stringify([a.describes, a.name]))?.shift();
+    if (!src) return true;
+    moved.push({ test: a, from: src.path });
+    return false;
+  });
   // 1) тот же файл и describe, похожее имя — переименован тест
   const changed = pair(removed, added, (r, a) => r.path === a.path && sameDescribes(r, a), (r, a) => ratio(r.name, a.name), RENAME_RATIO);
   // 2) тот же файл и имя, другой describe — переименован describe
   changed.push(
     ...pair(removed, added, (r, a) => r.path === a.path && r.name === a.name, (r, a) => ratio(r.describes.join(" › "), a.describes.join(" › ")), 0),
   );
-  return { removed, changed, added };
+  return { removed, changed, added, moved };
+}
+
+/**
+ * Файлы вне дерева без переноса целиком: перенесённый целиком (удалён, все его тесты нашли пару в
+ * дереве) — только число в сводке; остальные — по имени: часть тестов не нашла пары, значит при
+ * переносе что-то переименовано или потеряно.
+ */
+export function unmovedFiles(outFiles: string[], moved: Moved[], count: Map<string, number>, gone: Set<string>): string[] {
+  const n = new Map<string, number>();
+  for (const m of moved) n.set(m.from, (n.get(m.from) ?? 0) + 1);
+  return outFiles.filter((f) => !(gone.has(f) && (count.get(f) ?? 0) > 0 && n.get(f) === count.get(f)));
 }
 
 const outMark = (t: Test) => (L.classify(t.path)[0] === "out" ? " ⚠️ вне дерева" : "");
@@ -204,9 +293,35 @@ function changedEntry([o, n]: [Test, Test]): string {
   return `- \`${L.folderOf(n)}\` · ~~${md(o.describes)}~~ → ${md(n.describes)} › ${L.mdText(n.name)}${outMark(n)}`;
 }
 
-export function render(baseLabel: string, removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[]): string {
+/** Сводка переноса: по папке — сколько тестов и из скольких файлов вне дерева; по тесту — только в --json. */
+function movedLines(moved: Moved[]): string[] {
+  const byFolder = new Map<string, { tests: number; files: Set<string> }>();
+  for (const m of moved) {
+    const g = byFolder.get(L.folderOf(m.test)) ?? { tests: 0, files: new Set<string>() };
+    g.tests++;
+    g.files.add(m.from);
+    byFolder.set(L.folderOf(m.test), g);
+  }
+  const files = new Set(moved.map((m) => m.from)).size;
+  const fileWord = (n: number) => L.plural(n, "файла", "файлов", "файлов");
+  return [
+    `**Перенесены в дерево (${moved.length}):** названия те же, что вне \`${L.TESTS}/\` на базе; из ${fileWord(files)}.`,
+    "",
+    ...[...byFolder.keys()].sort().map((f) => `- \`${f}\` — ${L.testsWord(byFolder.get(f)!.tests)} из ${fileWord(byFolder.get(f)!.files.size)}`),
+    "",
+  ];
+}
+
+export function render(
+  baseLabel: string,
+  removed: Test[],
+  changed: [Test, Test][],
+  added: Test[],
+  outFiles: string[],
+  moved: Moved[] = [],
+): string {
   const lines = ["## Спека (тесты)", "", `_База: \`${baseLabel}\`._`, ""];
-  if (!removed.length && !changed.length && !added.length && !outFiles.length) {
+  if (!removed.length && !changed.length && !added.length && !outFiles.length && !moved.length) {
     lines.push("Тесты не менялись.");
     return lines.join("\n") + "\n";
   }
@@ -219,15 +334,23 @@ export function render(baseLabel: string, removed: Test[], changed: [Test, Test]
     if (items.length) lines.push(`**${title} (${items.length}):**`, "", ...items, "");
     else lines.push(`**${title}:** нет.`, "");
   }
+  if (moved.length) lines.push(...movedLines(moved));
   if (outFiles.length) lines.push(`**Вне дерева \`${L.TESTS}/\`** изменены файлы тестов: ${outFiles.map((p) => `\`${p}\``).join(", ")}.`, "");
   return lines.join("\n").trimEnd() + "\n";
 }
 
-function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[]): string {
+function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[], moved: Moved[]): string {
   const d = (t: Test) => ({ file: t.path, folder: L.folderOf(t), describes: t.describes, name: t.name });
   return (
     JSON.stringify(
-      { base: baseLabel, removed: removed.map(d), changed: changed.map(([o, n]) => ({ old: d(o), new: d(n) })), added: added.map(d), out_of_tree_files: outFiles },
+      {
+        base: baseLabel,
+        removed: removed.map(d),
+        changed: changed.map(([o, n]) => ({ old: d(o), new: d(n) })),
+        added: added.map(d),
+        moved: moved.map((m) => ({ from: m.from, ...d(m.test) })),
+        out_of_tree_files: outFiles,
+      },
       null,
       2,
     ) + "\n"
@@ -261,15 +384,17 @@ export function main(argv: string[]): number {
     return 0;
   }
 
-  let removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[];
+  let removed: Test[], changed: [Test, Test][], added: Test[], moved: Moved[], outFiles: string[];
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
     const baseTests = parseFiles(testsAtRev(base, top, prefix), v.base);
     const headFiles = v.worktree ? testsInWorktree(root) : testsAtRev(v.head, top, prefix);
     const headTests = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
-    outFiles = outOfTreeFiles(base, v.head, top, prefix, v.worktree);
-    ({ removed, changed, added } = diff(baseTests, headTests));
+    const changedOut = outOfTreeFiles(base, v.head, top, prefix, v.worktree);
+    const { pool, count, gone } = outOfTreePool(base, v.head, top, root, prefix, changedOut, v.worktree);
+    ({ removed, changed, added, moved } = diff(baseTests, headTests, pool));
+    outFiles = unmovedFiles(changedOut, moved, count, gone);
   } catch (e) {
     const msg = (e as Error).message;
     console.error(`spec-diff: ${msg}`);
@@ -280,7 +405,7 @@ export function main(argv: string[]): number {
   }
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
-  process.stdout.write(v.json ? asJson(label, removed, changed, added, outFiles) : render(label, removed, changed, added, outFiles));
+  process.stdout.write(v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved));
   return 0;
 }
 
