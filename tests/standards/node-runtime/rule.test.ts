@@ -7,9 +7,12 @@
 import { spawnSync } from "node:child_process";
 import { cpSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { gitRepo, runScript, SCRIPTS, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 // С 22.18 Node стирает типы без флага — нижняя граница из SKILL.md; CI ai-dev ставит ровно эту версию.
 beforeAll(() => {

@@ -12,7 +12,8 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, copyPackage, REPO, sandbox, snapshot, SPAWN_TIMEOUT, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, aiDevPackage, copyPackage, REPO, sandbox, snapshot, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);

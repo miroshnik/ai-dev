@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
@@ -19,7 +19,10 @@ import {
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const EST = fileURLToPath(new URL("../../../skills/est/scripts/est.ts", import.meta.url));
 const ts = (hhmm: string) => Date.parse(`2026-09-01T${hhmm}:00Z`) / 1000;

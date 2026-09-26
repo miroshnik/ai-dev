@@ -8,9 +8,12 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { runScript, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;

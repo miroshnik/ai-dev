@@ -6,9 +6,12 @@
  * сотен строк кода. Названия берутся статическим разбором исходников на двух ревизиях — без прогона тестов, за
  * секунды и в CI без установки зависимостей.
  */
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { gitRepo, runScript, tmpDir, writeTree } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;

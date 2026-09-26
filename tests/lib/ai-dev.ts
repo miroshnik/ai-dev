@@ -12,13 +12,6 @@ import { gitRepo, tmpDir, writeTree } from "./spec.ts";
 export const REPO = fileURLToPath(new URL("../../", import.meta.url));
 export const BIN = path.join(REPO, "bin/ai-dev.mjs");
 
-/**
- * Таймаут тестов, которые запускают установщик (`setDefaultTimeout` в файле теста): тест — десяток процессов node и
- * git, и под нагрузкой машины (параллельные сессии агентов) это дольше 5 с bun по умолчанию. Ожидания событий и гонок
- * тут нет — таймаут ловит только зависание.
- */
-export const SPAWN_TIMEOUT = 30_000;
-
 export interface Sandbox {
   tmp: string;
   home: string;
