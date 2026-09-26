@@ -6,9 +6,13 @@
 Поэтому в скриптах только `node:`-API и стираемый синтаксис TypeScript, а вывод под Node и под Bun совпадает
 байт в байт: `docs/spec`, собранный агентом под Bun, проходит проверку «не отстал» в CI под Node.
 
-## Скрипты spec под Node без Bun
+## Под Node без Bun скрипты spec пишут то же, что под Bun
+
+<details><summary>✅ 3 теста</summary>
 
 - ✅ spec-doc пишет тот же docs/spec, что под Bun
 - ✅ spec-diff печатает тот же раздел для PR, что под Bun
 - ✅ копия скилла в проекте без "type": "module" запускается под Node без предупреждений
   > Установка флоу кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev.
+
+</details>
