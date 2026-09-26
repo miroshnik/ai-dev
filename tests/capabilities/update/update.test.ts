@@ -1,11 +1,11 @@
 /**
- * Проверка и обновление флоу: `ai-dev check` говорит, отстала ли установка от main ai-dev, `ai-dev update` доводит её
- * до актуальной.
+ * Проверка и обновление флоу: агент первым шагом сессии узнаёт, не отстали ли правила и скиллы от main ai-dev, и одной
+ * командой доводит их до актуальных — чтобы сессия работала по текущим правилам, а не по когда-то поставленным.
  *
- * Правила грузятся в контекст на старте сессии: сессия на отставшем флоу работает по старым правилам, поэтому `check` —
- * первый шаг сессии (AGENTS.md). Он ничего не меняет и отвечает кодом: 0 — актуально, 1 — отстаёт, 2 — проверка
- * недоступна. Копию (проект, машина без `--link`) сверяет свежий пакет — npx берёт его из main при каждом запуске;
- * клон `--link` сверяется с `origin/main` после `git fetch`.
+ * Правила грузятся в контекст на старте сессии, поэтому `ai-dev check` идёт первым (AGENTS.md): он ничего не меняет и
+ * отвечает кодом 0 — актуально, 1 — отстаёт, 2 — проверка недоступна. Копию (проект, машина без `--link`) сверяет
+ * свежий пакет — npx берёт его из main при каждом запуске, клон `--link` — `origin/main` после `git fetch`.
+ * `ai-dev update` обновляет: копию — переустановкой, клон — `git pull`.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
-/** Пакеты ai-dev собираются один раз на файл: base — как этот клон, newer — ai-dev ушёл вперёд. */
+// пакеты ai-dev собираются один раз на файл: base — как этот клон, newer — ai-dev ушёл вперёд
 let packages: { dir: string; cleanup: () => void };
 let base: AiDevPackage;
 let newer: AiDevPackage;
@@ -44,14 +44,14 @@ const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd,
 const short = (sha: string) => sha.slice(0, 7);
 const manifest = (root: string) => path.join(root, ".agents/ai-dev.json");
 
-/** Установка прошлой версией установщика: в .agents/ai-dev.json нет SHA. */
+// установка прошлой версией установщика: в .agents/ai-dev.json нет SHA
 function dropSha(root: string) {
   const m = JSON.parse(read(manifest(root)));
   delete m.sha;
   writeFileSync(manifest(root), JSON.stringify(m, null, 2) + "\n");
 }
 
-/** Машина с `install -g --link` из клона; origin клона — upstream, куда тест коммитит новое в main. */
+// машина с `install -g --link` из клона; origin клона — upstream, куда тест коммитит новое в main
 function linkedClone() {
   mkdirSync(path.join(sb.home, ".claude"), { recursive: true });
   const up = copyPackage(base, path.join(sb.tmp, "upstream"));
@@ -61,7 +61,7 @@ function linkedClone() {
   return { up, clone };
 }
 
-describe("Проект — копия в .agents", () => {
+describe("Копия в проекте сверяется со свежим ai-dev и обновляется им", () => {
   it("поставлено из того же ai-dev — актуально, код 0", () => {
     aiDev(sb, ["install"]);
     const r = aiDev(sb, ["check"]);
@@ -113,7 +113,7 @@ describe("Проект — копия в .agents", () => {
   });
 });
 
-describe("Машина — копия в ~/.agents (-g)", () => {
+describe("Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude")));
 
   it("поставлено из того же ai-dev — актуально, код 0", () => {
@@ -153,7 +153,7 @@ describe("Машина — копия в ~/.agents (-g)", () => {
   });
 });
 
-describe("Машина — клон через --link (-g)", () => {
+describe("Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя", () => {
   const RULE = "\nНовое правило.\n";
 
   it("клон на origin/main — актуально, код 0", () => {
@@ -250,13 +250,13 @@ describe("Машина — клон через --link (-g)", () => {
 });
 
 /**
- * Хук SessionStart, который ставит `install -g`, запускает `check --hook`: вывод хука с кодом 0 Claude Code добавляет
- * в контекст сессии, другой код — нет, поэтому код хука всегда 0, а ошибка — в выводе.
+ * Хук SessionStart ставит `install -g`. Вывод хука с кодом 0 Claude Code добавляет в контекст сессии, с другим — нет,
+ * поэтому код хука всегда 0, а ошибка — в выводе.
  */
-describe("Хук SessionStart", () => {
+describe("В начале сессии Claude Code проверка идёт сама и старт сессии не срывает", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude"), { recursive: true }));
 
-  /** Команда хука из ~/.claude/settings.json — как её запускает Claude Code: через shell, в каталоге проекта. */
+  // команда хука из ~/.claude/settings.json — как её запускает Claude Code: через shell, в каталоге проекта
   function runHook() {
     const s = JSON.parse(read(path.join(sb.home, ".claude/settings.json")));
     const hooks: { command: string }[] = s.hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
@@ -265,7 +265,7 @@ describe("Хук SessionStart", () => {
     return { code: r.status, stdout: r.stdout };
   }
 
-  /** npx песочницы отдаёт пакет bin: `npx … github:miroshnik/ai-dev <команда>` → `node <bin> <команда>`. */
+  // npx песочницы отдаёт пакет bin: `npx … github:miroshnik/ai-dev <команда>` → `node <bin> <команда>`
   function npxServes(bin: string) {
     rmSync(path.join(sb.bin, "npx"));
     const script = `#!/bin/sh\nwhile [ "$#" -gt 0 ]; do case "$1" in github:*) shift; break ;; *) shift ;; esac; done\nexec node "${bin}" "$@"\n`;
