@@ -37,10 +37,10 @@ export function writeTree(root: string, files: Record<string, string>): void {
   }
 }
 
-/** Git-репозиторий во временном каталоге; commit пишет файлы (null — удалить) и возвращает SHA. */
-export function gitRepo(dir: string) {
+/** Git-репозиторий во временном каталоге (init: false — уже готовый); commit пишет файлы (null — удалить) и возвращает SHA. */
+export function gitRepo(dir: string, { init = true } = {}) {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
-  git("init", "-q", "-b", "main");
+  if (init) git("init", "-q", "-b", "main");
   return {
     git,
     commit(files: Record<string, string | null>, message = "step"): string {

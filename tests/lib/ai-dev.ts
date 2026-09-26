@@ -12,6 +12,13 @@ import { gitRepo, tmpDir, writeTree } from "./spec.ts";
 export const REPO = fileURLToPath(new URL("../../", import.meta.url));
 export const BIN = path.join(REPO, "bin/ai-dev.mjs");
 
+/**
+ * Таймаут тестов, которые запускают установщик (`setDefaultTimeout` в файле теста): тест — десяток процессов node и
+ * git, и под нагрузкой машины (параллельные сессии агентов) это дольше 5 с bun по умолчанию. Ожидания событий и гонок
+ * тут нет — таймаут ловит только зависание.
+ */
+export const SPAWN_TIMEOUT = 30_000;
+
 export interface Sandbox {
   tmp: string;
   home: string;
@@ -33,9 +40,9 @@ export function sandbox(): Sandbox {
   const bin = path.join(tmp, "bin");
   for (const d of [home, proj, bin]) mkdirSync(d);
   execFileSync("git", ["init", "-q"], { cwd: proj });
-  for (const cmd of ["node", "git", "npm", "npx", "sh"]) {
-    symlinkSync(execFileSync("sh", ["-c", `command -v ${cmd}`], { encoding: "utf8" }).trim(), path.join(bin, cmd));
-  }
+  const cmds = ["node", "git", "npm", "npx", "sh"];
+  const found = execFileSync("sh", ["-c", `for c in ${cmds.join(" ")}; do command -v "$c"; done`], { encoding: "utf8" }).trim().split("\n");
+  cmds.forEach((cmd, i) => symlinkSync(found[i]!, path.join(bin, cmd)));
   return { tmp, home, proj, bin, env: { HOME: home, PATH: bin }, cleanup };
 }
 
@@ -67,6 +74,14 @@ export function aiDevPackage(dir: string, edits: Record<string, string | null> =
   const repo = gitRepo(dir);
   const sha = repo.commit({});
   return { dir, bin: path.join(dir, "bin/ai-dev.mjs"), sha, repo };
+}
+
+export type AiDevPackage = ReturnType<typeof aiDevPackage>;
+
+/** Копия пакета вместе с `.git` в dir — без процессов git: пакет собирается один раз на файл теста. */
+export function copyPackage(pkg: AiDevPackage, dir: string): AiDevPackage {
+  cpSync(pkg.dir, dir, { recursive: true });
+  return { dir, bin: path.join(dir, "bin/ai-dev.mjs"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
 }
 
 /** Дерево каталога: путь → содержимое файла или «-> цель» симлинка; в `.git` не заходит. */

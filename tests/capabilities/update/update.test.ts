@@ -10,9 +10,12 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, aiDevPackage, copyPackage, REPO, sandbox, snapshot, SPAWN_TIMEOUT, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
+import { tmpDir } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 let sb: Sandbox;
 beforeEach(() => {
@@ -20,18 +23,26 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
+/** Пакеты ai-dev собираются один раз на файл: base — как этот клон, newer — ai-dev ушёл вперёд. */
+let packages: { dir: string; cleanup: () => void };
+let base: AiDevPackage;
+let newer: AiDevPackage;
+beforeAll(() => {
+  packages = tmpDir();
+  base = aiDevPackage(path.join(packages.dir, "base"));
+  // новое правило в AGENTS.md, новый скилл, скилл ci-wait убран
+  newer = aiDevPackage(path.join(packages.dir, "newer"), {
+    "AGENTS.md": readFileSync(path.join(REPO, "AGENTS.md"), "utf8") + "\nНовое правило.\n",
+    "skills/fresh/SKILL.md": "---\nname: fresh\ndescription: новый скилл\n---\n",
+    "skills/ci-wait": null,
+  });
+});
+afterAll(() => packages.cleanup());
+
 const read = (p: string) => readFileSync(p, "utf8");
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 const short = (sha: string) => sha.slice(0, 7);
 const manifest = (root: string) => path.join(root, ".agents/ai-dev.json");
-
-/** ai-dev ушёл вперёд: новое правило в AGENTS.md, новый скилл, скилл ci-wait убран. */
-const newer = () =>
-  aiDevPackage(path.join(sb.tmp, "newer"), {
-    "AGENTS.md": read(path.join(REPO, "AGENTS.md")) + "\nНовое правило.\n",
-    "skills/fresh/SKILL.md": "---\nname: fresh\ndescription: новый скилл\n---\n",
-    "skills/ci-wait": null,
-  });
 
 /** Установка прошлой версией установщика: в .agents/ai-dev.json нет SHA. */
 function dropSha(root: string) {
@@ -43,7 +54,7 @@ function dropSha(root: string) {
 /** Машина с `install -g --link` из клона; origin клона — upstream, куда тест коммитит новое в main. */
 function linkedClone() {
   mkdirSync(path.join(sb.home, ".claude"), { recursive: true });
-  const up = aiDevPackage(path.join(sb.tmp, "upstream"));
+  const up = copyPackage(base, path.join(sb.tmp, "upstream"));
   const clone = path.join(sb.tmp, "clone");
   git(sb.tmp, "clone", "-q", up.dir, clone);
   expect(aiDev(sb, ["install", "-g", "--link"], { bin: path.join(clone, "bin/ai-dev.mjs") }).code).toBe(0);
@@ -60,11 +71,10 @@ describe("Проект — копия в .agents", () => {
 
   it("ai-dev ушёл вперёд — отстаёт, код 1: стоит и свежий SHA, что изменится, команда обновления; check ничего не меняет", () => {
     aiDev(sb, ["install"]);
-    const pkg = newer();
     const before = snapshot(sb.proj);
-    const r = aiDev(sb, ["check"], { bin: pkg.bin });
+    const r = aiDev(sb, ["check"], { bin: newer.bin });
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain(`в проекте: отстаёт — стоит ${short(git(REPO, "rev-parse", "HEAD"))}, свежий ${short(pkg.sha)}`);
+    expect(r.stdout).toContain(`в проекте: отстаёт — стоит ${short(git(REPO, "rev-parse", "HEAD"))}, свежий ${short(newer.sha)}`);
     expect(r.stdout).toContain("~ .agents/ai-dev/AGENTS.md");
     expect(r.stdout).toContain("+ .agents/skills/fresh/");
     expect(r.stdout).toContain("- .agents/skills/ci-wait/");
@@ -74,27 +84,25 @@ describe("Проект — копия в .agents", () => {
 
   it("update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents); после него check — актуально", () => {
     aiDev(sb, ["install"]);
-    const pkg = newer();
-    const r = aiDev(sb, ["update"], { bin: pkg.bin });
+    const r = aiDev(sb, ["update"], { bin: newer.bin });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain(`chore(agents): флоу ai-dev ${short(pkg.sha)}`);
+    expect(r.stdout).toContain(`chore(agents): флоу ai-dev ${short(newer.sha)}`);
     expect(read(path.join(sb.proj, ".agents/ai-dev/AGENTS.md"))).toContain("Новое правило.");
     expect(existsSync(path.join(sb.proj, ".agents/skills/fresh/SKILL.md"))).toBe(true);
     expect(existsSync(path.join(sb.proj, ".agents/skills/ci-wait"))).toBe(false);
-    expect(JSON.parse(read(manifest(sb.proj))).sha).toBe(pkg.sha);
-    expect(aiDev(sb, ["check"], { bin: pkg.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj))).sha).toBe(newer.sha);
+    expect(aiDev(sb, ["check"], { bin: newer.bin }).code).toBe(0);
   });
 
   it("старая установка без SHA — check сравнивает содержимое: совпадает — актуально, нет — отстаёт «без SHA»; update записывает SHA", () => {
     aiDev(sb, ["install"]);
     dropSha(sb.proj);
     expect(aiDev(sb, ["check"]).code).toBe(0);
-    const pkg = newer();
-    const r = aiDev(sb, ["check"], { bin: pkg.bin });
+    const r = aiDev(sb, ["check"], { bin: newer.bin });
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("стоит без SHA");
-    expect(aiDev(sb, ["update"], { bin: pkg.bin }).code).toBe(0);
-    expect(JSON.parse(read(manifest(sb.proj))).sha).toBe(pkg.sha);
+    expect(aiDev(sb, ["update"], { bin: newer.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj))).sha).toBe(newer.sha);
   });
 
   it("флоу в проекте не стоит — «не установлен», код 0, ничего не создаётся", () => {
@@ -117,18 +125,17 @@ describe("Машина — копия в ~/.agents (-g)", () => {
 
   it("ai-dev ушёл вперёд — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального", () => {
     aiDev(sb, ["install", "-g"]);
-    const pkg = newer();
     const before = snapshot(sb.home);
-    const r = aiDev(sb, ["check", "-g"], { bin: pkg.bin });
+    const r = aiDev(sb, ["check", "-g"], { bin: newer.bin });
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("~ ~/.agents/ai-dev/AGENTS.md");
     expect(r.stdout).toContain("+ ~/.agents/skills/fresh/");
     expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update -g");
     expect(snapshot(sb.home)).toEqual(before);
-    expect(aiDev(sb, ["update", "-g"], { bin: pkg.bin }).code).toBe(0);
+    expect(aiDev(sb, ["update", "-g"], { bin: newer.bin }).code).toBe(0);
     expect(read(path.join(sb.home, ".agents/ai-dev/AGENTS.md"))).toContain("Новое правило.");
-    expect(JSON.parse(read(manifest(sb.home))).sha).toBe(pkg.sha);
-    expect(aiDev(sb, ["check", "-g"], { bin: pkg.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.home))).sha).toBe(newer.sha);
+    expect(aiDev(sb, ["check", "-g"], { bin: newer.bin }).code).toBe(0);
   });
 
   it("старая установка без SHA и без хука SessionStart — отстаёт; update -g ставит хук и пишет SHA", () => {
@@ -268,7 +275,7 @@ describe("Хук SessionStart", () => {
   it("команда хука — check --hook: машина и проект одним выводом, код 0, даже когда отстаёт", () => {
     aiDev(sb, ["install", "-g"]);
     aiDev(sb, ["install"]);
-    npxServes(newer().bin);
+    npxServes(newer.bin);
     const r = runHook();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("ai-dev на машине: отстаёт");

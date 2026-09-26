@@ -9,10 +9,12 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, REPO, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, REPO, sandbox, SPAWN_TIMEOUT, type Sandbox } from "../../lib/ai-dev.ts";
 import { writeTree } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const SKILLS = ["ci-wait", "est", "github", "spec"];
 
