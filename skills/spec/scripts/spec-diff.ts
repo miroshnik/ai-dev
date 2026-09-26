@@ -254,13 +254,18 @@ export function diff(
     const k = JSON.stringify([t.describes, t.name]);
     from.set(k, [...(from.get(k) ?? []), t]);
   }
+  // Идут все тесты HEAD, а не по одному на ключ: одинаковые тесты двух файлов, перенесённых в одну
+  // папку, там — одно требование, но перенесены оба, и файлы-источники перенесены целиком.
   const moved: Moved[] = [];
-  added = added.filter((a) => {
-    const src = from.get(JSON.stringify([a.describes, a.name]))?.shift();
-    if (!src) return true;
-    moved.push({ test: a, from: src.path });
-    return false;
-  });
+  const movedKeys = new Set<string>();
+  for (const t of headTests) {
+    if (b.has(L.keyOf(t))) continue;
+    const src = from.get(JSON.stringify([t.describes, t.name]))?.shift();
+    if (!src) continue;
+    moved.push({ test: t, from: src.path });
+    movedKeys.add(L.keyOf(t));
+  }
+  added = added.filter((a) => !movedKeys.has(L.keyOf(a)));
   // 1) тот же файл и describe, похожее имя — переименован тест
   const changed = pair(removed, added, (r, a) => r.path === a.path && sameDescribes(r, a), (r, a) => ratio(r.name, a.name), RENAME_RATIO);
   // 2) тот же файл и имя, другой describe — переименован describe
