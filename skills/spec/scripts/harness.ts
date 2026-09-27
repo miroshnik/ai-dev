@@ -106,6 +106,8 @@ export interface LintMessage {
 /** Линтер проекта: код и путь файла (от корня проекта — по нему конфиг решает, действует ли правило). */
 export interface Linter {
   lint(code: string, filePath: string): Promise<LintMessage[]>;
+  /** Загрузить конфиг заранее: `await linter.ready()` на верхнем уровне файла — не под таймаутом первого примера. */
+  ready?(): Promise<void>;
 }
 
 /** Пример к правилу: название (утверждение), путь от корня проекта и код. */
@@ -113,6 +115,8 @@ export interface Example {
   name: string;
   path: string;
   code: string;
+  /** У «нельзя»: сколько раз правило обязано сработать (по умолчанию — хотя бы раз). */
+  count?: number;
 }
 
 export interface Examples {
@@ -139,6 +143,8 @@ export function examples(it: It, spec: Examples): void {
     if (fatal) throw new Error(`пример не разбирается: ${e.path} — ${fatal.message}`);
     return messages.filter((m) => m.ruleId === spec.rule);
   };
+  // конфиг линтера грузится с регистрации, а не под таймаутом первого примера; ошибку загрузки покажет пример
+  spec.linter.ready?.().catch(() => {});
   if (!spec.bad.length) {
     it(`у правила ${spec.rule} есть пример «нельзя»`, () => {
       throw new Error(`у правила ${spec.rule} нет примера «нельзя» — доказать, что оно умеет падать, нечем`);
@@ -149,7 +155,9 @@ export function examples(it: It, spec: Examples): void {
   }
   for (const e of spec.bad) {
     it(`нельзя: ${e.name}`, async () => {
-      if (!(await fires(e)).length) throw new Error(`правило ${spec.rule} не сработало: ${e.path}`);
+      const hits = (await fires(e)).length;
+      if (e.count !== undefined && hits !== e.count) throw new Error(`срабатываний правила ${spec.rule}: ${hits}, а ждали ${e.count} — ${e.path}`);
+      if (!hits) throw new Error(`правило ${spec.rule} не сработало: ${e.path}`);
     });
   }
   const silent = (label: string) => (e: Example) =>
@@ -168,18 +176,28 @@ export function examples(it: It, spec: Examples): void {
  */
 export function eslintLinter(opts: { cwd?: string; module?: string } = {}): Linter {
   const cwd = path.resolve(opts.cwd ?? process.cwd());
-  type Engine = { lintText(code: string, o: { filePath: string }): Promise<{ messages: LintMessage[] }[]> };
+  type Engine = {
+    lintText(code: string, o: { filePath: string }): Promise<{ messages: LintMessage[] }[]>;
+    calculateConfigForFile(filePath: string): Promise<unknown>;
+  };
   let engine: Promise<Engine> | null = null;
   const load = async (): Promise<Engine> => {
     const entry = opts.module ?? createRequire(path.join(cwd, "package.json")).resolve("eslint");
     const { ESLint } = (await import(pathToFileURL(entry).href)) as { ESLint: new (o: { cwd: string }) => Engine };
     return new ESLint({ cwd });
   };
+  let warmed: Promise<void> | null = null;
   return {
     async lint(code, filePath) {
       engine ??= load();
       const [result] = await (await engine).lintText(code, { filePath: path.join(cwd, filePath) });
       return (result?.messages ?? []).map((m) => ({ ruleId: m.ruleId, message: m.message, fatal: m.fatal }));
+    },
+    // ESLint грузит конфиг лениво, при первом файле: расчёт конфига для файла проекта грузит его сейчас
+    ready() {
+      engine ??= load();
+      warmed ??= engine.then((e) => e.calculateConfigForFile(path.join(cwd, "index.js"))).then(() => undefined);
+      return warmed;
     },
   };
 }
@@ -250,8 +268,11 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
     const disables = disablesIn(file, text);
     if (!disables.length) continue;
     const rules = [...new Set(disables.flatMap((d) => (d.rules.length ? d.rules : ["все правила"])))].sort();
-    meta(`исключения в ${file}: ${rules.join(", ")}`, { disables: disables.map((d) => ({ line: d.line, rules: d.rules, description: d.description })) });
-    it(`исключения в ${file}: ${rules.join(", ")}`, () => {
+    // задачи отключений — в названии: спека показывает, какое решение допускает исключение
+    const issues = [...new Set(disables.map((d) => /^#(\d+)/.exec(d.description)?.[1]).filter((x): x is string => !!x).map(Number))].sort((a, b) => a - b);
+    const name = `исключения в ${file}: ${rules.join(", ")}${issues.length ? ` (${issues.map((n) => `#${n}`).join(", ")})` : ""}`;
+    meta(name, { disables: disables.map((d) => ({ line: d.line, rules: d.rules, description: d.description })) });
+    it(name, () => {
       const bad = disables.flatMap((d) => {
         if (!d.rules.length) return [`${d.file}:${d.line} — отключение без названия правила: общий eslint-disable глушит всё, включая проверки`];
         if (!/^#\d+\s+\S/.test(d.description)) return [`${d.file}:${d.line} — отключение без «-- #N причина»: ${d.rules.join(", ")}`];
