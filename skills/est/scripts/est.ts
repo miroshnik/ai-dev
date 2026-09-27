@@ -120,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 12; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии
+const SESSION_CACHE_V = 13; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds)
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -420,6 +420,7 @@ export interface Closers {
 export interface Session {
   sid: string;
   cwd: string | null;
+  cwds?: string[]; // все каталоги записей по порядку появления: сессия может перейти в репозиторий по ходу работы
   n_human: number;
   ev: Any[][]; // [ts, ветка, human, hint?, uidx?]
   prlinks: [number, number][];
@@ -927,6 +928,7 @@ function isHumanPrompt(r: Any): boolean {
 
 interface Acc {
   cwd: string | null;
+  cwds: string[];
   n_human: number;
   ev: Any[][];
   prlinks: [number, number][];
@@ -940,7 +942,7 @@ interface Acc {
   titles: [number, string][];
 }
 
-const newAcc = (): Acc => ({ cwd: null, n_human: 0, ev: [], prlinks: [], commits: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [] });
+const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [] });
 
 function* jsonlRecords(file: string): Generator<Any> {
   const text = readFileSync(file, "utf8");
@@ -992,6 +994,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void 
     const t = r.type;
     const ts = r.timestamp ? parseTs(r.timestamp) : null;
     if (acc.cwd === null && r.cwd) acc.cwd = r.cwd;
+    if (r.cwd && !acc.cwds.includes(r.cwd)) acc.cwds.push(r.cwd);
     if (t === "custom-title" && !subagent) {
       // название сессии по конвенции «#<номер> <название задачи>» привязывает к задаче записи с момента
       // переименования (первое — с начала сессии); Claude Code пишет его без времени
@@ -1111,6 +1114,7 @@ export function parseSessionFile(file: string): Session {
   return {
     sid: path.basename(file).slice(0, -6),
     cwd: acc.cwd,
+    cwds: acc.cwds,
     n_human: acc.n_human,
     ev: acc.ev,
     prlinks: acc.prlinks,
@@ -1350,6 +1354,16 @@ function codexCwd(file: string): string | null {
   return null;
 }
 
+/**
+ * Сессия относится к репозиторию, если хоть одна её запись сделана в его каталоге (или в worktree внутри): сессию
+ * начинают и вне проекта, а потом переносят в него. Облачная — по каталогу выгрузки, не по cwd контейнера.
+ */
+export function inRepo(s: Session, paths: string[]): boolean {
+  if (s.source === "cloud") return true;
+  const cwds = s.cwds?.length ? s.cwds : [s.cwd];
+  return cwds.some((c) => cwdMatches(c, paths));
+}
+
 function cwdMatches(cwd: string | null | undefined, paths: string[]): boolean {
   if (!cwd) return true; // не знаем — не отбрасываем
   return paths.some((p) => cwd === p || cwd.startsWith(p.replace(/\/+$/, "") + "/"));
@@ -1463,8 +1477,7 @@ function loadSessions(repo: Repo): Session[] {
   const sessions: Session[] = [];
   for (const s of Object.values(out)) {
     if (!s.ev.length || s.routine) continue;
-    // облачная сессия работает в своём контейнере (cwd /home/user/…) — к репозиторию её относит каталог выгрузки
-    if (s.source !== "cloud" && !cwdMatches(s.cwd, repo.paths)) continue;
+    if (!inRepo(s, repo.paths)) continue;
     sessions.push(s);
   }
   return sessions;

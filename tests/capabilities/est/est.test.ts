@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudPartsIn, cloudSessionsIn, fmtH, hashMatches, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  cloudPartsIn, cloudSessionsIn, fmtH, hashMatches, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
@@ -332,6 +332,24 @@ describe("Транскрипт Claude Code даёт привязки к зада
     const s = parseSessionFile(file);
     expect(s.n_human).toBe(2);
     expect(s.first_refs).toEqual([42]);
+  });
+
+  // Сессия приложения без проекта, перенесённая в репозиторий и дальше в worktree: каталог первой записи — не
+  // репозиторий, и факт всех её задач был «недоступен» (#93)
+  it("сессия, перешедшая в каталог репозитория по ходу работы, относится к нему; сессия целиком вне репозитория — нет", () => {
+    const rec = (hhmm: string, cwd: string, content: string) => ({
+      type: "user", timestamp: `2026-09-01T${hhmm}:00Z`, cwd, gitBranch: "HEAD", origin: { kind: "human" }, message: { role: "user", content },
+    });
+    const moved = path.join(dir, "moved.jsonl");
+    writeFileSync(moved, jsonl([
+      rec("10:00", "/scratch/session-1", "обсудим правила"),
+      rec("10:10", "/repo", "#42 сделай"),
+      rec("10:20", "/repo/.claude/worktrees/epic", "дальше"),
+    ]));
+    const outside = path.join(dir, "outside.jsonl");
+    writeFileSync(outside, jsonl([rec("10:00", "/scratch/session-2", "вопрос"), rec("10:05", "/repo-other", "ещё")]));
+    expect(inRepo(parseSessionFile(moved), ["/repo"])).toBe(true);
+    expect(inRepo(parseSessionFile(outside), ["/repo"])).toBe(false);
   });
 });
 
