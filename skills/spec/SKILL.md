@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Спецификация из тестов — два детерминированных скрипта и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR, обновлённый docs/spec в коммит); в CI на PR и main (проверка, что docs/spec не отстал); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и на main (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
 allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
@@ -8,13 +8,15 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 
 Правило «Спецификация — тесты» (`AGENTS.md`): требование существует, пока есть
 тест, который его проверяет. Поэтому документация — это дерево `tests/` и
-названия тестов, а дифф тестов в PR — дифф спеки. Два скрипта в `scripts/`
+названия тестов, а дифф тестов в PR — дифф спеки. Скрипты в `scripts/`
 делают это детерминированно, без модели и без конфигурации под репозиторий:
 
 - `spec-doc.ts` — отчёты раннеров и JSDoc тестов → `docs/spec/` (или один
   документ в stdout);
 - `spec-diff.ts` — названия тестов на базовой ветке и в HEAD → три списка для
   тела PR: удалены, изменены, добавлены;
+- `spec-publish.ts` — собранный `docs/spec` → ветка `spec` (CI после мержа в
+  `main`); в `main` документации нет;
 - `harness.ts` — библиотека для тестов проекта: механическая проверка
   регистрирует обычные тесты раннера и попадает в спеку (раздел «Проверки»).
 
@@ -31,8 +33,10 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 
 | Момент | Действие |
 |---|---|
-| Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc` → `docs/spec/` в коммит; 3. `spec-diff` → раздел «Спека (тесты)» в тело PR |
-| В CI на PR и `main` | прогон → `spec-doc --strict` (тесты вне дерева, шапка не в главном файле — код 1) → `git status --porcelain docs/spec` пуст; на PR ещё `spec-diff` в summary |
+| Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc --strict` — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff` → раздел «Спека (тесты)» в тело PR |
+| В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, шапка не в главном файле, `rule.test.ts` — код 1); `spec-diff` в summary |
+| В CI на `main` после мержа | прогон → `spec-doc` → `spec-publish`: ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
+| Прочитать спеку проекта | `git fetch origin spec && git show origin/spec:README.md` (страницы — `capabilities/<name>.md`…) или сами тесты |
 | Просят документацию, «что делает система» | `spec-doc <отчёт> --stdout` — один документ, файлы не трогаются |
 | Спрашивают, какие требования снял PR | `spec-diff` — список «Удалены» идёт первым |
 | Проект переходит на тест-спек | раздел «Подключение в репозиторий»: установка флоу, скрипты под Node, workflow |
@@ -220,6 +224,23 @@ capabilities/standards помечены `⚠️ вне дерева`; измен
 Раздел вставляется в тело PR целиком (после `Closes #N`); при новых коммитах
 с тестами — перегенерировать и заменить.
 
+## spec-publish
+
+```bash
+bun <каталог скилла>/scripts/spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--check]
+```
+
+Корень ветки `spec` — содержимое `docs/spec`; в сообщении коммита — `Source:
+<SHA>`, из которого собрано (по умолчанию `HEAD`). Рабочая копия и `HEAD` не
+трогаются: дерево собирается во временном индексе, коммит — поверх
+опубликованного, история публикаций сохраняется. То же содержимое — без
+нового коммита («без изменений»). После пуша ветка читается с remote и
+сверяется с каталогом: опубликовано ровно собранное, а не «пуш прошёл».
+`--check` — только сверка (код 1, если ветка отстала или её нет). Коды: 0 —
+опубликовано или совпадает, 1 — расхождение или пуш отклонён, 2 — нет
+каталога или не git. Без настроенного `git user` коммит — от бота GitHub
+Actions.
+
 ## Проверки — `harness.ts`
 
 Механическая проверка — это тесты раннера: они в отчёте, а значит в
@@ -263,8 +284,7 @@ describe("каждая мутация пишет аудит", () => {
 Скрипты берутся из копии скилла в самом проекте и идут под Node — Bun проекту
 на Node не нужен. Копию ставит установка флоу ai-dev, и она коммитится: агент
 перед PR и CI зовут одни и те же `spec:doc` / `spec:diff` проекта над одними и
-теми же файлами, поэтому `docs/spec`, собранный локально, совпадает с
-проверкой в CI. Почему копия, а не подмодуль, чекаут в workflow или пакет —
+теми же файлами, поэтому то, что агент видит локально, совпадает с CI. Почему копия, а не подмодуль, чекаут в workflow или пакет —
 `reference.md`.
 
 1. **Установка** в корне проекта, результат (`.agents/`, `.claude/`, блок в
@@ -275,25 +295,32 @@ describe("каждая мутация пишет аудит", () => {
    - `.agents/` и `.claude/` исключить из линтеров и форматтеров проекта
      (`ignores` в ESLint, `.prettierignore`, `include` в tsconfig): там код и
      Markdown ai-dev.
-   - Обновление — та же команда отдельным PR, потом отчёты и `spec:doc`;
-     поменялся формат — новый `docs/spec` едет в том же PR.
+   - Обновление — та же команда отдельным PR, потом отчёты и `spec:doc
+     --strict`; поменялся формат — после мержа CI опубликует новый.
 2. **Скрипты** в `package.json` — через `node`: Node ≥ 22.18 стирает типы сам,
    `scripts/package.json` скилла задаёт ESM при любом `type` проекта. Отчёты —
    те, что есть в проекте:
    ```json
    "spec:doc": "node .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json --strict",
-   "spec:diff": "node .agents/skills/spec/scripts/spec-diff.ts"
+   "spec:diff": "node .agents/skills/spec/scripts/spec-diff.ts",
+   "spec:publish": "node .agents/skills/spec/scripts/spec-publish.ts"
    ```
    Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
-   spec-doc»). В `.gitignore`: `.spec-*.json`, `vitest-blob/`, `blob-report/`,
-   `playwright-blob/`.
-3. **`docs/spec/` коммитится вместе с PR:** дифф документации виден ревьюеру
-   как дифф требований, коммитов от бота нет.
+   spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `vitest-blob/`,
+   `blob-report/`, `playwright-blob/`.
+3. **`docs/spec/` в `main` не коммитится — его публикует CI в ветку `spec`:**
+   это производная копия тестов, и в `main` параллельные PR конфликтовали бы
+   в её страницах и оглавлении. Дельту требований ревьюер видит в `spec-diff`
+   (тело PR), правку прозы — в диффе JSDoc теста. Переход проекта, где
+   `docs/spec` уже в `main`: `git rm -r --cached docs/spec`, строка в
+   `.gitignore`, шаги CI ниже.
 4. **CI.** Шарды пишут blob-отчёты, отдельная job `spec` после всех шардов
    склеивает их средствами раннеров (`vitest --merge-reports`,
    `playwright merge-reports` — все проекты Playwright в одном отчёте) и
-   проверяет, что `docs/spec` не отстал. Упал тест — `spec` не запускается:
-   сверять документацию с красным прогоном незачем. `spec-diff` — своя лёгкая
+   собирает `docs/spec` с `--strict`; на `main` отдаёт его артефактом job
+   `spec-publish` — у неё одной токен на запись (`contents: write`), и она не
+   ставит зависимости проекта. Упал тест — `spec` не запускается:
+   собирать документацию из красного прогона незачем. `spec-diff` — своя лёгкая
    job: ей нужны git-история и Node, не тесты, поэтому раздел в summary есть и
    при красных тестах. Фрагмент для pnpm (в `package.json` —
    `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
@@ -359,12 +386,23 @@ describe("каждая мутация пишет аудит", () => {
          - run: pnpm exec playwright merge-reports --reporter=json playwright-blob
            env: { PLAYWRIGHT_JSON_OUTPUT_NAME: .spec-playwright.json }
          - run: pnpm spec:doc
-         - name: docs/spec не отстал от тестов
-           run: |
-             if [ -n "$(git status --porcelain docs/spec)" ]; then
-               git status --short docs/spec; git diff docs/spec
-               echo "::error::docs/spec отстал от тестов — прогон с отчётами, pnpm spec:doc и закоммить"; exit 1
-             fi
+         - if: github.event_name == 'push'
+           uses: actions/upload-artifact@v7
+           with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
+
+     spec-publish:
+       if: github.event_name == 'push'
+       needs: spec
+       runs-on: ubuntu-latest
+       permissions: { contents: write } # пуш ветки spec — только здесь
+       concurrency: { group: spec-publish, cancel-in-progress: false }
+       steps:
+         - uses: actions/checkout@v7
+         - uses: actions/setup-node@v7
+           with: { node-version: 24, package-manager-cache: false }
+         - uses: actions/download-artifact@v8
+           with: { name: docs-spec, path: docs/spec }
+         - run: node .agents/skills/spec/scripts/spec-publish.ts
 
      spec-diff:
        if: github.event_name == 'pull_request'
@@ -378,7 +416,8 @@ describe("каждая мутация пишет аудит", () => {
    ```
    Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
    `spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами из
-   таблицы выше, `spec:doc`, проверка. ai-dev сам на Bun — его
+   таблицы выше, `spec:doc`, артефакт на `main`; `spec-publish` — так же
+   отдельно. ai-dev сам на Bun — его
    `.github/workflows/ci.yml` образцом для проекта на Node не служит.
 
 ## Ограничения, о которых надо знать
