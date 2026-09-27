@@ -129,10 +129,15 @@ describe("Тест — это папка, цепочка describe и имя: п�
     expect(out).toContain("- `tests/capabilities/invoicing` · выставляется");
   });
 
-  it("тест в tests/, но вне capabilities/standards — помечен «вне дерева»", () => {
+  it("тест в tests/, но вне capabilities, architecture и standards — помечен «вне дерева»", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
-    repo.commit({ "tests/unit/a.test.ts": ts(`it("сирота", () => {});`) });
-    expect(diffFrom(base).stdout).toContain("- `tests/unit` · сирота ⚠️ вне дерева");
+    repo.commit({
+      "tests/unit/a.test.ts": ts(`it("сирота", () => {});`),
+      "tests/architecture/layers/layers.test.ts": ts(`it("домен не импортирует инфраструктуру", () => {});`),
+    });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("- `tests/unit` · сирота ⚠️ вне дерева");
+    expect(out).toContain("- `tests/architecture/layers` · домен не импортирует инфраструктуру\n");
   });
 });
 

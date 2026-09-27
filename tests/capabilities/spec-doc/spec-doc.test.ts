@@ -1,6 +1,6 @@
 /**
- * Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из тестов — страница на capability и стандарт,
- * которая читается рассказом: зачем, что умеет, чем проверено.
+ * Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из тестов — страница на capability, правило
+ * архитектуры и стандарт, которая читается рассказом: зачем, что умеет, чем проверено.
  *
  * Требование существует, пока есть проверяющий его тест, поэтому документацию о поведении не пишут руками: её
  * собирают из отчётов раннеров и JSDoc тестов, и с тестами она не расходится. `docs/spec` коммитится вместе с
@@ -35,7 +35,7 @@ const billing = () => vitestReport(dir, { [MAIN]: [[["Счета"], "выста�
  * Зачем — шапка главного файла папки, что умеет — разделы из `describe`, чем проверено — тесты, свёрнутые под
  * разделом: доказательства не заслоняют рассказ.
  */
-describe("Страница capability — рассказ: зачем, что умеет, чем проверено", () => {
+describe("Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено", () => {
   it("шапка главного файла `<name>.test.ts` — абзацы под заголовком, первый — описание в оглавлении", () => {
     writeTree(dir, {
       [MAIN]: `/**\n * Биллинг: счета клиентам\n * за месяц.\n *\n * Второй абзац — только на странице.\n */\nimport { describe, it } from "bun:test";\n${BODY}`,
@@ -136,18 +136,40 @@ describe("Счета", () => {
     expect(r.stdout.indexOf("первый")).toBeLessThan(r.stdout.indexOf("второй"));
   });
 
-  it("у стандарта главный файл — rule.test.ts: его шапка и его тесты первыми", () => {
+  // Одно правило для всех видов вместо «у стандарта — rule.test.ts»: главный файл находится по имени папки (#72)
+  it("у правила архитектуры и стандарта главный файл тоже `<name>.test.ts`: его шапка и его тесты первыми", () => {
     writeTree(dir, {
-      "tests/standards/audit/examples.test.ts": `/** Примеры. */\nimport { it } from "bun:test";\nit("пример", () => {});\n`,
-      "tests/standards/audit/rule.test.ts": `/** Каждая мутация пишет аудит. */\nimport { it } from "bun:test";\nit("правило", () => {});\n`,
+      "tests/standards/audit/examples.test.ts": `import { it } from "bun:test";\nit("пример", () => {});\n`,
+      "tests/standards/audit/audit.test.ts": `/** Каждая мутация пишет аудит. */\nimport { it } from "bun:test";\nit("правило", () => {});\n`,
+      "tests/architecture/layers/cases.test.ts": `import { it } from "bun:test";\nit("инфраструктура импортирует домен", () => {});\n`,
+      "tests/architecture/layers/layers.test.ts": `/** Домен не знает об инфраструктуре. */\nimport { it } from "bun:test";\nit("домен не импортирует инфраструктуру", () => {});\n`,
     });
     const r = doc(
       "r.json",
-      vitestReport(dir, { "tests/standards/audit/examples.test.ts": [[[], "пример"]], "tests/standards/audit/rule.test.ts": [[[], "правило"]] }),
+      vitestReport(dir, {
+        "tests/standards/audit/examples.test.ts": [[[], "пример"]],
+        "tests/standards/audit/audit.test.ts": [[[], "правило"]],
+        "tests/architecture/layers/cases.test.ts": [[[], "инфраструктура импортирует домен"]],
+        "tests/architecture/layers/layers.test.ts": [[[], "домен не импортирует инфраструктуру"]],
+      }),
       "--stdout",
     );
+    expect(r.code).toBe(0);
     expect(r.stdout).toContain("### audit\n\nКаждая мутация пишет аудит.\n\n<details><summary>✅ 2 теста</summary>\n\n- ✅ правило\n- ✅ пример\n");
-    expect(r.stdout).not.toContain("Примеры.");
+    expect(r.stdout).toContain(
+      "### layers\n\nДомен не знает об инфраструктуре.\n\n<details><summary>✅ 2 теста</summary>\n\n- ✅ домен не импортирует инфраструктуру\n- ✅ инфраструктура импортирует домен\n",
+    );
+  });
+
+  it("`rule.test.ts` больше не главный файл — spec-doc просит переименовать в `<name>.test.ts`, --strict — код 1", () => {
+    writeTree(dir, { "tests/standards/audit/rule.test.ts": `/** Каждая мутация пишет аудит. */\nimport { it } from "bun:test";\nit("правило", () => {});\n` });
+    const report = vitestReport(dir, { "tests/standards/audit/rule.test.ts": [[[], "правило"]] });
+    const r = doc("r.json", report, "--stdout");
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("Каждая мутация пишет аудит.");
+    expect(r.stderr).toContain("главный файл папки — audit.test.ts, а не rule.test.ts — переименуй: tests/standards/audit/rule.test.ts");
+    expect(r.stderr).not.toContain("шапка вне главного файла");
+    expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
   });
 });
 
@@ -246,8 +268,8 @@ describe("Пропущенный и падающий тест видны — н�
 
 describe("Отчёты Vitest, Playwright и bun test — в любом сочетании", () => {
   it("Vitest: абсолютный путь с другой машины приводится по сегменту /tests/", () => {
-    const r = doc("r.json", vitestReport("/home/runner/work/repo/repo", { "tests/standards/audit/rule.test.ts": [[["Аудит"], "каждая мутация пишет запись"]] }), "--stdout");
-    expect(r.stdout).toContain("## Как построена\n\n### audit\n\n#### Аудит\n\n");
+    const r = doc("r.json", vitestReport("/home/runner/work/repo/repo", { "tests/standards/audit/audit.test.ts": [[["Аудит"], "каждая мутация пишет запись"]] }), "--stdout");
+    expect(r.stdout).toContain("## Каким правилам подчиняется код\n\n### audit\n\n#### Аудит\n\n");
     expect(r.stdout).not.toContain("Вне дерева");
   });
 
@@ -345,23 +367,31 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
 });
 
 /**
- * `tests/lib` — фабрики и хелперы, не спека. Тест вне `capabilities/<name>` и `standards/<name>` — без дома:
- * это сигнал перенести, а не ошибка разбора.
+ * `tests/lib` — фабрики и хелперы, не спека. Тест вне `capabilities/<name>`, `architecture/<name>` и
+ * `standards/<name>` — без дома: это сигнал перенести, а не ошибка разбора.
  */
-describe("Оглавление: что делает система, как построена и что без дома", () => {
+describe("Оглавление: что делает система, из чего состоит, каким правилам подчиняется код и что без дома", () => {
   const report = () =>
     vitestReport(dir, {
       "tests/capabilities/billing/a.test.ts": [[[], "в дереве"]],
       "tests/lib/factories.test.ts": [[[], "фабрика"]],
       "src/utils/sum.test.ts": [[["sum"], "складывает"]],
       "tests/capabilities/stray.test.ts": [[[], "без папки"]],
+      "tests/architecture/overview.test.ts": [[[], "без папки"]],
     });
 
-  it("capability — в «Что делает система», стандарт — в «Как построена»", () => {
-    doc("r.json", vitestReport(dir, { "tests/capabilities/billing/a.test.ts": [[[], "x"]], "tests/standards/audit/rule.test.ts": [[[], "y"]] }));
-    const readme = read("docs/spec/README.md");
-    expect(readme).toContain("## Что делает система\n\n- [billing](capabilities/billing.md)\n");
-    expect(readme).toContain("## Как построена\n\n- [audit](standards/audit.md)\n");
+  it("capability — в «Что делает система», правило архитектуры — в «Из чего состоит», стандарт — в «Каким правилам подчиняется код»", () => {
+    doc(
+      "r.json",
+      vitestReport(dir, {
+        "tests/capabilities/billing/a.test.ts": [[[], "x"]],
+        "tests/architecture/layers/layers.test.ts": [[[], "z"]],
+        "tests/standards/audit/audit.test.ts": [[[], "y"]],
+      }),
+    );
+    expect(read("docs/spec/README.md")).toContain(
+      "## Что делает система\n\n- [billing](capabilities/billing.md)\n\n## Из чего состоит\n\n- [layers](architecture/layers.md)\n\n## Каким правилам подчиняется код\n\n- [audit](standards/audit.md)\n",
+    );
   });
 
   it("tests/lib пропускается, тесты вне дерева — в раздел «Вне дерева»", () => {
@@ -371,7 +401,8 @@ describe("Оглавление: что делает система, как по�
     expect(r.stdout).toContain("## Вне дерева");
     expect(r.stdout).toContain("- `src/utils/sum.test.ts` — 1 тест");
     expect(r.stdout).toContain("- `tests/capabilities/stray.test.ts` — 1 тест");
-    expect(r.stderr).toContain("вне дерева: 2 в 2 файлах");
+    expect(r.stdout).toContain("- `tests/architecture/overview.test.ts` — 1 тест");
+    expect(r.stderr).toContain("вне дерева: 3 в 3 файлах");
   });
 
   it("--strict возвращает 1 при тестах вне дерева, без него — 0", () => {
@@ -390,12 +421,13 @@ describe("Оглавление: что делает система, как по�
  * чужие не трогает.
  */
 describe("docs/spec обновляется сам и не трогает рукописное", () => {
-  it("пишет README.md, capabilities/<name>.md и standards/<name>.md с маркером", () => {
+  it("пишет README.md и страницу на папку — capabilities/, architecture/, standards/ — с маркером", () => {
     const r = doc(
       "r.json",
       vitestReport(dir, {
         "tests/capabilities/billing/a.test.ts": [[["Счета"], "выставляется"]],
-        "tests/standards/audit/rule.test.ts": [[[], "каждая мутация пишет аудит"]],
+        "tests/architecture/layers/layers.test.ts": [[[], "домен не импортирует инфраструктуру"]],
+        "tests/standards/audit/audit.test.ts": [[[], "каждая мутация пишет аудит"]],
         "src/x.test.ts": [[[], "вне"]],
       }),
     );
@@ -406,6 +438,8 @@ describe("docs/spec обновляется сам и не трогает рук�
     expect(readme).toContain("- `src/x.test.ts` — 1 тест");
     expect(read("docs/spec/capabilities/billing.md")).toStartWith("<!-- spec-doc:");
     expect(read("docs/spec/capabilities/billing.md")).toContain("# billing\n\n## Счета\n\n<details><summary>✅ 1 тест</summary>\n\n- ✅ выставляется");
+    expect(read("docs/spec/architecture/layers.md")).toStartWith("<!-- spec-doc:");
+    expect(read("docs/spec/architecture/layers.md")).toContain("# layers\n\n<details><summary>✅ 1 тест</summary>\n\n- ✅ домен не импортирует инфраструктуру");
     expect(read("docs/spec/standards/audit.md")).toContain("# audit\n\n<details><summary>✅ 1 тест</summary>\n\n- ✅ каждая мутация пишет аудит");
   });
 

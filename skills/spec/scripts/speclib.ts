@@ -14,7 +14,7 @@ import path from "node:path";
 const posix = path.posix;
 
 export const TESTS = "tests";
-export type Kind = "capability" | "standard" | "lib" | "out";
+export type Kind = "capability" | "architecture" | "standard" | "lib" | "out";
 export type Status = "passed" | "failed" | "skipped" | "todo";
 
 export interface Test {
@@ -80,13 +80,14 @@ export function isTestFile(p: string): boolean {
 }
 
 /**
- * (вид, имя) для пути относительно корня: capability/standard с именем папки,
- * lib — не спека, out — вне дерева (в том числе файл прямо в tests/capabilities/).
+ * (вид, имя) для пути относительно корня: capability / правило архитектуры / стандарт с именем папки,
+ * lib — не спека, out — вне дерева (в том числе файл прямо в tests/capabilities/ или tests/architecture/).
  */
 export function classify(p: string): [Kind, string | null] {
   const parts = p.split("/");
   if (parts.length >= 4 && parts[0] === TESTS) {
     if (parts[1] === "capabilities") return ["capability", parts[2]!];
+    if (parts[1] === "architecture") return ["architecture", parts[2]!];
     if (parts[1] === "standards") return ["standard", parts[2]!];
   }
   if (parts.length >= 3 && parts[0] === TESTS && parts[1] === "lib") return ["lib", null];

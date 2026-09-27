@@ -43,7 +43,7 @@
 
 - ✅ перенос между файлами одной папки — не изменение
 - ✅ перенос в другую capability — удалён и добавлен
-- ✅ тест в tests/, но вне capabilities/standards — помечен «вне дерева»
+- ✅ тест в tests/, но вне capabilities, architecture и standards — помечен «вне дерева»
 
 </details>
 
