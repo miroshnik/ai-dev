@@ -8,6 +8,8 @@
 тест (Vitest, Jest, bun test, `node:test`). Импорт — из копии скилла в
 проекте: `.agents/skills/spec/scripts/harness.ts` (из
 `tests/standards/<name>/` — `../../../.agents/skills/spec/scripts/harness.ts`).
+Импорт с расширением `.ts` — в `tsconfig.json` проекта нужен
+`allowImportingTsExtensions` (вместе с `noEmit`), иначе `tsc` даёт TS5097.
 
 **`invariant` — реестр + инвариант.** Соглашение о поведении («каждая
 мутация пишет аудит», «каждый маршрут проверяет право») проверяется на каждом
@@ -80,10 +82,21 @@ export default [...base, ...(await collectEslint(import.meta.dirname))];
 ESLint кэширует конфиг в процессе: новый или удалённый фрагмент редактор
 увидит после перезапуска ESLint-сервера; `lint` в CLI — сразу.
 
+Опции правила flat config не сливает: два фрагмента с одним правилом ядра
+(`no-restricted-syntax`, `no-restricted-imports`) на одни файлы — действует
+последний, запреты первого молча пропадают, и примеры «нельзя» другого
+стандарта это ловят не всегда. Каждому стандарту — своё правило: локальный
+плагин проекта с правилом `<плагин>/<id>` на стандарт, один объект плагина на
+все фрагменты (ESLint не даёт переопределить плагин). Помощник в скилле,
+пропуск `tests/lib` и фрагменты `eslint.mts` — #116; до него хелперы линта не
+класть в `tests/lib` (`collectEslint` примет их за фрагмент).
+
 **Исключения — явные, с задачей, и уходят, когда больше не нужны.**
 
 - *Реестр + инвариант:* `exceptions.ts` в папке решения —
-  `export default [{ item: "importLegacy", issue: 12, reason: "…" }]`, в
+  `const exceptions: Exception[] = [{ item: "importLegacy", issue: 12, reason: "…" }]; export default exceptions;`
+  (именованная константа: анонимный `export default` ловит
+  `import/no-anonymous-default-export` популярных пресетов), в
   `invariant` — `exceptions` и `key` (стабильный идентификатор элемента: имя,
   путь). Исключённый элемент вместо обычного теста получает «исключение:
   <ключ> (#N)»: зелёный, пока нарушает соглашение; начал соблюдать — красный
