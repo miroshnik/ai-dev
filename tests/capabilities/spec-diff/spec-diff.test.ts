@@ -1,7 +1,9 @@
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { gitRepo, runScript, tmpDir, writeTree } from "../../lib/spec.ts";
+import { gitRepo, runScript, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -383,6 +385,59 @@ describe("Решения вне названий тестов — модель, 
     expect(out).not.toContain("Модель архитектуры");
     expect(out).not.toContain("Исключения");
     expect(out).not.toContain("Проверки харнесса");
+  });
+});
+
+/**
+ * Тесты, которые порождает харнесс (по элементу реестра, «не пуст», нарушитель, исключения), в исходниках не названы
+ * — их видит только отчёт раннера. База для них — `tests.json` ветки `spec`, собранный из отчёта на SHA мержа.
+ */
+describe("Тесты харнесса — в диффе спеки: названия по отчёту, база — ветка spec", () => {
+  const STD = "tests/standards/audit/audit.test.ts";
+  const registry = ts(`import { invariant } from "../../../harness.ts";\ninvariant(it, { registry: "мутации", items, name: (m) => m + " пишет аудит" });`);
+  const t = (name: string) => ({ path: STD, describes: [] as string[], name });
+
+  // ветка spec как её пишет spec-publish: корень — docs/spec, в сообщении — Source: <sha исходника>
+  function publishSpec(source: string, tests: object[]) {
+    repo.git("checkout", "-q", "--orphan", "spec");
+    repo.git("rm", "-rq", "--cached", ".");
+    writeTree(dir, { "tests.json": JSON.stringify(tests) });
+    repo.git("add", "tests.json");
+    repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "-c", "commit.gpgsign=false", "commit", "-q", "-m", `spec: ${source.slice(0, 12)}\n\nSource: ${source}\n`);
+    repo.git("checkout", "-q", "-f", "main");
+  }
+  const report = (names: string[]) => writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [STD]: names.map((n) => [[], n] as [string[], string]) }));
+
+  it("тесты, которые порождает харнесс, видны в диффе спеки — новый элемент реестра добавлен, снятый удалён", () => {
+    const base = repo.commit({ [STD]: registry });
+    publishSpec(base, [t("a пишет аудит"), t("b пишет аудит")]);
+    repo.commit({ [STD]: registry + "// реестр сменился\n" });
+    report(["a пишет аудит", "импорт платежей из банка"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("**Удалены (1):**\n\n- `tests/standards/audit` · b пишет аудит");
+    expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/standards/audit` · импорт платежей из банка");
+  });
+
+  it("перевод примеров на реестр не выглядит в диффе спеки как одни удаления", () => {
+    const base = repo.commit({ [STD]: ts(`it("a пишет аудит", () => {});\nit("b пишет аудит", () => {});`) });
+    publishSpec(base, [t("a пишет аудит"), t("b пишет аудит")]);
+    repo.commit({ [STD]: registry });
+    report(["a пишет аудит", "b пишет аудит", "реестр «мутации» не пуст", "нарушитель не проходит: без аудита"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.stdout).toContain("**Удалены:** нет.");
+    expect(r.stdout).toContain("**Добавлены (2):**");
+    expect(r.stdout).toContain("нарушитель не проходит: без аудита");
+  });
+
+  it("без базы в ветке spec — дифф по исходникам, и это сказано", () => {
+    const base = repo.commit({ [STD]: ts(`it("a пишет аудит", () => {});`) });
+    repo.commit({ [STD]: registry });
+    report(["a пишет аудит"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("в ветке spec нет tests.json для базы — дифф по исходникам, тестов харнесса в нём не видно");
+    expect(r.stdout).toContain("**Удалены (1):**");
   });
 });
 

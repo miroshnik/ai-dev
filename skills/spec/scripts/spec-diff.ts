@@ -540,7 +540,40 @@ function scenarioLines(scenarios: string[] | null, fresh: Test[]): string[] {
   return lines;
 }
 
-const USAGE = "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -]";
+const USAGE =
+  "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -] [--report отчёт … --spec-branch origin/spec]";
+
+/** Тесты без повторов: первым — из исходников, из отчёта — только те, которых там нет (порождённые харнессом). */
+function union(a: Test[], b: Test[]): Test[] {
+  const keys = new Set(a.map((t) => t.path + "\0" + L.keyOf(t)));
+  return [...a, ...b.filter((t) => !keys.has(t.path + "\0" + L.keyOf(t)))];
+}
+
+/**
+ * Тесты базы из ветки spec: `tests.json` коммита, чей `Source:` (SHA исходника, его пишет spec-publish) — merge-base
+ * или ближайший предок; ветки или файла нет — null.
+ */
+function specTestsAt(branch: string, base: string, top: string): { tests: Test[]; source: string } | null {
+  let log: string;
+  try {
+    log = gitText(["log", "--format=%H%x1f%B%x1e", branch, "--"], top);
+  } catch {
+    return null;
+  }
+  for (const rec of log.split("\x1e")) {
+    const [sha, body = ""] = rec.trim().split("\x1f");
+    const source = /^Source: ([0-9a-f]{40})$/m.exec(body)?.[1];
+    if (!sha || !source) continue;
+    if (source !== base && spawnSync("git", ["merge-base", "--is-ancestor", source, base], { cwd: top }).status !== 0) continue;
+    try {
+      const list = JSON.parse(gitText(["show", `${sha}:tests.json`], top)) as { path: string; describes: string[]; name: string }[];
+      return { tests: list.map((x) => L.makeTest(x.path, x.describes, x.name)), source };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 export async function main(argv: string[]): Promise<number> {
   let opts;
@@ -555,6 +588,8 @@ export async function main(argv: string[]): Promise<number> {
         "no-merge-base": { type: "boolean", default: false },
         json: { type: "boolean", default: false },
         scenarios: { type: "string" },
+        report: { type: "string", multiple: true },
+        "spec-branch": { type: "string", default: "origin/spec" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -571,13 +606,28 @@ export async function main(argv: string[]): Promise<number> {
   let removed: Test[], changed: [Test, Test][], added: Test[], moved: Moved[], outFiles: string[];
   let decisions: string[];
   let decisionData: { base: Decisions; head: Decisions };
+  let harnessNote = "";
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
     const baseFiles = testsAtRev(base, top, prefix);
-    const baseTests = parseFiles(baseFiles, v.base);
+    let baseTests = parseFiles(baseFiles, v.base);
     const headFiles = v.worktree ? testsInWorktree(root) : testsAtRev(v.head, top, prefix);
-    const headTests = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
+    let headTests = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
+    // тесты харнесса (реестры, примеры) в исходниках не названы: голова — по отчёту раннера, база — tests.json ветки spec
+    if (v.report?.length) {
+      const branch = v["spec-branch"]!;
+      const specBase = specTestsAt(branch, base, top);
+      if (specBase) {
+        const inTree = (t: Test) => t.path.startsWith(L.TESTS + "/");
+        const reported = L.mergeTests(v.report.flatMap((r) => L.loadReport(r, root))).filter(inTree);
+        baseTests = union(baseTests, specBase.tests);
+        headTests = union(headTests, reported);
+        harnessNote = `_Тесты харнесса — по отчёту; база — ветка ${branch} (исходник ${specBase.source.slice(0, 12)})._`;
+      } else {
+        harnessNote = `_Тесты харнесса: в ветке ${branch} нет tests.json для базы — дифф по исходникам, тестов харнесса в нём не видно._`;
+      }
+    }
     const changedOut = outOfTreeFiles(base, v.head, top, prefix, v.worktree);
     const { pool, count, gone } = outOfTreePool(base, v.head, top, root, prefix, changedOut, v.worktree);
     ({ removed, changed, added, moved } = diff(baseTests, headTests, pool));
@@ -606,6 +656,7 @@ export async function main(argv: string[]): Promise<number> {
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
   let text = v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved);
+  if (harnessNote && !v.json) text = text.replace(/^(_База: .*_)$/m, (m) => `${m}\n\n${harnessNote}`);
   if (v.json) {
     const j = JSON.parse(text);
     j.decisions = Object.fromEntries(

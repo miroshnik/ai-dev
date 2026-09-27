@@ -5,7 +5,9 @@
 разделу правил «CI: параллельные задачи». Шарды пишут blob-отчёты, job `spec`
 склеивает их средствами раннеров и собирает `docs/spec` с `--strict`; на
 `main` отдаёт его артефактом job `spec-publish` — у неё одной токен на запись.
-`spec-diff` — своя лёгкая job: ей нужны git-история и Node, не тесты.
+`spec-diff` — своя лёгкая job после `spec`: git-история, Node и склеенные
+отчёты (тесты харнесса видны только в отчёте; база для них — `tests.json`
+ветки `spec`).
 
 ```yaml
 on:
@@ -82,6 +84,9 @@ jobs:
       - if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with: { name: spec-reports, path: ".spec-*.json", retention-days: 1 }
 
   spec-publish:
     if: github.event_name == 'push'
@@ -99,13 +104,16 @@ jobs:
 
   spec-diff:
     if: github.event_name == 'pull_request'
+    needs: spec
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with: { fetch-depth: 0 } # merge-base с базовой веткой
+        with: { fetch-depth: 0 } # merge-base с базовой веткой и ветка spec
       - uses: actions/setup-node@v7
         with: { node-version: 24, package-manager-cache: false }
-      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v8
+        with: { name: spec-reports }
+      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json >> "$GITHUB_STEP_SUMMARY"
 ```
 
 Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в

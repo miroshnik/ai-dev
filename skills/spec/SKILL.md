@@ -186,7 +186,7 @@ describe("Оплаченный счёт закрывается без участ
 ## spec-diff
 
 ```bash
-bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -]
+bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -] [--report отчёт … [--spec-branch origin/spec]]
 ```
 
 Решения вне названий тестов — отдельными разделами, только если менялись:
@@ -212,6 +212,14 @@ bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--h
 `--no-merge-base` — сравнение с веткой как есть. `--worktree` — рабочее дерево
 вместо HEAD, чтобы посмотреть до коммита. Перед запуском — `git fetch origin`,
 иначе `origin/main` устарел.
+
+Тестов, которые порождает харнесс (по элементу реестра, «не пуст»,
+нарушитель, исключения, примеры), в исходниках нет — их видит только отчёт.
+`--report <отчёт>` (повторяется) добавляет их к разобранным: голова — из
+отчёта прогона PR, база — `tests.json` ветки `spec` (его пишет `spec-doc`,
+публикует `spec-publish`) из коммита, чей `Source:` — merge-base или его
+предок (`--spec-branch`, по умолчанию `origin/spec`). Такого коммита нет —
+дифф по исходникам, и строка под «База» это говорит.
 
 Идентичность теста — путь папки + цепочка `describe` + `it`: перенос между
 файлами одной папки не изменение, перенос в другую папку — удалён и добавлен
