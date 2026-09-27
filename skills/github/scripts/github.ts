@@ -5,16 +5,21 @@
  * Подкоманды:
  *   github project check — сверка с каноном по пунктам ✅/❌
  *   github project fix   — довести до канона: API, шаги UI со ссылками, удаление и переименование — с --confirm
- *   github task new      — задача одной командой: тип или метка, проект и Бэклог, Priority, эпик, blocked by, milestone
+ *   github task new      — задача одной командой: тип или метка, проект и Бэклог, Priority, эпик, blocked by, milestone,
+ *                          метки решений `type:name`
  *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
  *   github task drop     — закрыть без выполнения и убрать из проекта
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
+ * Метки решений сверяются с деревом спеки основной ветки; модель архитектуры читает отдельный процесс того же
+ * рантайма (`modelModules`).
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { parseArgs } from "node:util";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,6 +45,18 @@ export const DEFAULT_PRIORITY = "Medium";
 /** В личном аккаунте типов issue нет — эпик помечается меткой, это единственное исключение. */
 export const EPIC_LABEL = { name: "epic", color: "8250DF", description: "Эпик: большая задача с подзадачами" };
 export const ISSUE_TYPES = ["Задача", "Баг", "Эпик"] as const;
+/**
+ * Метки решений `type:name`: вид — папка дерева спеки, цвет — по виду. У архитектуры решение — правило
+ * `tests/architecture/<name>` или модуль модели `tests/architecture/model.ts`.
+ */
+export const DECISIONS = {
+  capability: { dir: "capabilities", color: "0E8A16" },
+  standard: { dir: "standards", color: "1D76DB" },
+  architecture: { dir: "architecture", color: "FBCA04" },
+} as const;
+export type DecisionKind = keyof typeof DECISIONS;
+const DECISION_KINDS = Object.keys(DECISIONS) as DecisionKind[];
+const MODEL_PATH = "tests/architecture/model.ts";
 export const WORKFLOW_ADDED = "Item added to project";
 export const WORKFLOW_CLOSED = "Item closed";
 export const WORKFLOW_AUTO_ADD = "Auto-add to project";
@@ -125,10 +142,23 @@ interface Owner {
   issueTypes: { id: string; name: string; isEnabled: boolean }[];
   issueFields: { id: string; name: string; options: { id: string; name: string }[] }[];
 }
+interface Label {
+  id: string;
+  name: string;
+  color: string;
+  description: string;
+}
+/** Решения основной ветки по видам; модель не загрузилась — причина, модули в `architecture` тогда не входят. */
+export interface Decisions {
+  names: Record<DecisionKind, string[]>;
+  modelError: string | null;
+}
 export interface State {
   repo: { id: string; name: string; nameWithOwner: string; owner: Owner; linked: ProjectRef[] };
   project: Project | null;
   openIssues: { id: string; number: number }[];
+  labels: Label[];
+  decisions: Decisions;
 }
 
 interface Mutation {
@@ -226,6 +256,20 @@ export const Q = {
     milestones(first: 100, states: OPEN) { nodes { id title } }
   }
 }`,
+  // HEAD — основная ветка: метки сверяются с тем, что уже влито
+  SpecDecisions: `query SpecDecisions($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    capabilities: object(expression: "HEAD:tests/capabilities") { ... on Tree { entries { name type } } }
+    standards: object(expression: "HEAD:tests/standards") { ... on Tree { entries { name type } } }
+    architecture: object(expression: "HEAD:tests/architecture") { ... on Tree { entries { name type } } }
+    model: object(expression: "HEAD:${MODEL_PATH}") { ... on Blob { text } }
+  }
+}`,
+  RepoLabels: `query RepoLabels($owner: String!, $name: String!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    labels(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id name color description } }
+  }
+}`,
   IssueSearch: `query IssueSearch($q: String!) {
   search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
 }`,
@@ -266,6 +310,8 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   UpdateIssueType: ["updateIssueType", "UpdateIssueTypeInput", "issueType { id }"],
   CreateIssue: ["createIssue", "CreateIssueInput", "issue { id number title url projectItems(first: 10) { nodes { id project { id } } } }"],
   CreateLabel: ["createLabel", "CreateLabelInput", "label { id }"],
+  UpdateLabel: ["updateLabel", "UpdateLabelInput", "label { id }"],
+  DeleteLabel: ["deleteLabel", "DeleteLabelInput", "clientMutationId"],
   AddBlockedBy: ["addBlockedBy", "AddBlockedByInput", "issue { id }"],
   SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
   CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
@@ -356,8 +402,58 @@ export function loadState(io: Io, slug: string): State {
   const repo = loadRepo(io, slug);
   const openIssues = pages<{ id: string; number: number }>((after) => graphql(io, Q.RepoIssues, { owner, name, after }).repository.issues);
   const main = mainProject(repo);
-  return { repo, project: main ? loadProject(io, main.id) : null, openIssues };
+  return { repo, project: main ? loadProject(io, main.id) : null, openIssues, labels: loadLabels(io, slug), decisions: loadDecisions(io, slug) };
 }
+
+function loadLabels(io: Io, slug: string): Label[] {
+  const [owner, name] = slug.split("/") as [string, string];
+  return pages<Label>((after) => graphql(io, Q.RepoLabels, { owner, name, after }).repository.labels);
+}
+
+/**
+ * Модули модели архитектуры: текст модели — во временный файл, ключи `modules` печатает отдельный процесс того же
+ * рантайма (Bun или Node стирают типы; `import type` скилла spec модели не нужен). Не загрузилась — причина строкой.
+ */
+export function modelModules(text: string): string[] | string {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "github-model-"));
+  try {
+    writeFileSync(path.join(dir, "model.ts"), text);
+    writeFileSync(path.join(dir, "keys.mjs"), 'const m = await import("./model.ts");\nconsole.log(JSON.stringify(Object.keys(m.default?.modules ?? {})));\n');
+    const r = spawnSync(process.execPath, [path.join(dir, "keys.mjs")], { encoding: "utf8", timeout: 30_000 });
+    if (r.status !== 0) return ((r.stderr || r.error?.message || "").trim().split("\n").find((l) => /error/i.test(l)) ?? "процесс завершился с ошибкой").trim().slice(0, 200);
+    return JSON.parse(r.stdout) as string[];
+  } catch (e) {
+    return (e as Error).message;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Решения основной ветки: папки дерева спеки по видам и модули модели — у архитектуры. */
+export function loadDecisions(io: Io, slug: string): Decisions {
+  const [owner, name] = slug.split("/") as [string, string];
+  const r = graphql(io, Q.SpecDecisions, { owner, name })?.repository ?? {};
+  const dirs = (t: Any): string[] => (t?.entries ?? []).filter((e: Any) => e.type === "tree").map((e: Any) => e.name as string);
+  const names = { capability: dirs(r.capabilities), standard: dirs(r.standards), architecture: dirs(r.architecture) };
+  let modelError: string | null = null;
+  if (r.model) {
+    const mods = modelModules(r.model.text ?? "");
+    if (typeof mods === "string") modelError = mods;
+    else names.architecture.push(...mods);
+  }
+  for (const k of DECISION_KINDS) names[k] = [...new Set(names[k])].sort();
+  return { names, modelError };
+}
+
+/** `capability:billing` → вид и имя решения; другая метка — null. */
+export function decisionOf(label: string): { kind: DecisionKind; name: string } | null {
+  const i = label.indexOf(":");
+  const kind = label.slice(0, i) as DecisionKind;
+  return i > 0 && DECISION_KINDS.includes(kind) && label.length > i + 1 ? { kind, name: label.slice(i + 1) } : null;
+}
+
+const decisionPath = (kind: DecisionKind, name: string) => (kind === "architecture" ? `tests/architecture — правило или модуль ${name}` : `tests/${DECISIONS[kind].dir}/${name}`);
+const decisionLabel = (kind: DecisionKind, name: string) => ({ name: `${kind}:${name}`, color: DECISIONS[kind].color, description: `Решение: ${decisionPath(kind, name)}` });
 
 function loadProject(io: Io, id: string, withItems = true): Project {
   const p = graphql(io, Q.ProjectState, { id }).node;
@@ -558,6 +654,35 @@ export function analyze(s: State): Check[] {
   if (missing.length) open(`не в проекте: ${nums(missing)}`, api(`добавить в проект ${nums(missing)}`, ...missing.map((i) => ({ op: "AddItem", input: { projectId: p.id, contentId: i.id } }))));
   const noStatus = issues.filter((it) => it.issue!.state === "OPEN" && !it.status);
   if (noStatus.length) open(`без ${STATUS}: ${nums(noStatus.map((it) => it.issue!))}`, ...(statusReady ? [api(`${STATUS} ${q(BACKLOG)}: ${nums(noStatus.map((it) => it.issue!))}`, ...noStatus.map((it) => setStatus(it, BACKLOG)))] : []));
+
+  // Метки решений: по дереву спеки и модели основной ветки. Удалить или переименовать метку — только с --confirm:
+  // она стоит на задачах. Одна лишняя и одна недостающая одного вида — переименованная папка, а не два решения.
+  const labels = add("labels", "Метки решений `type:name` — по дереву спеки и модели в основной ветке, цвет — по виду");
+  const d = s.decisions;
+  if (d.modelError) labels(`модель ${MODEL_PATH} не загружается — метки модулей не сверяются: ${d.modelError}`);
+  const byName = new Map(s.labels.map((l) => [l.name, l]));
+  for (const kind of DECISION_KINDS) {
+    const want = new Set(d.names[kind]);
+    const have = s.labels.filter((l) => decisionOf(l.name)?.kind === kind);
+    // модель не прочитана — неизвестно, какие модули есть: метки архитектуры не удаляем
+    const orphans = kind === "architecture" && d.modelError ? [] : have.filter((l) => !want.has(decisionOf(l.name)!.name));
+    const missing = d.names[kind].filter((n) => !byName.has(`${kind}:${n}`));
+    if (orphans.length === 1 && missing.length === 1) {
+      const o = orphans[0]!;
+      const to = decisionLabel(kind, missing[0]!);
+      labels(`метка ${q(o.name)} без решения, решение ${to.name} без метки`, { kind: "confirm", text: `переименовать метку ${q(o.name)} → ${q(to.name)} (задачи сохранят её)`, mutations: [{ op: "UpdateLabel", input: { id: o.id, ...to } }] });
+    } else {
+      for (const o of orphans) labels(`метка ${q(o.name)} без решения в основной ветке`, { kind: "confirm", text: `удалить метку ${q(o.name)}`, mutations: [{ op: "DeleteLabel", input: { id: o.id } }] });
+      if (missing.length) {
+        const fresh = missing.map((n) => decisionLabel(kind, n));
+        labels(`решения без метки: ${fresh.map((x) => x.name).join(", ")}`, api(`создать метки ${fresh.map((x) => q(x.name)).join(", ")}`, ...fresh.map((x) => ({ op: "CreateLabel", input: { repositoryId: s.repo.id, ...x } }))));
+      }
+    }
+    const color = DECISIONS[kind].color;
+    for (const l of have.filter((x) => want.has(decisionOf(x.name)!.name) && x.color.toLowerCase() !== color.toLowerCase())) {
+      labels(`метка ${q(l.name)} цвета ${l.color}, а не ${color}`, api(`перекрасить метку ${q(l.name)} в ${color}`, { op: "UpdateLabel", input: { id: l.id, color } }));
+    }
+  }
 
   return checks;
 }
@@ -769,6 +894,8 @@ export interface NewTask {
   milestone?: string;
   blockedBy: number[];
   priority?: string;
+  /** Метки: решения `type:name` (нет — создаётся с цветом вида) и существующие обычные. */
+  labels?: string[];
 }
 
 export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
@@ -805,6 +932,14 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   if (o.milestone && !milestone) throw new GhError(`открытого milestone ${q(o.milestone)} нет`);
   const dup = (graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${title.replaceAll('"', "")}"` }).search.nodes as Any[]).find((x) => x?.title === title);
   if (dup) throw new GhError(`открытая задача с таким заголовком уже есть: #${dup.number}`);
+  const wanted = [...new Set(o.labels ?? [])];
+  const repoLabels = wanted.length ? loadLabels(io, slug) : [];
+  for (const l of wanted) {
+    if (!decisionOf(l) && !repoLabels.some((x) => x.name === l)) {
+      throw new GhError(`метки ${q(l)} в репозитории нет; новая создаётся только для решения: ${DECISION_KINDS.map((k) => `${k}:<name>`).join(", ")}`);
+    }
+  }
+  const decisions = wanted.some((l) => decisionOf(l)) ? loadDecisions(io, slug) : null;
 
   const done: string[] = [];
   const input: Record<string, unknown> = { repositoryId: ctx.repo.id, title, body: o.body, projectV2Ids: [ctx.project.id] };
@@ -820,6 +955,25 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
     }
     input.labelIds = [labelId];
     done.push(`метка ${q(EPIC_LABEL.name)} — тип в личном аккаунте`);
+  }
+  if (wanted.length) {
+    const ids: string[] = [];
+    const fresh: string[] = [];
+    for (const l of wanted) {
+      let id = repoLabels.find((x) => x.name === l)?.id;
+      const dec = decisionOf(l);
+      if (!id && dec) {
+        id = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...decisionLabel(dec.kind, dec.name) } }).createLabel.label.id as string;
+        done.push(`создана метка ${q(l)}`);
+      }
+      ids.push(id!);
+      // решение появится в PR этой задачи — метка говорит об этом, а не падает
+      if (dec && decisions && !decisions.names[dec.kind].includes(dec.name)) {
+        fresh.push(`${l} — новое решение: ${decisionPath(dec.kind, dec.name)} в основной ветке ещё нет`);
+      }
+    }
+    input.labelIds = [...((input.labelIds as string[] | undefined) ?? []), ...ids];
+    done.push(`метки: ${wanted.join(", ")}`, ...fresh);
   }
   if (milestone) input.milestoneId = milestone.id;
   if (epic) input.parentIssueId = epic.id;
@@ -907,11 +1061,12 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github project check [--repo owner/repo]
   github project fix   [--repo owner/repo] [--confirm] [--template owner/N | none]
   github task new      --title "…" [--body "…" | --body-file F] [--type Задача|Баг|Эпик] [--epic N]
-                       [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] [--repo owner/repo]
+                       [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
+                       [--labels capability:<name>,standard:<name>,architecture:<name>] [--repo owner/repo]
   github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
 
-check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌.
+check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки.
 fix   — исправляет через API; шаги UI печатает со ссылками; удаление и переименование в проекте
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
@@ -966,6 +1121,7 @@ export function main(argv: string[], io: Io): number {
           "blocked-by": { type: "string" },
           priority: { type: "string" },
           "duplicate-of": { type: "string" },
+          labels: { type: "string" },
         },
       });
       const slug = repoOf(values.repo);
@@ -976,7 +1132,8 @@ export function main(argv: string[], io: Io): number {
         const body = values["body-file"] ? readFileSync(values["body-file"], "utf8") : (values.body ?? "");
         const blockedBy = (values["blocked-by"] ?? "").split(",").filter((x) => x.trim()).map((x) => issueNumber(x, "--blocked-by"));
         const epic = values.epic === undefined ? undefined : issueNumber(values.epic, "--epic");
-        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type!, epic, milestone: values.milestone, blockedBy, priority: values.priority });
+        const labels = (values.labels ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type!, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels });
       }
       const number = issueNumber(positionals[0], `task ${cmd}`);
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));

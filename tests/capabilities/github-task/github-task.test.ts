@@ -119,6 +119,42 @@ describe("task new заводит задачу со всем сразу", () => 
   });
 });
 
+const issueLabels = (f: FakeGitHub, n: number) => f.issue(n).labels.nodes.map((l: { name: string }) => l.name);
+
+/** Метка решения ставится при создании: по ней задачу находят из спеки, а `est` — аналоги по тому же решению. */
+describe("task new ставит метки решений `type:name`", () => {
+  it("--labels ставит метки решений; метки нет — создаётся с цветом вида", () => {
+    const f = new FakeGitHub(REC);
+    Object.assign(f.tree, { capabilities: ["billing"], standards: ["audit"] });
+    const audit = f.label("standard:audit", "1D76DB");
+    const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:billing,standard:audit"]);
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "capability:billing", color: "0E8A16", description: "Решение: tests/capabilities/billing" }]);
+    const billing = f.labels.find((l) => l.name === "capability:billing")!;
+    expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([billing.id, audit.id]);
+    expect(issueLabels(f, 50)).toEqual(["capability:billing", "standard:audit"]);
+    expect(r.out).toContain("+ создана метка «capability:billing»");
+    expect(r.out).toContain("+ метки: capability:billing, standard:audit");
+  });
+
+  it("метка решения, которого нет в main, — задача создаётся, строка называет решение новым", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export"]);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 50)).toEqual(["capability:export"]);
+    expect(r.out).toContain("+ capability:export — новое решение: tests/capabilities/export в основной ветке ещё нет");
+  });
+
+  it("метка не решения, которой нет в репозитории, — ошибка до создания задачи", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export,срочно"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("метки «срочно» в репозитории нет");
+    expect(byOp(f, "CreateIssue")).toEqual([]);
+    expect(byOp(f, "CreateLabel")).toEqual([]);
+  });
+});
+
 describe("В организации задача получает тип issue и Priority, эпик — не ниже подзадачи", () => {
   const org = () => new FakeGitHub(asOrg(REC));
 
