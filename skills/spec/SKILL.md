@@ -36,7 +36,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | Момент | Действие |
 |---|---|
 | Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc --strict` — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff` → раздел «Спека (тесты)» в тело PR |
-| В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, нет `<папка>.md`, шапка у файла теста, `rule.test.ts` — код 1); `spec-diff` в summary |
+| В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, нет главного файла или `<папка>.md`, шапка у файла теста, `rule.test.ts`, название не по-русски — код 1); `spec-diff` в summary |
 | В CI на `main` после мержа | прогон → `spec-doc` → `spec-publish`: ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
 | Прочитать спеку проекта | `git fetch origin spec && git show origin/spec:README.md` (страницы — `capabilities/<name>.md`…) или сами тесты |
 | Просят документацию, «что делает система» | `spec-doc <отчёт> --stdout` — один документ, файлы не трогаются |
@@ -103,7 +103,11 @@ bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё 
 
 **Главный файл папки** — `tests/<вид>/<name>/<name>.*` (`<name>.test.ts`,
 `<name>.e2e.ts`…) у capability, правила архитектуры и стандарта: его
-`describe` идут первыми. **Описание** — `tests/<вид>/<name>/<name>.md`: нет —
+`describe` идут первыми; нет его — stderr, `--strict` — код 1. **Названия**
+`describe` и `it` — утверждения по-русски: без русских слов (идентификатор,
+имя функции или файла, английская фраза) — stderr с названием и файлом,
+`--strict` — код 1; код в обратных кавычках внутри утверждения — можно.
+**Описание** — `tests/<вид>/<name>/<name>.md`: нет —
 `spec-doc` называет файл в stderr, `--strict` — код 1. JSDoc-шапка у файла
 теста в документацию не идёт — в stderr с подсказкой перенести в md,
 `--strict` — код 1. Прежний главный файл стандарта `rule.*` — тоже в stderr с
