@@ -1,9 +1,3 @@
-/**
- * Скрипты скилла `spec` идут под Node ≥ 22.18 без Bun — CI проекта на Node запускает их из копии скилла в проекте.
- *
- * Поэтому в скриптах только `node:`-API и стираемый синтаксис TypeScript, а вывод под Node и под Bun совпадает
- * байт в байт: `docs/spec`, который агент видит локально под Bun, CI под Node собирает и публикует таким же.
- */
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";

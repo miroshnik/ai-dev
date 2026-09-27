@@ -1,11 +1,3 @@
-/**
- * Установка флоу: одна команда `npx github:miroshnik/ai-dev install` даёт проекту — или, с `-g`, машине — общие
- * правила, справочники и все скиллы ai-dev для любого агента.
- *
- * В проекте всё ложится копией в `.agents/` и коммитится: облачная сессия и CI видят ровно ту версию, что агент
- * у разработчика. Claude Code получает симлинки из `.claude/`, остальные агенты — ссылку в `AGENTS.md` проекта. На
- * машине — `~/.agents/` и агенты, которые на ней есть.
- */
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";

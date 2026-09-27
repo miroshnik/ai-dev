@@ -1,11 +1,3 @@
-/**
- * Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из тестов — страница на capability, правило
- * архитектуры и стандарт, которая читается рассказом: зачем, что умеет, чем проверено.
- *
- * Требование существует, пока есть проверяющий его тест, поэтому документацию о поведении не пишут руками: её
- * собирают из отчётов раннеров и JSDoc тестов, и с тестами она не расходится. В `main` её нет: после мержа CI
- * собирает `docs/spec` и публикует в ветку `spec` (`spec-publish`).
- */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";

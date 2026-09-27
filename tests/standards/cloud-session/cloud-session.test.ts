@@ -1,9 +1,3 @@
-/**
- * Скрипты скиллов, которые ходят в GitHub Projects, в облачной сессии выходят с объяснением, а не сбоем `gh`.
- *
- * Облачной сессии Claude Code Projects v2 недоступны (403): скрипт без проверки падает непонятной ошибкой `gh`, и
- * агент ищет причину не там. Проверка — переменная `CLAUDE_CODE_REMOTE`, объяснение ведёт в `docs/cloud-sessions.md`.
- */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

@@ -1,22 +1,9 @@
-/**
- * Тест, который запускает процессы (git, node, bun), держит таймаут `SPAWN_TIMEOUT`, а не 5 с bun по умолчанию, — чтобы
- * нагрузка машины не роняла зелёные тесты.
- *
- * Время такого теста — время его процессов, а оно растёт с нагрузкой: параллельные сессии агентов замедляют запуск node
- * и git в разы, и тест на секунду идёт 5–15 с, а установка через npm — до 45 с. Падение по таймауту тогда ложное —
- * гонки и ожидания событий нет, тест детерминирован; таймаут 2 мин ловит только зависание.
- */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 import { invariant } from "../../../skills/spec/scripts/harness.ts";
-
-// Таймаут — в каждом файле, а не один на прогон: ключа timeout у bun test в bunfig.toml нет (документация bun),
-// setDefaultTimeout в preload действует только на первый файл прогона (проверено на bun 1.4.2), а --timeout в скриптах
-// package.json не видит голый `bun test`. 2 мин — запас ×2,5 к установке через npm под нагрузкой ~70 на 16 ядрах
-// (44–48 с; при обычной нагрузке — 4,5 с).
 
 const TESTS = fileURLToPath(new URL("../../", import.meta.url));
 
