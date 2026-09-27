@@ -14,16 +14,21 @@
  *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]
  *
  * Метаданные прогона харнесса (`.spec-meta/` в корне или --meta) — код примеров и причины исключений под строкой теста.
+ * Модель архитектуры (`tests/architecture/model.ts`) — страница architecture.md: схемы C4 и таблица модулей (`c4.ts`);
+ * метка `<!-- spec: c4-… -->` в `<папка>.md` заменяется той же схемой.
  *
- * Вывод по умолчанию — docs/spec/: README.md (индекс), capabilities/<name>.md, architecture/<name>.md,
- * standards/<name>.md; свои устаревшие файлы (с маркером) удаляет. Запуск — Bun, без зависимостей.
+ * Вывод по умолчанию — docs/spec/: README.md (индекс), architecture.md, capabilities/<name>.md, architecture/<name>.md,
+ * standards/<name>.md; свои устаревшие файлы (с маркером) удаляет. Запуск — Bun или Node ≥ 22.18, без зависимостей.
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import type { Model } from "./architecture.ts";
+import * as C4 from "./c4.ts";
 import * as L from "./speclib.ts";
 import type { Kind, Test } from "./speclib.ts";
 
@@ -324,9 +329,9 @@ function renderGroup(g: Group, level: number): string {
   return lines.join("\n").trimEnd() + "\n";
 }
 
-/** Первый абзац описания группы (не заголовок) одной строкой — описание в индексе. */
+/** Первый абзац описания группы (не заголовок, не схема и не таблица) одной строкой — описание в индексе. */
 function summaryOf(g: Group): string {
-  const first = (g.doc[0] ?? "").split("\n\n").find((p) => p.trim() && !/^#{1,6}\s/.test(p.trim())) ?? "";
+  const first = (g.doc[0] ?? "").split("\n\n").find((p) => p.trim() && !/^(#{1,6}\s|```|~~~|\|)/.test(p.trim())) ?? "";
   return first.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 }
 
@@ -349,35 +354,70 @@ function outSection(out: Map<string, Test[]>): string[] {
   return lines;
 }
 
-function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>): string {
+/** Страница архитектуры — рядом с README, первая строка раздела «Из чего состоит». */
+const ARCH_PAGE = "architecture.md";
+
+function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model: Model | null): string {
   const lines = [MARK, "# Спецификация", "", INTRO];
   for (const kind of KINDS) {
     const names = groupNames(groups, kind);
-    // правил архитектуры в проекте может не быть вовсе — тогда раздела нет, а не «— нет.»
-    if (!names.length && kind === "architecture") continue;
+    const page = kind === "architecture" && model;
+    // ни модели, ни правил архитектуры в проекте может не быть вовсе — тогда раздела нет, а не «— нет.»
+    if (!names.length && !page && kind === "architecture") continue;
     lines.push("", `## ${SECTION[kind]}`, "");
-    if (!names.length) lines.push("— нет.");
+    if (page) lines.push(`- [Архитектура](${ARCH_PAGE}) — ${C4.modelSummary(model)}`);
+    if (!names.length && !page) lines.push("— нет.");
     for (const n of names) lines.push(indexLine(groups.get(kind + "/" + n)!));
   }
   lines.push(...outSection(out));
   return lines.join("\n") + "\n";
 }
 
-function renderStdout(groups: Map<string, Group>, out: Map<string, Test[]>): string {
+/** Страница архитектуры: схемы и таблица из модели, затем правила, которые сверяют модель с кодом. */
+function renderArchitecture(groups: Map<string, Group>, model: Model): string {
+  const lines = [MARK, ...C4.architecturePage(model, 1), "## Правила", ""];
+  const names = groupNames(groups, "architecture");
+  if (!names.length) lines.push("— нет.");
+  for (const n of names) lines.push(indexLine(groups.get("architecture/" + n)!));
+  return lines.join("\n") + "\n";
+}
+
+function renderStdout(groups: Map<string, Group>, out: Map<string, Test[]>, model: Model | null): string {
   const lines = [MARK, "# Спецификация", "", INTRO];
   for (const kind of KINDS) {
     const names = groupNames(groups, kind);
-    if (!names.length && kind === "architecture") continue;
+    const page = kind === "architecture" && model;
+    if (!names.length && !page && kind === "architecture") continue;
     lines.push("", `## ${SECTION[kind]}`, "");
-    if (!names.length) lines.push("— нет.");
+    if (page) lines.push(...C4.architecturePage(model, 3));
+    if (!names.length && !page) lines.push("— нет.");
     for (const n of names) lines.push(renderGroup(groups.get(kind + "/" + n)!, 3).trimEnd(), "");
   }
   lines.push(...outSection(out));
   return lines.join("\n").trimEnd() + "\n";
 }
 
-function writeFiles(groups: Map<string, Group>, out: Map<string, Test[]>, outDir: string): { generated: Set<string>; removed: string[] } {
+/** Свой сгенерированный файл (маркер в первой строке) — его можно удалить; чужой — нет. */
+const isOwn = (file: string): boolean => readFileSync(file, "utf8").split("\n", 1)[0] === MARK;
+
+function writeFiles(
+  groups: Map<string, Group>,
+  out: Map<string, Test[]>,
+  outDir: string,
+  model: Model | null,
+): { generated: Set<string>; removed: string[] } {
   const generated = new Set<string>();
+  const removed: string[] = [];
+  mkdirSync(outDir, { recursive: true });
+  const arch = path.join(outDir, ARCH_PAGE);
+  if (model) {
+    writeFileSync(arch, renderArchitecture(groups, model));
+    generated.add(ARCH_PAGE);
+  } else if (existsSync(arch) && isOwn(arch)) {
+    // модель убрали — её страница устарела
+    unlinkSync(arch);
+    removed.push(ARCH_PAGE);
+  }
   for (const g of groups.values()) {
     const rel = path.join(SUBDIR[g.kind]!, g.name + ".md");
     const full = path.join(outDir, rel);
@@ -385,17 +425,14 @@ function writeFiles(groups: Map<string, Group>, out: Map<string, Test[]>, outDir
     writeFileSync(full, MARK + "\n" + renderGroup(g, 1));
     generated.add(rel);
   }
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, "README.md"), renderIndex(groups, out));
-  const removed: string[] = [];
+  writeFileSync(path.join(outDir, "README.md"), renderIndex(groups, out, model));
   for (const sub of Object.values(SUBDIR)) {
     const d = path.join(outDir, sub);
     if (!existsSync(d)) continue;
     for (const fn of readdirSync(d).sort()) {
       const rel = path.join(sub, fn);
       if (!fn.endsWith(".md") || generated.has(rel)) continue;
-      const first = readFileSync(path.join(d, fn), "utf8").split("\n", 1)[0];
-      if (first === MARK) {
+      if (isOwn(path.join(d, fn))) {
         // свой устаревший файл; чужой не трогаем
         unlinkSync(path.join(d, fn));
         removed.push(rel);
@@ -405,9 +442,47 @@ function writeFiles(groups: Map<string, Group>, out: Map<string, Test[]>, outDir
   return { generated, removed };
 }
 
+/** Модель архитектуры проекта — одна, на этом месте. */
+const MODEL = `${L.TESTS}/architecture/model.ts`;
+
+/** Модель из `tests/architecture/model.ts` (export default); файла нет — null, не загружается — ошибка с причиной. */
+async function loadModel(root: string): Promise<Model | null> {
+  const file = path.join(root, MODEL);
+  if (!existsSync(file)) return null;
+  let mod: { default?: unknown };
+  try {
+    mod = (await import(pathToFileURL(file).href)) as { default?: unknown };
+  } catch (e) {
+    throw new Error(`модель ${MODEL} не загружается: ${(e as Error).message}`);
+  }
+  const m = mod.default as Model | undefined;
+  if (!m || typeof m !== "object" || !m.modules || typeof m.modules !== "object") throw new Error(`модель ${MODEL} — нет export default с modules`);
+  return m;
+}
+
+/** Метки `<!-- spec: … -->` в описаниях групп → схемы из модели; возвращает непонятые метки с файлом. */
+function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
+  const problems: string[] = [];
+  for (const g of groups.values()) {
+    g.doc = g.doc.map((d) => {
+      const { text, bad } = C4.embed(d, model);
+      for (const b of bad) {
+        const mark = `<!-- spec: ${b.mark} -->`;
+        problems.push(
+          b.missing === "model"
+            ? `метка ${mark} в ${descriptionPath(g)}: нет модели ${MODEL}`
+            : `неизвестная метка ${mark} в ${descriptionPath(g)} — есть: ${Object.keys(C4.MARKS).join(", ")}`,
+        );
+      }
+      return text;
+    });
+  }
+  return problems;
+}
+
 const USAGE = "spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]";
 
-export function main(argv: string[]): number {
+export async function main(argv: string[]): Promise<number> {
   let opts;
   try {
     opts = parseArgs({
@@ -443,17 +518,25 @@ export function main(argv: string[]): number {
     }
   }
   tests = L.mergeTests(tests);
+  let model: Model | null;
+  try {
+    model = await loadModel(root);
+  } catch (e) {
+    console.error(`spec-doc: ${(e as Error).message}`);
+    return 2;
+  }
   META = loadMeta(path.resolve(root, values.meta ?? ".spec-meta"));
   const { groups, out, libFiles } = build(tests);
   const { missing, headers, legacy, undescribed } = attachDocs(groups, root);
   const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);
   const names = badNames(groups);
+  const marks = embedMarks(groups, model);
 
   if (values.stdout) {
-    process.stdout.write(renderStdout(groups, out));
+    process.stdout.write(renderStdout(groups, out, model));
   } else {
     const outDir = path.isAbsolute(values.out) ? values.out : path.join(root, values.out);
-    const { generated, removed } = writeFiles(groups, out, outDir);
+    const { generated, removed } = writeFiles(groups, out, outDir, model);
     for (const rel of removed) console.error(`spec-doc: удалён устаревший ${path.join(values.out, rel)}`);
     console.error(`spec-doc: ${values.out}: README.md + ${generated.size} файлов`);
   }
@@ -479,9 +562,10 @@ export function main(argv: string[]): number {
     const base = path.posix.basename(file);
     console.error(`spec-doc: главный файл папки — ${L.classify(file)[1]}${base.slice("rule".length)}, а не ${base} — переименуй: ${file}`);
   }
-  return (out.size || headers.length || legacy.length || undescribed.length || noMain.length || names.length) && values.strict ? 1 : 0;
+  for (const m of marks) console.error(`spec-doc: ${m}`);
+  return (out.size || headers.length || legacy.length || undescribed.length || noMain.length || names.length || marks.length) && values.strict ? 1 : 0;
 }
 
 if (import.meta.main) {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 }
