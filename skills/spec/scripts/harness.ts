@@ -77,6 +77,7 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
   // храповик: исключение живёт, пока элемент нарушает соглашение; начал соблюдать — исключение убрать
   const exceptions = [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : 0));
   for (const e of exceptions) {
+    meta(`исключение: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
     it(`исключение: ${e.item} (#${e.issue})`, async () => {
       if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи — issue: номер задачи, которая снимет долг`);
       if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
@@ -140,6 +141,9 @@ export function examples(it: It, spec: Examples): void {
     it(`у правила ${spec.rule} есть пример «нельзя»`, () => {
       throw new Error(`у правила ${spec.rule} нет примера «нельзя» — доказать, что оно умеет падать, нечем`);
     });
+  }
+  for (const e of [...spec.bad.map((x) => ["нельзя", x] as const), ...(spec.good ?? []).map((x) => ["можно", x] as const), ...(spec.outside ?? []).map((x) => ["вне охвата", x] as const)]) {
+    meta(`${e[0]}: ${e[1].name}`, { path: e[1].path, code: e[1].code });
   }
   for (const e of spec.bad) {
     it(`нельзя: ${e.name}`, async () => {
@@ -244,6 +248,7 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
     const disables = disablesIn(file, text);
     if (!disables.length) continue;
     const rules = [...new Set(disables.flatMap((d) => (d.rules.length ? d.rules : ["все правила"])))].sort();
+    meta(`исключения в ${file}: ${rules.join(", ")}`, { disables: disables.map((d) => ({ line: d.line, rules: d.rules, description: d.description })) });
     it(`исключения в ${file}: ${rules.join(", ")}`, () => {
       const bad = disables.flatMap((d) => {
         if (!d.rules.length) return [`${d.file}:${d.line} — отключение без названия правила: общий eslint-disable глушит всё, включая проверки`];
@@ -256,7 +261,8 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
 }
 
 // файл теста в стеке вызова: *.test.* / *.spec.* / *.e2e.* (V8 и JavaScriptCore; file:// — у ESM)
-const STACK_FILE = /(?:\(|\bat\s+)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+:\d+)/g;
+// у кадра верхнего уровня модуля Bun пишет только строку, без колонки: «at /…/x.test.ts:4»
+const STACK_FILE = /(?:\(|\bat\s+)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+)/g;
 const seen = new Set<string>();
 let journalFile: string | null = null;
 
@@ -270,6 +276,28 @@ function callerTest(root: string): string | null {
     if (i >= 0) return abs.slice(i + 1);
   }
   return null;
+}
+
+let metaFile: string | null = null;
+
+/**
+ * Метаданные прогона для `spec-doc`: то, чего нет в названии теста, — код примера, задача и причина исключения.
+ * Строка JSON `{ file, test, … }` в `.spec-meta/<процесс>.jsonl` (`SPEC_META` — другой каталог); файл теста — по стеку
+ * регистрации. Страница стандарта показывает их под строкой теста.
+ */
+function meta(test: string, data: object): void {
+  const root = process.cwd();
+  const file = callerTest(root);
+  if (!file) return;
+  const key = `meta\0${file}\0${test}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  if (!metaFile) {
+    const dir = path.resolve(root, process.env.SPEC_META ?? ".spec-meta");
+    mkdirSync(dir, { recursive: true });
+    metaFile = path.join(dir, `${process.pid}-${Math.random().toString(36).slice(2, 10)}.jsonl`);
+  }
+  appendFileSync(metaFile, JSON.stringify({ file, test, ...data }) + "\n");
 }
 
 /**
@@ -347,6 +375,7 @@ export function deadCode(it: It, opts: { root: string; report?: string; exceptio
     });
   }
   for (const e of [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : 1))) {
+    meta(`исключение: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
     it(`исключение: ${e.item} (#${e.issue})`, () => {
       if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи`);
       if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
