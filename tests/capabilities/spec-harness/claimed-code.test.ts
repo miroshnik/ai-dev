@@ -1,10 +1,13 @@
 import { chmodSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { deadCode, envVars } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 // `it` раннера подменяется сборщиком: харнесс только регистрирует тесты, запускать их — дело раннера
 async function outcomes(register: (it: It) => void): Promise<Record<string, string>> {

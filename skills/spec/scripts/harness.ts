@@ -11,6 +11,7 @@
  * поэтому идёт под Node ≥ 22.18 и под Bun без зависимостей.
  */
 
+import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -289,4 +290,121 @@ export function journal(id: string, opts: { test?: string; root?: string } = {})
     journalFile = path.join(dir, `${process.pid}-${Math.random().toString(36).slice(2, 10)}.jsonl`);
   }
   appendFileSync(journalFile, JSON.stringify({ id, test }) + "\n");
+}
+
+// виды находок knip (knip.dev, «Reporters», JSON) → тест и префикс ключа исключения
+const KNIP: [string, string, string[]][] = [
+  ["нет файлов без потребителя", "file", ["files"]],
+  ["нет экспортов без потребителя", "export", ["exports", "nsExports"]],
+  ["нет типов без потребителя", "type", ["types", "nsTypes"]],
+  ["нет зависимостей без импорта", "dependency", ["dependencies", "devDependencies", "optionalPeerDependencies"]],
+  ["нет импортов неустановленных пакетов", "unlisted", ["unlisted"]],
+  ["нет нерезолвящихся импортов", "unresolved", ["unresolved"]],
+];
+
+/** Находки knip по видам: ключ вида (`file:…`, `export:<файл>#<имя>`, `dependency:<пакет>`) → то, что показать. */
+function knipFindings(report: { issues?: Record<string, unknown>[] }): Map<string, Map<string, string>> {
+  const out = new Map(KNIP.map(([, kind]) => [kind, new Map<string, string>()]));
+  for (const issue of report.issues ?? []) {
+    const file = String(issue.file ?? "");
+    for (const [, kind, keys] of KNIP) {
+      for (const k of keys) {
+        for (const item of (issue[k] as { name: string }[] | undefined) ?? []) {
+          const shown = kind === "file" ? item.name : kind === "dependency" || kind === "unlisted" ? item.name : `${file}#${item.name}`;
+          out.get(kind)!.set(`${kind}:${shown}`, shown);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Код без потребителя — по отчёту knip: тест на каждый вид находок (файлы, экспорты, типы, зависимости, неустановленные
+ * пакеты, нерезолвящиеся импорты) — упавший со списком находок. Отчёт — файл `knip --reporter json` (`report`) или
+ * запуск knip проекта (`node_modules/.bin/knip`). Исключение — ключ находки (`file:src/legacy.ts`,
+ * `export:src/math.ts#factorial`, `dependency:lodash`) с задачей: зелёное, пока knip его находит, иначе — «убери».
+ */
+export function deadCode(it: It, opts: { root: string; report?: string; exceptions?: readonly Exception[] }): void {
+  let findings: Map<string, Map<string, string>> | null = null;
+  const load = (): Map<string, Map<string, string>> => {
+    if (findings) return findings;
+    let text: string;
+    if (opts.report) text = readFileSync(path.resolve(opts.root, opts.report), "utf8");
+    else {
+      const r = spawnSync(path.join(opts.root, "node_modules", ".bin", "knip"), ["--reporter", "json"], { cwd: opts.root, encoding: "utf8" });
+      if (r.error) throw new Error(`knip не запустился: ${r.error.message} — установи knip в проект или передай report`);
+      text = r.stdout;
+    }
+    findings = knipFindings(JSON.parse(text || "{}"));
+    return findings;
+  };
+  const excepted = new Map((opts.exceptions ?? []).map((e) => [e.item, e]));
+  for (const [name, kind] of KNIP) {
+    it(name, () => {
+      const found = [...load().get(kind)!].filter(([key]) => !excepted.has(key)).map(([, shown]) => shown).sort();
+      if (found.length) throw new Error(found.join("\n"));
+    });
+  }
+  for (const e of [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : 1))) {
+    it(`исключение: ${e.item} (#${e.issue})`, () => {
+      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи`);
+      if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
+      const kind = e.item.split(":")[0]!;
+      if (!load().get(kind)?.has(e.item)) throw new Error(`knip больше не находит ${e.item} — убери исключение (#${e.issue})`);
+    });
+  }
+}
+
+const ENV_READ = /\bprocess\.env\.([A-Z_][A-Z0-9_]*)|\bprocess\.env\[\s*["']([A-Z_][A-Z0-9_]*)["']\s*\]|\bimport\.meta\.env\.([A-Z_][A-Z0-9_]*)|\{([^{}]*)\}\s*=\s*process\.env\b/g;
+const ENV_SERVICE = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV", "PROD", "MODE", "SSR", "BASE_URL"];
+
+/** Переменные окружения, которые читает код: имя → файлы. */
+function envReads(root: string, dirs: string[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const file of codeFiles(root, dirs)) {
+    const text = readFileSync(path.join(root, file), "utf8");
+    for (const m of text.matchAll(ENV_READ)) {
+      const names = m[4] ? m[4].split(",").map((x) => x.split(":")[0]!.trim()).filter((x) => /^[A-Z_][A-Z0-9_]*$/.test(x)) : [m[1] ?? m[2] ?? m[3]!];
+      for (const n of names) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Переменные окружения — объявлены и читаются: «<VAR> объявлена» на каждую, что читает код (`process.env.X`,
+ * `process.env["X"]`, `import.meta.env.X`, `const { X } = process.env`), и «<VAR> читается в коде» на каждую
+ * объявленную (`declared` — из схемы окружения проекта: zod, t3-env, .env.example). Служебные (NODE_ENV, CI, PORT…
+ * и `ignore`) — вне проверки.
+ */
+export function envVars(
+  it: It,
+  opts: { root: string; dirs?: string[]; declared: readonly string[]; ignore?: readonly string[]; exceptions?: readonly Exception[] },
+): void {
+  const skip = new Set([...ENV_SERVICE, ...(opts.ignore ?? [])]);
+  const reads = envReads(opts.root, opts.dirs ?? ["src"]);
+  const declared = new Set(opts.declared);
+  invariant(it, {
+    registry: "переменные окружения в коде",
+    items: [...reads.keys()].filter((v) => !skip.has(v)),
+    name: (v) => `${v} объявлена`,
+    key: (v) => v,
+    check: (v) => {
+      if (!declared.has(v)) throw new Error(`${v} читается в ${reads.get(v)!.join(", ")}, но не объявлена в схеме окружения`);
+    },
+    violator: { name: "переменная без объявления", item: "__НЕ_ОБЪЯВЛЕНА__" },
+    exceptions: opts.exceptions,
+  });
+  invariant(it, {
+    registry: "объявленные переменные окружения",
+    items: [...declared].filter((v) => !skip.has(v)),
+    name: (v) => `${v} читается в коде`,
+    key: (v) => v,
+    check: (v) => {
+      if (!reads.has(v)) throw new Error(`${v} объявлена, но не читается — убери из схемы окружения`);
+    },
+    violator: { name: "объявлена и не читается", item: "__НЕ_ЧИТАЕТСЯ__" },
+    exceptions: opts.exceptions,
+  });
 }
