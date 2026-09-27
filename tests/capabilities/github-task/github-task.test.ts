@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { main } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+
+// модель архитектуры скилл читает отдельным процессом bun
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 // Ответы GitHub — записанные с проекта ai-dev, `gh` подменён: мутации меняют запись так, как это сделал бы GitHub
 const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.json", import.meta.url), "utf8"));
@@ -152,6 +156,91 @@ describe("task new ставит метки решений `type:name`", () => {
     expect(r.err).toContain("метки «срочно» в репозитории нет");
     expect(byOp(f, "CreateIssue")).toEqual([]);
     expect(byOp(f, "CreateLabel")).toEqual([]);
+  });
+
+  it("task new --epic — метки решений задачи добавляются эпику", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "capability:billing"]);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 45)).toEqual(["epic", "capability:billing"]);
+    expect(r.out).toContain("+ эпик #45: capability:billing");
+  });
+});
+
+const HEAD = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+// модель в голове PR: модуль web — весь src, domain — его подкаталог и ещё один каталог
+const MODEL = `export default { modules: {
+  web: { path: "src", purpose: "приложение" },
+  domain: { path: ["src/domain", "lib/domain"], purpose: "правила" },
+} };
+`;
+function prLabels(f: FakeGitHub, number: number) {
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = main(["pr", "labels", String(number), "--repo", REPO], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {} });
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+
+/**
+ * Метки решений задачи ставит её PR: какие папки спеки и модули модели он меняет, те решения задача и трогала.
+ * Эпик копит метки подзадач — по нему видно, каких решений касается вся большая задача.
+ */
+describe("pr labels ставит задаче метки решений по диффу PR, эпику — объединение", () => {
+  it("задача из «Closes #N» получает метки решений по папкам спеки в диффе PR", () => {
+    const f = new FakeGitHub(REC);
+    f.label("capability:billing", "0E8A16");
+    f.label("standard:audit", "1D76DB");
+    const files = ["tests/capabilities/billing/billing.test.ts", "tests/capabilities/billing/billing.md", "tests/standards/audit/eslint.ts", "tests/lib/fake.ts", "README.md"];
+    f.prs[120] = { files, closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 49)).toEqual(["capability:billing", "standard:audit"]);
+    expect(r.out).toContain("+ #49: capability:billing, standard:audit");
+  });
+
+  it("изменённый код — метка модуля модели из головы PR, путь модуля — самый длинный подходящий", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[120] = { files: ["src/domain/invoice.ts", "src/web/page.tsx", "lib/domain/money.ts", "docs/readme.md"], closes: [49], head: HEAD, model: MODEL };
+    expect(prLabels(f, 120).code).toBe(0);
+    expect(issueLabels(f, 49)).toEqual(["architecture:domain", "architecture:web"]);
+  });
+
+  it("метки решения нет в репозитории — создаётся с цветом вида", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "capability:billing", color: "0E8A16", description: "Решение: tests/capabilities/billing" }]);
+    expect(r.out).toContain("+ создана метка «capability:billing»");
+  });
+
+  it("прежняя метка решения, которого нет в диффе, — не снимается, строка в выводе", () => {
+    const f = new FakeGitHub(REC);
+    f.label("capability:old", "0E8A16");
+    f.labelIssue(49, "capability:old");
+    f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(issueLabels(f, 49)).toEqual(["capability:old", "capability:billing"]);
+    expect(r.out).toContain("= #49: capability:old — решения нет в диффе PR, метка не снята");
+  });
+
+  it("эпик задачи получает метки подзадачи — объединение", () => {
+    const f = new FakeGitHub(REC);
+    f.label("capability:est", "0E8A16");
+    f.labelIssue(45, "capability:est");
+    f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts", "tests/capabilities/est/est.test.ts"], closes: [47], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(issueLabels(f, 47)).toEqual(["capability:billing", "capability:est"]);
+    expect(issueLabels(f, 45)).toEqual(["epic", "capability:est", "capability:billing"]);
+    expect(r.out).toContain("+ эпик #45: capability:billing");
+  });
+
+  it("PR без «Closes #N» — ошибка, ничего не меняется", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("в PR #120 нет «Closes #N»");
+    expect(f.mutations).toEqual([]);
   });
 });
 

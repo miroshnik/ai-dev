@@ -33,6 +33,8 @@ export class FakeGitHub {
   labels: { id: string; name: string; color: string; description: string }[] = [];
   /** Дерево спеки в основной ветке (SpecDecisions): папки решений и текст модели архитектуры. */
   tree: { capabilities: string[]; standards: string[]; architecture: string[]; model: string | null } = { capabilities: [], standards: [], architecture: [], model: null };
+  /** PR по номеру (PrChange): изменённые файлы, задачи из «Closes #N», голова и модель архитектуры в ней (ModelAt). */
+  prs: Record<number, { files: string[]; closes: number[]; head: string; model: string | null }> = {};
   private seq = 0;
 
   constructor(recording: Recording) {
@@ -60,6 +62,11 @@ export class FakeGitHub {
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
     if (op === "RepoLabels") return JSON.stringify({ data: { repository: { labels: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: this.labels } } } });
     if (op === "SpecDecisions") return JSON.stringify({ data: { repository: this.specTree() } });
+    if (op === "PrChange") return JSON.stringify(this.prChange(variables.number));
+    if (op === "ModelAt") {
+      const pr = Object.values(this.prs).find((x) => x.head === variables.expression.split(":")[0]);
+      return JSON.stringify({ data: { repository: { object: pr?.model == null ? null : { text: pr.model } } } });
+    }
     const key = keyOf(op, variables);
     if (!(key in this.rec)) throw new Error(`fake gh: нет записи ${key}`);
     return JSON.stringify(this.rec[key]);
@@ -128,6 +135,22 @@ export class FakeGitHub {
   /** Поставить задаче метку (как будто её поставили раньше). */
   labelIssue(number: number, name: string): void {
     this.issue(number).labels.nodes.push({ name });
+  }
+  private prChange(number: number): Any {
+    const pr = this.prs[number];
+    if (!pr) return { data: { repository: { pullRequest: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to a PullRequest with the number of ${number}.` }] };
+    return {
+      data: {
+        repository: {
+          pullRequest: {
+            number,
+            headRefOid: pr.head,
+            closingIssuesReferences: { nodes: pr.closes.map((n) => ({ number: n })) },
+            files: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: pr.files.map((path) => ({ path })) },
+          },
+        },
+      },
+    };
   }
   // папка без решений в GitHub — не пустое дерево, а null
   private specTree(): Any {
@@ -295,6 +318,14 @@ export class FakeGitHub {
       Object.assign(l, patch);
       for (const i of this.allIssues()) for (const n of i.labels.nodes) if (n.name === old) n.name = l.name;
       return { updateLabel: { label: { id } } };
+    },
+    AddLabels: ({ labelableId, labelIds }: Any) => {
+      const i = this.allIssues().find((x) => x.id === labelableId);
+      for (const lid of labelIds) {
+        const name = this.labels.find((l) => l.id === lid)!.name;
+        if (!i.labels.nodes.some((n: Any) => n.name === name)) i.labels.nodes.push({ name });
+      }
+      return { addLabelsToLabelable: { clientMutationId: null } };
     },
     DeleteLabel: ({ id }: Any) => {
       const l = this.labels.find((x) => x.id === id)!;
