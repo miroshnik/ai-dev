@@ -47,7 +47,7 @@ describe("check показывает каждое расхождение с ка
     const r = check(fake());
     expect(r.code).toBe(0);
     expect(r.out).toStartWith(`Проект ${REPO}: ${PROJECT_URL}`);
-    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅" });
+    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅", Метки: "✅" });
     expect(r.out).toContain("➖ Priority и типы issue — в личном аккаунте их нет");
   });
 
