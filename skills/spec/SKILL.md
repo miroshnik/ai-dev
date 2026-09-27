@@ -283,6 +283,7 @@ Actions.
 | Правило ESLint в папке стандарта | `collectEslint` в `eslint.config.*` | фрагменты `eslint.ts` дерева |
 | Исключения с храповиком | `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions.ts` папки решения |
 | Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
+| Внешние системы (C1): хосты, пакеты и ключи — только в адаптере, сеть в тестах, CSP | `externals` в модели, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, настройка тестов |
 | Каждая точка входа вызывается тестом capability | `journal` + `spec-claims` после прогона | `standards/entry-points/` |
 | Нет кода без потребителя (файлы, экспорты, зависимости) | `deadCode` по отчёту knip | `standards/dead-code/` |
 | Переменные окружения объявлены и читаются | `envVars` | `standards/env/` |
