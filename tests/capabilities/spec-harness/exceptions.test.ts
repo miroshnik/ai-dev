@@ -105,11 +105,17 @@ describe("Отключение линт-правила в коде — искл�
       "src/clean.ts": "export const x = 1;\n",
     });
     const r = await outcomes((it) => lintExceptions(it, { root: dir, dirs: ["src"] }));
-    expect(r["исключения в src/ok.ts: no-console"]).toBe("✓");
+    expect(r["исключения в src/ok.ts: no-console (#12)"]).toBe("✓");
     expect(r["исключения в src/no-issue.ts: no-console"]).toStartWith("✗ src/no-issue.ts:1 — отключение без «-- #N причина»");
     expect(r["исключения в src/no-reason.ts: no-console"]).toStartWith("✗ src/no-reason.ts:1 — отключение без «-- #N причина»");
-    expect(r["исключения в src/blanket.ts: все правила"]).toStartWith("✗ src/blanket.ts:1 — отключение без названия правила");
+    expect(r["исключения в src/blanket.ts: все правила (#12)"]).toStartWith("✗ src/blanket.ts:1 — отключение без названия правила");
     expect(Object.keys(r).some((n) => n.includes("clean.ts"))).toBe(false);
+  });
+
+  it("тест отключений линта в файле называет задачи отключений", async () => {
+    writeTree(dir, { "src/a.ts": "// eslint-disable-next-line no-console -- #12 логгер\nconsole.log(1);\n// eslint-disable-next-line no-alert -- #7 диалог\nalert(1);\n" });
+    const r = await outcomes((it) => lintExceptions(it, { root: dir, dirs: ["src"] }));
+    expect(r["исключения в src/a.ts: no-alert, no-console (#7, #12)"]).toBe("✓");
   });
 
   it("файлов кода не нашлось — упавший тест: путь ошибочен", async () => {

@@ -84,6 +84,22 @@ describe("Линт-правило проверяется примерами «н
     );
     expect(r["можно: опечатка"]).toStartWith("✗ пример не разбирается: src/b.ts — Parsing error: Unexpected token");
   });
+
+  it("пример «нельзя» с числом срабатываний падает, если правило сработало иначе", async () => {
+    const each = fake((code) => [...code.matchAll(/alert/g)].map(() => ({ ruleId: "no-alert", message: "x" })));
+    const r = await outcomes((it) =>
+      examples(it, {
+        linter: each,
+        rule: "no-alert",
+        bad: [
+          { name: "два вызова", path: "src/a.ts", code: "alert(1); alert(2);", count: 2 },
+          { name: "ждём три", path: "src/b.ts", code: "alert(1);", count: 3 },
+        ],
+      }),
+    );
+    expect(r["нельзя: два вызова"]).toBe("✓");
+    expect(r["нельзя: ждём три"]).toStartWith("✗ срабатываний правила no-alert: 1, а ждали 3 — src/b.ts");
+  });
 });
 
 let dir: string;
@@ -148,6 +164,19 @@ describe("Правило ESLint живёт в папке своего станд
     const { ESLint } = await import(ESLINT);
     const [res] = await new ESLint({ cwd: dir }).lintFiles(["src/ui/both.js"]);
     expect(res.messages.map((m: { ruleId: string }) => m.ruleId).sort()).toEqual(["spec/no-alert", "spec/no-debugger"]);
+  });
+
+  it("конфиг линтера загружается до первого примера, а не под его таймаутом", async () => {
+    project();
+    // конфиг проекта отмечает свою загрузку: ESLint грузит его в том же процессе
+    writeTree(dir, {
+      "eslint.config.mjs": `globalThis.__specConfigLoads = (globalThis.__specConfigLoads ?? 0) + 1;\nexport default [{ files: ["src/**/*.js"], rules: { "no-console": "error" } }];\n`,
+    });
+    const g = globalThis as { __specConfigLoads?: number };
+    const before = g.__specConfigLoads ?? 0;
+    const linter = eslintLinter({ cwd: dir, module: ESLINT });
+    await linter.ready!();
+    expect(g.__specConfigLoads).toBe(before + 1);
   });
 
   it("collectEslint пропускает tests/lib — хелпер там не фрагмент", async () => {
