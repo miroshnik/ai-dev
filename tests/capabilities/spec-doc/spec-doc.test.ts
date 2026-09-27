@@ -552,6 +552,22 @@ describe("docs/spec обновляется сам и не трогает рук�
     expect(read("docs/spec/standards/audit.md")).toContain("# audit\n\n<details><summary>✅ 1 тест</summary>\n\n- ✅ каждая мутация пишет аудит");
   });
 
+  it("рядом с README — tests.json: все тесты дерева для spec-diff", () => {
+    doc(
+      "r.json",
+      vitestReport(dir, {
+        "tests/standards/audit/audit.test.ts": [[[], "b пишет аудит"], [[], "a пишет аудит"]],
+        "tests/capabilities/billing/billing.test.ts": [[["Счета"], "выставляется"]],
+        "tests/lib/f.test.ts": [[[], "фабрика"]],
+      }),
+    );
+    expect(JSON.parse(read("docs/spec/tests.json"))).toEqual([
+      { path: "tests/capabilities/billing/billing.test.ts", describes: ["Счета"], name: "выставляется" },
+      { path: "tests/standards/audit/audit.test.ts", describes: [], name: "a пишет аудит" },
+      { path: "tests/standards/audit/audit.test.ts", describes: [], name: "b пишет аудит" },
+    ]);
+  });
+
   it("удаляет свой устаревший файл и не трогает чужой", () => {
     writeTree(dir, {
       "docs/spec/capabilities/old.md": "<!-- spec-doc: сгенерировано из названий тестов, руками не править -->\n# old\n",
