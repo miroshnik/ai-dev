@@ -63,7 +63,8 @@ Cursor глобального файла не имеет (вставить пр�
   Скрипты — TypeScript под Bun (`bun script.ts`, без сборки и зависимостей).
   Тесты скриптов — `bun test` в `tests/`
   (`bun install`, `bun test`, `bun run typecheck`, `bun run spec:doc` —
-  документация `docs/spec/` из названий тестов).
+  документация `docs/spec/` из названий тестов; в `main` её нет — после мержа
+  CI публикует её в ветку `spec`).
 - `bin/ai-dev.mjs` — установщик; JavaScript без зависимостей: npx запускает
   его из `node_modules`, где Node типы не стирает.
 
@@ -90,8 +91,10 @@ Cursor глобального файла не имеет (вставить пр�
   PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch`.
 - `spec` — спецификация из тестов: `spec-doc` строит `docs/spec/` из отчётов
   раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву
-  `tests/capabilities` и `tests/standards`; `spec-diff` — список удалённых,
-  изменённых и добавленных названий тестов для тела PR.
+  `tests/capabilities`, `tests/architecture` и `tests/standards`; `spec-diff` —
+  список удалённых, изменённых и добавленных названий тестов для тела PR;
+  `spec-publish` — публикация `docs/spec` в ветку `spec` после мержа;
+  `harness.ts` — тесты механических проверок («реестр + инвариант»).
 
 Задачи по этому репозиторию — в Issues и проекте `ai-dev`, по правилам из
 `AGENTS.md`.

@@ -1,5 +1,5 @@
-# CI ai-dev: тесты скиллов (bun test), типы, документация спеки не отстала от тестов,
-# дифф спеки в summary PR. Ветки и PR — параллельно, устаревший прогон PR отменяется;
+# CI ai-dev: тесты скиллов (bun test), типы, документация спеки собирается (--strict), дифф спеки в summary PR;
+# на main — публикация docs/spec в ветку spec (в main документации нет). Ветки и PR — параллельно, устаревший прогон PR отменяется;
 # прогон main не отменяется (docs/ci-concurrency.md, вариант «CI и деплой в одном workflow»
 # — деплоя здесь нет, но правило то же).
 name: CI
@@ -29,14 +29,23 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run spec:doc
-      - name: docs/spec не отстал от тестов
-        run: |
-          if [ -n "$(git status --porcelain docs/spec)" ]; then
-            git status --short docs/spec
-            git diff docs/spec
-            echo "::error::docs/spec отстал от тестов — bun run spec:doc и закоммить"
-            exit 1
-          fi
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
       - name: Дифф спеки в summary
         if: github.event_name == 'pull_request'
         run: bun run spec:diff --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # Токен на запись — только здесь: job не ставит зависимости и не идёт на PR. Публикации — по очереди, не отменяются.
+  spec-publish:
+    if: github.event_name == 'push'
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    concurrency: { group: spec-publish, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/download-artifact@v8
+        with: { name: docs-spec, path: docs/spec }
+      - run: bun run spec:publish
