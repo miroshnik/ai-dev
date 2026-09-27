@@ -120,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 13; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds)
+const SESSION_CACHE_V = 14; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -423,7 +423,7 @@ export interface Session {
   cwds?: string[]; // все каталоги записей по порядку появления: сессия может перейти в репозиторий по ходу работы
   n_human: number;
   ev: Any[][]; // [ts, ветка, human, hint?, uidx?]
-  prlinks: [number, number][];
+  prlinks: [number, number, string?][]; // [ts, номер PR, репозиторий PR owner/name — у Claude Code prRepository]
   commits: [number, string][];
   first_refs: number[];
   first_urls: string[];
@@ -438,6 +438,7 @@ export interface Session {
   routine: boolean;
   mtime?: number;
   v?: number;
+  guest?: boolean; // транскрипт из каталога другого репозитория реестра: привязка только признаками репозитория задачи
 }
 
 /**
@@ -516,6 +517,7 @@ export class Repo implements FactRepo {
   owner: string;
   name: string;
   paths: string[];
+  otherPaths: string[];
   projectRef: { owner: string; number: number | string } | undefined;
   cacheDir: string;
   defaultBranch: string | null = null;
@@ -535,6 +537,8 @@ export class Repo implements FactRepo {
     this.name = name;
     const cfg = registry[full] ?? {};
     this.paths = cfg.paths ?? [];
+    // каталоги других репозиториев реестра: там ищутся сессии-гости (задача начата из чужого каталога)
+    this.otherPaths = uniqSortedStrs(Object.entries(registry).filter(([k]) => k !== full).flatMap(([, c]) => c.paths ?? [])).filter((x) => !this.paths.includes(x));
     this.projectRef = cfg.project;
     this.cacheDir = path.join(CACHE_DIR, full.replace("/", "__"));
   }
@@ -931,7 +935,7 @@ interface Acc {
   cwds: string[];
   n_human: number;
   ev: Any[][];
-  prlinks: [number, number][];
+  prlinks: [number, number, string?][];
   commits: [number, string][];
   first_refs: number[] | null;
   first_urls: string[];
@@ -1014,7 +1018,9 @@ function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void 
     }
     if (t === "pr-link") {
       const pr = r.prNumber;
-      if (ts && Number.isInteger(pr)) acc.prlinks.push([ts, pr]);
+      // номер PR без репозитория неоднозначен: у каждого репозитория свои номера
+      const prRepo = String(r.prRepository || /github\.com\/([^/\s]+\/[^/\s]+)\/pull\//.exec(String(r.prUrl ?? ""))?.[1] || "");
+      if (ts && Number.isInteger(pr)) acc.prlinks.push(prRepo ? [ts, pr, prRepo] : [ts, pr]);
       continue;
     }
     if (t !== "user" && t !== "assistant") continue;
@@ -1417,27 +1423,68 @@ function transcriptFiles(repo: Repo): string[] {
 }
 
 /** Транскрипты Claude Code по каталогам работы: ~/.claude/projects/<путь-через-дефисы>*\/*.jsonl. */
-function transcriptFilesIn(paths: string[]): string[] {
+function transcriptFilesIn(paths: string[], projectsDir = PROJECTS_DIR): string[] {
   const files: string[] = [];
   for (const p of paths) {
     const enc = encodePath(p);
     let dirs: string[];
     try {
-      dirs = readdirSync(PROJECTS_DIR).filter((d) => d.startsWith(enc));
+      dirs = readdirSync(projectsDir).filter((d) => d.startsWith(enc));
     } catch {
       continue;
     }
     for (const d of dirs) {
       let names: string[];
       try {
-        names = readdirSync(path.join(PROJECTS_DIR, d));
+        names = readdirSync(path.join(projectsDir, d));
       } catch {
         continue;
       }
-      for (const fn of names) if (fn.endsWith(".jsonl")) files.push(path.join(PROJECTS_DIR, d, fn));
+      for (const fn of names) if (fn.endsWith(".jsonl")) files.push(path.join(projectsDir, d, fn));
     }
   }
   return uniqSortedStrs(files);
+}
+
+/** Имя репозитория `owner/name` в тексте: в URL, pr-link, выводе `git push` (`…/owner/name.git`), но не часть другого имени. */
+const slugRe = (slug: string) => new RegExp(`(?<![\\w.-])${reEscape(slug)}(?![\\w-]|\\.(?!git\\b)[\\w-])`, "i");
+
+/**
+ * Сессии-гости: транскрипты из каталогов других репозиториев реестра, в которых (или в субагентах) встречается имя
+ * репозитория задачи — разговор в одном репозитории перерос в задачу другого. Без имени репозитория работы над его
+ * задачей там нет: коммит, push, PR и URL issue его называют. Индекс — по mtime (indexFile), текст читается раз.
+ */
+export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: string[], projectsDir = PROJECTS_DIR, indexFile?: string): string[] {
+  const own = new Set(transcriptFilesIn(ownPaths, projectsDir));
+  const re = slugRe(slug);
+  const idx = indexFile ? loadJson<Record<string, { mtime: number; hit: boolean }>>(indexFile, {}) : {};
+  let changed = false;
+  const out: string[] = [];
+  for (const f of transcriptFilesIn(otherPaths, projectsDir)) {
+    if (own.has(f)) continue;
+    let m: number;
+    try {
+      m = sessionMtime(f);
+    } catch {
+      continue;
+    }
+    let c = idx[f];
+    if (!c || !sameMtime(c.mtime, m)) {
+      const hit = [f, ...subagentFiles(f)].some((x) => {
+        try {
+          return re.test(readFileSync(x, "utf8"));
+        } catch {
+          return false;
+        }
+      });
+      c = { mtime: m, hit };
+      idx[f] = c;
+      changed = true;
+    }
+    if (c.hit) out.push(f);
+  }
+  if (indexFile && changed) saveJson(indexFile, idx);
+  return out;
 }
 
 /** Разбор транскриптов с кэшем по mtime (инкрементально). */
@@ -1447,7 +1494,8 @@ function loadSessions(repo: Repo): Session[] {
   const cache = loadJson<Record<string, Session>>(file, {});
   const out: Record<string, Session> = {};
   let changed = false;
-  const files = transcriptFiles(repo).concat(codexFiles(repo), cloudFiles(repo));
+  const guests = new Set(guestTranscripts(repo.full, repo.paths, repo.otherPaths, PROJECTS_DIR, path.join(repo.cacheDir, "guest-index.json")));
+  const files = uniqSortedStrs(transcriptFiles(repo).concat([...guests])).concat(codexFiles(repo), cloudFiles(repo));
   for (const f of files) {
     let mtime: number;
     try {
@@ -1475,10 +1523,10 @@ function loadSessions(repo: Repo): Session[] {
   const same = Object.keys(cache).length === Object.keys(out).length && Object.keys(cache).every((k) => k in out);
   if (changed || !same) saveJson(file, out);
   const sessions: Session[] = [];
-  for (const s of Object.values(out)) {
+  for (const [f, s] of Object.entries(out)) {
     if (!s.ev.length || s.routine) continue;
-    if (!inRepo(s, repo.paths)) continue;
-    sessions.push(s);
+    if (inRepo(s, repo.paths)) sessions.push(s);
+    else if (guests.has(f)) sessions.push({ ...s, guest: true });
   }
   return sessions;
 }
@@ -1875,13 +1923,25 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   const ourKey = `${repo.full}#${number}`;
   const cmpAnchor = (a: Anchor, b: Anchor) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0) || a[3] - b[3];
 
+  const sameRepo = (r: string) => r.toLowerCase() === repo.full.toLowerCase();
+  const urlRefs = (urls: string[]) => urls.filter((u) => u.startsWith(repo.full + "#")).map((u) => parseInt(u.split("#")[1]!, 10));
+
   for (const s of sessions) {
     const ev = s.ev;
     if (!ev.length) continue;
-    for (const [, pr] of s.prlinks) seenPrs.add(pr);
-    for (const e of ev) if (e[1]) seenBranches.add(e[1]);
+    // Гость — транскрипт из каталога другого репозитория: номера задач и ветки там свои. Его ветка — наша, только
+    // если это точно ветка нашего PR; чужая — только если это ветка чужого PR нашего репозитория.
+    const guest = !!s.guest;
+    const ourBr = (b: string) => (guest ? !!b && ourBranches.has(b) : isOurBranch(b));
+    const foreignBr = (b: string) => {
+      if (!guest) return isForeignBranch(b);
+      const nums = b && !isNeutral(b) && !ourBranches.has(b) ? branch2prs.get(b) : undefined;
+      return !!nums?.size && ![...nums].some((x) => ourPrs.has(x));
+    };
+    // pr-link без репозитория у гостя неоднозначен, со своим репозиторием — наш, с другим — не наш и не чужой
+    const links = s.prlinks.filter(([, , r]) => (r ? sameRepo(r) : !guest));
     const anchors: Anchor[] = [];
-    for (const [ts, pr] of s.prlinks) {
+    for (const [ts, pr] of links) {
       const own = ourPrs.has(pr);
       // Claude Code повторяет pr-link привязанного к сессии PR и после мержа — это статус приложения, а не работа:
       // после мержа он не якорь ни для своей задачи (иначе она заберёт время следующих), ни для чужой (иначе
@@ -1896,6 +1956,18 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       if (cls !== "neutral") anchors.push([ts, cls, "commit", w]);
     }
     anchors.sort(cmpAnchor);
+    // гостя привязывает только признак нашего репозитория; номер в названии — лишь вместе с ним
+    if (
+      guest &&
+      !anchors.some((a) => a[1] === "own") &&
+      !ev.some((e) => ourBranches.has(e[1]) || e[3] === ourKey) &&
+      !urlRefs(s.first_urls ?? []).includes(number) &&
+      !(s.title_hist ?? []).some(([, t]) => urlRefs(urlsIn(t)).includes(number))
+    ) {
+      continue;
+    }
+    for (const [, pr] of links) seenPrs.add(pr);
+    for (const e of ev) if (e[1]) seenBranches.add(e[1]);
     const foreignTs = anchors.filter((a) => a[1] === "foreign").map((a) => a[0]);
 
     // окна по якорям: от предыдущего чужого якоря до своего; внутри окна считаются только
@@ -1932,7 +2004,6 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // (первое — с начала сессии): сессия, которую переименовывали под каждую следующую задачу, отдаёт
     // записи безномерной ветки той задаче, под чьим названием они сделаны, а не последней. Название без
     // номера — решает первый промпт; названия нет — первый промпт на всю сессию.
-    const urlRefs = (urls: string[]) => urls.filter((u) => u.startsWith(repo.full + "#")).map((u) => parseInt(u.split("#")[1]!, 10));
     const promptRefs = new Set<number>([...s.first_refs, ...urlRefs(s.first_urls ?? [])]);
     const titleRefs = (title: string) => new Set<number>([...refsIn(title), ...urlRefs(urlsIn(title))]);
     let hist: [number, Set<number>][] = [...(s.title_hist ?? [])].sort((x, y) => x[0] - y[0]).map(([t, title]) => [t, titleRefs(title)]);
@@ -1942,6 +2013,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       : [{ a: -1e18, z: 1e18, refs: promptRefs, rule: "промпт" }];
     for (const seg of segs) {
       if (!(seg.refs.size === 1 && seg.refs.has(number))) continue;
+      // в периоде — PR другого репозитория: «#N» в названии — номер его задачи, а не нашей
+      if (s.prlinks.some(([t, , r]) => !!r && !sameRepo(r) && t >= seg.a && t < seg.z)) continue;
       // до конца периода, первого чужого якоря в нём или первого перехода на ветку, которая не наша и
       // не нейтральная (стартовая ветка периода допускается, если она не чужая — на ней и делалась задача)
       const later = foreignTs.filter((t) => t >= seg.a);
@@ -1952,8 +2025,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         if (e[0] < seg.a) continue;
         if (e[0] >= end) break;
         const b: string = e[1];
-        if (isNeutral(b) || isOurBranch(b)) continue;
-        if (isForeignBranch(b) || (startBranch !== null && b !== startBranch)) {
+        if (isNeutral(b) || ourBr(b)) continue;
+        if (foreignBr(b) || (startBranch !== null && b !== startBranch)) {
           end = e[0];
           zOpen = false;
           break;
@@ -1982,10 +2055,10 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         weak.push("");
         continue;
       }
-      if (isOurBranch(b)) {
+      if (ourBr(b)) {
         w = branchW(b);
         rules["ветка"] = (rules["ветка"] ?? 0) + 1;
-      } else if (windows.length && !isForeignBranch(b)) {
+      } else if (windows.length && !foreignBr(b)) {
         const ws = windows.filter((x) => x.a <= ts && (x.zOpen ? ts < x.z : ts <= x.z) && (x.br === null || b === x.br || isNeutral(b)));
         if (ws.length) {
           w = Math.max(...ws.map((x) => x.w));
