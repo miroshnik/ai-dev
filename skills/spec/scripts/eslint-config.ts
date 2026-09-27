@@ -37,9 +37,12 @@ export function eslintFragments(root: string, dirs: string[] = ["tests"]): strin
   return out.sort();
 }
 
-/** Фрагменты flat config из дерева спеки — для `eslint.config.*` проекта. */
+/**
+ * Фрагменты flat config из дерева спеки — для `eslint.config.*` проекта. Первым — храповик исключений: отключение
+ * правила в коде, которое больше ничего не глушит, — ошибка (исключение надо убрать, долг только уменьшается).
+ */
 export async function collectEslint(root: string, dirs: string[] = ["tests"]): Promise<object[]> {
-  const configs: object[] = [];
+  const configs: object[] = [{ linterOptions: { reportUnusedDisableDirectives: "error" } }];
   for (const file of eslintFragments(root, dirs)) {
     const mod = (await import(pathToFileURL(file).href)) as { default?: object | object[] };
     if (!mod.default) throw new Error(`${path.relative(root, file)}: нет export default — фрагмента flat config`);
