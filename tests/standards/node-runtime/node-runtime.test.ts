@@ -5,7 +5,7 @@
  * байт в байт: `docs/spec`, собранный агентом под Bun, проходит проверку «не отстал» в CI под Node.
  */
 import { spawnSync } from "node:child_process";
-import { cpSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -63,6 +63,23 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     expect([bun.code, node.code]).toEqual([0, 0]);
     expect(node.stdout).toContain("**Удалены (1):**\n\n- `tests/capabilities/billing` · Счета › черновик удаляется");
     expect(node.stdout).toBe(bun.stdout);
+  });
+
+  it("spec-publish публикует под Node то же дерево, что под Bun", () => {
+    const remote = path.join(dir, "remote.git");
+    spawnSync("git", ["init", "-q", "--bare", "-b", "main", remote]);
+    const work = path.join(dir, "work");
+    mkdirSync(work);
+    const repo = gitRepo(work);
+    repo.commit({ "README.md": "# проект\n" });
+    repo.git("remote", "add", "origin", remote);
+    writeTree(work, { "docs/spec/README.md": "# Спецификация\n", "docs/spec/capabilities/billing.md": "# billing\n" });
+    const bun = runScript("spec-publish", ["--branch", "spec-bun"], work);
+    const node = runScript("spec-publish", ["--branch", "spec-node"], work, "node");
+    expect([bun.code, node.code]).toEqual([0, 0]);
+    const tree = (branch: string) => repo.git("rev-parse", `origin/${branch}^{tree}`);
+    repo.git("fetch", "-q", "origin", "spec-bun", "spec-node");
+    expect(tree("spec-node")).toBe(tree("spec-bun"));
   });
 
   /** Установка флоу кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev. */
