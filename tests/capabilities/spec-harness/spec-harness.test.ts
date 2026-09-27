@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { invariant } from "../../../skills/spec/scripts/harness.ts";
+import { invariant, source, sources } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -94,6 +94,106 @@ describe("Соглашение проверяется на каждом элем
       invariant(it, { registry: "мутации", items: [{ name: "a", audits: true }, { name: "b", audits: true }], name: (m) => m.name, check: mustAudit, violator }),
     );
     expect(two.map((t) => t.name).filter((n) => !one.some((t) => t.name === n))).toEqual(["b"]);
+  });
+});
+
+/**
+ * На реальном проекте в одной папке стандарта живут несколько соглашений над одним реестром, часть элементов
+ * намеренно вне охвата, а проверка бывает из двух половин. Всё это видно в спеке, а не спрятано фильтром в коде теста.
+ */
+describe("Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители", () => {
+  const forms: Mutation[] = [
+    { name: "invoice", audits: true },
+    { name: "login", audits: false },
+  ];
+  const byNameKey = (m: Mutation) => m.name;
+
+  it("исключения двух инвариантов одной папки не мешают друг другу", async () => {
+    const exceptions = [
+      { rule: "audit", item: "login", issue: 12, reason: "вход без аудита до #12" },
+      { rule: "cancel", item: "invoice", issue: 13, reason: "отмена счёта — в #13" },
+    ];
+    const noCancel = (m: Mutation) => {
+      if (m.name === "invoice") throw new Error("нет отмены");
+    };
+    const r = await outcomes((it) => {
+      invariant(it, { rule: "audit", registry: "формы", items: forms, key: byNameKey, name: (m) => `${m.name} пишет аудит`, check: mustAudit, violator, exceptions });
+      invariant(it, { rule: "cancel", registry: "формы", items: forms, key: byNameKey, name: (m) => `${m.name} отменяется`, check: noCancel, violator: { name: "форма без отмены", item: { name: "invoice", audits: true } }, exceptions });
+    });
+    expect(r["исключение (audit): login (#12)"]).toBe("✓");
+    expect(r["исключение (cancel): invoice (#13)"]).toBe("✓");
+    expect(Object.entries(r).filter(([, v]) => v !== "✓")).toEqual([]);
+  });
+
+  it("два инварианта в одном describe дают разные названия служебных тестов", () => {
+    const names = collect((it) => {
+      invariant(it, { rule: "audit", registry: "формы", items: forms, name: (m) => `${m.name} пишет аудит`, check: mustAudit, violator });
+      invariant(it, { rule: "cancel", registry: "формы", items: forms, name: (m) => `${m.name} отменяется`, check: mustAudit, violator });
+    }).map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toContain("реестр «формы» не пуст (audit)");
+    expect(names).toContain("нарушитель не проходит (cancel): мутация без записи аудита");
+  });
+
+  it("элемент вне охвата — с причиной на странице, пропал из реестра — «убери из охвата»", async () => {
+    const outside = [
+      { item: "login", reason: "форма входа — аудит пишет сервис авторизации" },
+      { item: "gone", reason: "удалена" },
+    ];
+    const r = await outcomes((it) => invariant(it, { registry: "формы", items: forms, key: byNameKey, name: (m) => `${m.name} пишет аудит`, check: mustAudit, violator, outside }));
+    expect(r["вне охвата: login"]).toBe("✓");
+    expect(r["login пишет аудит"]).toBeUndefined();
+    expect(r["вне охвата: gone"]).toStartWith("✗ элемента gone в реестре «формы» нет — убери из охвата");
+  });
+
+  it("обязательный элемент пропал из реестра — проверка красная", async () => {
+    const r = await outcomes((it) => invariant(it, { registry: "формы", items: forms, key: byNameKey, name: (m) => m.name, check: mustAudit, violator, includes: ["invoice", "signup"] }));
+    expect(r["реестр «формы» находит invoice, signup"]).toStartWith("✗ в реестре «формы» нет: signup");
+  });
+
+  it("каждый из нескольких нарушителей валит проверку", async () => {
+    // проверка из двух половин — клиент и сервер; сервер проверка забыла
+    type Form = { name: string; client: boolean; server: boolean };
+    const clientOnly = (f: Form) => {
+      if (!f.client) throw new Error("нет проверки на клиенте");
+    };
+    const r = await outcomes((it) =>
+      invariant(it, {
+        registry: "формы",
+        items: [{ name: "invoice", client: true, server: true }],
+        name: (f) => f.name,
+        check: clientOnly,
+        violator: [
+          { name: "без проверки на клиенте", item: { name: "x", client: false, server: true } },
+          { name: "без проверки на сервере", item: { name: "y", client: true, server: false } },
+        ],
+      }),
+    );
+    expect(r["нарушитель не проходит: без проверки на клиенте"]).toBe("✓");
+    expect(r["нарушитель не проходит: без проверки на сервере"]).toStartWith("✗ проверка прошла на нарушителе");
+  });
+
+  it("реестр из исходников читает текст лениво, нарушитель — текстом", async () => {
+    writeTree(dir, { "src/a.ts": "export default 1;\n", "src/b.ts": "export const b = 1;\n" });
+    const items = sources(dir, ["src"]);
+    expect(items.map((x) => x.file)).toEqual(["src/a.ts", "src/b.ts"]);
+    // текст читается при проверке, а не при сборе реестра
+    writeTree(dir, { "src/a.ts": "export default 2;\n" });
+    expect(items[0]!.text).toBe("export default 2;\n");
+    const r = await outcomes((it) =>
+      invariant(it, {
+        registry: "обработчики",
+        items,
+        key: (x) => x.file,
+        name: (x) => `${x.file} экспортирует default`,
+        check: (x) => {
+          if (!/export default/.test(x.text)) throw new Error("нет default");
+        },
+        violator: { name: "обработчик без default", item: source("src/fake.ts", "export const x = 1;\n") },
+      }),
+    );
+    expect(r["нарушитель не проходит: обработчик без default"]).toBe("✓");
+    expect(r["src/b.ts экспортирует default"]).toBe("✗ нет default");
   });
 });
 
