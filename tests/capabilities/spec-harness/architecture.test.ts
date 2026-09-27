@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { architecture, cspConnectSrc, importsIn, networkGuard } from "../../../skills/spec/scripts/architecture.ts";
+import { architecture, cspConnectSrc, deployUnits, importsIn, networkGuard } from "../../../skills/spec/scripts/architecture.ts";
 import type { Model } from "../../../skills/spec/scripts/architecture.ts";
 import { eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
@@ -195,6 +195,69 @@ describe("Внешние системы модели (C1) проверяются
   it("CSP connect-src браузера собирается из хостов модели", () => {
     const withMaps: Model = { ...c1, externals: { ...c1.externals, maps: { purpose: "карты", adapter: "billing", hosts: ["maps.example.org"] } } };
     expect(cspConnectSrc(withMaps)).toBe("connect-src 'self' https://api.stripe.com https://maps.example.org");
+  });
+});
+
+const c2: Model = {
+  roots: ["src"],
+  modules: {
+    web: { path: "src/web", purpose: "страницы", dependsOn: ["domain"] },
+    domain: { path: "src/domain", purpose: "правила" },
+    mailer: { path: "src/mailer", purpose: "письма", packages: ["pg"] },
+    repo: { path: "src/repo", purpose: "доступ к базе", packages: ["pg"] },
+  },
+  containers: {
+    app: { purpose: "веб-приложение", modules: ["web", "domain", "repo"], deploy: ["compose:app"], uses: ["db"] },
+    mail: { purpose: "отправка писем", modules: ["mailer"], deploy: ["supabase-function:send-email"] },
+    db: { purpose: "база", deploy: ["compose:db"], clients: ["pg"] },
+  },
+};
+const deploy = {
+  "docker-compose.yml": "services:\n  app:\n    build: .\n  db:\n    image: postgres:17\n",
+  "supabase/functions/send-email/index.ts": "export default () => 1;\n",
+  "src/web/page.ts": 'import { rule } from "../domain/rule.ts";\nexport const p = rule;\n',
+  "src/domain/rule.ts": "export const rule = 1;\n",
+  "src/repo/db.ts": 'import pg from "pg";\nexport const db = pg;\n',
+  "src/mailer/send.ts": "export const send = 1;\n",
+};
+
+/**
+ * C2 — развёртываемые единицы и связи между ними. Модель называет контейнеры, их модули и связи; реальность —
+ * конфиги деплоя в репозитории. Контейнер без конфига и конфиг без контейнера, импорт через границу контейнера и
+ * клиент хранилища без связи с ним — упавшие тесты.
+ */
+describe("Контейнеры модели (C2) сверяются с кодом и конфигами деплоя", () => {
+  it("модуль — ровно в одном контейнере", async () => {
+    writeTree(dir, deploy);
+    const orphan: Model = { ...c2, modules: { ...c2.modules, jobs: { path: "src/jobs", purpose: "задачи" } } };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: orphan }));
+    expect(r["модуль web — в контейнере app"]).toBe("✓");
+    expect(r["модуль jobs — в контейнере ?"]).toStartWith("✗ модуль jobs не входит ни в один контейнер");
+  });
+
+  it("зависимость модулей между контейнерами — упавший тест, связь только uses", async () => {
+    writeTree(dir, deploy);
+    const cross: Model = { ...c2, modules: { ...c2.modules, mailer: { ...c2.modules.mailer!, dependsOn: ["domain"] } } };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: cross }));
+    expect(r["зависимость web → domain — внутри контейнера"]).toBe("✓");
+    expect(r["зависимость mailer → domain — внутри контейнера"]).toStartWith("✗ mailer (mail) зависит от domain (app) — между контейнерами только связь uses");
+  });
+
+  it("развёртываемая единица из конфигов деплоя — в модели, контейнер модели — в конфигах", async () => {
+    writeTree(dir, { ...deploy, "supabase/functions/resize/index.ts": "export default () => 1;\n", "vercel.json": JSON.stringify({ crons: [{ path: "/api/cron/cleanup", schedule: "0 3 * * *" }] }) });
+    expect(deployUnits(dir)).toEqual(["compose:app", "compose:db", "supabase-function:resize", "supabase-function:send-email", "vercel-cron:/api/cron/cleanup"]);
+    const ghost: Model = { ...c2, containers: { ...c2.containers, worker: { purpose: "фон", deploy: ["compose:worker"] } } };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: ghost }));
+    expect(r["развёртываемая единица compose:app — контейнер app"]).toBe("✓");
+    expect(r["развёртываемая единица supabase-function:resize — контейнер ?"]).toStartWith("✗ supabase-function:resize есть в конфигах деплоя, но не в модели");
+    expect(r["развёртываемая единица compose:worker — контейнер worker"]).toStartWith("✗ compose:worker контейнера worker нет в конфигах деплоя");
+  });
+
+  it("клиент хранилища импортирует только контейнер со связью с ним", async () => {
+    writeTree(dir, { ...deploy, "src/mailer/send.ts": 'import pg from "pg";\nexport const send = pg;\n' });
+    const r = await outcomes((it) => architecture(it, { root: dir, model: c2 }));
+    expect(r["клиент pg хранилища db — в контейнере app"]).toBe("✓");
+    expect(r["клиент pg хранилища db — в контейнере mail"]).toStartWith("✗ контейнер mail импортирует клиент pg хранилища db без связи uses: src/mailer/send.ts");
   });
 });
 
