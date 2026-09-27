@@ -9,6 +9,7 @@
  *                          метки решений `type:name`
  *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
  *   github task drop     — закрыть без выполнения и убрать из проекта
+ *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
@@ -270,6 +271,18 @@ export const Q = {
     labels(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id name color description } }
   }
 }`,
+  PrChange: `query PrChange($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      number headRefOid
+      closingIssuesReferences(first: 20) { nodes { number } }
+      files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path } }
+    }
+  }
+}`,
+  ModelAt: `query ModelAt($owner: String!, $name: String!, $expression: String!) {
+  repository(owner: $owner, name: $name) { object(expression: $expression) { ... on Blob { text } } }
+}`,
   IssueSearch: `query IssueSearch($q: String!) {
   search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
 }`,
@@ -312,6 +325,7 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   CreateLabel: ["createLabel", "CreateLabelInput", "label { id }"],
   UpdateLabel: ["updateLabel", "UpdateLabelInput", "label { id }"],
   DeleteLabel: ["deleteLabel", "DeleteLabelInput", "clientMutationId"],
+  AddLabels: ["addLabelsToLabelable", "AddLabelsToLabelableInput", "clientMutationId"],
   AddBlockedBy: ["addBlockedBy", "AddBlockedByInput", "issue { id }"],
   SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
   CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
@@ -411,17 +425,23 @@ function loadLabels(io: Io, slug: string): Label[] {
 }
 
 /**
- * Модули модели архитектуры: текст модели — во временный файл, ключи `modules` печатает отдельный процесс того же
- * рантайма (Bun или Node стирают типы; `import type` скилла spec модели не нужен). Не загрузилась — причина строкой.
+ * Модули модели архитектуры и их каталоги: текст модели — во временный файл, `modules` печатает отдельный процесс
+ * того же рантайма (Bun или Node стирают типы; `import type` скилла spec модели не нужен). Не загрузилась — причина
+ * строкой.
  */
-export function modelModules(text: string): string[] | string {
+export function modelModules(text: string): Record<string, string[]> | string {
   const dir = mkdtempSync(path.join(os.tmpdir(), "github-model-"));
   try {
     writeFileSync(path.join(dir, "model.ts"), text);
-    writeFileSync(path.join(dir, "keys.mjs"), 'const m = await import("./model.ts");\nconsole.log(JSON.stringify(Object.keys(m.default?.modules ?? {})));\n');
-    const r = spawnSync(process.execPath, [path.join(dir, "keys.mjs")], { encoding: "utf8", timeout: 30_000 });
+    writeFileSync(
+      path.join(dir, "modules.mjs"),
+      'const m = await import("./model.ts");\n' +
+        "const paths = (p) => (Array.isArray(p) ? p : [p]).map((x) => String(x).replace(/\\/+$/, \"\"));\n" +
+        "console.log(JSON.stringify(Object.fromEntries(Object.entries(m.default?.modules ?? {}).map(([k, v]) => [k, paths(v?.path ?? [])]))));\n",
+    );
+    const r = spawnSync(process.execPath, [path.join(dir, "modules.mjs")], { encoding: "utf8", timeout: 30_000 });
     if (r.status !== 0) return ((r.stderr || r.error?.message || "").trim().split("\n").find((l) => /error/i.test(l)) ?? "процесс завершился с ошибкой").trim().slice(0, 200);
-    return JSON.parse(r.stdout) as string[];
+    return JSON.parse(r.stdout) as Record<string, string[]>;
   } catch (e) {
     return (e as Error).message;
   } finally {
@@ -439,7 +459,7 @@ export function loadDecisions(io: Io, slug: string): Decisions {
   if (r.model) {
     const mods = modelModules(r.model.text ?? "");
     if (typeof mods === "string") modelError = mods;
-    else names.architecture.push(...mods);
+    else names.architecture.push(...Object.keys(mods));
   }
   for (const k of DECISION_KINDS) names[k] = [...new Set(names[k])].sort();
   return { names, modelError };
@@ -996,6 +1016,12 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
     done.push(`blocked by #${b.number}`);
   }
   if (milestone) done.push(`milestone ${q(milestone.title)}`);
+  // эпик копит метки решений подзадач
+  if (epic && wanted.some((l) => decisionOf(l))) {
+    const all = loadLabels(io, slug);
+    const line = addLabels(io, epic, wanted.filter((l) => decisionOf(l)), all);
+    if (line) done.push(`эпик #${epic.number}: ${line}`);
+  }
   // эпик — не ниже самой срочной открытой подзадачи
   if (epic && priority) {
     const rank = (p: string | null) => (p === null ? PRIORITIES.length : (PRIORITIES as readonly string[]).indexOf(p));
@@ -1053,6 +1079,90 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 }
 
 // ----------------------------------------------------------------------------
+// Метки решений по PR
+// ----------------------------------------------------------------------------
+
+/** Метки, которых у задачи нет, — одной мутацией; вернёт их через запятую (нечего добавлять — пусто). */
+function addLabels(io: Io, issue: Pick<Issue, "id" | "labels">, names: string[], all: Label[]): string {
+  const missing = names.filter((n) => !issue.labels.includes(n));
+  if (!missing.length) return "";
+  mutate(io, { op: "AddLabels", input: { labelableId: issue.id, labelIds: missing.map((n) => all.find((l) => l.name === n)!.id) } });
+  issue.labels.push(...missing);
+  return missing.join(", ");
+}
+
+/**
+ * Решения, которые трогает дифф: папка дерева спеки — само решение, файл кода — модуль модели с самым длинным
+ * подходящим каталогом (вложенный модуль точнее объемлющего). `tests/lib` и файлы вне модулей — не решения.
+ */
+export function decisionsOfFiles(files: string[], modules: Record<string, string[]>): string[] {
+  const out = new Set<string>();
+  const byDir = Object.fromEntries(DECISION_KINDS.map((k) => [DECISIONS[k].dir, k])) as Record<string, DecisionKind>;
+  for (const f of files) {
+    const parts = f.split("/");
+    if (parts[0] === "tests") {
+      const kind = byDir[parts[1] ?? ""];
+      if (kind && parts.length > 3) out.add(`${kind}:${parts[2]}`);
+      continue;
+    }
+    let best: [string, number] | null = null;
+    for (const [m, dirs] of Object.entries(modules)) {
+      for (const d of dirs) if ((f === d || f.startsWith(d + "/")) && (!best || d.length > best[1])) best = [m, d.length];
+    }
+    if (best) out.add(`architecture:${best[0]}`);
+  }
+  return [...out].sort();
+}
+
+export function cmdPrLabels(io: Io, slug: string, number: number): number {
+  const [owner, name] = slug.split("/") as [string, string];
+  let head: Any = null;
+  const files = pages<{ path: string }>((after) => {
+    const pr = graphql(io, Q.PrChange, { owner, name, number, after })?.repository?.pullRequest;
+    if (!pr) throw new GhError(`PR #${number} в ${slug} нет`);
+    head ??= pr;
+    return pr.files;
+  }).map((x) => x.path);
+  const closes: number[] = (head.closingIssuesReferences?.nodes ?? []).map((x: Any) => x.number);
+  if (!closes.length) throw new GhError(`в PR #${number} нет «Closes #N» — метки ставить некуда`);
+  // модули — из головы PR: PR может добавить модуль или перенести его каталог
+  const model = graphql(io, Q.ModelAt, { owner, name, expression: `${head.headRefOid}:${MODEL_PATH}` })?.repository?.object;
+  let modules: Record<string, string[]> = {};
+  if (model) {
+    const m = modelModules(model.text ?? "");
+    if (typeof m === "string") io.err(`предупреждение: модель ${MODEL_PATH} головы PR не загружается — модули не учтены: ${m}`);
+    else modules = m;
+  }
+  const want = decisionsOfFiles(files, modules);
+  io.out(`PR #${number} → ${closes.map((n) => `#${n}`).join(", ")}: ${want.join(", ") || "решений в диффе нет"}`);
+  if (!want.length) return 0;
+
+  const all = loadLabels(io, slug);
+  const fresh = want.filter((l) => !all.some((x) => x.name === l));
+  const repoId = fresh.length ? loadRepo(io, slug).id : "";
+  for (const l of fresh) {
+    const d = decisionOf(l)!;
+    const created = mutate(io, { op: "CreateLabel", input: { repositoryId: repoId, ...decisionLabel(d.kind, d.name) } }).createLabel.label;
+    all.push({ id: created.id, name: l, color: DECISIONS[d.kind].color, description: "" });
+    io.out(`+ создана метка ${q(l)}`);
+  }
+  const epics = new Map<number, Issue>();
+  for (const n of closes) {
+    const issue = loadIssue(io, slug, n);
+    const added = addLabels(io, issue, want, all);
+    if (added) io.out(`+ #${n}: ${added}`);
+    // прежние метки не снимаем: задача могла трогать решение и другим PR
+    for (const l of issue.labels.filter((x) => decisionOf(x) && !want.includes(x))) io.out(`= #${n}: ${l} — решения нет в диффе PR, метка не снята`);
+    if (issue.parent && !epics.has(issue.parent.number)) epics.set(issue.parent.number, loadIssue(io, slug, issue.parent.number));
+  }
+  for (const epic of epics.values()) {
+    const added = addLabels(io, epic, want, all);
+    if (added) io.out(`+ эпик #${epic.number}: ${added}`);
+  }
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
@@ -1065,12 +1175,14 @@ const USAGE = `github — проект и задачи GitHub репозитор
                        [--labels capability:<name>,standard:<name>,architecture:<name>] [--repo owner/repo]
   github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
+  github pr labels     <N> [--repo owner/repo]
 
 check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки.
 fix   — исправляет через API; шаги UI печатает со ссылками; удаление и переименование в проекте
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
-task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).`;
+task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).
+pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает.`;
 
 const issueNumber = (s: string | undefined, what: string): number => {
   const m = /^#?(\d+)$/.exec((s ?? "").trim());
@@ -1092,9 +1204,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop"], pr: ["labels"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix или task new|status|drop`);
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop или pr labels`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true") {
@@ -1106,6 +1218,13 @@ export function main(argv: string[], io: Io): number {
       if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new GhError(`неверный --repo «${slug}», ожидается owner/repo`);
       return slug;
     };
+    if (group === "pr") {
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" } } });
+      if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
+      const m = /^#?(\d+)$/.exec((positionals[0] ?? "").trim());
+      if (!m) throw new GhError(`pr labels: ожидается номер PR, а не «${positionals[0] ?? ""}»`);
+      return cmdPrLabels(io, repoOf(values.repo), Number(m[1]));
+    }
     if (group === "task") {
       const { values, positionals } = parseArgs({
         args: rest,
