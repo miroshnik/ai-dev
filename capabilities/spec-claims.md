@@ -33,7 +33,7 @@
 
 <details><summary>✅ 2 теста</summary>
 
-- ✅ отчёт — JUnit в папке стандарта tests/standards/entry-points: spec-doc показывает его со шапкой главного файла
+- ✅ отчёт — JUnit в папке стандарта tests/standards/entry-points: spec-doc показывает его с описанием entry-points.md
 - ✅ нет журнала — код 2 и подсказка, откуда он берётся
 
 </details>
