@@ -45,8 +45,11 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
     }
     throw new Error(`проверка прошла на нарушителе «${spec.violator.name}» — она ничего не проверяет`);
   });
-  for (const item of spec.items) {
-    it(spec.name(item), async () => {
+  // по названию, а не в порядке реестра: порядок файлов и запросов зависит от машины, а спека — нет
+  const named = spec.items.map((item) => ({ name: spec.name(item), item }));
+  named.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const { name, item } of named) {
+    it(name, async () => {
       await spec.check(item);
     });
   }
