@@ -27,8 +27,9 @@ beforeEach(() => ({ dir, cleanup } = tmpDir()));
 afterEach(() => cleanup());
 
 const BILLING = "tests/capabilities/billing/billing.test.ts";
+const DESCRIPTION = { "tests/capabilities/billing/billing.md": "Биллинг: счета клиентам за месяц.\n" };
 const source = (...names: string[]) =>
-  `/** Биллинг: счета клиентам за месяц. */\nimport { describe, it } from "vitest";\n` +
+  `import { describe, it } from "vitest";\n` +
   `describe("Счета", () => { ${names.map((n) => `it("${n}", () => {});`).join(" ")} });\n`;
 
 /** Каталог → { относительный путь: содержимое }. */
@@ -44,7 +45,7 @@ function readTree(root: string): Record<string, string> {
 
 describe("Под Node без Bun скрипты spec пишут то же, что под Bun", () => {
   it("spec-doc пишет тот же docs/spec, что под Bun", () => {
-    writeTree(dir, { [BILLING]: source("выставляется за месяц") });
+    writeTree(dir, { ...DESCRIPTION, [BILLING]: source("выставляется за месяц") });
     writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [BILLING]: [[["Счета"], "выставляется за месяц"]] }));
     const bun = runScript("spec-doc", ["r.json", "--root", dir, "--out", "spec-bun", "--strict"], dir);
     const node = runScript("spec-doc", ["r.json", "--root", dir, "--out", "spec-node", "--strict"], dir, "node");
