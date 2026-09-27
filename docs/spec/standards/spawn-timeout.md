@@ -10,9 +10,18 @@
 
 ## Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT
 
-<details><summary>✅ 1 тест</summary>
+<details><summary>✅ 10 тестов</summary>
 
-- ✅ тесты ai-dev, которые запускают процессы, задают setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ реестр «тесты ai-dev, которые запускают процессы» не пуст
+- ✅ нарушитель не проходит: файл с node:child_process без таймаута
+- ✅ tests/capabilities/est/est.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/capabilities/install/install.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/capabilities/spec-diff/spec-diff.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/capabilities/spec-doc/spec-doc.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/capabilities/spec-harness/spec-harness.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/capabilities/update/update.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/standards/node-runtime/node-runtime.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ в реестр попадают установщик, скрипты spec и est
 
 </details>
 
