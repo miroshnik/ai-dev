@@ -15,7 +15,8 @@
  *
  * Метаданные прогона харнесса (`.spec-meta/` в корне или --meta) — код примеров и причины исключений под строкой теста.
  * Модель архитектуры (`tests/architecture/model.ts`) — страница architecture.md: схемы C4 и таблица модулей (`c4.ts`);
- * метка `<!-- spec: c4-… -->` в `<папка>.md` заменяется той же схемой.
+ * метка `<!-- spec: c4-… -->` в `<папка>.md` заменяется той же схемой. Трасса сценария (`sequence` харнесса) —
+ * сиквенс-схема под его тестом или там, где в `<папка>.md` стоит `<!-- spec: sequence-<id> -->`.
  *
  * Вывод по умолчанию — docs/spec/: README.md (индекс), architecture.md, capabilities/<name>.md, architecture/<name>.md,
  * standards/<name>.md; свои устаревшие файлы (с маркером) удаляет. Запуск — Bun или Node ≥ 22.18, без зависимостей.
@@ -29,6 +30,7 @@ import { parseArgs } from "node:util";
 
 import type { Model } from "./architecture.ts";
 import * as C4 from "./c4.ts";
+import type { Call } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Kind, Test } from "./speclib.ts";
 
@@ -224,8 +226,32 @@ export function attachDocs(
 }
 
 /** Метаданные прогона харнесса: файл теста + название → то, чего нет в названии (код примера, причина исключения). */
-type Meta = { path?: string; code?: string; issue?: number; reason?: string; disables?: { line: number; rules: string[]; description: string }[] };
+type Meta = {
+  path?: string;
+  code?: string;
+  issue?: number;
+  reason?: string;
+  disables?: { line: number; rules: string[]; description: string }[];
+  id?: string;
+  sequence?: Call[];
+};
 let META = new Map<string, Meta>();
+// тесты, чья схема стоит меткой в описании папки: под тестом её не повторяем
+const PLACED = new Set<string>();
+
+/** Сиквенс-схема Mermaid из трассы: участники — в порядке появления; имя, которое не идентификатор, — через `as`. */
+export function sequenceLines(calls: Call[]): string[] {
+  const ids = new Map<string, string>();
+  for (const c of calls) for (const n of [c.from, c.to]) if (!ids.has(n)) ids.set(n, n.replace(/[^A-Za-z0-9_]/g, "_"));
+  return [
+    "```mermaid",
+    "sequenceDiagram",
+    ...[...ids].map(([n, id]) => `  participant ${id}${id === n ? "" : ` as ${n}`}`),
+    // «;» и «#» Mermaid читает как разделитель и код символа
+    ...calls.map((c) => `  ${ids.get(c.from)}->>${ids.get(c.to)}: ${c.message.replace(/[;#]/g, ",")}`),
+    "```",
+  ];
+}
 
 export function loadMeta(dir: string): Map<string, Meta> {
   const out = new Map<string, Meta>();
@@ -259,6 +285,7 @@ function metaLines(t: Test): string[] {
   if (m.issue !== undefined) out.push(`  > #${m.issue} — ${m.reason ?? ""}`);
   const codeFile = /^исключения в (.+?): /.exec(t.name)?.[1] ?? "";
   for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
+  if (m.sequence?.length && !PLACED.has(t.path + "\0" + t.name)) out.push(...sequenceLines(m.sequence).map((l) => "  " + l));
   return out;
 }
 
@@ -461,17 +488,30 @@ async function loadModel(root: string): Promise<Model | null> {
 }
 
 /** Метки `<!-- spec: … -->` в описаниях групп → схемы из модели; возвращает непонятые метки с файлом. */
+const SEQUENCE_MARK = /^[ \t]*<!--\s*spec:\s*sequence-([\w-]+)\s*-->[ \t]*$/gm;
+
 function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
   const problems: string[] = [];
   for (const g of groups.values()) {
+    const files = new Set(g.tests.map((t) => t.path));
     g.doc = g.doc.map((d) => {
-      const { text, bad } = C4.embed(d, model);
+      // сценарий — по id среди тестов этой папки: схема в рассказе, под тестом её уже нет
+      const withSequences = d.replace(SEQUENCE_MARK, (line, id: string) => {
+        const hit = [...META].find(([k, m]) => m.id === id && m.sequence && files.has(k.split("\0")[0]!));
+        if (!hit) {
+          problems.push(`метка <!-- spec: sequence-${id} --> в ${descriptionPath(g)}: нет сценария ${id} в тестах папки`);
+          return line;
+        }
+        PLACED.add(hit[0]);
+        return sequenceLines(hit[1].sequence!).join("\n");
+      });
+      const { text, bad } = C4.embed(withSequences, model);
       for (const b of bad) {
         const mark = `<!-- spec: ${b.mark} -->`;
         problems.push(
           b.missing === "model"
             ? `метка ${mark} в ${descriptionPath(g)}: нет модели ${MODEL}`
-            : `неизвестная метка ${mark} в ${descriptionPath(g)} — есть: ${Object.keys(C4.MARKS).join(", ")}`,
+            : `неизвестная метка ${mark} в ${descriptionPath(g)} — есть: ${[...Object.keys(C4.MARKS), "sequence-<id>"].join(", ")}`,
         );
       }
       return text;
