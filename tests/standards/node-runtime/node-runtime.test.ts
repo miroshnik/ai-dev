@@ -82,6 +82,17 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     expect(tree("spec-node")).toBe(tree("spec-bun"));
   });
 
+  it("spec-claims пишет под Node тот же отчёт, что под Bun", () => {
+    writeTree(dir, {
+      "entries.json": JSON.stringify(["POST /invoices", "job:cleanup"]),
+      ".spec-journal/1.jsonl": JSON.stringify({ id: "POST /invoices", test: "tests/capabilities/billing/billing.test.ts" }) + "\n",
+    });
+    const bun = runScript("spec-claims", ["--entries", "entries.json", "--report", "bun.xml"], dir);
+    const node = runScript("spec-claims", ["--entries", "entries.json", "--report", "node.xml"], dir, "node");
+    expect([bun.code, node.code]).toEqual([1, 1]);
+    expect(readFileSync(path.join(dir, "node.xml"), "utf8")).toBe(readFileSync(path.join(dir, "bun.xml"), "utf8"));
+  });
+
   /** Установка флоу кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev. */
   it("копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений", () => {
     writeTree(dir, { [BILLING]: source("выставляется за месяц") });

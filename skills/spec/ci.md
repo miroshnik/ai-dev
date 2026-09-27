@@ -34,6 +34,8 @@ jobs:
           --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
       - uses: actions/upload-artifact@v7
         with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
+      - uses: actions/upload-artifact@v7 # журнал точек входа — для spec-claims
+        with: { name: 'spec-journal-unit-${{ matrix.shard }}', path: .spec-journal/, retention-days: 1, include-hidden-files: true }
 
   e2e:
     runs-on: ubuntu-latest
@@ -50,6 +52,8 @@ jobs:
       - run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=dot,blob
       - uses: actions/upload-artifact@v7
         with: { name: 'playwright-blob-${{ matrix.shard }}', path: blob-report/, retention-days: 1 }
+      - uses: actions/upload-artifact@v7
+        with: { name: 'spec-journal-e2e-${{ matrix.shard }}', path: .spec-journal/, retention-days: 1, include-hidden-files: true }
 
   spec:
     needs: [unit, e2e]
@@ -64,6 +68,9 @@ jobs:
         with: { pattern: vitest-blob-*, path: vitest-blob, merge-multiple: true }
       - uses: actions/download-artifact@v8
         with: { pattern: playwright-blob-*, path: playwright-blob, merge-multiple: true }
+      - uses: actions/download-artifact@v8
+        with: { pattern: spec-journal-*, path: .spec-journal, merge-multiple: true }
+      - run: pnpm spec:claims # каждая точка входа вызвана тестом capability; отчёт — в spec:doc
       - run: pnpm exec vitest --merge-reports=vitest-blob --reporter=json --outputFile.json=.spec-report.json
       - run: pnpm exec playwright merge-reports --reporter=json playwright-blob
         env: { PLAYWRIGHT_JSON_OUTPUT_NAME: .spec-playwright.json }

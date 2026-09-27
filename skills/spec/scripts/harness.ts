@@ -11,7 +11,7 @@
  * поэтому идёт под Node ≥ 22.18 и под Bun без зависимостей.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -252,4 +252,41 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
       if (bad.length) throw new Error(bad.join("\n"));
     });
   }
+}
+
+// файл теста в стеке вызова: *.test.* / *.spec.* / *.e2e.* (V8 и JavaScriptCore; file:// — у ESM)
+const STACK_FILE = /(?:\(|\bat\s+)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+:\d+)/g;
+const seen = new Set<string>();
+let journalFile: string | null = null;
+
+/** Файл теста, из которого идёт вызов, от корня проекта — по стеку; не из теста — null. */
+function callerTest(root: string): string | null {
+  for (const m of (new Error().stack ?? "").matchAll(STACK_FILE)) {
+    const abs = m[1]!;
+    const rel = path.relative(root, abs).split(path.sep).join("/");
+    if (!rel.startsWith("..")) return rel;
+    const i = abs.indexOf("/tests/");
+    if (i >= 0) return abs.slice(i + 1);
+  }
+  return null;
+}
+
+/**
+ * Журнал точек входа: тестовое окружение отмечает вызов точки входа (маршрута, job, команды) — обёрткой роутера
+ * или обработчика в тестовой сборке. Файл теста определяется по стеку; где стека теста нет (e2e: запрос приходит в
+ * сервер) — передать явно (`test.info().file` у Playwright). Запись — строка JSON в `.spec-journal/<процесс>.jsonl`
+ * (`SPEC_JOURNAL` — другой каталог); сверку с реестром делает `spec-claims` после прогона всех тестов и шардов.
+ */
+export function journal(id: string, opts: { test?: string; root?: string } = {}): void {
+  const root = opts.root ?? process.cwd();
+  const test = opts.test ? path.relative(root, path.resolve(root, opts.test)).split(path.sep).join("/") : callerTest(root);
+  const key = `${id}\0${test}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  if (!journalFile) {
+    const dir = path.resolve(root, process.env.SPEC_JOURNAL ?? ".spec-journal");
+    mkdirSync(dir, { recursive: true });
+    journalFile = path.join(dir, `${process.pid}-${Math.random().toString(36).slice(2, 10)}.jsonl`);
+  }
+  appendFileSync(journalFile, JSON.stringify({ id, test }) + "\n");
 }

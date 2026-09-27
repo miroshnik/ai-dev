@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и на main (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
-allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
+description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и на main (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
 # spec — документация из названий тестов, дифф спеки в PR
@@ -17,6 +17,8 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
   тела PR: удалены, изменены, добавлены;
 - `spec-publish.ts` — собранный `docs/spec` → ветка `spec` (CI после мержа в
   `main`); в `main` документации нет;
+- `spec-claims.ts` — после прогона: каждая точка входа вызвана тестом
+  capability (журнал `journal` харнесса), отчёт JUnit — в `spec-doc`;
 - `harness.ts` — библиотека для тестов проекта: механическая проверка
   регистрирует обычные тесты раннера и попадает в спеку (раздел «Проверки»).
 
@@ -41,6 +43,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | Спрашивают, какие требования снял PR | `spec-diff` — список «Удалены» идёт первым |
 | Проект переходит на тест-спек | раздел «Подключение в репозиторий»: установка флоу, скрипты под Node, workflow |
 | Соглашение для всех элементов (мутации, маршруты, файлы) | `invariant` в `tests/standards/<name>/<name>.test.ts` — раздел «Проверки» |
+| После прогона всех тестов и шардов | `spec-claims` — каждая точка входа вызвана тестом capability; его отчёт — в `spec-doc` вместе с отчётами раннеров |
 
 ## Отчёты для spec-doc
 
@@ -241,143 +244,21 @@ bun <каталог скилла>/scripts/spec-publish.ts [--dir docs/spec] [--b
 каталога или не git. Без настроенного `git user` коммит — от бота GitHub
 Actions.
 
-## Проверки — `harness.ts`
+## Проверки — `harness.ts`, `architecture.ts`, `spec-claims.ts`
 
-Механическая проверка — это тесты раннера: они в отчёте, а значит в
-`docs/spec` и в `spec-diff`. Харнесс не зависит от раннера — `it` передаёт
-тест (Vitest, Jest, bun test, `node:test`). Импорт — из копии скилла в
-проекте: `.agents/skills/spec/scripts/harness.ts` (из
-`tests/standards/<name>/` — `../../../.agents/skills/spec/scripts/harness.ts`).
+Механическая проверка — это тесты раннера (или отчёт в формате раннера): они
+в отчёте, а значит в `docs/spec` и в `spec-diff`. Импорт — из копии скилла в
+проекте (`.agents/skills/spec/scripts/…`), раннер не важен — `it` передаёт
+тест. Как подключить каждую — `checks.md` рядом.
 
-**`invariant` — реестр + инвариант.** Соглашение о поведении («каждая
-мутация пишет аудит», «каждый маршрут проверяет право») проверяется на каждом
-элементе реестра, взятого из кода, а не на одном примере:
-
-```ts
-import { describe, expect, it } from "vitest";
-import { invariant } from "../../../.agents/skills/spec/scripts/harness.ts";
-
-const mutations = await listMutations(); // из кода: роутер, схема, файлы — не рукописный список
-
-describe("каждая мутация пишет аудит", () => {
-  invariant(it, {
-    registry: "мутации",
-    items: mutations,
-    name: (m) => `${m.name} пишет запись аудита`,
-    check: async (m) => expect(await auditRowsAfter(m)).toHaveLength(1),
-    violator: { name: "мутация без записи аудита", item: fakeMutationWithoutAudit },
-  });
-});
-```
-
-Тесты: «реестр «мутации» не пуст» — опечатка в пути или выборке даёт пустой
-реестр и зелёную проверку, которая ничего не проверяет; «нарушитель не
-проходит: …» — проверка обязана упасть на заведомом нарушителе; по тесту на
-элемент с названием-утверждением; тесты элементов идут по названию, а не в
-порядке реестра — порядок файлов и запросов зависит от машины, а `docs/spec`
-не должен. Счётчиков в названиях нет: реестр растёт — в `spec-diff` только
-новые элементы. Реестр считается до регистрации тестов:
-асинхронный — `await` на верхнем уровне файла.
-
-**`examples` — примеры линт-правила.** Правило проверяется кодом, на котором
-оно обязано сработать («нельзя»), промолчать («можно») и не действовать
-(«вне охвата» — файл, на который правило не распространяется). Линтер — через
-адаптер: `eslintLinter()` берёт ESLint и `eslint.config.*` проекта, пример
-проверяется так же, как `lint` проверит файл по этому пути.
-
-```ts
-import { describe, it } from "vitest";
-import { eslintLinter, examples } from "../../../.agents/skills/spec/scripts/harness.ts";
-
-describe("домен не пишет в консоль", () => {
-  examples(it, {
-    linter: eslintLinter(),
-    rule: "no-console",
-    bad: [{ name: "console.log в домене", path: "src/domain/invoice.ts", code: "console.log(1);" }],
-    good: [{ name: "логгер в домене", path: "src/domain/invoice.ts", code: "log.info(1);" }],
-    outside: [{ name: "console.log в скрипте сборки", path: "scripts/build.ts", code: "console.log(1);" }],
-  });
-});
-```
-
-Тесты — «нельзя: …», «можно: …», «вне охвата: …». Срабатывание другого
-правила не считается ни за, ни против; пример, который не разбирается, —
-упавший тест; без «нельзя» — упавший тест «у правила … есть пример
-«нельзя»». Адаптер пока один — ESLint: ast-grep и Biome добавятся, когда
-понадобятся проекту (ядро от линтера не зависит, `Linter` — интерфейс из
-одного метода).
-
-**Правило — в папке своего стандарта.** Фрагмент flat config — `eslint.ts`
-рядом с тестом (`export default [{ files: ["src/domain/**"], rules: {…} }]`,
-пути от корня проекта); `eslint.config.*` проекта только собирает фрагменты
-дерева — `lint` и редактор видят правило как обычно:
-
-```js
-import { collectEslint } from "./.agents/skills/spec/scripts/eslint-config.ts";
-export default [...base, ...(await collectEslint(import.meta.dirname))];
-```
-
-ESLint кэширует конфиг в процессе: новый или удалённый фрагмент редактор
-увидит после перезапуска ESLint-сервера; `lint` в CLI — сразу.
-
-**Исключения — явные, с задачей, и уходят, когда больше не нужны.**
-
-- *Реестр + инвариант:* `exceptions.ts` в папке решения —
-  `export default [{ item: "importLegacy", issue: 12, reason: "…" }]`, в
-  `invariant` — `exceptions` и `key` (стабильный идентификатор элемента: имя,
-  путь). Исключённый элемент вместо обычного теста получает «исключение:
-  <ключ> (#N)»: зелёный, пока нарушает соглашение; начал соблюдать — красный
-  «убери исключение» (храповик: долг только уменьшается). Исключение без
-  задачи, без причины или на элемент вне реестра — красный.
-- *Линт-правило:* исключение — отключение в коде, там же, где нарушение:
-  `// eslint-disable-next-line no-console -- #12 причина`. `collectEslint`
-  включает `reportUnusedDisableDirectives: "error"` — отключение, которое
-  больше ничего не глушит, — ошибка `lint`. Формат проверяет стандарт проекта:
-
-  ```ts
-  import { it } from "vitest";
-  import { lintExceptions } from "../../../.agents/skills/spec/scripts/harness.ts";
-
-  lintExceptions(it, { root: process.cwd(), dirs: ["src"] });
-  ```
-
-  По тесту на файл с отключениями («исключения в <файл>: <правила>»): у
-  каждого отключения названо правило и есть `-- #N причина`; общий
-  `eslint-disable` без правил запрещён — он глушит и правила, и проверку
-  внутри линтера, поэтому формат проверяет тест, а не правило ESLint. Тесты
-  файлов — список исключений в спеке.
-
-**Модель архитектуры — `architecture.ts`.** Одна на проект,
-`tests/architecture/model.ts`: модули (путь, назначение), от каких модулей и
-внешних пакетов каждый зависит.
-
-```ts
-import type { Model } from "../../.agents/skills/spec/scripts/architecture.ts";
-
-export default {
-  roots: ["src"],
-  aliases: { "@/": "src/" }, // импорт по псевдониму — локальный, не пакет
-  modules: {
-    domain: { path: "src/domain", purpose: "правила счетов, без ввода-вывода" },
-    infra: { path: "src/infra", purpose: "база и сервисы", dependsOn: ["domain"], packages: ["pg"] },
-  },
-} satisfies Model;
-```
-
-- *Границы модулей* — `tests/architecture/boundaries/eslint.ts`:
-  `export default boundariesConfig(model, boundaries)` (плагин
-  `eslint-plugin-boundaries` проекта; для псевдонимов TypeScript — резолвер
-  через `settings`). Импорт модуля не из `dependsOn` — ошибка
-  `boundaries/dependencies` в `lint` и редакторе; в `boundaries.test.ts` —
-  `examples` на это правило.
-- *Модель против кода* — `architecture(it, { root, model })` в
-  `tests/architecture/modules/modules.test.ts`: «<каталог> → <модуль>» на
-  каждый каталог кода (вне модулей — красный), «<модуль> импортирует <пакет>»
-  (пакет не разрешён модулю — красный), «<модуль> использует разрешённый
-  пакет <пакет>» (не импортируется — красный: модель разошлась с кодом).
-  Импорты — статический разбор: относительные, псевдонимы, встроенные модули
-  Node и `import type` — не пакеты. Пакеты проверяет разбор, а не плагин:
-  `eslint-plugin-boundaries` 7.2 внешние пакеты не ловит даже явным запретом.
+| Что проверить | Чем | Где в `tests/` |
+|---|---|---|
+| Соглашение на каждом элементе реестра из кода («каждая мутация пишет аудит») | `invariant` | `standards/<name>/` |
+| Линт-правило: «нельзя», «можно», «вне охвата» | `examples`, `eslintLinter` | `standards/<name>/` + фрагмент `eslint.ts` |
+| Правило ESLint в папке стандарта | `collectEslint` в `eslint.config.*` | фрагменты `eslint.ts` дерева |
+| Исключения с храповиком | `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions.ts` папки решения |
+| Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
+| Каждая точка входа вызывается тестом capability | `journal` + `spec-claims` после прогона | `standards/entry-points/` |
 
 ## Подключение в репозиторий
 
@@ -401,9 +282,10 @@ export default {
    `scripts/package.json` скилла задаёт ESM при любом `type` проекта. Отчёты —
    те, что есть в проекте:
    ```json
-   "spec:doc": "node .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json --strict",
+   "spec:doc": "node .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
    "spec:diff": "node .agents/skills/spec/scripts/spec-diff.ts",
-   "spec:publish": "node .agents/skills/spec/scripts/spec-publish.ts"
+   "spec:publish": "node .agents/skills/spec/scripts/spec-publish.ts",
+   "spec:claims": "node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
    Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
    spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `vitest-blob/`,
