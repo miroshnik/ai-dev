@@ -279,6 +279,47 @@ describe("каждая мутация пишет аудит", () => {
 новые элементы. Реестр считается до регистрации тестов:
 асинхронный — `await` на верхнем уровне файла.
 
+**`examples` — примеры линт-правила.** Правило проверяется кодом, на котором
+оно обязано сработать («нельзя»), промолчать («можно») и не действовать
+(«вне охвата» — файл, на который правило не распространяется). Линтер — через
+адаптер: `eslintLinter()` берёт ESLint и `eslint.config.*` проекта, пример
+проверяется так же, как `lint` проверит файл по этому пути.
+
+```ts
+import { describe, it } from "vitest";
+import { eslintLinter, examples } from "../../../.agents/skills/spec/scripts/harness.ts";
+
+describe("домен не пишет в консоль", () => {
+  examples(it, {
+    linter: eslintLinter(),
+    rule: "no-console",
+    bad: [{ name: "console.log в домене", path: "src/domain/invoice.ts", code: "console.log(1);" }],
+    good: [{ name: "логгер в домене", path: "src/domain/invoice.ts", code: "log.info(1);" }],
+    outside: [{ name: "console.log в скрипте сборки", path: "scripts/build.ts", code: "console.log(1);" }],
+  });
+});
+```
+
+Тесты — «нельзя: …», «можно: …», «вне охвата: …». Срабатывание другого
+правила не считается ни за, ни против; пример, который не разбирается, —
+упавший тест; без «нельзя» — упавший тест «у правила … есть пример
+«нельзя»». Адаптер пока один — ESLint: ast-grep и Biome добавятся, когда
+понадобятся проекту (ядро от линтера не зависит, `Linter` — интерфейс из
+одного метода).
+
+**Правило — в папке своего стандарта.** Фрагмент flat config — `eslint.ts`
+рядом с тестом (`export default [{ files: ["src/domain/**"], rules: {…} }]`,
+пути от корня проекта); `eslint.config.*` проекта только собирает фрагменты
+дерева — `lint` и редактор видят правило как обычно:
+
+```js
+import { collectEslint } from "./.agents/skills/spec/scripts/eslint-config.ts";
+export default [...base, ...(await collectEslint(import.meta.dirname))];
+```
+
+ESLint кэширует конфиг в процессе: новый или удалённый фрагмент редактор
+увидит после перезапуска ESLint-сервера; `lint` в CLI — сразу.
+
 ## Подключение в репозиторий
 
 Скрипты берутся из копии скилла в самом проекте и идут под Node — Bun проекту
