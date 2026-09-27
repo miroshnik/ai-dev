@@ -389,14 +389,20 @@ const ENV_READ = /\bprocess\.env\.([A-Z_][A-Z0-9_]*)|\bprocess\.env\[\s*["']([A-
 const ENV_SERVICE = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV", "PROD", "MODE", "SSR", "BASE_URL"];
 
 /** Переменные окружения, которые читает код: имя → файлы. */
+/** Имена переменных окружения, которые читает исходник. */
+export function envNamesIn(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(ENV_READ)) {
+    const names = m[4] ? m[4].split(",").map((x) => x.split(":")[0]!.trim()).filter((x) => /^[A-Z_][A-Z0-9_]*$/.test(x)) : [m[1] ?? m[2] ?? m[3]!];
+    for (const n of names) out.add(n);
+  }
+  return [...out];
+}
+
 function envReads(root: string, dirs: string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const file of codeFiles(root, dirs)) {
-    const text = readFileSync(path.join(root, file), "utf8");
-    for (const m of text.matchAll(ENV_READ)) {
-      const names = m[4] ? m[4].split(",").map((x) => x.split(":")[0]!.trim()).filter((x) => /^[A-Z_][A-Z0-9_]*$/.test(x)) : [m[1] ?? m[2] ?? m[3]!];
-      for (const n of names) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
-    }
+    for (const n of envNamesIn(readFileSync(path.join(root, file), "utf8"))) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
   }
   return out;
 }
