@@ -269,7 +269,7 @@ describe("Пропущенный и падающий тест видны — н�
 describe("Отчёты Vitest, Playwright и bun test — в любом сочетании", () => {
   it("Vitest: абсолютный путь с другой машины приводится по сегменту /tests/", () => {
     const r = doc("r.json", vitestReport("/home/runner/work/repo/repo", { "tests/standards/audit/audit.test.ts": [[["Аудит"], "каждая мутация пишет запись"]] }), "--stdout");
-    expect(r.stdout).toContain("## Как построена\n\n### audit\n\n#### Аудит\n\n");
+    expect(r.stdout).toContain("## Каким правилам подчиняется код\n\n### audit\n\n#### Аудит\n\n");
     expect(r.stdout).not.toContain("Вне дерева");
   });
 

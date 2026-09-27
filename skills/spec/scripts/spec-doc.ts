@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
  * spec-doc — документация из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
- * от bun test): раздел на папку tests/capabilities/<name> («Что делает система») и
- * tests/standards/<name> («Как построена»). Страница — рассказ: шапка главного файла папки
- * (<name>.test.ts, у стандарта — rule.test.ts) под заголовком (первый абзац — в индексе), describe →
+ * от bun test): раздел на папку tests/capabilities/<name> («Что делает система»),
+ * tests/architecture/<name> («Из чего состоит») и tests/standards/<name> («Каким правилам подчиняется
+ * код»). Страница — рассказ: шапка главного файла папки (<name>.test.ts у всех видов; rule.test.ts —
+ * подсказка переименовать) под заголовком (первый абзац — в индексе), describe →
  * раздел с прозой из своего JSDoc, тесты раздела свёрнуты в <details> со счётчиком. Разделы идут в
  * порядке главного файла, остальные файлы — следом по пути. Шапка другого файла папки в документацию
  * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
@@ -11,7 +12,7 @@
  *
  *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict]
  *
- * Вывод по умолчанию — docs/spec/: README.md (индекс), capabilities/<name>.md,
+ * Вывод по умолчанию — docs/spec/: README.md (индекс), capabilities/<name>.md, architecture/<name>.md,
  * standards/<name>.md; свои устаревшие файлы (с маркером) удаляет. Запуск — Bun, без зависимостей.
  */
 
@@ -25,8 +26,14 @@ import type { Kind, Test } from "./speclib.ts";
 
 export const MARK = "<!-- spec-doc: сгенерировано из названий тестов, руками не править -->";
 const ICON: Record<string, string> = { passed: "✅", failed: "❌", skipped: "⏭️", todo: "📝" };
-const SECTION: Record<string, string> = { capability: "Что делает система", standard: "Как построена" };
-const SUBDIR: Record<string, string> = { capability: "capabilities", standard: "standards" };
+// порядок разделов — вопросы читателя: что делает, из чего состоит, каким правилам подчиняется код
+const KINDS: Kind[] = ["capability", "architecture", "standard"];
+const SECTION: Record<string, string> = {
+  capability: "Что делает система",
+  architecture: "Из чего состоит",
+  standard: "Каким правилам подчиняется код",
+};
+const SUBDIR: Record<string, string> = { capability: "capabilities", architecture: "architecture", standard: "standards" };
 const INTRO =
   "Сгенерировано из дерева `tests/`, названий тестов и их JSDoc (скилл `spec`, `spec-doc`). Руками не править: правка — в тестах.";
 
@@ -66,15 +73,22 @@ function findRoot(root?: string): string {
 const newNode = (): Node => ({ tests: [], children: new Map(), doc: [] });
 const testKey = (t: Test): string => JSON.stringify([...t.describes, t.name]);
 
-/** Имя главного файла папки без расширений: у capability — имя папки, у стандарта — `rule`. */
-const mainName = (kind: Kind, name: string): string => (kind === "standard" ? "rule" : name);
-
-/** Главный файл папки (`<name>.test.ts`, `<name>.e2e.ts`…) — в нём рассказ, с него начинается страница. */
+/**
+ * Главный файл папки (`<name>.test.ts`, `<name>.e2e.ts`…) — в нём рассказ, с него начинается страница. Имя —
+ * имя папки у всех видов: одно правило вместо особого `rule.test.ts` у стандарта.
+ */
 function isMain(file: string): boolean {
   const [kind, name] = L.classify(file);
-  if ((kind !== "capability" && kind !== "standard") || name === null) return false;
+  if (!KINDS.includes(kind) || name === null) return false;
   const parts = file.split("/");
-  return parts.length === 4 && parts[3]!.split(".")[0] === mainName(kind, name);
+  return parts.length === 4 && parts[3]!.split(".")[0] === name;
+}
+
+/** Прежний главный файл стандарта `rule.*` прямо в папке: теперь не главный — его надо переименовать. */
+function isLegacyMain(file: string): boolean {
+  const [kind, name] = L.classify(file);
+  const parts = file.split("/");
+  return (kind === "standard" || kind === "architecture") && name !== "rule" && parts.length === 4 && parts[3]!.split(".")[0] === "rule";
 }
 
 /** → группы по (вид, имя), тесты вне дерева по файлам, файлы tests/lib. */
@@ -118,15 +132,18 @@ const addOnce = (list: string[], text: string): void => {
 /**
  * Проза из JSDoc исходников группы (отчёты комментариев не несут): шапка главного файла — абзацы
  * группы, describe — узла дерева, it — теста. Describe без тестов в отчёте (имя из it.each с
- * подстановкой) прозу теряет. Возвращает файлы, которых нет на диске (они без прозы), и файлы с
- * шапкой вне главного — рассказ пишется в одном месте, их шапка в документацию не идёт.
+ * подстановкой) прозу теряет. Возвращает файлы, которых нет на диске (они без прозы), файлы с
+ * шапкой вне главного — рассказ пишется в одном месте, их шапка в документацию не идёт, — и прежние
+ * главные `rule.*`, которые надо переименовать.
  */
-export function attachDocs(groups: Map<string, Group>, root: string): { missing: string[]; misplaced: string[] } {
+export function attachDocs(groups: Map<string, Group>, root: string): { missing: string[]; misplaced: string[]; legacy: string[] } {
   const missing: string[] = [];
   const misplaced: string[] = [];
+  const legacy: string[] = [];
   for (const g of groups.values()) {
     // порядок файлов — как в build: главный первым
     for (const file of [...new Set(g.tests.map((t) => t.path))]) {
+      if (isLegacyMain(file)) legacy.push(file);
       let source: string;
       try {
         source = readFileSync(path.join(root, file), "utf8");
@@ -136,7 +153,7 @@ export function attachDocs(groups: Map<string, Group>, root: string): { missing:
       }
       const docs = L.parseDocs(file, source);
       if (docs.file && isMain(file) && !g.doc.length) g.doc.push(docs.file);
-      else if (docs.file) misplaced.push(file);
+      else if (docs.file && !isLegacyMain(file)) misplaced.push(file);
       for (const [key, text] of docs.describes) {
         let node: Node | undefined = g.tree;
         for (const d of JSON.parse(key) as string[]) node = node?.children.get(d);
@@ -148,7 +165,7 @@ export function attachDocs(groups: Map<string, Group>, root: string): { missing:
       }
     }
   }
-  return { missing, misplaced };
+  return { missing, misplaced, legacy };
 }
 
 function testLine(t: Test): string {
@@ -224,16 +241,19 @@ function groupNames(groups: Map<string, Group>, kind: Kind): string[] {
 
 function outSection(out: Map<string, Test[]>): string[] {
   if (!out.size) return [];
-  const lines = ["", "## Вне дерева", "", `Тесты без дома в \`${L.TESTS}/capabilities/<name>\` и \`${L.TESTS}/standards/<name>\` — перенести:`, ""];
+  const homes = KINDS.map((k) => `\`${L.TESTS}/${SUBDIR[k]}/<name>\``);
+  const lines = ["", "## Вне дерева", "", `Тесты без дома в ${homes.slice(0, -1).join(", ")} и ${homes.at(-1)} — перенести:`, ""];
   for (const file of [...out.keys()].sort()) lines.push(`- \`${file}\` — ${testsWord(out.get(file)!.length)}`);
   return lines;
 }
 
 function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>): string {
   const lines = [MARK, "# Спецификация", "", INTRO];
-  for (const kind of ["capability", "standard"] as Kind[]) {
-    lines.push("", `## ${SECTION[kind]}`, "");
+  for (const kind of KINDS) {
     const names = groupNames(groups, kind);
+    // правил архитектуры в проекте может не быть вовсе — тогда раздела нет, а не «— нет.»
+    if (!names.length && kind === "architecture") continue;
+    lines.push("", `## ${SECTION[kind]}`, "");
     if (!names.length) lines.push("— нет.");
     for (const n of names) lines.push(indexLine(groups.get(kind + "/" + n)!));
   }
@@ -243,9 +263,10 @@ function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>): stri
 
 function renderStdout(groups: Map<string, Group>, out: Map<string, Test[]>): string {
   const lines = [MARK, "# Спецификация", "", INTRO];
-  for (const kind of ["capability", "standard"] as Kind[]) {
-    lines.push("", `## ${SECTION[kind]}`, "");
+  for (const kind of KINDS) {
     const names = groupNames(groups, kind);
+    if (!names.length && kind === "architecture") continue;
+    lines.push("", `## ${SECTION[kind]}`, "");
     if (!names.length) lines.push("— нет.");
     for (const n of names) lines.push(renderGroup(groups.get(kind + "/" + n)!, 3).trimEnd(), "");
   }
@@ -320,7 +341,7 @@ export function main(argv: string[]): number {
   }
   tests = L.mergeTests(tests);
   const { groups, out, libFiles } = build(tests);
-  const { missing, misplaced } = attachDocs(groups, root);
+  const { missing, misplaced, legacy } = attachDocs(groups, root);
 
   if (values.stdout) {
     process.stdout.write(renderStdout(groups, out));
@@ -332,19 +353,21 @@ export function main(argv: string[]): number {
   }
 
   const nCap = groupNames(groups, "capability").length;
+  const nArch = groupNames(groups, "architecture").length;
   const nStd = groupNames(groups, "standard").length;
   const inTree = [...groups.values()].flatMap((g) => g.tests);
   const outN = [...out.values()].reduce((s, v) => s + v.length, 0);
   console.error(
-    `spec-doc: capabilities ${nCap}, standards ${nStd}, ${countsLine(inTree)}; ${L.TESTS}/lib пропущено файлов: ${libFiles.size}; вне дерева: ${outN} в ${out.size} файлах`,
+    `spec-doc: capabilities ${nCap}, architecture ${nArch}, standards ${nStd}, ${countsLine(inTree)}; ${L.TESTS}/lib пропущено файлов: ${libFiles.size}; вне дерева: ${outN} в ${out.size} файлах`,
   );
   for (const file of [...out.keys()].sort()) console.error(`spec-doc: вне дерева: ${file} (${testsWord(out.get(file)!.length)})`);
   if (missing.length) console.error(`spec-doc: нет исходников (${missing.length}) — проза из JSDoc не взята: ${missing.join(", ")}`);
-  for (const file of misplaced) {
-    const [kind, name] = L.classify(file);
-    console.error(`spec-doc: шапка вне главного файла ${mainName(kind, name!)}.* — в документацию не идёт: ${file}`);
+  for (const file of misplaced) console.error(`spec-doc: шапка вне главного файла ${L.classify(file)[1]}.* — в документацию не идёт: ${file}`);
+  for (const file of legacy) {
+    const base = path.posix.basename(file);
+    console.error(`spec-doc: главный файл папки — ${L.classify(file)[1]}${base.slice("rule".length)}, а не ${base} — переименуй: ${file}`);
   }
-  return (out.size || misplaced.length) && values.strict ? 1 : 0;
+  return (out.size || misplaced.length || legacy.length) && values.strict ? 1 : 0;
 }
 
 if (import.meta.main) {
