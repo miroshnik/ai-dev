@@ -67,7 +67,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 ## spec-doc
 
 ```bash
-bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё отчёты] [--out docs/spec | --stdout] [--strict] [--root DIR]
+bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё отчёты] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
 ```
 
 Что получается в `docs/spec/`:
@@ -119,6 +119,12 @@ bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё 
 `describe` и `it` — утверждения по-русски: без русских слов (идентификатор,
 имя функции или файла, английская фраза) — stderr с названием и файлом,
 `--strict` — код 1; код в обратных кавычках внутри утверждения — можно.
+Старые названия на существующей спеке — исключениями в
+`tests/standards/spec-names/exceptions.ts` (`{ file, name, issue, reason }`,
+другой файл — `--names-exceptions`): `--strict` их пропускает, ненужное
+исключение (уже утверждение или теста нет) — код 1, долг — раздел оглавления
+«Названия — не утверждения (исключения)». Все текущие нарушения одной задачей
+на переписывание — `spec-doc … --names-baseline <N>`.
 **Описание** — `tests/<вид>/<name>/<name>.md`: нет —
 `spec-doc` называет файл в stderr, `--strict` — код 1. JSDoc-шапка у файла
 теста в документацию не идёт — в stderr с подсказкой перенести в md,
