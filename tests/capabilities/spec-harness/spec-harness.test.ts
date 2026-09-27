@@ -85,6 +85,17 @@ describe("Соглашение проверяется на каждом элем
     expect(strict["реестр «мутации» не пуст"]).toBe("✓");
   });
 
+  // readdirSync отдаёт файлы в порядке файловой системы: на macOS и Linux он разный, и docs/spec в CI расходился
+  // с собранным локально (#74)
+  it("тесты элементов идут по названию, а не в порядке реестра: спека одинакова на любой машине", () => {
+    const names = (items: Mutation[]) =>
+      collect((it) => invariant(it, { registry: "мутации", items, name: (m) => m.name, check: mustAudit, violator }))
+        .map((t) => t.name)
+        .slice(2);
+    expect(names([{ name: "b", audits: true }, { name: "a", audits: true }])).toEqual(["a", "b"]);
+    expect(names([{ name: "a", audits: true }, { name: "b", audits: true }])).toEqual(["a", "b"]);
+  });
+
   it("названия тестов без счётчиков: реестр растёт — меняются только тесты новых элементов", async () => {
     const one = collect((it) => invariant(it, { registry: "мутации", items: [{ name: "a", audits: true }], name: (m) => m.name, check: mustAudit, violator }));
     const two = collect((it) =>
