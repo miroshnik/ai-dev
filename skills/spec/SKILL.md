@@ -347,6 +347,38 @@ ESLint кэширует конфиг в процессе: новый или уд
   внутри линтера, поэтому формат проверяет тест, а не правило ESLint. Тесты
   файлов — список исключений в спеке.
 
+**Модель архитектуры — `architecture.ts`.** Одна на проект,
+`tests/architecture/model.ts`: модули (путь, назначение), от каких модулей и
+внешних пакетов каждый зависит.
+
+```ts
+import type { Model } from "../../.agents/skills/spec/scripts/architecture.ts";
+
+export default {
+  roots: ["src"],
+  aliases: { "@/": "src/" }, // импорт по псевдониму — локальный, не пакет
+  modules: {
+    domain: { path: "src/domain", purpose: "правила счетов, без ввода-вывода" },
+    infra: { path: "src/infra", purpose: "база и сервисы", dependsOn: ["domain"], packages: ["pg"] },
+  },
+} satisfies Model;
+```
+
+- *Границы модулей* — `tests/architecture/boundaries/eslint.ts`:
+  `export default boundariesConfig(model, boundaries)` (плагин
+  `eslint-plugin-boundaries` проекта; для псевдонимов TypeScript — резолвер
+  через `settings`). Импорт модуля не из `dependsOn` — ошибка
+  `boundaries/dependencies` в `lint` и редакторе; в `boundaries.test.ts` —
+  `examples` на это правило.
+- *Модель против кода* — `architecture(it, { root, model })` в
+  `tests/architecture/modules/modules.test.ts`: «<каталог> → <модуль>» на
+  каждый каталог кода (вне модулей — красный), «<модуль> импортирует <пакет>»
+  (пакет не разрешён модулю — красный), «<модуль> использует разрешённый
+  пакет <пакет>» (не импортируется — красный: модель разошлась с кодом).
+  Импорты — статический разбор: относительные, псевдонимы, встроенные модули
+  Node и `import type` — не пакеты. Пакеты проверяет разбор, а не плагин:
+  `eslint-plugin-boundaries` 7.2 внешние пакеты не ловит даже явным запретом.
+
 ## Подключение в репозиторий
 
 Скрипты берутся из копии скилла в самом проекте и идут под Node — Bun проекту
