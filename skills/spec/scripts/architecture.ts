@@ -41,6 +41,19 @@ export interface External {
   env?: string[];
 }
 
+/** Контейнер (C2): развёртываемая единица — приложение, функция, cron, воркер, база, хранилище. */
+export interface Container {
+  purpose: string;
+  /** Модули кода, которые разворачиваются в этом контейнере. */
+  modules?: string[];
+  /** Развёртываемые единицы из конфигов: `compose:<сервис>`, `supabase-function:<имя>`, `vercel-cron:<путь>`. */
+  deploy?: string[];
+  /** Контейнеры, с которыми этот связан (запрос, очередь, база): связь — не импорт. */
+  uses?: string[];
+  /** У хранилища: пакеты-клиенты, через которые с ним говорят (`pg`, `@supabase/supabase-js`). */
+  clients?: string[];
+}
+
 export interface Model {
   /** Каталоги кода от корня (по умолчанию `src`): каждый каталог с кодом в них принадлежит модулю. */
   roots?: string[];
@@ -49,6 +62,48 @@ export interface Model {
   modules: Record<string, Module>;
   /** Внешние системы (C1): платёжный провайдер, почта, геокодер… */
   externals?: Record<string, External>;
+  /** Контейнеры (C2): развёртываемые единицы и связи между ними. */
+  containers?: Record<string, Container>;
+}
+
+/**
+ * Развёртываемые единицы из конфигов деплоя в репозитории: сервисы `docker-compose.yml` / `compose.yml`, функции
+ * `supabase/functions/<имя>`, crons в `vercel.json`. Разбор без зависимостей: сервис compose — ключ с отступом
+ * в два пробела под верхним `services:`.
+ */
+export function deployUnits(root: string): string[] {
+  const out = new Set<string>();
+  for (const f of ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]) {
+    let text: string;
+    try {
+      text = readFileSync(path.join(root, f), "utf8");
+    } catch {
+      continue;
+    }
+    let inServices = false;
+    for (const line of text.split(/\r?\n/)) {
+      if (/^services:\s*$/.test(line)) inServices = true;
+      else if (/^\S/.test(line)) inServices = false;
+      else if (inServices) {
+        const m = /^ {2}([A-Za-z0-9_.-]+):\s*$/.exec(line);
+        if (m) out.add(`compose:${m[1]}`);
+      }
+    }
+  }
+  try {
+    for (const e of readdirSync(path.join(root, "supabase", "functions"), { withFileTypes: true })) {
+      if (e.isDirectory() && !e.name.startsWith("_")) out.add(`supabase-function:${e.name}`);
+    }
+  } catch {
+    /* нет функций Supabase */
+  }
+  try {
+    const v = JSON.parse(readFileSync(path.join(root, "vercel.json"), "utf8")) as { crons?: { path: string }[] };
+    for (const c of v.crons ?? []) out.add(`vercel-cron:${c.path}`);
+  } catch {
+    /* нет vercel.json или crons */
+  }
+  return sorted([...out]);
 }
 
 const CODE = /\.[cm]?[jt]sx?$/;
@@ -222,6 +277,95 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
   });
 
   if (model.externals) c1(it, model, src, opts.exceptions);
+  if (model.containers) c2(it, opts.root, model, src, opts.exceptions);
+}
+
+/**
+ * C2: модуль — ровно в одном контейнере; зависимость модулей — внутри контейнера (между контейнерами — только
+ * `uses`); развёртываемые единицы конфигов и модели совпадают в обе стороны; клиент хранилища — только в контейнере
+ * со связью `uses` с этим хранилищем.
+ */
+function c2(it: It, root: string, model: Model, src: Source[], exceptions?: readonly Exception[]): void {
+  const cont = model.containers!;
+  const containerOf = (m: string) => Object.keys(cont).filter((c) => (cont[c]!.modules ?? []).includes(m)).sort();
+  invariant(it, {
+    registry: "модули в контейнерах",
+    items: names(model),
+    name: (m) => `модуль ${m} — в контейнере ${containerOf(m).length === 1 ? containerOf(m)[0] : "?"}`,
+    key: (m) => m,
+    check: (m) => {
+      const c = containerOf(m);
+      if (!c.length) throw new Error(`модуль ${m} не входит ни в один контейнер модели`);
+      if (c.length > 1) throw new Error(`модуль ${m} — в нескольких контейнерах: ${c.join(", ")}`);
+    },
+    violator: { name: "модуль вне контейнеров", item: "__вне_контейнеров__" },
+    exceptions,
+  });
+
+  const edges = names(model).flatMap((m) => (model.modules[m]!.dependsOn ?? []).map((d) => ({ m, d })));
+  if (edges.length) {
+    invariant(it, {
+      registry: "зависимости модулей",
+      items: edges,
+      name: (e) => `зависимость ${e.m} → ${e.d} — внутри контейнера`,
+      key: (e) => `${e.m}→${e.d}`,
+      check: (e) => {
+        const a = containerOf(e.m)[0];
+        const b = containerOf(e.d)[0];
+        if (a !== b) throw new Error(`${e.m} (${a ?? "?"}) зависит от ${e.d} (${b ?? "?"}) — между контейнерами только связь uses`);
+      },
+      violator: { name: "зависимость через контейнер", item: { m: "__a__", d: "__b__" } },
+      exceptions,
+    });
+  }
+
+  const found = deployUnits(root);
+  const declared = new Map<string, string>();
+  for (const [c, x] of Object.entries(cont)) for (const d of x.deploy ?? []) declared.set(d, c);
+  invariant(it, {
+    registry: "развёртываемые единицы",
+    items: sorted([...new Set([...found, ...declared.keys()])]),
+    name: (u) => `развёртываемая единица ${u} — контейнер ${declared.get(u) ?? "?"}`,
+    key: (u) => u,
+    check: (u) => {
+      if (!declared.has(u)) throw new Error(`${u} есть в конфигах деплоя, но не в модели — добавь контейнер в tests/architecture/model.ts`);
+      if (!found.includes(u)) throw new Error(`${u} контейнера ${declared.get(u)} нет в конфигах деплоя — модель разошлась с деплоем`);
+    },
+    violator: { name: "единица вне модели", item: "__вне_модели__" },
+    exceptions,
+  });
+
+  // клиенты хранилищ: какой контейнер их импортирует на деле
+  const storages = Object.entries(cont).flatMap(([s, x]) => (x.clients ?? []).map((pkg) => ({ s, pkg })));
+  if (storages.length) {
+    const uses = new Map<string, { s: string; pkg: string; c: string; files: string[] }>();
+    for (const src1 of src) {
+      const mod = owners(model, src1.dir);
+      if (mod.length !== 1) continue;
+      const c = containerOf(mod[0]!)[0];
+      if (!c) continue;
+      for (const st of storages) {
+        if (!src1.packages.includes(st.pkg)) continue;
+        const k = `${st.pkg}:${st.s}:${c}`;
+        const u = uses.get(k) ?? { ...st, c, files: [] };
+        u.files.push(src1.file);
+        uses.set(k, u);
+      }
+    }
+    invariant(it, {
+      registry: "клиенты хранилищ в контейнерах",
+      items: [...uses.values()],
+      name: (u) => `клиент ${u.pkg} хранилища ${u.s} — в контейнере ${u.c}`,
+      key: (u) => `${u.pkg}:${u.c}`,
+      check: (u) => {
+        if (u.c !== u.s && !(cont[u.c]?.uses ?? []).includes(u.s)) {
+          throw new Error(`контейнер ${u.c} импортирует клиент ${u.pkg} хранилища ${u.s} без связи uses: ${u.files.join(", ")}`);
+        }
+      },
+      violator: { name: "клиент без связи", item: { s: "__хранилище__", pkg: "__клиент__", c: "__контейнер__", files: [] } },
+      exceptions,
+    });
+  }
 }
 
 /**
