@@ -323,6 +323,69 @@ describe("Сценарии задачи сверяются с тестами PR"
   });
 });
 
+/**
+ * Не каждое решение — название теста: модель архитектуры, исключения и реестры проверок живут в данных и в вызовах
+ * харнесса. Их изменение — тоже изменение спеки, и ревьюер видит его в том же разделе PR.
+ */
+describe("Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки", () => {
+  const MODEL = "tests/architecture/model.ts";
+  const model = (modules: object) => `export default ${JSON.stringify({ modules })};\n`;
+
+  it("модуль, зависимость и пакет модели архитектуры: добавленные и снятые", () => {
+    const base = repo.commit({
+      [MODEL]: model({ domain: { path: "src/domain", purpose: "x" }, infra: { path: "src/infra", purpose: "y", dependsOn: ["domain"], packages: ["pg"] } }),
+    });
+    repo.commit({
+      [MODEL]: model({
+        domain: { path: "src/domain", purpose: "x" },
+        infra: { path: "src/infra", purpose: "y", packages: ["pg", "redis"] },
+        ui: { path: "src/ui", purpose: "z", dependsOn: ["domain"] },
+      }),
+    });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Модель архитектуры — снято (1):**\n\n- зависимость infra → domain\n");
+    expect(out).toContain("**Модель архитектуры — добавлено (3):**\n\n- модуль ui\n- зависимость ui → domain\n- пакет redis модуля infra\n");
+  });
+
+  it("исключение из exceptions.ts и отключение линта в коде: добавленные и снятые", () => {
+    const EXC = "tests/standards/audit/exceptions.ts";
+    const base = repo.commit({
+      [EXC]: 'export default [{ item: "a", issue: 1, reason: "r1" }];\n',
+      "src/a.ts": "// eslint-disable-next-line no-console -- #5 старое\nconsole.log(1);\n",
+    });
+    repo.commit({
+      [EXC]: 'export default [{ item: "b", issue: 2, reason: "r2" }];\n',
+      "src/a.ts": "console.log(1);\n",
+      "src/b.ts": "// eslint-disable-next-line eqeqeq -- #6 новое\na == b;\n",
+    });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Исключения — снято (2):**\n\n- `src/a.ts` · no-console — #5 старое\n- `tests/standards/audit` · a (#1) — r1\n");
+    expect(out).toContain("**Исключения — добавлено (2):**\n\n- `src/b.ts` · eqeqeq — #6 новое\n- `tests/standards/audit` · b (#2) — r2\n");
+  });
+
+  it("реестр invariant и правило examples: добавленные и снятые", () => {
+    const STD = "tests/standards/audit/audit.test.ts";
+    const src = (registry: string, rule: string) =>
+      ts(`it("x", () => {});\ninvariant(it, { registry: "${registry}", items: [] });\nexamples(it, { rule: "${rule}", bad: [] });`);
+    const base = repo.commit({ [STD]: src("мутации", "no-console") });
+    // значение с подстановкой — не литерал: реестр вычисляется, статически его не назвать
+    repo.commit({ [STD]: src("мутации и команды", "eqeqeq") + 'examples(it, { rule: `${dynamic}`, bad: [] });\n' });
+    const out = diffFrom(base).stdout;
+    expect(out).not.toContain("${dynamic}");
+    expect(out).toContain("**Проверки харнесса — снято (2):**\n\n- `tests/standards/audit` · правило no-console\n- `tests/standards/audit` · реестр «мутации»\n");
+    expect(out).toContain("**Проверки харнесса — добавлено (2):**\n\n- `tests/standards/audit` · правило eqeqeq\n- `tests/standards/audit` · реестр «мутации и команды»\n");
+  });
+
+  it("без изменений модели, исключений и проверок — разделов нет", () => {
+    const base = repo.commit({ [MODEL]: model({ domain: { path: "src/domain", purpose: "x" } }), [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); it("y", () => {});`) });
+    const out = diffFrom(base).stdout;
+    expect(out).not.toContain("Модель архитектуры");
+    expect(out).not.toContain("Исключения");
+    expect(out).not.toContain("Проверки харнесса");
+  });
+});
+
 describe("--json — то же для машины", () => {
   it("перенесённые — с исходным и новым путём", () => {
     const base = repo.commit({ "src/sum.test.ts": ts(`describe("Сумма", () => { it("складывает", () => {}); });`) });
