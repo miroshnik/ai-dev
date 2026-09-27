@@ -167,3 +167,37 @@ export default {
   `.spec-claims.xml` (JUnit) в папке стандарта `tests/standards/entry-points`
   (`--standard`): передай его в `spec-doc` вместе с отчётами раннеров — сверка
   попадёт в спеку со шапкой главного файла стандарта.
+
+**Код без потребителя — `deadCode` (knip).** Файл, экспорт или зависимость, до
+которых не доходит ни одна точка входа, — мёртвый код: knip находит его по
+графу импортов (точки входа knip — из его конфига проекта).
+
+```ts
+import { it } from "vitest";
+import { deadCode } from "../../../.agents/skills/spec/scripts/harness.ts";
+import exceptions from "./exceptions.ts";
+
+deadCode(it, { root: process.cwd(), exceptions }); // или report: ".knip.json" — готовый `knip --reporter json`
+```
+
+Тесты по видам — «нет файлов без потребителя», «нет экспортов без
+потребителя», «нет типов без потребителя», «нет зависимостей без импорта»,
+«нет импортов неустановленных пакетов», «нет нерезолвящихся импортов» —
+упавшие со списком находок. Исключение — ключ находки (`file:src/legacy.ts`,
+`export:src/math.ts#factorial`, `dependency:lodash`) с задачей: зелёное, пока
+knip его находит; перестал — «убери исключение». Без `report` запускается
+`node_modules/.bin/knip --reporter json` проекта.
+
+**Переменные окружения — `envVars`.** Переменная, которую читает код
+(`process.env.X`, `process.env["X"]`, `import.meta.env.X`,
+`const { X } = process.env`), объявлена в схеме окружения; объявленная —
+читается. `declared` — из схемы проекта (ключи zod-схемы, t3-env,
+`.env.example`):
+
+```ts
+envVars(it, { root: process.cwd(), dirs: ["src"], declared: Object.keys(envSchema.shape) });
+```
+
+Тесты «<VAR> объявлена» и «<VAR> читается в коде»; служебные (`NODE_ENV`,
+`CI`, `PORT`… и `ignore`) — вне проверки.
+
