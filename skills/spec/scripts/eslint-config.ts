@@ -7,15 +7,21 @@
  *   export default [...base, ...(await collectEslint(import.meta.dirname))];
  *
  * Пути `files` во фрагменте — от корня проекта. Порядок фрагментов — по пути: конфиг одинаков на любой машине.
+ * `tests/lib` — хелперы, не фрагменты. Фрагмент `eslint.mts` Node грузит как ESM и в проекте без `"type": "module"`.
  * Только `node:`-API и стираемый TypeScript: фрагмент `.ts` импортирует Node ≥ 22.18 без сборки.
+ *
+ * Запрет стандарта — `restrict(...)`: своё правило `spec/<id>` на стандарт. Flat config опции одного правила не сливает:
+ * два фрагмента с `no-restricted-syntax` на одни файлы — действует последний, запреты первого молча пропадают.
  */
 
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const FRAGMENT = new Set(["eslint.ts", "eslint.mjs", "eslint.js"]);
+const FRAGMENT = new Set(["eslint.ts", "eslint.mts", "eslint.mjs", "eslint.js"]);
 const SKIP = new Set(["node_modules", ".git"]);
+// хелперы тестов, не спека: `spec-doc` их тоже пропускает
+const SKIP_REL = new Set(["tests/lib"]);
 
 /** Пути фрагментов `eslint.ts` в каталогах (по умолчанию `tests/`), по порядку. */
 export function eslintFragments(root: string, dirs: string[] = ["tests"]): string[] {
@@ -28,9 +34,10 @@ export function eslintFragments(root: string, dirs: string[] = ["tests"]): strin
       return;
     }
     for (const e of entries) {
+      const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (!SKIP.has(e.name)) walk(path.join(dir, e.name));
-      } else if (FRAGMENT.has(e.name)) out.push(path.join(dir, e.name));
+        if (!SKIP.has(e.name) && !SKIP_REL.has(path.relative(root, full).split(path.sep).join("/"))) walk(full);
+      } else if (FRAGMENT.has(e.name)) out.push(full);
     }
   };
   for (const d of dirs) walk(path.join(root, d));
@@ -49,4 +56,25 @@ export async function collectEslint(root: string, dirs: string[] = ["tests"]): P
     configs.push(...(Array.isArray(mod.default) ? mod.default : [mod.default]));
   }
   return configs;
+}
+
+type RuleContext = { report(d: { node: unknown; message: string }): void };
+
+/** Общий плагин запретов стандартов: один объект на все фрагменты — ESLint не даёт переопределить плагин. */
+const SPEC_PLUGIN: { meta: { name: string }; rules: Record<string, object> } = { meta: { name: "spec" }, rules: {} };
+
+/**
+ * Запрет стандарта по селекторам AST (как у `no-restricted-syntax`) — своим правилом `spec/<id>` в общем плагине `spec`:
+ * запреты разных стандартов на одни файлы действуют все. Фрагмент `eslint.ts` стандарта:
+ *
+ *   export default restrict({ id: "no-alert", selectors: ["CallExpression[callee.name='alert']"], message: "…", files: ["src/**"] });
+ */
+export function restrict(o: { id: string; selectors: string[]; message: string; files: string[]; ignores?: string[] }): object[] {
+  SPEC_PLUGIN.rules[o.id] = {
+    meta: { type: "problem", schema: [], docs: { description: o.message } },
+    create(context: RuleContext) {
+      return Object.fromEntries(o.selectors.map((sel) => [sel, (node: unknown) => context.report({ node, message: o.message })]));
+    },
+  };
+  return [{ files: o.files, ...(o.ignores ? { ignores: o.ignores } : {}), plugins: { spec: SPEC_PLUGIN }, rules: { [`spec/${o.id}`]: "error" } }];
 }
