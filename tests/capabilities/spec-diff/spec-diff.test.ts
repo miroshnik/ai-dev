@@ -368,8 +368,10 @@ describe("Решения вне названий тестов — модель, 
     const src = (registry: string, rule: string) =>
       ts(`it("x", () => {});\ninvariant(it, { registry: "${registry}", items: [] });\nexamples(it, { rule: "${rule}", bad: [] });`);
     const base = repo.commit({ [STD]: src("мутации", "no-console") });
-    repo.commit({ [STD]: src("мутации и команды", "eqeqeq") });
+    // значение с подстановкой — не литерал: реестр вычисляется, статически его не назвать
+    repo.commit({ [STD]: src("мутации и команды", "eqeqeq") + 'examples(it, { rule: `${dynamic}`, bad: [] });\n' });
     const out = diffFrom(base).stdout;
+    expect(out).not.toContain("${dynamic}");
     expect(out).toContain("**Проверки харнесса — снято (2):**\n\n- `tests/standards/audit` · правило no-console\n- `tests/standards/audit` · реестр «мутации»\n");
     expect(out).toContain("**Проверки харнесса — добавлено (2):**\n\n- `tests/standards/audit` · правило eqeqeq\n- `tests/standards/audit` · реестр «мутации и команды»\n");
   });

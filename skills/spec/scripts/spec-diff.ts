@@ -376,8 +376,9 @@ export function checkFacts(files: Map<string, string>): string[] {
   const out = new Set<string>();
   for (const [file, text] of files) {
     const folder = path.posix.dirname(file);
-    for (const m of text.matchAll(REGISTRY)) out.add(`\`${folder}\` · реестр «${m[2]}»`);
-    for (const m of text.matchAll(RULE)) out.add(`\`${folder}\` · правило ${m[2]}`);
+    // значение с подстановкой ${…} — не литерал: реестр вычисляется, статически его не назвать
+    for (const m of text.matchAll(REGISTRY)) if (!m[2]!.includes("${")) out.add(`\`${folder}\` · реестр «${m[2]}»`);
+    for (const m of text.matchAll(RULE)) if (!m[2]!.includes("${")) out.add(`\`${folder}\` · правило ${m[2]}`);
   }
   return [...out].sort();
 }
