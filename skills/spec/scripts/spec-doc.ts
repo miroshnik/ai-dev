@@ -466,6 +466,16 @@ function writeFiles(
     generated.add(rel);
   }
   writeFileSync(path.join(outDir, "README.md"), renderIndex(groups, out, model));
+  // все тесты дерева по отчёту — база для spec-diff: тестов харнесса в исходниках не видно, в отчёте — видно
+  const seen = new Set<string>();
+  const list = [...groups.values()]
+    .flatMap((g) => g.tests.map((t) => ({ path: t.path, describes: t.describes, name: t.name })))
+    .filter((t) => {
+      const k = JSON.stringify(t);
+      return !seen.has(k) && !!seen.add(k);
+    })
+    .sort((x, y) => (JSON.stringify([x.path, x.describes, x.name]) < JSON.stringify([y.path, y.describes, y.name]) ? -1 : 1));
+  writeFileSync(path.join(outDir, "tests.json"), JSON.stringify(list, null, 1) + "\n");
   for (const sub of Object.values(SUBDIR)) {
     const d = path.join(outDir, sub);
     if (!existsSync(d)) continue;

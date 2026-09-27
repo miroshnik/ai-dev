@@ -412,11 +412,11 @@ describe("Тесты харнесса — в диффе спеки: назван
     const base = repo.commit({ [STD]: registry });
     publishSpec(base, [t("a пишет аудит"), t("b пишет аудит")]);
     repo.commit({ [STD]: registry + "// реестр сменился\n" });
-    report(["a пишет аудит", "c пишет аудит"]);
+    report(["a пишет аудит", "импорт платежей из банка"]);
     const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("**Удалены (1):**\n\n- `tests/standards/audit` · b пишет аудит");
-    expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/standards/audit` · c пишет аудит");
+    expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/standards/audit` · импорт платежей из банка");
   });
 
   it("перевод примеров на реестр не выглядит в диффе спеки как одни удаления", () => {
