@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudPartsIn, cloudSessionsIn, fmtH, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  cloudPartsIn, cloudSessionsIn, fmtH, guestTranscripts, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
@@ -232,6 +232,84 @@ describe("Сессия, которая ведёт задачи подряд, д�
     expect(f41.h).toBe(0.25);
     expect(f41.overlap).toEqual([{ issue: 43, h: 0.05 }]);
     expect(factCommentBody(f41, null, [], 0, null)).toContain("Пересечение с фактом #43: 0.05 ч — пересчитать #43.");
+  });
+});
+
+/**
+ * Разговор в сессии одного репозитория перерастает в задачу другого: задачу заводят там же, сессию переименовывают
+ * «#N …», коммит и PR — в другом репозитории. Такая сессия — гость: её транскрипт лежит в каталоге чужого
+ * репозитория, а номера задач у репозиториев свои. Поэтому гостя привязывают только признаки, в которых есть
+ * репозиторий задачи: её PR и коммиты, точная ветка её PR, URL её issue; номер в названии — лишь вместе с ними.
+ */
+describe("Сессия из каталога другого репозитория даёт факт задаче только по признакам её репозитория", () => {
+  const SID = "44444444-5555-6666-7777-888888888888";
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+  // сессия открыта в каталоге репозитория o/r, её ветка — своя, с тем же номером 57
+  const B = "feat/57-legacy";
+  const work = (hhmm: string, out = "…", gitBranch = B) => ({ type: "user", timestamp: at(hhmm), cwd: "/b", gitBranch, message: { content: [{ type: "tool_result", tool_use_id: "t", content: out }] } });
+  const prompt = (hhmm: string, text: string, gitBranch = B) => ({ type: "user", timestamp: at(hhmm), cwd: "/b", gitBranch, origin: { kind: "human" }, message: { role: "user", content: text } });
+  const rename = (customTitle: string) => ({ type: "custom-title", customTitle, sessionId: SID });
+  const prLink = (hhmm: string, prNumber: number, prRepository: string) => ({ type: "pr-link", timestamp: at(hhmm), prNumber, prRepository, prUrl: `https://github.com/${prRepository}/pull/${prNumber}` });
+  const OID = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+  // PR #7 задачи #57 репозитория o/a
+  const pr7: PR = { ...pr77(), number: 7, headRefName: "docs/57-rules", closing: [57], body: "Closes #57", commits: [{ oid: OID, at: ts("10:10") }], mergedAt: ts("11:00") };
+
+  function session(lines: unknown[]): Session {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl(lines));
+    return parseSessionFile(file);
+  }
+  const discussion = [rename("Обсуждение правил"), prompt("09:00", "обсудим правила"), work("09:10"), work("09:15")];
+  const task = [rename("#57 Правила · новое"), prompt("10:00", "заведи задачу и сделай"), work("10:10", `[docs/57-rules ${OID.slice(0, 7)}] правила`), prLink("10:20", 7, "o/a"), work("10:25")];
+  const inA = (s: Session) => ({ ...stubRepo([{ ...s, guest: true }], [pr7]), full: "o/a" });
+
+  it("сессия из каталога другого репозитория с PR и коммитом задачи даёт ей факт — с переименования под задачу, ветка того репозитория не в счёт", () => {
+    const res = computeFact(inA(session([...discussion, ...task])), 57, [{ ...pr7, why: "закрыл issue" }], []);
+    expect(res.h).toBe(0.42); // 10:00–10:25; обсуждение 09:00–09:15 на ветке feat/57-legacy — не задача o/a#57
+    expect(res.cov).toBe("full");
+    expect(res.details[0]!.rules.ветка).toBeUndefined();
+  });
+
+  it("та же сессия не даёт факта задаче своего репозитория с тем же номером — период с PR другого репозитория не её", () => {
+    // сессия на main репозитория o/r: период «#57» — с PR o/a#7, задача o/r#57 его не получает
+    const s = session([
+      prompt("09:00", "обсудим правила", "main"), work("09:10", "…", "main"),
+      rename("#57 Правила · новое"), prompt("10:00", "заведи задачу и сделай", "main"), work("10:10", "…", "main"), prLink("10:20", 7, "o/a"), work("10:25", "…", "main"),
+    ]);
+    const res = computeFact(stubRepo([s], []), 57, [], []);
+    expect(res.h).toBeNull();
+    expect(res.cov).toBe("none");
+  });
+
+  it("номер в названии сессии другого репозитория без признака репозитория задачи — не привязка", () => {
+    // на main: привязать могло бы только название
+    const s = session([rename("#57 Правила"), prompt("10:00", "сделай #57", "main"), work("10:10", "…", "main"), work("10:20", "…", "main")]);
+    const res = computeFact(inA(s), 57, [{ ...pr7, why: "закрыл issue" }], []);
+    expect(res.h).toBeNull();
+    expect(res.cov).toBe("none");
+  });
+
+  it("pr-link PR другого репозитория с тем же номером — не якорь", () => {
+    // своя сессия o/r, PR #7 есть и у o/r (задача #9), но ссылка — на PR #7 репозитория o/a
+    const own: PR = { ...pr77(), number: 7, headRefName: "fix/9-x", closing: [9], body: "Closes #9", commits: [] };
+    const s = session([prompt("10:00", "посмотри", "main"), work("10:10", "…", "main"), prLink("10:20", 7, "o/a"), work("10:25", "…", "main")]);
+    const res = computeFact(stubRepo([s], [own]), 9, [{ ...own, why: "закрыл issue" }], []);
+    expect(res.h).toBeNull();
+  });
+
+  it("сессия другого репозитория — кандидат, только если в её транскрипте есть имя репозитория задачи", () => {
+    const projects = path.join(dir, "projects");
+    const put = (rel: string, text: string) => {
+      mkdirSync(path.dirname(path.join(projects, rel)), { recursive: true });
+      writeFileSync(path.join(projects, rel), text);
+    };
+    put("-work-b/s1.jsonl", '{"type":"pr-link","prRepository":"o/a"}\n');
+    put("-work-b/s2.jsonl", '{"text":"работа в foo/abc и o/ab"}\n');
+    put("-work-b/s3.jsonl", '{"text":"без упоминаний"}\n');
+    put("-work-b/s3/subagents/agent-1.jsonl", '{"text":"git -C ~/work/a push https://github.com/o/a.git"}\n');
+    put("-work-a/s4.jsonl", '{"prRepository":"o/a"}\n');
+    const found = guestTranscripts("o/a", ["/work/a"], ["/work/b"], projects).map((f) => path.relative(projects, f));
+    expect(found).toEqual(["-work-b/s1.jsonl", "-work-b/s3.jsonl"]);
   });
 });
 
