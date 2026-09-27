@@ -29,6 +29,10 @@ export class FakeGitHub {
   createIssueHidesItems = false;
   /** Номер задачи → сколько следующих чтений IssueRef ещё не покажут её элементы проекта. */
   issueRefLag: Record<number, number> = {};
+  /** Метки репозитория (RepoLabels): создаёт, переименовывает и удаляет их fix и task new. */
+  labels: { id: string; name: string; color: string; description: string }[] = [];
+  /** Дерево спеки в основной ветке (SpecDecisions): папки решений и текст модели архитектуры. */
+  tree: { capabilities: string[]; standards: string[]; architecture: string[]; model: string | null } = { capabilities: [], standards: [], architecture: [], model: null };
   private seq = 0;
 
   constructor(recording: Recording) {
@@ -54,6 +58,8 @@ export class FakeGitHub {
     }
     if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
+    if (op === "RepoLabels") return JSON.stringify({ data: { repository: { labels: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: this.labels } } } });
+    if (op === "SpecDecisions") return JSON.stringify({ data: { repository: this.specTree() } });
     const key = keyOf(op, variables);
     if (!(key in this.rec)) throw new Error(`fake gh: нет записи ${key}`);
     return JSON.stringify(this.rec[key]);
@@ -112,6 +118,28 @@ export class FakeGitHub {
     for (const x of this.allIssues()) for (const sub of x.subIssues.nodes) if (sub.number === number) sub.state = "CLOSED";
     const it = this.item(number);
     if (it) Object.assign(it.content, { state: "CLOSED", stateReason: reason });
+  }
+  /** Метка в репозитории (как будто её завели раньше). */
+  label(name: string, color: string): { id: string; name: string; color: string; description: string } {
+    const l = { id: this.id("LA"), name, color, description: "" };
+    this.labels.push(l);
+    return l;
+  }
+  /** Поставить задаче метку (как будто её поставили раньше). */
+  labelIssue(number: number, name: string): void {
+    this.issue(number).labels.nodes.push({ name });
+  }
+  // папка без решений в GitHub — не пустое дерево, а null
+  private specTree(): Any {
+    const t = this.tree;
+    const dir = (names: string[], files: string[] = []) =>
+      names.length || files.length ? { entries: [...names.map((name) => ({ name, type: "tree" })), ...files.map((name) => ({ name, type: "blob" }))] } : null;
+    return {
+      capabilities: dir(t.capabilities),
+      standards: dir(t.standards),
+      architecture: dir(t.architecture, t.model === null ? [] : ["model.ts"]),
+      model: t.model === null ? null : { text: t.model },
+    };
   }
   setPriority(number: number, name: string | null): void {
     this.issue(number).issueFieldValues = { nodes: name === null ? [] : [{ __typename: "IssueFieldSingleSelectValue", name, field: { name: "Priority" } }] };
@@ -231,7 +259,7 @@ export class FakeGitHub {
       const id = `I_fake${number}`;
       const owner = this.repo.owner;
       const type = owner.issueTypes?.nodes.find((t: Any) => t.id === input.issueTypeId);
-      const labels = (input.labelIds ?? []).map((lid: Any) => (lid === this.taskContext.label?.id ? "epic" : lid));
+      const labels = (input.labelIds ?? []).map((lid: Any) => (lid === this.taskContext.label?.id ? "epic" : (this.labels.find((l) => l.id === lid)?.name ?? lid)));
       const prio = owner.issueFields?.nodes.flatMap((f: Any) => (f.options ?? []).map((o: Any) => ({ f, o }))).find((x: Any) => input.issueFields?.some((v: Any) => v.singleSelectOptionId === x.o.id));
       const parent = input.parentIssueId ? this.allIssues().find((i) => i.id === input.parentIssueId) : null;
       const node = {
@@ -254,10 +282,25 @@ export class FakeGitHub {
       const items = (input.projectV2Ids ?? []).map((pid: string) => ({ id: this.addItem(pid, node), project: { id: pid } }));
       return { createIssue: { issue: { id, number, title: node.title, url: node.url, projectItems: { nodes: this.createIssueHidesItems ? [] : items } } } };
     },
-    CreateLabel: ({ name }: Any) => {
+    CreateLabel: ({ name, color, description }: Any) => {
       const id = this.id("LA");
-      this.taskContext.label = { id };
+      this.labels.push({ id, name, color, description: description ?? "" });
+      if (name === "epic") this.taskContext.label = { id };
       return { createLabel: { label: { id, name } } };
+    },
+    // Переименованная метка остаётся на задачах под новым именем; удалённая — снимается с них.
+    UpdateLabel: ({ id, ...patch }: Any) => {
+      const l = this.labels.find((x) => x.id === id)!;
+      const old = l.name;
+      Object.assign(l, patch);
+      for (const i of this.allIssues()) for (const n of i.labels.nodes) if (n.name === old) n.name = l.name;
+      return { updateLabel: { label: { id } } };
+    },
+    DeleteLabel: ({ id }: Any) => {
+      const l = this.labels.find((x) => x.id === id)!;
+      this.labels = this.labels.filter((x) => x.id !== id);
+      for (const i of this.allIssues()) i.labels.nodes = i.labels.nodes.filter((n: Any) => n.name !== l.name);
+      return { deleteLabel: { clientMutationId: null } };
     },
     AddBlockedBy: ({ issueId }: Any) => ({ addBlockedBy: { issue: { id: issueId } } }),
     SetIssueField: ({ issueId, issueFields }: Any) => {

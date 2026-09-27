@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudPartsIn, cloudSessionsIn, fmtH, hashMatches, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  cloudPartsIn, cloudSessionsIn, fmtH, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
@@ -667,6 +667,17 @@ describe("Вывод читается человеком: часы без хво
     expect(parseSince("6m")).toBe(6 * 30 * 86400);
     expect(parseSince("48h")).toBe(48 * 3600);
     expect(() => parseSince("вчера")).toThrow(EstError);
+  });
+
+  it("метки `type:name` в est history видны целиком — колонка по самой длинной", () => {
+    const row = (number: number, labels: string[]): Row => ({
+      item_id: "", issue_id: "", number, title: `Задача ${number}`, state: "CLOSED", stateReason: "COMPLETED", closedAt: 0, createdAt: 0, labels,
+      est: 1, fact: 0.5, status: "Готово", est_marker: { type: "feat" }, fact_marker: { cov: "full", tok: { total: 2e6 }, usd: 1.5 },
+    });
+    const lines = historyTable([row(12, ["capability:spec-harness", "standard:spawn-timeout"]), row(13, ["epic"])]);
+    expect(lines[1]).toContain(" capability:spec-harness,standard:spawn-timeout | Задача 12");
+    // заголовок и строки — одной ширины до названия задачи: колонки не съезжают
+    expect(new Set(lines.map((l) => l.lastIndexOf(" | "))).size).toBe(1);
   });
 });
 
