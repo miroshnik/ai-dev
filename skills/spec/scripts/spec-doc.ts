@@ -283,6 +283,7 @@ function metaLines(t: Test): string[] {
     out.push("  ```" + (LANG[(m.path ?? "").split(".").pop() ?? ""] ?? ""), ...m.code.split("\n").map((l) => (l ? "  " + l : "")), "  ```");
   }
   if (m.issue !== undefined) out.push(`  > #${m.issue} — ${m.reason ?? ""}`);
+  else if (m.reason) out.push(`  > ${m.reason}`); // вне охвата — причина без задачи: это решение, а не долг
   const codeFile = /^исключения в (.+?): /.exec(t.name)?.[1] ?? "";
   for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
   if (m.sequence?.length && !PLACED.has(t.path + "\0" + t.name)) out.push(...sequenceLines(m.sequence).map((l) => "  " + l));

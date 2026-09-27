@@ -34,12 +34,24 @@ export interface Invariant<T> {
   name: (item: T) => string;
   /** Проверка одного элемента: бросает, если элемент нарушает соглашение. */
   check: (item: T) => unknown;
-  /** Заведомый нарушитель: проверка обязана на нём упасть — иначе она ничего не проверяет. */
-  violator: { name: string; item: T };
-  /** Ключ элемента для исключений — стабильный идентификатор (имя, путь); по умолчанию — название теста. */
+  /**
+   * Заведомый нарушитель: проверка обязана на нём упасть — иначе она ничего не проверяет. У проверки из нескольких
+   * половин (клиент и сервер) — нарушитель на каждую.
+   */
+  violator: { name: string; item: T } | readonly { name: string; item: T }[];
+  /** Ключ элемента для исключений, охвата и `includes` — стабильный идентификатор (имя, путь); по умолчанию — название теста. */
   key?: (item: T) => string;
+  /**
+   * Идентификатор соглашения, когда в папке их несколько над одним реестром: исключения — только с этим `rule`,
+   * служебные тесты называют его («реестр «формы» не пуст (audit)»).
+   */
+  rule?: string;
   /** Исключения — из `exceptions.ts` папки решения: элемент, задача, которая его снимет, и причина. */
   exceptions?: readonly Exception[];
+  /** Вне охвата — элементы, к которым соглашение не относится намеренно, с причиной: она видна на странице. */
+  outside?: readonly { item: string; reason: string }[];
+  /** Ключи, которые обязаны быть в реестре: «не пуст» не заметит, что выборка потеряла половину элементов. */
+  includes?: readonly string[];
 }
 
 /** Исключение из соглашения: ключ элемента, номер задачи, которая снимет долг, и причина. */
@@ -47,6 +59,8 @@ export interface Exception {
   item: string;
   issue: number;
   reason: string;
+  /** Соглашение (`rule` инварианта), к которому исключение относится; без него — ко всем инвариантам папки. */
+  rule?: string;
 }
 
 /**
@@ -54,33 +68,55 @@ export interface Exception {
  * падать) и по тесту на элемент. В названиях нет счётчиков: реестр растёт — в диффе спеки только новые элементы.
  */
 export function invariant<T>(it: It, spec: Invariant<T>): void {
-  it(`реестр «${spec.registry}» не пуст`, () => {
+  // несколько соглашений над одним реестром в одном describe: служебные тесты различает правило
+  const tag = spec.rule ? ` (${spec.rule})` : "";
+  it(`реестр «${spec.registry}» не пуст${tag}`, () => {
     if (!spec.items.length) throw new Error(`реестр «${spec.registry}» пуст — проверять нечего: путь или выборка реестра ошибочны`);
   });
-  it(`нарушитель не проходит: ${spec.violator.name}`, async () => {
-    try {
-      await spec.check(spec.violator.item);
-    } catch {
-      return;
-    }
-    throw new Error(`проверка прошла на нарушителе «${spec.violator.name}» — она ничего не проверяет`);
-  });
   const key = spec.key ?? spec.name;
-  const excepted = new Map((spec.exceptions ?? []).map((e) => [e.item, e]));
   const byKey = new Map(spec.items.map((item) => [key(item), item]));
+  if (spec.includes?.length) {
+    it(`реестр «${spec.registry}» находит ${spec.includes.join(", ")}${tag}`, () => {
+      const missing = spec.includes!.filter((k) => !byKey.has(k));
+      if (missing.length) throw new Error(`в реестре «${spec.registry}» нет: ${missing.join(", ")} — выборка реестра потеряла элементы`);
+    });
+  }
+  const violators = Array.isArray(spec.violator) ? spec.violator : [spec.violator as { name: string; item: T }];
+  for (const v of violators) {
+    it(`нарушитель не проходит${tag}: ${v.name}`, async () => {
+      try {
+        await spec.check(v.item);
+      } catch {
+        return;
+      }
+      throw new Error(`проверка прошла на нарушителе «${v.name}» — она ничего не проверяет`);
+    });
+  }
+  // исключение без правила — ко всем соглашениям папки, с правилом — только к своему
+  const excepted = new Map((spec.exceptions ?? []).filter((e) => !e.rule || e.rule === spec.rule).map((e) => [e.item, e]));
+  const outside = new Map((spec.outside ?? []).map((o) => [o.item, o]));
   // по названию, а не в порядке реестра: порядок файлов и запросов зависит от машины, а спека — нет
-  const named = spec.items.filter((item) => !excepted.has(key(item))).map((item) => ({ name: spec.name(item), item }));
+  const named = spec.items.filter((item) => !excepted.has(key(item)) && !outside.has(key(item))).map((item) => ({ name: spec.name(item), item }));
   named.sort(byName);
   for (const { name, item } of named) {
     it(name, async () => {
       await spec.check(item);
     });
   }
+  // вне охвата — намеренно, с причиной на странице; элемент пропал — запись об охвате убрать
+  for (const o of [...outside.values()].sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : 0))) {
+    const name = `вне охвата${tag}: ${o.item}`;
+    meta(name, { reason: o.reason });
+    it(name, () => {
+      if (!o.reason.trim()) throw new Error(`у элемента вне охвата ${o.item} нет причины`);
+      if (!byKey.has(o.item)) throw new Error(`элемента ${o.item} в реестре «${spec.registry}» нет — убери из охвата`);
+    });
+  }
   // храповик: исключение живёт, пока элемент нарушает соглашение; начал соблюдать — исключение убрать
   const exceptions = [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : 0));
   for (const e of exceptions) {
-    meta(`исключение: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
-    it(`исключение: ${e.item} (#${e.issue})`, async () => {
+    meta(`исключение${tag}: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
+    it(`исключение${tag}: ${e.item} (#${e.issue})`, async () => {
       if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи — issue: номер задачи, которая снимет долг`);
       if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
       if (!byKey.has(e.item)) throw new Error(`элемента ${e.item} в реестре «${spec.registry}» нет — убери исключение из exceptions.ts`);
@@ -213,6 +249,33 @@ export interface Disable {
 const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage"]);
 const DIRECTIVE = /(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\/|$)([^\n]*?)(?:\*\/|$)/gm;
+
+/** Файл кода для реестра над исходниками: путь от корня и текст. */
+export interface SourceFile {
+  file: string;
+  readonly text: string;
+}
+
+/** Нарушитель реестра над исходниками — текстом, без файла на диске. */
+export function source(file: string, text: string): SourceFile {
+  return { file, text };
+}
+
+/**
+ * Реестр файлов кода в каталогах (от корня): список дешёвый, текст читается при первом обращении — разбор всего
+ * `src/` идёт в проверке элемента, а не при сборе тестов.
+ */
+export function sources(root: string, dirs: string[] = ["src"]): SourceFile[] {
+  return codeFiles(root, dirs).map((file) => {
+    let text: string | undefined;
+    return {
+      file,
+      get text() {
+        return (text ??= readFileSync(path.join(root, file), "utf8"));
+      },
+    };
+  });
+}
 
 /** Файлы кода в каталогах (от корня), по порядку. */
 function codeFiles(root: string, dirs: string[]): string[] {
