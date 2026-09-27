@@ -17,6 +17,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import type { Model } from "./architecture.ts";
+
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
 
@@ -285,9 +287,8 @@ let metaFile: string | null = null;
  * Строка JSON `{ file, test, … }` в `.spec-meta/<процесс>.jsonl` (`SPEC_META` — другой каталог); файл теста — по стеку
  * регистрации. Страница стандарта показывает их под строкой теста.
  */
-function meta(test: string, data: object): void {
+function meta(test: string, data: object, file: string | null = callerTest(process.cwd())): void {
   const root = process.cwd();
-  const file = callerTest(root);
   if (!file) return;
   const key = `meta\0${file}\0${test}`;
   if (seen.has(key)) return;
@@ -318,6 +319,70 @@ export function journal(id: string, opts: { test?: string; root?: string } = {})
     journalFile = path.join(dir, `${process.pid}-${Math.random().toString(36).slice(2, 10)}.jsonl`);
   }
   appendFileSync(journalFile, JSON.stringify({ id, test }) + "\n");
+}
+
+/** Вызов на границе модели: кто, кому, что. */
+export interface Call {
+  from: string;
+  to: string;
+  message: string;
+}
+
+// трасса идущего сценария: тесты файла идут по очереди, сценарий один (test.concurrent — не для sequence)
+let activeTrace: Call[] | null = null;
+
+/**
+ * Вызов на границе модели — его пишет обёртка в тестовой сборке, рядом с `journal`: точка входа, адаптер внешней
+ * системы, клиент хранилища, вызов другого контейнера. Участники — имена элементов модели. Вне сценария (`sequence`) —
+ * ничего; вызов внутри участника (`from === to`) — не граница: перестановка внутри модуля схему не меняет.
+ */
+export function trace(from: string, to: string, message: string): void {
+  if (activeTrace && from !== to) activeTrace.push({ from, to, message });
+}
+
+const callLine = (c: Call): string => `${c.from} → ${c.to}: ${c.message}`;
+
+/** Участники схемы, если задана модель: модули, внешние системы, контейнеры. */
+const modelParticipants = (m: Model): Set<string> => new Set([...Object.keys(m.modules), ...Object.keys(m.externals ?? {}), ...Object.keys(m.containers ?? {})]);
+
+/**
+ * Сценарий capability — тест, чья трасса вызовов на границах модели становится сиквенс-схемой на странице capability
+ * (`spec-doc`: под тестом, или меткой `<!-- spec: sequence-<id> -->` в `<папка>.md`). `order` — объявленный порядок
+ * (`"app → db: резерв"`), когда порядок сам решение: трасса должна содержать его шаги в этой последовательности (между
+ * ними — что угодно), иначе тест красный. `model` — участники только из модели. Без `order` схема — документация.
+ */
+export function sequence(
+  it: It,
+  name: string,
+  fn: () => void | Promise<unknown>,
+  opts: { id?: string; order?: string[]; model?: Model } = {},
+): void {
+  // файл теста — по стеку регистрации: при запуске теста в стеке его уже нет
+  const file = callerTest(process.cwd());
+  it(name, async () => {
+    const calls: Call[] = [];
+    activeTrace = calls;
+    try {
+      await fn();
+    } finally {
+      activeTrace = null;
+    }
+    meta(name, { ...(opts.id ? { id: opts.id } : {}), sequence: calls }, file);
+    if (opts.model) {
+      const known = modelParticipants(opts.model);
+      const unknown = [...new Set(calls.flatMap((c) => [c.from, c.to]).filter((x) => !known.has(x)))];
+      if (unknown.length) throw new Error(unknown.map((x) => `участник ${x} — не элемент модели`).join("\n"));
+    }
+    if (opts.order?.length) {
+      const lines = calls.map(callLine);
+      let j = 0;
+      for (const l of lines) if (l === opts.order[j]) j++;
+      if (j < opts.order.length) {
+        const after = j ? `после «${opts.order[j - 1]}»` : "с начала сценария";
+        throw new Error(`порядок сценария «${name}» нарушен: нет «${opts.order[j]}» ${after}\nтрасса:\n${lines.join("\n") || "— пусто"}`);
+      }
+    }
+  });
 }
 
 // виды находок knip (knip.dev, «Reporters», JSON) → тест и префикс ключа исключения

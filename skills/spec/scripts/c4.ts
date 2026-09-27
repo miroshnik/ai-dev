@@ -150,6 +150,8 @@ const MARK_LINE = /^[ \t]*<!--\s*spec:\s*([\w-]+)\s*-->[ \t]*$/gm;
 export function embed(text: string, model: Model | null): { text: string; bad: { mark: string; missing: "model" | "mark" }[] } {
   const bad: { mark: string; missing: "model" | "mark" }[] = [];
   const out = text.replace(MARK_LINE, (line, name: string) => {
+    // схема сценария — не из модели: её ставит spec-doc по трассе теста
+    if (name.startsWith("sequence-")) return line;
     const render = Object.hasOwn(MARKS, name) ? MARKS[name] : undefined;
     if (!render) bad.push({ mark: name, missing: "mark" });
     else if (!model) bad.push({ mark: name, missing: "model" });

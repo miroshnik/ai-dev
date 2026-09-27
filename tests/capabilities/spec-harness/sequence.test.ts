@@ -90,7 +90,8 @@ sequence(it, "заказ оплачивается", async () => {
 sequence(it, "не в модели", () => { trace("app", "paypal", "списание"); }, { model: ${model} });
 `);
     expect(r.code).toBe(1);
-    expect(r.out).toContain("(pass) в модели");
+    // без терминала bun печатает только упавшие тесты — прошедший виден в счётчике
+    expect(r.out).toMatch(/^ 1 pass$/m);
     expect(r.out).toContain("(fail) не в модели");
     expect(r.out).toContain("участник paypal — не элемент модели");
   });
