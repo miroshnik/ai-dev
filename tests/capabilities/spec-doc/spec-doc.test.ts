@@ -421,6 +421,15 @@ describe("Страница стандарта показывает пример�
     expect(r.stdout).not.toContain("снято");
   });
 
+  it("элемент вне охвата — причина под строкой теста", () => {
+    writeTree(dir, {
+      "tests/standards/no-console/no-console.md": "Домен не пишет в консоль.\n",
+      ...meta({ test: "вне охвата: login", reason: "форма входа — аудит пишет сервис авторизации" }),
+    });
+    const r = doc("r.json", vitestReport(dir, { [STD]: [[[], "вне охвата: login"]] }), "--stdout");
+    expect(r.stdout).toContain("- ✅ вне охвата: login\n  > форма входа — аудит пишет сервис авторизации\n");
+  });
+
   it("без метаданных прогона — страница без кода примеров, не ошибка", () => {
     writeTree(dir, { "tests/standards/no-console/no-console.md": "Домен не пишет в консоль.\n" });
     const r = doc("r.json", vitestReport(dir, { [STD]: [[[], "нельзя: console.log в домене"]] }), "--stdout", "--strict");
