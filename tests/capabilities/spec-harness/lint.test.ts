@@ -134,4 +134,35 @@ describe("Правило ESLint живёт в папке своего станд
     const off = await outcomes((it) => examples(it, { linter: eslintLinter({ cwd: bare, module: ESLINT }), ...spec() }));
     expect(off["нельзя: console.log в домене"]).toStartWith("✗ правило no-console не сработало");
   });
+
+  // flat config опции одного правила не сливает: два фрагмента с no-restricted-syntax на одни файлы — действует последний
+  it("запреты двух стандартов на одни файлы действуют оба — у каждого своё правило", async () => {
+    const restrict = (id: string, selector: string) =>
+      `import { restrict } from ${JSON.stringify(path.join(SCRIPTS, "eslint-config.ts"))};\nexport default restrict({ id: ${JSON.stringify(id)}, selectors: [${JSON.stringify(selector)}], message: "нельзя", files: ["src/**/*.js"] });\n`;
+    project();
+    writeTree(dir, {
+      "tests/standards/no-alert/eslint.ts": restrict("no-alert", "CallExpression[callee.name='alert']"),
+      "tests/standards/no-debugger/eslint.ts": restrict("no-debugger", "DebuggerStatement"),
+      "src/ui/both.js": "alert(1);\ndebugger;\n",
+    });
+    const { ESLint } = await import(ESLINT);
+    const [res] = await new ESLint({ cwd: dir }).lintFiles(["src/ui/both.js"]);
+    expect(res.messages.map((m: { ruleId: string }) => m.ruleId).sort()).toEqual(["spec/no-alert", "spec/no-debugger"]);
+  });
+
+  it("collectEslint пропускает tests/lib — хелпер там не фрагмент", async () => {
+    project();
+    writeTree(dir, { "tests/lib/eslint.ts": "export const helper = 1;\n" });
+    const { ESLint } = await import(ESLINT);
+    const results = await new ESLint({ cwd: dir }).lintFiles(["src/domain/invoice.js"]);
+    expect(results[0].messages.map((m: { ruleId: string }) => m.ruleId)).toEqual(["no-console"]);
+  });
+
+  it("фрагмент eslint.mts собирается так же, как eslint.ts", async () => {
+    project(dir, false);
+    writeTree(dir, { "tests/standards/domain-no-console/eslint.mts": `export default [{ files: ["src/domain/**/*.js"], rules: { "no-console": "error" } }];\n` });
+    const { ESLint } = await import(ESLINT);
+    const results = await new ESLint({ cwd: dir }).lintFiles(["src/domain/invoice.js"]);
+    expect(results[0].messages.map((m: { ruleId: string }) => m.ruleId)).toEqual(["no-console"]);
+  });
 });
