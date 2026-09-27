@@ -259,6 +259,8 @@ Actions.
 | Исключения с храповиком | `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions.ts` папки решения |
 | Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
 | Каждая точка входа вызывается тестом capability | `journal` + `spec-claims` после прогона | `standards/entry-points/` |
+| Нет кода без потребителя (файлы, экспорты, зависимости) | `deadCode` по отчёту knip | `standards/dead-code/` |
+| Переменные окружения объявлены и читаются | `envVars` | `standards/env/` |
 
 ## Подключение в репозиторий
 
