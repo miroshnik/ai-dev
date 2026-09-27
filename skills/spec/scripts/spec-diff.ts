@@ -7,6 +7,10 @@
  * дереве под тем же именем — сводкой по папкам); плюс файлы тестов, изменённые вне дерева tests/.
  *
  *   bun spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json]
+ *                    [--scenarios issue.md | -]
+ *
+ * --scenarios — тело задачи (markdown, `-` — stdin): раздел «## Сценарии» сверяется с добавленными и изменёнными
+ * тестами — сценарий, ставший тестом, несделанный сценарий и тесты сверх сценариев.
  *
  * База по умолчанию — merge-base базовой ветки и HEAD (как дифф PR на GitHub). Запуск — Bun; нужен git.
  */
@@ -369,7 +373,45 @@ function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], add
   );
 }
 
-const USAGE = "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json]";
+/** Сценарии задачи — пункты списка раздела «## Сценарии» (до следующего заголовка); чекбоксы сняты; нет раздела — null. */
+export function parseScenarios(md: string): string[] | null {
+  const lines = md.split(/\r?\n/);
+  const start = lines.findIndex((l) => /^##\s+Сценарии\s*$/.test(l.trim()));
+  if (start < 0) return null;
+  const out: string[] = [];
+  for (const l of lines.slice(start + 1)) {
+    if (/^#{1,2}\s/.test(l)) break;
+    const m = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/.exec(l);
+    if (m) out.push(m[1]!);
+  }
+  return out;
+}
+
+const norm = (s: string): string => s.replace(/\s+/g, " ").trim().replace(/[.。]$/, "").toLowerCase();
+
+/** Сценарий ↔ новый тест: совпадает с названием it или с цепочкой «describe › it» (без регистра и точки в конце). */
+export function matchScenarios(scenarios: string[], fresh: Test[]): { found: [string, Test | null][]; extra: Test[] } {
+  const used = new Set<Test>();
+  const found = scenarios.map((sc): [string, Test | null] => {
+    const want = norm(sc);
+    const t = fresh.find((x) => !used.has(x) && (norm(x.name) === want || norm([...x.describes, x.name].join(" › ")) === want)) ?? null;
+    if (t) used.add(t);
+    return [sc, t];
+  });
+  return { found, extra: fresh.filter((t) => !used.has(t)) };
+}
+
+function scenarioLines(scenarios: string[] | null, fresh: Test[]): string[] {
+  if (scenarios === null) return ["### Сценарии задачи", "", "В задаче нет раздела «## Сценарии» — сверять не с чем.", ""];
+  const { found, extra } = matchScenarios(scenarios, fresh);
+  const lines = [`### Сценарии задачи (${scenarios.length})`, ""];
+  for (const [sc, t] of found) lines.push(t ? `- ✅ ${L.mdText(sc)} — ${entry(t).slice(2)}` : `- ❌ ${L.mdText(sc)} — теста нет`);
+  lines.push("");
+  if (extra.length) lines.push(`**Тесты сверх сценариев (${extra.length}):**`, "", ...extra.map(entry), "");
+  return lines;
+}
+
+const USAGE = "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -]";
 
 export function main(argv: string[]): number {
   let opts;
@@ -383,6 +425,7 @@ export function main(argv: string[]): number {
         root: { type: "string" },
         "no-merge-base": { type: "boolean", default: false },
         json: { type: "boolean", default: false },
+        scenarios: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -417,7 +460,28 @@ export function main(argv: string[]): number {
   }
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
-  process.stdout.write(v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved));
+  let text = v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved);
+  if (v.scenarios !== undefined) {
+    let md: string;
+    try {
+      md = readFileSync(v.scenarios === "-" ? 0 : v.scenarios, "utf8");
+    } catch (e) {
+      console.error(`spec-diff: --scenarios: ${(e as Error).message}`);
+      return 2;
+    }
+    const scenarios = parseScenarios(md);
+    const fresh = [...added, ...changed.map(([, n]) => n)];
+    if (v.json) {
+      const j = JSON.parse(text);
+      const { found, extra } = scenarios ? matchScenarios(scenarios, fresh) : { found: [], extra: fresh };
+      j.scenarios = scenarios === null ? null : found.map(([sc, t]) => ({ scenario: sc, test: t ? { folder: L.folderOf(t), describes: t.describes, name: t.name } : null }));
+      j.extra_tests = extra.map((t) => ({ folder: L.folderOf(t), describes: t.describes, name: t.name }));
+      text = JSON.stringify(j, null, 2) + "\n";
+    } else {
+      text = text.trimEnd() + "\n\n" + scenarioLines(scenarios, fresh).join("\n").trimEnd() + "\n";
+    }
+  }
+  process.stdout.write(text);
   return 0;
 }
 

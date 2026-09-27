@@ -35,7 +35,8 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 
 | Момент | Действие |
 |---|---|
-| Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc --strict` — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff` → раздел «Спека (тесты)» в тело PR |
+| Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc --strict` — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff --scenarios <тело задачи>` → раздел «Спека (тесты)» со сверкой сценариев в тело PR |
+| Коммит с тестами готов, кода ещё нет | черновой PR с этим разделом — требования видны пользователю до кода |
 | В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, нет главного файла или `<папка>.md`, шапка у файла теста, `rule.test.ts`, название не по-русски — код 1); `spec-diff` в summary |
 | В CI на `main` после мержа | прогон → `spec-doc` → `spec-publish`: ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
 | Прочитать спеку проекта | `git fetch origin spec && git show origin/spec:README.md` (страницы — `capabilities/<name>.md`…) или сами тесты |
@@ -168,8 +169,15 @@ describe("Оплаченный счёт закрывается без участ
 ## spec-diff
 
 ```bash
-bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR]
+bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -]
 ```
+
+`--scenarios` — тело задачи (`gh issue view N --json body --jq .body | … --scenarios -`):
+раздел «## Сценарии» сверяется с добавленными и изменёнными тестами —
+«### Сценарии задачи»: ✅ сценарий стал тестом (папка и название), ❌ теста
+нет, отдельно — тесты сверх сценариев. Совпадение — с названием `it` или
+цепочкой «describe › it», без учёта регистра и точки в конце. Нет раздела —
+сверка так и говорит.
 
 Сравнивает названия тестов **статически** — разбирает файлы `tests/` на двух
 ревизиях через `git show`, прогонять тесты и переключать ветки не нужно.
