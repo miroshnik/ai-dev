@@ -1,0 +1,103 @@
+# CI проекта со скиллом spec — фрагмент workflow
+
+Раздел «Подключение в репозиторий» в `SKILL.md`, п. 4: pnpm (в `package.json`
+— `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
+разделу правил «CI: параллельные задачи». Шарды пишут blob-отчёты, job `spec`
+склеивает их средствами раннеров и собирает `docs/spec` с `--strict`; на
+`main` отдаёт его артефактом job `spec-publish` — у неё одной токен на запись.
+`spec-diff` — своя лёгкая job: ей нужны git-история и Node, не тесты.
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3] }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
+      - uses: actions/upload-artifact@v7
+        with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
+
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2] }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps
+      - run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=dot,blob
+      - uses: actions/upload-artifact@v7
+        with: { name: 'playwright-blob-${{ matrix.shard }}', path: blob-report/, retention-days: 1 }
+
+  spec:
+    needs: [unit, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with: { pattern: vitest-blob-*, path: vitest-blob, merge-multiple: true }
+      - uses: actions/download-artifact@v8
+        with: { pattern: playwright-blob-*, path: playwright-blob, merge-multiple: true }
+      - run: pnpm exec vitest --merge-reports=vitest-blob --reporter=json --outputFile.json=.spec-report.json
+      - run: pnpm exec playwright merge-reports --reporter=json playwright-blob
+        env: { PLAYWRIGHT_JSON_OUTPUT_NAME: .spec-playwright.json }
+      - run: pnpm spec:doc
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
+
+  spec-publish:
+    if: github.event_name == 'push'
+    needs: spec
+    runs-on: ubuntu-latest
+    permissions: { contents: write } # пуш ветки spec — только здесь
+    concurrency: { group: spec-publish, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, package-manager-cache: false }
+      - uses: actions/download-artifact@v8
+        with: { name: docs-spec, path: docs/spec }
+      - run: node .agents/skills/spec/scripts/spec-publish.ts
+
+  spec-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 } # merge-base с базовой веткой
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, package-manager-cache: false }
+      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
+```
+
+Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
+`spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами,
+`spec:doc`, артефакт на `main`; `spec-publish` — так же отдельно. ai-dev сам на
+Bun — его `.github/workflows/ci.yml` образцом для проекта на Node не служит.
