@@ -320,6 +320,33 @@ export default [...base, ...(await collectEslint(import.meta.dirname))];
 ESLint кэширует конфиг в процессе: новый или удалённый фрагмент редактор
 увидит после перезапуска ESLint-сервера; `lint` в CLI — сразу.
 
+**Исключения — явные, с задачей, и уходят, когда больше не нужны.**
+
+- *Реестр + инвариант:* `exceptions.ts` в папке решения —
+  `export default [{ item: "importLegacy", issue: 12, reason: "…" }]`, в
+  `invariant` — `exceptions` и `key` (стабильный идентификатор элемента: имя,
+  путь). Исключённый элемент вместо обычного теста получает «исключение:
+  <ключ> (#N)»: зелёный, пока нарушает соглашение; начал соблюдать — красный
+  «убери исключение» (храповик: долг только уменьшается). Исключение без
+  задачи, без причины или на элемент вне реестра — красный.
+- *Линт-правило:* исключение — отключение в коде, там же, где нарушение:
+  `// eslint-disable-next-line no-console -- #12 причина`. `collectEslint`
+  включает `reportUnusedDisableDirectives: "error"` — отключение, которое
+  больше ничего не глушит, — ошибка `lint`. Формат проверяет стандарт проекта:
+
+  ```ts
+  import { it } from "vitest";
+  import { lintExceptions } from "../../../.agents/skills/spec/scripts/harness.ts";
+
+  lintExceptions(it, { root: process.cwd(), dirs: ["src"] });
+  ```
+
+  По тесту на файл с отключениями («исключения в <файл>: <правила>»): у
+  каждого отключения названо правило и есть `-- #N причина`; общий
+  `eslint-disable` без правил запрещён — он глушит и правила, и проверку
+  внутри линтера, поэтому формат проверяет тест, а не правило ESLint. Тесты
+  файлов — список исключений в спеке.
+
 ## Подключение в репозиторий
 
 Скрипты берутся из копии скилла в самом проекте и идут под Node — Bun проекту
@@ -354,7 +381,7 @@ ESLint кэширует конфиг в процессе: новый или уд
    в её страницах и оглавлении. Дельту требований ревьюер видит в `spec-diff`
    (тело PR), правку прозы — в диффе JSDoc теста. Переход проекта, где
    `docs/spec` уже в `main`: `git rm -r --cached docs/spec`, строка в
-   `.gitignore`, шаги CI ниже.
+   `.gitignore`, шаги CI — п. 4 и `ci.md`.
 4. **CI.** Шарды пишут blob-отчёты, отдельная job `spec` после всех шардов
    склеивает их средствами раннеров (`vitest --merge-reports`,
    `playwright merge-reports` — все проекты Playwright в одном отчёте) и
@@ -365,101 +392,7 @@ ESLint кэширует конфиг в процессе: новый или уд
    job: ей нужны git-история и Node, не тесты, поэтому раздел в summary есть и
    при красных тестах. Фрагмент для pnpm (в `package.json` —
    `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
-   разделу правил «CI: параллельные задачи»:
-   ```yaml
-   on:
-     pull_request:
-     push:
-       branches: [main]
-
-   concurrency:
-     group: ci-${{ github.event.pull_request.number || github.ref }}
-     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-   jobs:
-     unit:
-       runs-on: ubuntu-latest
-       strategy:
-         fail-fast: false
-         matrix: { shard: [1, 2, 3] }
-       steps:
-         - uses: actions/checkout@v7
-         - uses: pnpm/action-setup@v6
-         - uses: actions/setup-node@v7
-           with: { node-version: 24, cache: pnpm }
-         - run: pnpm install --frozen-lockfile
-         - run: >-
-             pnpm exec vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-             --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
-         - uses: actions/upload-artifact@v7
-           with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
-
-     e2e:
-       runs-on: ubuntu-latest
-       strategy:
-         fail-fast: false
-         matrix: { shard: [1, 2] }
-       steps:
-         - uses: actions/checkout@v7
-         - uses: pnpm/action-setup@v6
-         - uses: actions/setup-node@v7
-           with: { node-version: 24, cache: pnpm }
-         - run: pnpm install --frozen-lockfile
-         - run: pnpm exec playwright install --with-deps
-         - run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=dot,blob
-         - uses: actions/upload-artifact@v7
-           with: { name: 'playwright-blob-${{ matrix.shard }}', path: blob-report/, retention-days: 1 }
-
-     spec:
-       needs: [unit, e2e]
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v7
-         - uses: pnpm/action-setup@v6
-         - uses: actions/setup-node@v7
-           with: { node-version: 24, cache: pnpm }
-         - run: pnpm install --frozen-lockfile
-         - uses: actions/download-artifact@v8
-           with: { pattern: vitest-blob-*, path: vitest-blob, merge-multiple: true }
-         - uses: actions/download-artifact@v8
-           with: { pattern: playwright-blob-*, path: playwright-blob, merge-multiple: true }
-         - run: pnpm exec vitest --merge-reports=vitest-blob --reporter=json --outputFile.json=.spec-report.json
-         - run: pnpm exec playwright merge-reports --reporter=json playwright-blob
-           env: { PLAYWRIGHT_JSON_OUTPUT_NAME: .spec-playwright.json }
-         - run: pnpm spec:doc
-         - if: github.event_name == 'push'
-           uses: actions/upload-artifact@v7
-           with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
-
-     spec-publish:
-       if: github.event_name == 'push'
-       needs: spec
-       runs-on: ubuntu-latest
-       permissions: { contents: write } # пуш ветки spec — только здесь
-       concurrency: { group: spec-publish, cancel-in-progress: false }
-       steps:
-         - uses: actions/checkout@v7
-         - uses: actions/setup-node@v7
-           with: { node-version: 24, package-manager-cache: false }
-         - uses: actions/download-artifact@v8
-           with: { name: docs-spec, path: docs/spec }
-         - run: node .agents/skills/spec/scripts/spec-publish.ts
-
-     spec-diff:
-       if: github.event_name == 'pull_request'
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v7
-           with: { fetch-depth: 0 } # merge-base с базовой веткой
-         - uses: actions/setup-node@v7
-           with: { node-version: 24, package-manager-cache: false }
-         - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
-   ```
-   Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
-   `spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами из
-   таблицы выше, `spec:doc`, артефакт на `main`; `spec-publish` — так же
-   отдельно. ai-dev сам на Bun — его
-   `.github/workflows/ci.yml` образцом для проекта на Node не служит.
+   разделу правил «CI: параллельные задачи» — фрагмент workflow в `ci.md` рядом.
 
 ## Ограничения, о которых надо знать
 
