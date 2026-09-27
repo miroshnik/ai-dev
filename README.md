@@ -53,7 +53,8 @@ Cursor глобального файла не имеет (вставить пр�
 ## Что внутри
 
 - `AGENTS.md` — канон правил (ведение задач в GitHub Issues + Projects,
-  milestones, оценка и факт, спецификация тестами, CI).
+  milestones, оценка и факт, спецификация — решения с механической
+  проверкой, CI).
 - `claude/CLAUDE.md` — то, что есть только у Claude Code.
 - `docs/` — справочники к правилам (`ci-concurrency.md`,
   `pr-checks.md`, `cloud-sessions.md`); правила ссылаются на них, агент
@@ -89,12 +90,16 @@ Cursor глобального файла не имеет (вставить пр�
   и закрытие без выполнения.
 - `ci-wait` — ожидание чеков PR или статуса коммита с исходами
   PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch`.
-- `spec` — спецификация из тестов: `spec-doc` строит `docs/spec/` из отчётов
-  раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву
-  `tests/capabilities`, `tests/architecture` и `tests/standards`; `spec-diff` —
-  список удалённых, изменённых и добавленных названий тестов для тела PR;
-  `spec-publish` — публикация `docs/spec` в ветку `spec` после мержа;
-  `harness.ts` — тесты механических проверок («реестр + инвариант»).
+- `spec` — спецификация из решений с механической проверкой: `spec-doc`
+  строит `docs/spec/` из отчётов раннеров (JSON Vitest/Jest, JSON Playwright,
+  JUnit XML от bun test) по дереву `tests/capabilities`, `tests/architecture`
+  и `tests/standards`, страницу архитектуры — из модели, сиквенс-схемы — из
+  трасс сценариев; `spec-diff` — изменения тестов, модели, исключений и
+  сверка «## Сценарии» задачи для тела PR; `spec-publish` — публикация
+  `docs/spec` в ветку `spec` после мержа; `spec-claims` — точки входа против
+  журнала вызовов; `harness.ts` — механические проверки («реестр +
+  инвариант», примеры линт-правил, исключения с храповиком, модель
+  архитектуры C1–C3, мёртвый код, окружение, сценарии).
 
 Задачи по этому репозиторию — в Issues и проекте `ai-dev`, по правилам из
 `AGENTS.md`.
