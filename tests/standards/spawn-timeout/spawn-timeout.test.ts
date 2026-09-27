@@ -11,6 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
+import { invariant } from "../../../skills/spec/scripts/harness.ts";
+
 // Таймаут — в каждом файле, а не один на прогон: ключа timeout у bun test в bunfig.toml нет (документация bun),
 // setDefaultTimeout в preload действует только на первый файл прогона (проверено на bun 1.4.2), а --timeout в скриптах
 // package.json не видит голый `bun test`. 2 мин — запас ×2,5 к установке через npm под нагрузкой ~70 на 16 ядрах
@@ -48,11 +50,14 @@ function spawning(tests: File[], lib: File[]): File[] {
   return tests.filter((f) => importsFrom(f.text, CHILD_PROCESS) || libs.some((name) => importsFrom(f.text, new RegExp(`/lib/${name.replace(".", "\\.")}$`))));
 }
 
+const hasTimeout = (f: File) => /^setDefaultTimeout\(SPAWN_TIMEOUT\);$/m.test(f.text);
+const violation = (f: File) => `${f.path}: запускает процессы без setDefaultTimeout(SPAWN_TIMEOUT)`;
+
 /** Нарушения правила: файл запускает процессы, а таймаут на уровне файла не задан. */
 function violations(tests: File[], lib: File[]): string[] {
   return spawning(tests, lib)
-    .filter((f) => !/^setDefaultTimeout\(SPAWN_TIMEOUT\);$/m.test(f.text))
-    .map((f) => `${f.path}: запускает процессы без setDefaultTimeout(SPAWN_TIMEOUT)`);
+    .filter((f) => !hasTimeout(f))
+    .map(violation);
 }
 
 function read(dir: string, match: (name: string) => boolean): File[] {
@@ -61,11 +66,22 @@ function read(dir: string, match: (name: string) => boolean): File[] {
     .map((rel) => ({ path: path.join("tests", dir, rel), text: readFileSync(path.join(TESTS, dir, rel), "utf8") }));
 }
 
+const tests = [...read("capabilities", (n) => n.endsWith(".test.ts")), ...read("standards", (n) => n.endsWith(".test.ts"))];
+const lib = read("lib", (n) => n.endsWith(".ts"));
+
 describe("Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT", () => {
-  it("тесты ai-dev, которые запускают процессы, задают setDefaultTimeout(SPAWN_TIMEOUT)", () => {
-    const tests = [...read("capabilities", (n) => n.endsWith(".test.ts")), ...read("standards", (n) => n.endsWith(".test.ts"))];
-    const lib = read("lib", (n) => n.endsWith(".ts"));
-    // правило не пустое: под него попадают установщик, скрипты spec и est
+  invariant(it, {
+    registry: "тесты ai-dev, которые запускают процессы",
+    items: spawning(tests, lib),
+    name: (f) => `${f.path} задаёт setDefaultTimeout(SPAWN_TIMEOUT)`,
+    check: (f) => {
+      if (!hasTimeout(f)) throw new Error(violation(f));
+    },
+    violator: { name: "файл с node:child_process без таймаута", item: { path: "a.test.ts", text: 'import { spawnSync } from "node:child_process";\n' } },
+  });
+
+  // сильнее, чем «реестр не пуст»: выборка находит известные файлы, а не случайный один
+  it("в реестр попадают установщик, скрипты spec и est", () => {
     expect(spawning(tests, lib).map((f) => f.path)).toEqual(
       expect.arrayContaining([
         "tests/capabilities/install/install.test.ts",
@@ -76,7 +92,6 @@ describe("Тест, который запускает процессы, не п�
         "tests/standards/node-runtime/node-runtime.test.ts",
       ]),
     );
-    expect(violations(tests, lib)).toEqual([]);
   });
 
   describe("примеры", () => {
