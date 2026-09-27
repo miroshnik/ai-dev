@@ -36,6 +36,8 @@ jobs:
         with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
       - uses: actions/upload-artifact@v7 # журнал точек входа — для spec-claims
         with: { name: 'spec-journal-unit-${{ matrix.shard }}', path: .spec-journal/, retention-days: 1, include-hidden-files: true }
+      - uses: actions/upload-artifact@v7 # код примеров и причины исключений — для spec-doc
+        with: { name: 'spec-meta-unit-${{ matrix.shard }}', path: .spec-meta/, retention-days: 1, include-hidden-files: true }
 
   e2e:
     runs-on: ubuntu-latest
@@ -70,6 +72,8 @@ jobs:
         with: { pattern: playwright-blob-*, path: playwright-blob, merge-multiple: true }
       - uses: actions/download-artifact@v8
         with: { pattern: spec-journal-*, path: .spec-journal, merge-multiple: true }
+      - uses: actions/download-artifact@v8
+        with: { pattern: spec-meta-*, path: .spec-meta, merge-multiple: true }
       - run: pnpm spec:claims # каждая точка входа вызвана тестом capability; отчёт — в spec:doc
       - run: pnpm exec vitest --merge-reports=vitest-blob --reporter=json --outputFile.json=.spec-report.json
       - run: pnpm exec playwright merge-reports --reporter=json playwright-blob

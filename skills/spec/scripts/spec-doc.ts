@@ -11,7 +11,9 @@
  * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
  * tests/lib пропускается; тесты вне дерева попадают в раздел «Вне дерева» — это сигнал.
  *
- *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict]
+ *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]
+ *
+ * Метаданные прогона харнесса (`.spec-meta/` в корне или --meta) — код примеров и причины исключений под строкой теста.
  *
  * Вывод по умолчанию — docs/spec/: README.md (индекс), capabilities/<name>.md, architecture/<name>.md,
  * standards/<name>.md; свои устаревшие файлы (с маркером) удаляет. Запуск — Bun, без зависимостей.
@@ -216,6 +218,45 @@ export function attachDocs(
   return { missing, headers, legacy, undescribed };
 }
 
+/** Метаданные прогона харнесса: файл теста + название → то, чего нет в названии (код примера, причина исключения). */
+type Meta = { path?: string; code?: string; issue?: number; reason?: string; disables?: { line: number; rules: string[]; description: string }[] };
+let META = new Map<string, Meta>();
+
+export function loadMeta(dir: string): Map<string, Meta> {
+  const out = new Map<string, Meta>();
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith(".jsonl")).sort();
+  } catch {
+    return out;
+  }
+  for (const f of files) {
+    for (const line of readFileSync(path.join(dir, f), "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      const { file, test, ...rest } = JSON.parse(line) as Meta & { file: string; test: string };
+      out.set(file + "\0" + test, rest);
+    }
+  }
+  return out;
+}
+
+const LANG: Record<string, string> = { ts: "ts", mts: "ts", cts: "ts", tsx: "tsx", js: "js", mjs: "js", cjs: "js", jsx: "jsx" };
+
+/** Под строкой теста: путь и код примера, задача и причина исключения, отключения правил в файле. */
+function metaLines(t: Test): string[] {
+  const m = META.get(t.path + "\0" + t.name);
+  if (!m) return [];
+  const out: string[] = [];
+  if (m.code !== undefined) {
+    if (m.path) out.push(`  \`${m.path}\``);
+    out.push("  ```" + (LANG[(m.path ?? "").split(".").pop() ?? ""] ?? ""), ...m.code.split("\n").map((l) => (l ? "  " + l : "")), "  ```");
+  }
+  if (m.issue !== undefined) out.push(`  > #${m.issue} — ${m.reason ?? ""}`);
+  const codeFile = /^исключения в (.+?): /.exec(t.name)?.[1] ?? "";
+  for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
+  return out;
+}
+
 function testLine(t: Test): string {
   let line = `- ${ICON[t.status] ?? "❔"} ${L.mdText(t.name)}`;
   if (t.status === "skipped") line += t.reason ? ` — пропущен: ${L.mdText(t.reason)}` : " — пропущен";
@@ -246,6 +287,7 @@ function renderTests(g: Group, tests: Test[], lines: string[]): void {
     lines.push(testLine(t));
     const doc = g.testDocs.get(testKey(t));
     if (doc?.length) lines.push(...doc.join("\n\n").split("\n").map((l) => (l ? "  > " + l : "  >")));
+    lines.push(...metaLines(t));
   }
   lines.push("", "</details>", "");
 }
@@ -363,7 +405,7 @@ function writeFiles(groups: Map<string, Group>, out: Map<string, Test[]>, outDir
   return { generated, removed };
 }
 
-const USAGE = "spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict]";
+const USAGE = "spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]";
 
 export function main(argv: string[]): number {
   let opts;
@@ -376,6 +418,7 @@ export function main(argv: string[]): number {
         out: { type: "string", default: path.join("docs", "spec") },
         stdout: { type: "boolean", default: false },
         strict: { type: "boolean", default: false },
+        meta: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -400,6 +443,7 @@ export function main(argv: string[]): number {
     }
   }
   tests = L.mergeTests(tests);
+  META = loadMeta(path.resolve(root, values.meta ?? ".spec-meta"));
   const { groups, out, libFiles } = build(tests);
   const { missing, headers, legacy, undescribed } = attachDocs(groups, root);
   const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);

@@ -306,8 +306,9 @@ Actions.
    "spec:claims": "node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
    Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
-   spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `vitest-blob/`,
-   `blob-report/`, `playwright-blob/`.
+   spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
+   `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,
+   `playwright-blob/`.
 3. **`docs/spec/` в `main` не коммитится — его публикует CI в ветку `spec`:**
    это производная копия тестов, и в `main` параллельные PR конфликтовали бы
    в её страницах и оглавлении. Дельту требований ревьюер видит в `spec-diff`

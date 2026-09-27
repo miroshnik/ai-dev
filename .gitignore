@@ -3,3 +3,5 @@ node_modules/
 .spec-report.xml
 .spec-report.json
 docs/spec/
+.spec-meta/
+.spec-journal/
