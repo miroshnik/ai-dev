@@ -2432,6 +2432,24 @@ export function calib(rows: Row[], last = 20): Calib {
 /** Тип задачи строки проекта: фактический (из ветки, маркер «Факт»), иначе из маркера «Оценка». */
 const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type || "";
 
+/**
+ * Таблица истории: колонка меток — по самой длинной строке меток (метки решений `type:name` — первый признак
+ * аналога, обрезанными их не сравнить); `epic` — не признак, его нет.
+ */
+export function historyTable(rows: Row[]): string[] {
+  const labelsOf = (r: Row) => r.labels.filter((l) => l !== "epic").join(",");
+  const w = Math.max("метки".length, ...rows.map((r) => labelsOf(r).length));
+  const out = [`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("тип", 8)} | ${pad("метки", w)} | заголовок`];
+  for (const r of rows) {
+    const fm = r.fact_marker ?? {};
+    const cov = fm.cov || "—";
+    const mt = fm.tok ? fmtMtok(fm.tok.total) : "—";
+    const usd = fm.usd !== undefined && fm.usd !== null ? Number(fm.usd).toFixed(2) : "—";
+    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
+  }
+  return out;
+}
+
 interface HistoryArgs {
   repo?: string;
   grep?: string;
@@ -2464,16 +2482,7 @@ function cmdHistory(args: HistoryArgs): void {
     if (!rowsFact.length) {
       console.log("история пуста" + (args.grep ? ` (фильтр «${args.grep}»)` : ""));
     } else {
-      console.log(`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("тип", 8)} | ${pad("метки", 22)} | заголовок`);
-      for (const r of rowsFact) {
-        const typ = rowType(r);
-        const labels = r.labels.filter((l) => l !== "epic").join(",").slice(0, 22);
-        const fm = r.fact_marker ?? {};
-        const cov = fm.cov || "—";
-        const mt = fm.tok ? fmtMtok(fm.tok.total) : "—";
-        const usd = fm.usd !== undefined && fm.usd !== null ? Number(fm.usd).toFixed(2) : "—";
-        console.log(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(typ, 8)} | ${pad(labels, 22)} | ${r.title.slice(0, 60)}`);
-      }
+      for (const line of historyTable(rowsFact)) console.log(line);
     }
     if (c.n) {
       const units = c.k! >= 0.5 && c.k! <= 3 ? "" : " — старые оценки и факты не в одних единицах";
