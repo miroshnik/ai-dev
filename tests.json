@@ -1,0 +1,2527 @@
+[
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "PR достаётся задаче, которую он делает, а не той, что упомянута"
+  ],
+  "name": "PR без закрываемых задач, упоминающий задачу, — слабая связь, когда сильных нет"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "PR достаётся задаче, которую он делает, а не той, что упомянута"
+  ],
+  "name": "PR закрывает другую задачу и лишь упоминает эту — к ней не привязывается"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "PR достаётся задаче, которую он делает, а не той, что упомянута"
+  ],
+  "name": "сильная связь — Closes #N или номер в ветке — важнее упоминаний"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
+  ],
+  "name": "est fact в облаке считает часть сессии по её транскрипту в контейнере: «Факт (облако)» с цифрами и маркером части"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
+  ],
+  "name": "est fact печатает комментарий «Факт недоступен (облако)» со ссылкой на сессию и маркером факта — в GitHub не ходит"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
+  ],
+  "name": "оценка, история и sweep в облаке — ошибка с объяснением, а не сбой gh"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Ветка `<type>/<issue>-<slug>` даёт номер и тип задачи"
+  ],
+  "name": "конвенция <type>/N-slug даёт номер и тип, префикс области допустим"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Ветка `<type>/<issue>-<slug>` даёт номер и тип задачи"
+  ],
+  "name": "номер — отдельный токен ветки, даты и однозначные числа без issue- не считаются"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Время — без двойного счёта, коммит узнаётся и по короткому хешу"
+  ],
+  "name": "пересекающиеся интервалы сливаются, короткий хеш — префикс полного"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Вывод читается человеком: часы без хвостовых нулей, склонения, периоды"
+  ],
+  "name": "метки `type:name` в est history видны целиком — колонка по самой длинной"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Вывод читается человеком: часы без хвостовых нулей, склонения, периоды"
+  ],
+  "name": "период --since: дни, недели, месяцы, часы; иное — ошибка"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Вывод читается человеком: часы без хвостовых нулей, склонения, периоды"
+  ],
+  "name": "часы без хвостовых нулей, отсутствие — тире, склонение по числу"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Калибровка k показывает, сходятся ли оценки с фактами"
+  ],
+  "name": "k — медиана факт/оценка по задачам с маркером и полным покрытием; partial не в счёт"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
+  ],
+  "name": "«+ вручную: N ч» и «Причина: …» сохраняются при перезаписи комментария"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
+  ],
+  "name": "без сессий — «Факт недоступен» и покрытие none в маркере"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
+  ],
+  "name": "маркер <!-- est {…} --> читается, битый JSON — как отсутствие"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
+  ],
+  "name": "текст с часами, отношением к оценке, PR и диффом; маркер разбирается обратно; строки человека сохранены"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Неверный вызов — справка или ошибка до обращения к GitHub"
+  ],
+  "name": "без команды — справка и код 2, неизвестная команда — ошибка"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Неверный вызов — справка или ошибка до обращения к GitHub"
+  ],
+  "name": "проверки аргументов — до обращения к GitHub"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai",
+   "облачная часть в маркере факта"
+  ],
+  "name": "выгрузка той же сессии импортирована — часть из маркера второй раз не считается"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai",
+   "облачная часть в маркере факта"
+  ],
+  "name": "облачная часть считается, как сессия: время, токены, стоимость, покрытие full по трейлеру; в маркере — сохраняется"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai",
+   "облачная часть в маркере факта"
+  ],
+  "name": "с локальной работой той же поры — сумма без двойного счёта пересечения"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai",
+   "облачная часть в маркере факта"
+  ],
+  "name": "части собираются из всех комментариев с маркером факта; по сессии — последняя"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
+  "name": "est cloud-import кладёт выгрузку в личный каталог по репозиторию; не выгрузка — ошибка"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
+  "name": "ключ облачной сессии в маркере — после префикса session_, локальной — как был"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
+  "name": "коммит PR с трейлером Claude-Session, чья сессия не импортирована, — покрытие partial и ссылка на сессию"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
+  "name": "облачная сессия считается в факт наравне с локальной — покрытие full, агент назван"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
+  "name": "события → сессия: человек — клиент, ветка — из vcs_state_changed и вывода git (до них нейтральная), токены раз на ответ, хеши из выводов, субагент — в таймлайне"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
+  "name": "трейлер Claude-Session читается из тела коммита PR"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Оценка — ступень шкалы от 0,1 до 13 ч"
+  ],
+  "name": "округляет к ближайшей ступени, при равном расстоянии — к меньшей, выше 13 не бывает"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия из каталога другого репозитория даёт факт задаче только по признакам её репозитория"
+  ],
+  "name": "pr-link PR другого репозитория с тем же номером — не якорь"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия из каталога другого репозитория даёт факт задаче только по признакам её репозитория"
+  ],
+  "name": "номер в названии сессии другого репозитория без признака репозитория задачи — не привязка"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия из каталога другого репозитория даёт факт задаче только по признакам её репозитория"
+  ],
+  "name": "сессия другого репозитория — кандидат, только если в её транскрипте есть имя репозитория задачи"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия из каталога другого репозитория даёт факт задаче только по признакам её репозитория"
+  ],
+  "name": "сессия из каталога другого репозитория с PR и коммитом задачи даёт ей факт — с переименования под задачу, ветка того репозитория не в счёт"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия из каталога другого репозитория даёт факт задаче только по признакам её репозитория"
+  ],
+  "name": "та же сессия не даёт факта задаче своего репозитория с тем же номером — период с PR другого репозитория не её"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "pr-link смёрженного PR прошлой задачи, повторённый после мержа, не обрывает время следующей задачи"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "записи безномерной ветки достаются задаче из названия на момент записи, а не из последнего; ни одна не засчитана двум задачам"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "запись на своей ветке остаётся своей и при пересечении с записанным фактом другой задачи — только предупреждение"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "запись, уже засчитанная в записанном факте другой задачи той же сессии, по названию повторно не засчитывается — комментарий называет ту задачу"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "маркер факта хранит интервалы по сессиям — по ним следующий расчёт видит, что уже засчитано"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "окно своего PR не тянется назад через переименование: записи на HEAD под прошлым названием остаются прошлой задаче"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Сессия, которая ведёт задачи подряд, делит время между ними"
+  ],
+  "name": "повтор той же записи названия не начинает новый период — переход на другую ветку без номера по-прежнему закрывает окно"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Стоимость — API-эквивалент по публичным тарифам"
+  ],
+  "name": "вход, выход, запись кэша ×1.25 (5 мин) и ×2 (1 ч), чтение кэша — по тарифу модели"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Стоимость — API-эквивалент по публичным тарифам"
+  ],
+  "name": "модель вне прайса — без цены (null), а не ноль"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Транскрипт Claude Code даёт привязки к задаче и расход токенов"
+  ],
+  "name": "вставки <system-reminder> перед текстом промпта вырезаются: промпт человеческий, номер задачи — из текста, а не из вставки; одна вставка — не промпт"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Транскрипт Claude Code даёт привязки к задаче и расход токенов"
+  ],
+  "name": "название сессии, первый промпт, промпты, хеши из вывода инструментов, pr-link, usage раз на ответ, подсказка субагента"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Транскрипт Claude Code даёт привязки к задаче и расход токенов"
+  ],
+  "name": "сессия, перешедшая в каталог репозитория по ходу работы, относится к нему; сессия целиком вне репозитория — нет"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Транскрипт Codex — такой же источник факта, только без ветки"
+  ],
+  "name": "cwd и id из session_meta, промпт из UserMessage, токены раз на response_id, хеши из выводов инструментов"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — активные часы работы над задачей по её сессиям"
+  ],
+  "name": "записи на ветке задачи и субагента с подсказкой считаются, паузы ≤ gap — время, токены и цена — с долей"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — активные часы работы над задачей по её сессиям"
+  ],
+  "name": "общий PR на две задачи — доля ½ на записях ветки, субагент с подсказкой — целиком; в результате есть «shared»"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — активные часы работы над задачей по её сессиям"
+  ],
+  "name": "пауза длиннее gap не входит во время"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — активные часы работы над задачей по её сессиям"
+  ],
+  "name": "сессия на чужой ветке не привязывается — покрытие none, факт недоступен"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «не настроен», код 1"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "выключенный «Item closed» — ❌ «выключен», отличается от ненастроенного"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "закрытая не в Готово, закрытая без выполнения в проекте, открытая вне проекта и без Status — ❌"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "к репозиторию не привязан проект — единственный пункт ❌, остальное без проекта не проверить"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "облачная сессия — объяснение и код 2, а не сбой gh на Projects v2"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "проект ai-dev как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "фильтр, чужой вид, доска не по Status и лишнее представление — ❌ представлений с каждой причиной"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "check показывает каждое расхождение с каноном отдельным пунктом"
+  ],
+  "name": "чужие варианты Status, недостающее числовое поле и своё поле сверх канона — ❌"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "в проекте с задачами удаление и переименование — только с --confirm, до него списком на подтверждение"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "доска не по Status — шаг UI со ссылкой на представление"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "закрытая задача не в Готово — ставит Готово и просит проверить цель «Item closed» в UI"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "исправимое через API исправляет сам и сверяет заново: все ✅, код 0"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "ненастроенные workflow — шаги UI со ссылкой на список workflow проекта, API их не включает"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "проекта нет — копирует эталон под владельца репозитория и привязывает; из шагов остаётся только auto-add"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "проекта нет — привязывает одноимённый проект владельца, а не заводит новый"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "fix доводит проект до канона: через API — сам, остальное — шагом UI или после подтверждения"
+  ],
+  "name": "эталон недоступен — создаёт проект с нуля: варианты Status переименовывает с теми же id, View 1 → Таблица"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "В организации сверяются ещё поле Priority и типы issue"
+  ],
+  "name": "другое поле issue организации в проекте — лишнее, как своё поле"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "В организации сверяются ещё поле Priority и типы issue"
+  ],
+  "name": "нет прав на настройку организации — строка «!» с ошибкой и ссылкой на UI, код 1, остальное сделано"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "В организации сверяются ещё поле Priority и типы issue"
+  ],
+  "name": "поле issue Priority не подключено — fix подключает; Таблица и Доска не по Priority — шаги UI"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "В организации сверяются ещё поле Priority и типы issue"
+  ],
+  "name": "своё поле проекта Priority вместо поля issue — замена только с --confirm"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "В организации сверяются ещё поле Priority и типы issue"
+  ],
+  "name": "типы Task, Bug, Feature — переименовать, создать Эпик, выключить лишний; всё — только с --confirm"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Метки решений `type:name` сверяются с деревом спеки и моделью в основной ветке"
+  ],
+  "name": "метка решения без папки или модуля в main — ❌, удаляется только с --confirm"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Метки решений `type:name` сверяются с деревом спеки и моделью в основной ветке"
+  ],
+  "name": "метка решения чужого цвета — fix перекрашивает в цвет вида"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Метки решений `type:name` сверяются с деревом спеки и моделью в основной ветке"
+  ],
+  "name": "модель не загружается — метки модулей не сверяются и не удаляются, check называет причину"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Метки решений `type:name` сверяются с деревом спеки и моделью в основной ветке"
+  ],
+  "name": "папку решения переименовали — метка переименовывается с --confirm, задачи сохраняют её"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Метки решений `type:name` сверяются с деревом спеки и моделью в основной ветке"
+  ],
+  "name": "решение в main без метки — ❌, fix создаёт метку с цветом вида"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "PR без «Closes #N» — ошибка, ничего не меняется"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "задача из «Closes #N» получает метки решений по папкам спеки в диффе PR"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "изменённый код — метка модуля модели из головы PR, путь модуля — самый длинный подходящий"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "метки решения нет в репозитории — создаётся с цветом вида"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "прежняя метка решения, которого нет в диффе, — не снимается, строка в выводе"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "эпик задачи получает метки подзадачи — объединение"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task drop закрывает без выполнения и убирает из проекта"
+  ],
+  "name": "--duplicate-of — закрывает как дубль со ссылкой на оригинал"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task drop закрывает без выполнения и убирает из проекта"
+  ],
+  "name": "выполненную задачу не трогает — ошибка"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task drop закрывает без выполнения и убирает из проекта"
+  ],
+  "name": "закрывает как not planned и убирает из проекта"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task drop закрывает без выполнения и убирает из проекта"
+  ],
+  "name": "подзадача эпика — подсказка пересчитать оценку эпика"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task drop закрывает без выполнения и убирает из проекта"
+  ],
+  "name": "уже закрыта без выполнения, но в проекте — только убирает из проекта"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "--epic указывает не на эпик"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "блокера нет в репозитории"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "в личном аккаунте --priority — приоритет там не ведём"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "открытая задача с тем же заголовком уже есть — дубль не заводится"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "открытого milestone с таким названием нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "проекта нет — сначала project fix"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
+  "name": "эпик закрыт"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "milestone — по названию среди открытых"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "заголовок уже с префиксом эпика — префикс не удваивается"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "задача и баг в личном аккаунте — без типа и без меток"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "закрытый блокер пропускается — он уже не блокирует"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "метки epic в репозитории нет — создаёт её и ставит"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "подзадача эпика: заголовок с префиксом эпика, в проекте в Бэклог, sub-issue, blocked by, следующий шаг — оценка"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "тело задачи — из файла --body-file"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
+  "name": "эпик в личном аккаунте — метка epic вместо типа; эпик не оценивается"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит метки решений `type:name`"
+  ],
+  "name": "--labels ставит метки решений; метки нет — создаётся с цветом вида"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит метки решений `type:name`"
+  ],
+  "name": "task new --epic — метки решений задачи добавляются эпику"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит метки решений `type:name`"
+  ],
+  "name": "метка не решения, которой нет в репозитории, — ошибка до создания задачи"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит метки решений `type:name`"
+  ],
+  "name": "метка решения, которого нет в main, — задача создаётся, строка называет решение новым"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status двигает задачу по доске, эпик — следом"
+  ],
+  "name": "задача вне проекта — добавляется и получает статус"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status двигает задачу по доске, эпик — следом"
+  ],
+  "name": "подзадача «В работе» — эпик из Бэклог тоже «В работе»: взята первая подзадача"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status двигает задачу по доске, эпик — следом"
+  ],
+  "name": "последняя подзадача закрыта и в Готово — подсказка закрыть эпик"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status двигает задачу по доске, эпик — следом"
+  ],
+  "name": "статус не из канона — ошибка, ничего не меняется"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status двигает задачу по доске, эпик — следом"
+  ],
+  "name": "эпик уже в работе — не трогается"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "В организации задача получает тип issue и Priority, эпик — не ниже подзадачи"
+  ],
+  "name": "выключенный тип или чужое значение Priority — ошибка до создания"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "В организации задача получает тип issue и Priority, эпик — не ниже подзадачи"
+  ],
+  "name": "подзадача срочнее эпика — Priority эпика поднимается до неё; не срочнее — эпик не трогается"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "В организации задача получает тип issue и Priority, эпик — не ниже подзадачи"
+  ],
+  "name": "тип issue организации и Priority Medium по умолчанию — в той же мутации, что и задача"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Статус ставится, даже если проект ещё не показал задачу"
+  ],
+  "name": "createIssue ещё не показывает элемент, добавление — «уже есть»: task new всё равно ставит Бэклог"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Статус ставится, даже если проект ещё не показал задачу"
+  ],
+  "name": "задачу проект уже добавил, а чтение её ещё не показывает: task status перечитывает с паузой и ставит статус"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Статус ставится, даже если проект ещё не показал задачу"
+  ],
+  "name": "элемент так и не виден — понятная ошибка с тем, что повторить, а не падение"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "без AGENTS.md в проекте — файл создаётся с одним блоком"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "в .agents/ai-dev.json — SHA ai-dev, из которого поставлено: у клона — его HEAD"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "в AGENTS.md проекта — блок со ссылкой на правила: свой текст проекта на месте, повторная установка блок не дублирует"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "из пакета npx — SHA из resolved в lock-файле npm"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "корень установки — корень git-репозитория, даже при запуске из подкаталога"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "правила, справочники и все скиллы — копией в .agents, Claude Code получает их симлинками из .claude"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "скилл, которого больше нет в ai-dev, при переустановке удаляется; свой скилл проекта не трогается"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "через npx из пакета ai-dev: bin из node_modules ставит правила и скиллы"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
+  "name": "чужой каталог с именем скилла ai-dev не перезаписывается — предупреждение"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "--link из клона — симлинки на клон вместо копий: правка в клоне видна сразу"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "AI_DEV_PRIVATE — ~/.config/ai-dev становится симлинком на личную конфигурацию"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "без Claude Code на машине — хука нет, ~/.claude не создаётся"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "правила и скиллы — в ~/.agents; агентам, что есть на машине, — симлинки, отсутствующим каталоги не создаются"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "с Claude Code — хук SessionStart в ~/.claude/settings.json запускает check --hook; свои настройки и хуки на месте, повторная установка хук не дублирует"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "свой ~/.claude/CLAUDE.md пользователя остаётся"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "старый симлинк install.sh ~/.claude/CLAUDE.md → claude/CLAUDE.md убирается — правила не грузятся дважды"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — всем агентам, что на ней есть"
+  ],
+  "name": "чужой непустой файл правил агента не трогается — предупреждение"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Неверный вызов — код 2 с объяснением"
+  ],
+  "name": "--link без -g — код 2: в проект коммитится копия, не ссылка на локальный клон"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Неверный вызов — код 2 с объяснением"
+  ],
+  "name": "неизвестная команда — код 2 и справка"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
+  ],
+  "name": "вызов из теста записывается в журнал вместе с файлом теста, из которого он пришёл"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
+  ],
+  "name": "журналы шардов складываются: вызов в любом шарде засчитан"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
+  ],
+  "name": "пустой реестр — упавший тест: выборка точек входа ошибочна"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
+  ],
+  "name": "реестр — модуль проекта: default — массив или функция, которая его возвращает"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
+  ],
+  "name": "точка входа без вызова из теста capability — упавший тест сверки и код 1; вызов из теста стандарта не засчитан"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Сверка попадает в спеку как стандарт"
+  ],
+  "name": "нет журнала — код 2 и подсказка, откуда он берётся"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Сверка попадает в спеку как стандарт"
+  ],
+  "name": "отчёт — JUnit в папке стандарта tests/standards/entry-points: spec-doc показывает его с описанием entry-points.md"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Точка входа без теста — исключение с задачей, пока тест не появился"
+  ],
+  "name": "исключение на точку без теста — зелёное; точка, у которой тест появился, — «убери исключение»"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "describe с колбэком-переменной не открывает вложенность"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "it.each и describe.each — имя второго вызова с плейсхолдером"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "test.describe Playwright и модификаторы skip/only/serial/todo/fixme"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "test.step, test.use, beforeEach и test.fail() без имени — не тесты"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "xit / xdescribe / fit Jest и suite / context Mocha"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "вложенные describe дают цепочку, объект опций перед колбэком не считается телом"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "комментарии и строки не считаются вызовами"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "шаблонная строка с подстановкой сохраняется как есть, экранирование снимается"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "--json — то же для машины"
+  ],
+  "name": "машинный формат с тремя списками и файлами вне дерева"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "--json — то же для машины"
+  ],
+  "name": "перенесённые — с исходным и новым путём"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменён — только очевидное переименование, иначе удалён и добавлен"
+  ],
+  "name": "непохожее имя в том же describe — удалён и добавлен, не переименование"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменён — только очевидное переименование, иначе удалён и добавлен"
+  ],
+  "name": "переименован describe — изменён, старый describe зачёркнут"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменён — только очевидное переименование, иначе удалён и добавлен"
+  ],
+  "name": "переименование в другом файле — не изменение, а удалён и добавлен"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменён — только очевидное переименование, иначе удалён и добавлен"
+  ],
+  "name": "тот же тест под другим describe в другом файле папки — изменён: переехал в другой раздел"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменённые тесты вне дерева видны по имени файла"
+  ],
+  "name": "tests/lib не участвует"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменённые тесты вне дерева видны по имени файла"
+  ],
+  "name": "изменённый файл теста вне tests/ перечисляется по имени"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
+  ],
+  "name": "--worktree: перенос до коммита тоже сворачивается"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
+  ],
+  "name": "одинаковые тесты двух файлов, перенесённые в одну папку, — оба перенесены, файлы не по имени"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
+  ],
+  "name": "тест с тем же describe и именем из файла вне дерева — перенесён, а не добавлен; сводка по папкам"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
+  ],
+  "name": "тест, оставшийся и вне дерева, — копия: в дереве он добавлен"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
+  ],
+  "name": "тест, переименованный при переносе, — добавлен, а файл-источник — в списке вне дерева"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "без изменений модели, исключений и проверок — разделов нет"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "исключение из exceptions.ts и отключение линта в коде: добавленные и снятые"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "модуль, зависимость и пакет модели архитектуры: добавленные и снятые"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "реестр invariant и правило examples: добавленные и снятые"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Снятые требования — первыми, потом изменённые и добавленные"
+  ],
+  "name": "`<` в названиях вне code span экранируется — GitHub не съест `<type>` в теле PR"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Снятые требования — первыми, потом изменённые и добавленные"
+  ],
+  "name": "без изменений — «Тесты не менялись»"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Снятые требования — первыми, потом изменённые и добавленные"
+  ],
+  "name": "пустой список — «нет», а не пропуск раздела"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Снятые требования — первыми, потом изменённые и добавленные"
+  ],
+  "name": "удалённые идут первыми, потом изменённые, потом добавленные"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сравнение — с тем, что меняет PR, как дифф на GitHub"
+  ],
+  "name": "--no-merge-base сравнивает с веткой как есть"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сравнение — с тем, что меняет PR, как дифф на GitHub"
+  ],
+  "name": "--worktree видит незакоммиченные и неотслеживаемые тесты"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сравнение — с тем, что меняет PR, как дифф на GitHub"
+  ],
+  "name": "merge-base: тест, добавленный в main после ветвления, не считается удалённым"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сравнение — с тем, что меняет PR, как дифф на GitHub"
+  ],
+  "name": "нет такой ревизии — код 2 и подсказка про fetch"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарии задачи сверяются с тестами PR"
+  ],
+  "name": "в задаче нет раздела «## Сценарии» — сверка говорит об этом, а не молчит"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарии задачи сверяются с тестами PR"
+  ],
+  "name": "сценарий совпадает с названием it или цепочкой «describe › it» — без учёта регистра и точки в конце"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарии задачи сверяются с тестами PR"
+  ],
+  "name": "сценарий, ставший тестом, — ✅ с папкой и названием; без теста — ❌; тест сверх сценариев — отдельным списком"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тест — это папка, цепочка describe и имя: перекладка между файлами папки — не изменение"
+  ],
+  "name": "перенос в другую capability — удалён и добавлен"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тест — это папка, цепочка describe и имя: перекладка между файлами папки — не изменение"
+  ],
+  "name": "перенос между файлами одной папки — не изменение"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тест — это папка, цепочка describe и имя: перекладка между файлами папки — не изменение"
+  ],
+  "name": "тест в tests/, но вне capabilities, architecture и standards — помечен «вне дерева»"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тесты харнесса — в диффе спеки: названия по отчёту, база — ветка spec"
+  ],
+  "name": "без базы в ветке spec — дифф по исходникам, и это сказано"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тесты харнесса — в диффе спеки: названия по отчёту, база — ветка spec"
+  ],
+  "name": "перевод примеров на реестр не выглядит в диффе спеки как одни удаления"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тесты харнесса — в диффе спеки: названия по отчёту, база — ветка spec"
+  ],
+  "name": "тесты, которые порождает харнесс, видны в диффе спеки — новый элемент реестра добавлен, снятый удалён"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "C1 — система и внешние системы схемой `C4Context`, связь подписана модулем-адаптером"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "C2 — контейнеры схемой `C4Container`: хранилище — база, связи `uses`, внешняя система — у контейнера с адаптером"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "C3 — модули схемой `C4Component` по контейнерам и таблица: назначение, каталог, API, зависимости, пакеты"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "без внешних систем и контейнеров — только модули: уровень без данных не рисуется"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "модель изменилась — страница тоже; модель убрали — устаревшая страница удаляется"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "модель не загружается — код 2 и сообщение"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "под Node без Bun — та же страница"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
+  "name": "страница архитектуры — первой строкой «Из чего состоит» в оглавлении, на ней — правила из `tests/architecture/<name>`"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Схема из модели встраивается меткой в `<папка>.md`"
+  ],
+  "name": "метка `<!-- spec: c4-… -->` в описании заменяется схемой или таблицей модулей"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Схема из модели встраивается меткой в `<папка>.md`"
+  ],
+  "name": "метка без модели или неизвестная — spec-doc называет файл и метку, --strict — код 1"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "--names-baseline пишет исключения для всех текущих нарушений одной задачей"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "исключение на название, которое стало утверждением или пропало, — spec-doc просит его убрать"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "исключения названий видны в оглавлении спеки — это долг"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "старое название из исключений не валит --strict, новое — валит"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/sequence.test.ts",
+  "describes": [
+   "Сиквенс-схема сценария — на странице capability"
+  ],
+  "name": "метка `<!-- spec: sequence-<id> -->` в `<папка>.md` ставит схему туда, под тестом её тогда нет"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/sequence.test.ts",
+  "describes": [
+   "Сиквенс-схема сценария — на странице capability"
+  ],
+  "name": "метка сценария, которого нет, — spec-doc называет её, --strict — код 1"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/sequence.test.ts",
+  "describes": [
+   "Сиквенс-схема сценария — на странице capability"
+  ],
+  "name": "схема из трассы — под тестом сценария"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "docs/spec обновляется сам и не трогает рукописное"
+  ],
+  "name": "--out задаёт каталог"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "docs/spec обновляется сам и не трогает рукописное"
+  ],
+  "name": "пишет README.md и страницу на папку — capabilities/, architecture/, standards/ — с маркером"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "docs/spec обновляется сам и не трогает рукописное"
+  ],
+  "name": "рядом с README — tests.json: все тесты дерева для spec-diff"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "docs/spec обновляется сам и не трогает рукописное"
+  ],
+  "name": "удаляет свой устаревший файл и не трогает чужой"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В документацию идёт только проза для читателя спеки"
+  ],
+  "name": "JSDoc вплотную к describe в файле без импортов — проза describe, а не capability"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В документацию идёт только проза для читателя спеки"
+  ],
+  "name": "`//`-комментарий, блочные теги JSDoc и JSDoc, отделённый от вызова кодом, в документацию не попадают"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В документацию идёт только проза для читателя спеки"
+  ],
+  "name": "заголовки в `<папка>.md` — под заголовком папки: в общем документе сдвигаются на его уровень"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В документацию идёт только проза для читателя спеки"
+  ],
+  "name": "нет `<папка>.md` — страница без вступления, spec-doc называет файл описания, --strict — код 1"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В документацию идёт только проза для читателя спеки"
+  ],
+  "name": "нет исходника (отчёт с другой машины) — документация без прозы, не ошибка"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В документацию идёт только проза для читателя спеки"
+  ],
+  "name": "шапка файла теста в документацию не идёт — spec-doc просит перенести её в `<папка>.md`, --strict — код 1"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Названия — текст, а не разметка"
+  ],
+  "name": "`<` вне code span экранируется — `<type>` и `<!-- … -->` не пропадают как HTML, в code span — как есть"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Нарушение структуры спеки видно при сборке, --strict — код 1"
+  ],
+  "name": "название describe или it без русских слов — идентификатор, имя функции или файла — spec-doc называет его и файл"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Нарушение структуры спеки видно при сборке, --strict — код 1"
+  ],
+  "name": "папка без главного файла `<папка>.test.ts` — spec-doc называет, где его ждёт"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Оглавление: что делает система, из чего состоит, каким правилам подчиняется код и что без дома"
+  ],
+  "name": "--strict возвращает 1 при тестах вне дерева, без него — 0"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Оглавление: что делает система, из чего состоит, каким правилам подчиняется код и что без дома"
+  ],
+  "name": "capability — в «Что делает система», правило архитектуры — в «Из чего состоит», стандарт — в «Каким правилам подчиняется код»"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Оглавление: что делает система, из чего состоит, каким правилам подчиняется код и что без дома"
+  ],
+  "name": "tests/lib пропускается, тесты вне дерева — в раздел «Вне дерева»"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Оглавление: что делает система, из чего состоит, каким правилам подчиняется код и что без дома"
+  ],
+  "name": "без тестов вне дерева раздела нет"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
+  "name": "Playwright: проекты сворачиваются в одну строку, причина skip — из аннотации, худший статус побеждает"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
+  "name": "Vitest: абсолютный путь с другой машины приводится по сегменту /tests/"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
+  "name": "bun test: describe — вложенные testsuite JUnit, todo и skip различаются"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
+  "name": "без отчётов — код 2 и подсказка"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
+  "name": "неизвестный формат — код 2 и сообщение"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
+  "name": "одинаковый тест из двух отчётов — одна строка с худшим статусом"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Пропущенный и падающий тест видны — на странице и в оглавлении"
+  ],
+  "name": "в оглавлении у capability — только счётчики пропущенных и падающих, общего числа тестов нет"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Пропущенный и падающий тест видны — на странице и в оглавлении"
+  ],
+  "name": "пропущенный, упавший и todo помечены своим статусом"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "`rule.test.ts` больше не главный файл — spec-doc просит переименовать в `<name>.test.ts`, --strict — код 1"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "describe — раздел с прозой из JSDoc, вложенный describe — на уровень глубже"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "есть падающие или пропущенные — они в строке-заголовке, и блок раскрыт"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "один describe из нескольких файлов — один раздел, файлы по порядку путей"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "описание `<папка>.md` — абзацы под заголовком, первый — описание в оглавлении"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "разделы — в порядке главного файла, остальные файлы — следом по пути"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "тест без describe — сразу под заголовком capability"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "тесты раздела свёрнуты под счётчиком, JSDoc теста — цитата под его строкой"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "у правила архитектуры и стандарта — так же: описание из `<папка>.md`, тесты главного файла `<name>.test.ts` первыми"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница стандарта показывает примеры и исключения"
+  ],
+  "name": "без метаданных прогона — страница без кода примеров, не ошибка"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница стандарта показывает примеры и исключения"
+  ],
+  "name": "исключение — задача и причина под строкой теста; снятое исключение пропадает вместе с тестом"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница стандарта показывает примеры и исключения"
+  ],
+  "name": "пример «нельзя» и «можно» — путь и код под строкой теста"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница стандарта показывает примеры и исключения"
+  ],
+  "name": "элемент вне охвата — причина под строкой теста"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "CSP connect-src браузера собирается из хостов модели"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "в тестах запрос к хосту вне модели падает, к объявленному — идёт дальше"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "ключ окружения внешней системы читает только её адаптер"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "пакет внешней системы разрешён только её адаптеру — иначе модель противоречит себе"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "хост внешней системы в коде — только в её адаптере; необъявленный хост — упавший тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Импорт — это пакет, только если не локальный путь, не псевдоним, не встроенный модуль и не тип"
+  ],
+  "name": "псевдоним, относительный путь, node:-модуль, встроенный без префикса и import type — не пакеты; scope и подпуть — имя пакета"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Контейнеры модели (C2) сверяются с кодом и конфигами деплоя"
+  ],
+  "name": "зависимость модулей между контейнерами — упавший тест, связь только uses"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Контейнеры модели (C2) сверяются с кодом и конфигами деплоя"
+  ],
+  "name": "клиент хранилища импортирует только контейнер со связью с ним"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Контейнеры модели (C2) сверяются с кодом и конфигами деплоя"
+  ],
+  "name": "модуль — ровно в одном контейнере"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Контейнеры модели (C2) сверяются с кодом и конфигами деплоя"
+  ],
+  "name": "развёртываемая единица из конфигов деплоя — в модели, контейнер модели — в конфигах"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Модель архитектуры проверяется кодом: модули, их зависимости и пакеты"
+  ],
+  "name": "внешний пакет в модуле, которому он не разрешён, — упавший тест; разрешённый — зелёный"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Модель архитектуры проверяется кодом: модули, их зависимости и пакеты"
+  ],
+  "name": "импорт через границу модулей — ошибка lint из правил, сгенерированных по модели; разрешённая зависимость — нет"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Модель архитектуры проверяется кодом: модули, их зависимости и пакеты"
+  ],
+  "name": "каталог кода в модуле — зелёный тест «<каталог> → <модуль>», вне модулей — упавший"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Модель архитектуры проверяется кодом: модули, их зависимости и пакеты"
+  ],
+  "name": "разрешённый модулю пакет, который им не используется, — упавший тест: модель разошлась с кодом"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
+  "name": "читается без объявления — упавший тест; объявлена и не читается — упавший; служебные (NODE_ENV) — вне проверки"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
+  "name": "без отчёта — knip проекта запускается сам (node_modules/.bin/knip --reporter json)"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
+  "name": "исключение — зелёное, пока knip его находит; перестал находить — «убери исключение»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
+  "name": "файл, экспорт и зависимость без потребителя — упавшие тесты своих видов; чисто — зелёные"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключение из соглашения — явное, с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "исключение без задачи или без причины — упавший тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключение из соглашения — явное, с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "исключение на элемент, которого нет в реестре, — упавший тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключение из соглашения — явное, с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "исключённый элемент, который нарушает соглашение, — зелёный тест «исключение: …» вместо обычного"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключение из соглашения — явное, с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "исключённый элемент, который уже соблюдает соглашение, — упавший тест «убери исключение»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отключение линт-правила в коде — исключение с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "отключение с правилом и «-- #N причина» — зелёный тест файла; без задачи, без причины или без правила — упавший"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отключение линт-правила в коде — исключение с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "отключение, которое больше ничего не глушит, — ошибка lint: храповик встроен в конфиг collectEslint"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отключение линт-правила в коде — исключение с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "тест отключений линта в файле называет задачи отключений"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отключение линт-правила в коде — исключение с задачей, и уходит, когда больше не нужно"
+  ],
+  "name": "файлов кода не нашлось — упавший тест: путь ошибочен"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Линт-правило проверяется примерами «нельзя», «можно», «вне охвата»"
+  ],
+  "name": "«нельзя» падает, если правило не сработало; «можно» и «вне охвата» — если сработало"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Линт-правило проверяется примерами «нельзя», «можно», «вне охвата»"
+  ],
+  "name": "правило без примера «нельзя» — упавший тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Линт-правило проверяется примерами «нельзя», «можно», «вне охвата»"
+  ],
+  "name": "пример «нельзя» с числом срабатываний падает, если правило сработало иначе"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Линт-правило проверяется примерами «нельзя», «можно», «вне охвата»"
+  ],
+  "name": "пример, который не разбирается, — упавший тест, а не ложное «можно»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Линт-правило проверяется примерами «нельзя», «можно», «вне охвата»"
+  ],
+  "name": "срабатывание другого правила не засчитывается ни за «нельзя», ни против «можно»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
+  "name": "collectEslint пропускает tests/lib — хелпер там не фрагмент"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
+  "name": "eslint.ts стандарта попадает в конфиг: lint проекта ловит нарушение в охвате правила и молчит вне его"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
+  "name": "запреты двух стандартов на одни файлы действуют оба — у каждого своё правило"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
+  "name": "конфиг линтера загружается до первого примера, а не под его таймаутом"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
+  "name": "примеры идут через тот же конфиг: с фрагментом — зелёные, без фрагмента «нельзя» падает"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
+  "name": "фрагмент eslint.mts собирается так же, как eslint.ts"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/meta.test.ts",
+  "describes": [
+   "Проверка оставляет метаданные прогона — спека показывает примеры и долг"
+  ],
+  "name": "examples и исключения пишут метаданные прогона для spec-doc"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/sequence.test.ts",
+  "describes": [
+   "Сценарий capability — сиквенс-схема из трассы вызовов на границах модели"
+  ],
+  "name": "sequence пишет вызовы на границах по порядку в метаданные прогона, trace вне сценария — ничего"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/sequence.test.ts",
+  "describes": [
+   "Сценарий capability — сиквенс-схема из трассы вызовов на границах модели"
+  ],
+  "name": "вызов внутри участника в трассу не попадает — перестановка внутри модуля схему не меняет"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/sequence.test.ts",
+  "describes": [
+   "Сценарий capability — сиквенс-схема из трассы вызовов на границах модели"
+  ],
+  "name": "нарушенный объявленный порядок валит тест, соблюдённый — зелёный"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/sequence.test.ts",
+  "describes": [
+   "Сценарий capability — сиквенс-схема из трассы вызовов на границах модели"
+  ],
+  "name": "участник не из модели — тест падает: схема говорит на языке модели"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "два инварианта в одном describe дают разные названия служебных тестов"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "исключения двух инвариантов одной папки не мешают друг другу"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "каждый из нескольких нарушителей валит проверку"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "обязательный элемент пропал из реестра — проверка красная"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "реестр из исходников читает текст лениво, нарушитель — текстом"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "элемент вне охвата — с причиной на странице, пропал из реестра — «убери из охвата»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Соглашение проверяется на каждом элементе реестра из кода, а не на одном примере"
+  ],
+  "name": "названия тестов без счётчиков: реестр растёт — меняются только тесты новых элементов"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Соглашение проверяется на каждом элементе реестра из кода, а не на одном примере"
+  ],
+  "name": "по тесту на элемент с названием-утверждением о нём; нарушающий элемент — упавший тест с причиной"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Соглашение проверяется на каждом элементе реестра из кода, а не на одном примере"
+  ],
+  "name": "проверка, которая прошла на заведомом нарушителе, — упавший тест: она ничего не проверяет"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Соглашение проверяется на каждом элементе реестра из кода, а не на одном примере"
+  ],
+  "name": "пустой реестр — упавший тест «реестр … не пуст»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Соглашение проверяется на каждом элементе реестра из кода, а не на одном примере"
+  ],
+  "name": "тесты элементов идут по названию, а не в порядке реестра: спека одинакова на любой машине"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Тесты проверки — в отчёте любого раннера: bun test, Vitest, node:test"
+  ],
+  "name": "bun test: по тесту на обработчик, нарушитель и «не пуст» — в отчёте, нарушающий обработчик падает"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Тесты проверки — в отчёте любого раннера: bun test, Vitest, node:test"
+  ],
+  "name": "node:test под Node без Bun: те же тесты, нарушающий обработчик падает"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "--check сверяет опубликованное с собранным"
+  ],
+  "name": "ветка совпадает с docs/spec — код 0; отстала или её нет — код 1 и что не совпало"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "--check сверяет опубликованное с собранным"
+  ],
+  "name": "нет каталога docs/spec — код 2 и подсказка собрать его spec-doc"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Документация публикуется в ветку spec, а не коммитится в main"
+  ],
+  "name": "корень ветки spec — содержимое docs/spec, в сообщении — SHA main, из которого собрано; main не меняется"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Документация публикуется в ветку spec, а не коммитится в main"
+  ],
+  "name": "повтор без изменений — без нового коммита; изменение — новый коммит поверх, история публикаций сохраняется"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Документация публикуется в ветку spec, а не коммитится в main"
+  ],
+  "name": "удалённая страница исчезает из ветки"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "check --hook: проверка недоступна — объяснение в stdout, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "npx недоступен — код хука 0, в выводе — что проверка недоступна"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "команда хука — check --hook: машина и проект одним выводом, код 0, даже когда отстаёт"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "git fetch не удался (нет сети, нет remote) — проверка недоступна, код 2"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "update -g — git pull --ff-only клона и ссылки на новый скилл; после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "update -g: в клоне изменения в отслеживаемых файлах — отказ с причиной, код 1, клон не тронут"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "update -g: клон не на main — отказ с причиной, код 1, клон не тронут"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "update -g: неотслеживаемые файлы в клоне не мешают"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "в main новое правило и новый скилл — отстаёт, код 1: файлы флоу из origin/main; клон и ~/.agents не тронуты"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "клон на origin/main — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "коммиты в main без файлов флоу — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "старая установка без SHA — check по git; update -g пишет SHA клона"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "ai-dev ушёл вперёд — отстаёт, код 1: стоит и свежий SHA, что изменится, команда обновления; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents); после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "поставлено из того же ai-dev — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "старая установка без SHA — check сравнивает содержимое: совпадает — актуально, нет — отстаёт «без SHA»; update записывает SHA"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "флоу в проекте не стоит — «не установлен», код 0, ничего не создаётся"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
+  ],
+  "name": "ai-dev ушёл вперёд — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
+  ],
+  "name": "поставлено из того же ai-dev — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
+  ],
+  "name": "старая установка без SHA и без хука SessionStart — отстаёт; update -g ставит хук и пишет SHA"
+ },
+ {
+  "path": "tests/standards/cloud-session/cloud-session.test.ts",
+  "describes": [
+   "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть",
+   "примеры"
+  ],
+  "name": "проверка есть, а объяснение не ведёт в docs/cloud-sessions.md — нарушение"
+ },
+ {
+  "path": "tests/standards/cloud-session/cloud-session.test.ts",
+  "describes": [
+   "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть",
+   "примеры"
+  ],
+  "name": "проверка с объяснением — чисто; `gh project` — тоже Projects v2"
+ },
+ {
+  "path": "tests/standards/cloud-session/cloud-session.test.ts",
+  "describes": [
+   "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть",
+   "примеры"
+  ],
+  "name": "скрипт без Projects v2 — вне правила"
+ },
+ {
+  "path": "tests/standards/cloud-session/cloud-session.test.ts",
+  "describes": [
+   "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть",
+   "примеры"
+  ],
+  "name": "скрипт с Projects v2 без проверки CLAUDE_CODE_REMOTE — нарушение"
+ },
+ {
+  "path": "tests/standards/cloud-session/cloud-session.test.ts",
+  "describes": [
+   "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть"
+  ],
+  "name": "скрипты скиллов ai-dev, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
+  "name": "spec-claims пишет под Node тот же отчёт, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
+  "name": "spec-diff печатает тот же раздел для PR, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
+  "name": "spec-doc пишет тот же docs/spec, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
+  "name": "spec-publish публикует под Node то же дерево, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
+  "name": "копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT",
+   "примеры"
+  ],
+  "name": "без процессов — вне правила: свой модуль без процессов, import type, пример кода в строке"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT",
+   "примеры"
+  ],
+  "name": "с setDefaultTimeout(SPAWN_TIMEOUT) — чисто"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT",
+   "примеры"
+  ],
+  "name": "файл с node:child_process без таймаута — нарушение"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT",
+   "примеры"
+  ],
+  "name": "хелпер из модуля tests/lib, который запускает процессы сам или через другой модуль, — тоже нарушение"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/est/est.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/install/install.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-claims/spec-claims.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-diff/spec-diff.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-doc/architecture.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-doc/names.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-doc/sequence.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-doc/spec-doc.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/architecture.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/claimed-code.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/exceptions.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/lint.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/meta.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/sequence.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/spec-harness.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-publish/spec-publish.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/update/update.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/node-runtime/node-runtime.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "в реестр попадают установщик, скрипты spec и est"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "нарушитель не проходит: файл с node:child_process без таймаута"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "реестр «тесты ai-dev, которые запускают процессы» не пуст"
+ }
+]
