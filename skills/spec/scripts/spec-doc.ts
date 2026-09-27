@@ -130,6 +130,42 @@ const addOnce = (list: string[], text: string): void => {
   if (text && !list.includes(text)) list.push(text);
 };
 
+/** Главный файл папки, которого ждём, если в отчёте его нет: `<папка>.test.ts`. */
+const mainPath = (g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.test.ts`;
+
+/** У группы есть главный файл: в отчёте или на диске (`<папка>.<что угодно>` с тестовым суффиксом). */
+function hasMain(g: Group, root: string): boolean {
+  if (g.tests.some((t) => isMain(t.path))) return true;
+  try {
+    return readdirSync(path.join(root, L.TESTS, SUBDIR[g.kind]!, g.name)).some((f) => L.isTestFile(f) && f.split(".")[0] === g.name);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Название — утверждение по-русски: в нём есть русские слова. Идентификатор (camelCase, snake_case), имя функции
+ * или файла, английская фраза — не утверждение: читатель спеки не узнает из него, что система делает.
+ */
+export const isStatement = (name: string): boolean => /[А-Яа-яЁё]/.test(name.replace(/`[^`]*`/g, ""));
+
+/** Названия describe и it, которые не утверждения, — по файлу, без повторов. */
+function badNames(groups: Map<string, Group>): [string, string][] {
+  const seen = new Set<string>();
+  const out: [string, string][] = [];
+  for (const g of groups.values()) {
+    for (const t of g.tests) {
+      for (const n of [...t.describes, t.name]) {
+        const k = t.path + "\0" + n;
+        if (seen.has(k) || isStatement(n)) continue;
+        seen.add(k);
+        out.push([n, t.path]);
+      }
+    }
+  }
+  return out;
+}
+
 /** Описание решения — `<папка>.md` рядом с тестами папки, путь от корня. */
 export const descriptionPath = (g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.md`;
 
@@ -366,6 +402,8 @@ export function main(argv: string[]): number {
   tests = L.mergeTests(tests);
   const { groups, out, libFiles } = build(tests);
   const { missing, headers, legacy, undescribed } = attachDocs(groups, root);
+  const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);
+  const names = badNames(groups);
 
   if (values.stdout) {
     process.stdout.write(renderStdout(groups, out));
@@ -387,6 +425,8 @@ export function main(argv: string[]): number {
   for (const file of [...out.keys()].sort()) console.error(`spec-doc: вне дерева: ${file} (${testsWord(out.get(file)!.length)})`);
   if (missing.length) console.error(`spec-doc: нет исходников (${missing.length}) — проза из JSDoc не взята: ${missing.join(", ")}`);
   for (const file of undescribed) console.error(`spec-doc: нет описания ${file} — зачем, причина, отвергнутое`);
+  for (const file of noMain) console.error(`spec-doc: нет главного файла ${file} — его describe открывают страницу`);
+  for (const [name, file] of names) console.error(`spec-doc: название — не утверждение по-русски: «${name}» (${file})`);
   for (const file of headers) {
     const [kind, name] = L.classify(file);
     console.error(`spec-doc: шапка файла в документацию не идёт — перенеси в ${descriptionPath({ kind, name: name! })}: ${file}`);
@@ -395,7 +435,7 @@ export function main(argv: string[]): number {
     const base = path.posix.basename(file);
     console.error(`spec-doc: главный файл папки — ${L.classify(file)[1]}${base.slice("rule".length)}, а не ${base} — переименуй: ${file}`);
   }
-  return (out.size || headers.length || legacy.length || undescribed.length) && values.strict ? 1 : 0;
+  return (out.size || headers.length || legacy.length || undescribed.length || noMain.length || names.length) && values.strict ? 1 : 0;
 }
 
 if (import.meta.main) {

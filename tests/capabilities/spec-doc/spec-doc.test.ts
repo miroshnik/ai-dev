@@ -387,6 +387,43 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
 });
 
 /**
+ * Структура спеки — правило для всех проектов, поэтому её проверяет сама сборка документации: `--strict` в CI
+ * валит PR, а без него то же видно в stderr.
+ */
+describe("Нарушение структуры спеки видно при сборке, --strict — код 1", () => {
+  it("папка без главного файла `<папка>.test.ts` — spec-doc называет, где его ждёт", () => {
+    writeTree(dir, {
+      "tests/capabilities/billing/billing.md": "Биллинг.\n",
+      "tests/capabilities/billing/vat.test.ts": `import { it } from "bun:test";\nit("НДС считается", () => {});\n`,
+    });
+    const report = vitestReport(dir, { "tests/capabilities/billing/vat.test.ts": [[[], "НДС считается"]] });
+    const r = doc("r.json", report, "--stdout");
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("нет главного файла tests/capabilities/billing/billing.test.ts — его describe открывают страницу");
+    expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
+  });
+
+  // Название — требование; идентификатор или английская фраза не говорят читателю спеки, что система делает
+  it("название describe или it без русских слов — идентификатор, имя функции или файла — spec-doc называет его и файл", () => {
+    writeTree(dir, { "tests/capabilities/billing/billing.md": "Биллинг.\n" });
+    const report = vitestReport(dir, {
+      [MAIN]: [
+        [["createInvoice"], "returns 201"],
+        [["createInvoice"], "счёт `createInvoice()` в `invoice.ts` создаётся по заказу"],
+        [["Счета"], "snake_case_name"],
+      ],
+    });
+    const r = doc("r.json", report, "--stdout");
+    expect(r.stderr).toContain(`название — не утверждение по-русски: «createInvoice» (${MAIN})`);
+    expect(r.stderr).toContain(`название — не утверждение по-русски: «returns 201» (${MAIN})`);
+    expect(r.stderr).toContain(`название — не утверждение по-русски: «snake_case_name» (${MAIN})`);
+    expect(r.stderr).not.toContain("«счёт");
+    expect(r.stderr).not.toContain("«Счета»");
+    expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
+  });
+});
+
+/**
  * `tests/lib` — фабрики и хелперы, не спека. Тест вне `capabilities/<name>`, `architecture/<name>` и
  * `standards/<name>` — без дома: это сигнал перенести, а не ошибка разбора.
  */
