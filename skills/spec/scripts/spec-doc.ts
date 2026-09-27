@@ -3,8 +3,9 @@
  * spec-doc — документация из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
  * от bun test): раздел на папку tests/capabilities/<name> («Что делает система»),
  * tests/architecture/<name> («Из чего состоит») и tests/standards/<name> («Каким правилам подчиняется
- * код»). Страница — рассказ: шапка главного файла папки (<name>.test.ts у всех видов; rule.test.ts —
- * подсказка переименовать) под заголовком (первый абзац — в индексе), describe →
+ * код»). Страница — рассказ: описание <папка>.md рядом с тестами под заголовком (первый абзац — в индексе,
+ * заголовки md — под заголовком папки), главный файл <name>.test.ts у всех видов (rule.test.ts — подсказка
+ * переименовать), describe →
  * раздел с прозой из своего JSDoc, тесты раздела свёрнуты в <details> со счётчиком. Разделы идут в
  * порядке главного файла, остальные файлы — следом по пути. Шапка другого файла папки в документацию
  * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
@@ -129,18 +130,30 @@ const addOnce = (list: string[], text: string): void => {
   if (text && !list.includes(text)) list.push(text);
 };
 
+/** Описание решения — `<папка>.md` рядом с тестами папки, путь от корня. */
+export const descriptionPath = (g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.md`;
+
 /**
- * Проза из JSDoc исходников группы (отчёты комментариев не несут): шапка главного файла — абзацы
- * группы, describe — узла дерева, it — теста. Describe без тестов в отчёте (имя из it.each с
- * подстановкой) прозу теряет. Возвращает файлы, которых нет на диске (они без прозы), файлы с
- * шапкой вне главного — рассказ пишется в одном месте, их шапка в документацию не идёт, — и прежние
- * главные `rule.*`, которые надо переименовать.
+ * Проза группы: вступление — `<папка>.md` (зачем, причина, отвергнутое), describe и it — их JSDoc из исходников
+ * (отчёты комментариев не несут). Describe без тестов в отчёте (имя из it.each с подстановкой) прозу теряет.
+ * Возвращает файлы, которых нет на диске (они без прозы), папки без описания, файлы тестов с шапкой — рассказ
+ * пишется в одном месте, шапка файла в документацию не идёт, — и прежние главные `rule.*`, которые надо переименовать.
  */
-export function attachDocs(groups: Map<string, Group>, root: string): { missing: string[]; misplaced: string[]; legacy: string[] } {
+export function attachDocs(
+  groups: Map<string, Group>,
+  root: string,
+): { missing: string[]; headers: string[]; legacy: string[]; undescribed: string[] } {
   const missing: string[] = [];
-  const misplaced: string[] = [];
+  const headers: string[] = [];
   const legacy: string[] = [];
+  const undescribed: string[] = [];
   for (const g of groups.values()) {
+    try {
+      const text = readFileSync(path.join(root, descriptionPath(g)), "utf8").trim();
+      if (text) g.doc.push(text);
+    } catch {
+      undescribed.push(descriptionPath(g));
+    }
     // порядок файлов — как в build: главный первым
     for (const file of [...new Set(g.tests.map((t) => t.path))]) {
       if (isLegacyMain(file)) legacy.push(file);
@@ -152,8 +165,7 @@ export function attachDocs(groups: Map<string, Group>, root: string): { missing:
         continue;
       }
       const docs = L.parseDocs(file, source);
-      if (docs.file && isMain(file) && !g.doc.length) g.doc.push(docs.file);
-      else if (docs.file && !isLegacyMain(file)) misplaced.push(file);
+      if (docs.file) headers.push(file);
       for (const [key, text] of docs.describes) {
         let node: Node | undefined = g.tree;
         for (const d of JSON.parse(key) as string[]) node = node?.children.get(d);
@@ -165,7 +177,7 @@ export function attachDocs(groups: Map<string, Group>, root: string): { missing:
       }
     }
   }
-  return { missing, misplaced, legacy };
+  return { missing, headers, legacy, undescribed };
 }
 
 function testLine(t: Test): string {
@@ -211,20 +223,32 @@ function renderNode(g: Group, node: Node, level: number, lines: string[]): void 
   }
 }
 
+/** Markdown описания под заголовком папки уровня level: его заголовки сдвигаются на level − 1 (кроме блоков кода). */
+function shiftHeadings(text: string, level: number): string {
+  let fence = false;
+  return text
+    .split("\n")
+    .map((l) => {
+      if (/^\s*(```|~~~)/.test(l)) fence = !fence;
+      return !fence && /^#{1,6}\s/.test(l) ? "#".repeat(level - 1) + l : l;
+    })
+    .join("\n");
+}
+
 /**
- * Заголовок группы на уровне level, под ним проза, describe — глубже. Строки «раздел · путь ·
+ * Заголовок группы на уровне level, под ним описание, describe — глубже. Строки «раздел · путь ·
  * счётчик» нет: раздел и путь следуют из конвенции, статус виден у каждого теста.
  */
 function renderGroup(g: Group, level: number): string {
   const lines = [heading(level, g.name), ""];
-  pushDoc(lines, g.doc);
+  pushDoc(lines, g.doc.map((d) => shiftHeadings(d, level)));
   renderNode(g, g.tree, level + 1, lines);
   return lines.join("\n").trimEnd() + "\n";
 }
 
-/** Первый абзац прозы группы одной строкой — описание в индексе. */
+/** Первый абзац описания группы (не заголовок) одной строкой — описание в индексе. */
 function summaryOf(g: Group): string {
-  const first = (g.doc[0] ?? "").split("\n\n")[0]!;
+  const first = (g.doc[0] ?? "").split("\n\n").find((p) => p.trim() && !/^#{1,6}\s/.test(p.trim())) ?? "";
   return first.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 }
 
@@ -341,7 +365,7 @@ export function main(argv: string[]): number {
   }
   tests = L.mergeTests(tests);
   const { groups, out, libFiles } = build(tests);
-  const { missing, misplaced, legacy } = attachDocs(groups, root);
+  const { missing, headers, legacy, undescribed } = attachDocs(groups, root);
 
   if (values.stdout) {
     process.stdout.write(renderStdout(groups, out));
@@ -362,12 +386,16 @@ export function main(argv: string[]): number {
   );
   for (const file of [...out.keys()].sort()) console.error(`spec-doc: вне дерева: ${file} (${testsWord(out.get(file)!.length)})`);
   if (missing.length) console.error(`spec-doc: нет исходников (${missing.length}) — проза из JSDoc не взята: ${missing.join(", ")}`);
-  for (const file of misplaced) console.error(`spec-doc: шапка вне главного файла ${L.classify(file)[1]}.* — в документацию не идёт: ${file}`);
+  for (const file of undescribed) console.error(`spec-doc: нет описания ${file} — зачем, причина, отвергнутое`);
+  for (const file of headers) {
+    const [kind, name] = L.classify(file);
+    console.error(`spec-doc: шапка файла в документацию не идёт — перенеси в ${descriptionPath({ kind, name: name! })}: ${file}`);
+  }
   for (const file of legacy) {
     const base = path.posix.basename(file);
     console.error(`spec-doc: главный файл папки — ${L.classify(file)[1]}${base.slice("rule".length)}, а не ${base} — переименуй: ${file}`);
   }
-  return (out.size || misplaced.length || legacy.length) && values.strict ? 1 : 0;
+  return (out.size || headers.length || legacy.length || undescribed.length) && values.strict ? 1 : 0;
 }
 
 if (import.meta.main) {

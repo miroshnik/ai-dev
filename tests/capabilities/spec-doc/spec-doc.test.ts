@@ -1,11 +1,3 @@
-/**
- * Скрипт `spec-doc` скилла `spec`: документация `docs/spec` из тестов — страница на capability, правило
- * архитектуры и стандарт, которая читается рассказом: зачем, что умеет, чем проверено.
- *
- * Требование существует, пока есть проверяющий его тест, поэтому документацию о поведении не пишут руками: её
- * собирают из отчётов раннеров и JSDoc тестов, и с тестами она не расходится. В `main` её нет: после мержа CI
- * собирает `docs/spec` и публикует в ветку `spec` (`spec-publish`).
- */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -32,13 +24,14 @@ const BODY = `describe("Счета", () => { it("выставляется за �
 const billing = () => vitestReport(dir, { [MAIN]: [[["Счета"], "выставляется за месяц"], [["Счета"], "черновик удаляется"]] });
 
 /**
- * Зачем — шапка главного файла папки, что умеет — разделы из `describe`, чем проверено — тесты, свёрнутые под
- * разделом: доказательства не заслоняют рассказ.
+ * Зачем — описание `<папка>.md` рядом с тестами, что умеет — разделы из `describe`, чем проверено — тесты,
+ * свёрнутые под разделом: доказательства не заслоняют рассказ.
  */
 describe("Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено", () => {
-  it("шапка главного файла `<name>.test.ts` — абзацы под заголовком, первый — описание в оглавлении", () => {
+  it("описание `<папка>.md` — абзацы под заголовком, первый — описание в оглавлении", () => {
     writeTree(dir, {
-      [MAIN]: `/**\n * Биллинг: счета клиентам\n * за месяц.\n *\n * Второй абзац — только на странице.\n */\nimport { describe, it } from "bun:test";\n${BODY}`,
+      "tests/capabilities/billing/billing.md": "Биллинг: счета клиентам\nза месяц.\n\nВторой абзац — только на странице.\n",
+      [MAIN]: `import { describe, it } from "bun:test";\n${BODY}`,
     });
     const r = doc("r.json", billing());
     expect(r.code).toBe(0);
@@ -137,12 +130,14 @@ describe("Счета", () => {
   });
 
   // Одно правило для всех видов вместо «у стандарта — rule.test.ts»: главный файл находится по имени папки (#72)
-  it("у правила архитектуры и стандарта главный файл тоже `<name>.test.ts`: его шапка и его тесты первыми", () => {
+  it("у правила архитектуры и стандарта — так же: описание из `<папка>.md`, тесты главного файла `<name>.test.ts` первыми", () => {
     writeTree(dir, {
+      "tests/standards/audit/audit.md": "Каждая мутация пишет аудит.\n",
       "tests/standards/audit/examples.test.ts": `import { it } from "bun:test";\nit("пример", () => {});\n`,
-      "tests/standards/audit/audit.test.ts": `/** Каждая мутация пишет аудит. */\nimport { it } from "bun:test";\nit("правило", () => {});\n`,
+      "tests/standards/audit/audit.test.ts": `import { it } from "bun:test";\nit("правило", () => {});\n`,
+      "tests/architecture/layers/layers.md": "Домен не знает об инфраструктуре.\n",
       "tests/architecture/layers/cases.test.ts": `import { it } from "bun:test";\nit("инфраструктура импортирует домен", () => {});\n`,
-      "tests/architecture/layers/layers.test.ts": `/** Домен не знает об инфраструктуре. */\nimport { it } from "bun:test";\nit("домен не импортирует инфраструктуру", () => {});\n`,
+      "tests/architecture/layers/layers.test.ts": `import { it } from "bun:test";\nit("домен не импортирует инфраструктуру", () => {});\n`,
     });
     const r = doc(
       "r.json",
@@ -162,48 +157,73 @@ describe("Счета", () => {
   });
 
   it("`rule.test.ts` больше не главный файл — spec-doc просит переименовать в `<name>.test.ts`, --strict — код 1", () => {
-    writeTree(dir, { "tests/standards/audit/rule.test.ts": `/** Каждая мутация пишет аудит. */\nimport { it } from "bun:test";\nit("правило", () => {});\n` });
+    writeTree(dir, {
+      "tests/standards/audit/audit.md": "Каждая мутация пишет аудит.\n",
+      "tests/standards/audit/rule.test.ts": `import { it } from "bun:test";\nit("правило", () => {});\n`,
+    });
     const report = vitestReport(dir, { "tests/standards/audit/rule.test.ts": [[[], "правило"]] });
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
-    expect(r.stdout).not.toContain("Каждая мутация пишет аудит.");
     expect(r.stderr).toContain("главный файл папки — audit.test.ts, а не rule.test.ts — переименуй: tests/standards/audit/rule.test.ts");
-    expect(r.stderr).not.toContain("шапка вне главного файла");
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
   });
 });
 
 /**
- * Отчёты раннеров комментариев не несут — прозу `spec-doc` берёт из исходников тестов тем же сканером, что
- * `spec-diff`. JSDoc — для читателя спеки; причины решений, устройство теста и ссылки на задачи — `//`, для
- * читателя кода.
+ * Отчёты раннеров комментариев не несут — прозу `spec-doc` берёт из `<папка>.md` и JSDoc у `describe` и `it` тем же
+ * сканером, что `spec-diff`. Причины решений и отвергнутое — в `<папка>.md`; устройство теста и ссылки на задачи —
+ * `//`, для читателя кода.
  */
 describe("В документацию идёт только проза для читателя спеки", () => {
-  // Шапки всех файлов подряд давали лоскутное одеяло заметок разработчику вместо рассказа (#63)
-  it("шапка не в главном файле папки в документацию не идёт — spec-doc называет файл, --strict — код 1", () => {
+  // Шапки всех файлов подряд давали лоскутное одеяло заметок разработчику вместо рассказа (#63); теперь рассказ —
+  // в <папка>.md (#91), а шапка любого файла — второй источник, который никто не сверяет
+  it("шапка файла теста в документацию не идёт — spec-doc просит перенести её в `<папка>.md`, --strict — код 1", () => {
     writeTree(dir, {
+      "tests/capabilities/billing/billing.md": "Биллинг: счета клиентам.\n",
       "tests/capabilities/billing/a.test.ts": `/** Заметка разработчику: здесь чистая функция. */\nimport { it } from "bun:test";\nit("a", () => {});\n`,
-      [MAIN]: `/** Биллинг: счета клиентам. */\nimport { it } from "bun:test";\nit("b", () => {});\n`,
+      [MAIN]: `/** Старая шапка. */\nimport { it } from "bun:test";\nit("b", () => {});\n`,
     });
     const report = vitestReport(dir, { "tests/capabilities/billing/a.test.ts": [[[], "a"]], [MAIN]: [[[], "b"]] });
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("### billing\n\nБиллинг: счета клиентам.\n\n<details>");
     expect(r.stdout).not.toContain("Заметка разработчику");
-    expect(r.stderr).toContain("шапка вне главного файла billing.* — в документацию не идёт: tests/capabilities/billing/a.test.ts");
+    expect(r.stdout).not.toContain("Старая шапка");
+    expect(r.stderr).toContain("шапка файла в документацию не идёт — перенеси в tests/capabilities/billing/billing.md: tests/capabilities/billing/a.test.ts");
+    expect(r.stderr).toContain(`перенеси в tests/capabilities/billing/billing.md: ${MAIN}`);
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
+  });
+
+  it("нет `<папка>.md` — страница без вступления, spec-doc называет файл описания, --strict — код 1", () => {
+    writeTree(dir, { [MAIN]: `import { describe, it } from "bun:test";\n${BODY}` });
+    const r = doc("r.json", billing(), "--stdout");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("### billing\n\n#### Счета");
+    expect(r.stderr).toContain("нет описания tests/capabilities/billing/billing.md — зачем, причина, отвергнутое");
+    expect(doc("r.json", billing(), "--stdout", "--strict").code).toBe(1);
+  });
+
+  it("заголовки в `<папка>.md` — под заголовком папки: в общем документе сдвигаются на его уровень", () => {
+    writeTree(dir, {
+      "tests/capabilities/billing/billing.md": "Биллинг.\n\n## Почему месяц\n\nТак считает бухгалтерия.\n",
+      [MAIN]: `import { describe, it } from "bun:test";\n${BODY}`,
+    });
+    expect(doc("r.json", billing(), "--stdout").stdout).toContain("### billing\n\nБиллинг.\n\n#### Почему месяц\n\nТак считает бухгалтерия.\n\n#### Счета");
+    doc("r.json", billing());
+    expect(read("docs/spec/capabilities/billing.md")).toContain("# billing\n\nБиллинг.\n\n## Почему месяц\n\nТак считает бухгалтерия.\n\n## Счета");
   });
 
   it("`//`-комментарий, блочные теги JSDoc и JSDoc, отделённый от вызова кодом, в документацию не попадают", () => {
     writeTree(dir, {
-      [MAIN]: `/**
- * Биллинг.
+      "tests/capabilities/billing/billing.md": "Биллинг.\n",
+      [MAIN]: `// комментарий файла
+import { describe, it } from "bun:test";
+// комментарий describe
+/**
+ * Счёт — документ на оплату.
  *
  * @see #12
  */
-// комментарий файла
-import { describe, it } from "bun:test";
-// комментарий describe
 describe("Счета", () => {
   /** про константу */
   const x = 1;
@@ -213,7 +233,7 @@ describe("Счета", () => {
 `,
     });
     const out = doc("r.json", billing(), "--stdout").stdout;
-    expect(out).toContain("### billing\n\nБиллинг.\n\n#### Счета\n\n<details><summary>✅ 2 теста</summary>\n\n- ✅ выставляется за месяц\n- ✅ черновик удаляется");
+    expect(out).toContain("### billing\n\nБиллинг.\n\n#### Счета\n\nСчёт — документ на оплату.\n\n<details><summary>✅ 2 теста</summary>\n\n- ✅ выставляется за месяц\n- ✅ черновик удаляется");
     expect(out).not.toContain("комментарий");
     expect(out).not.toContain("про константу");
     expect(out).not.toContain("@see");

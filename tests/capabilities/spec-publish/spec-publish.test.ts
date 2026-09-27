@@ -1,11 +1,3 @@
-/**
- * Скрипт `spec-publish` скилла `spec`: после мержа в `main` CI публикует сгенерированную документацию `docs/spec` в
- * отдельную ветку `spec`, а не коммитит её в `main`.
- *
- * `docs/spec` — производная копия тестов: в `main` параллельные PR конфликтовали бы в сгенерированных страницах и
- * оглавлении. Ветка `spec` читается в GitHub и агентом (`git show origin/spec:README.md`), каждая публикация помнит
- * SHA `main`, из которого собрана, и CI проверяет, что опубликовано ровно то, что собрано.
- */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";

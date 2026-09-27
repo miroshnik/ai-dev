@@ -1,12 +1,3 @@
-/**
- * Нет решения — нет кода: каждая точка входа системы (маршрут, страница, job, команда) вызывается хотя бы одним
- * тестом capability. Код, до которого не доходит ни одно заявленное поведение, — кандидат на удаление или
- * незаписанное требование.
- *
- * Тестовое окружение пишет в журнал, какую точку входа и из какого теста вызвали (`journal` харнесса), а после
- * прогона всех тестов и шардов `spec-claims` сверяет реестр точек входа из кода с журналом. Результат — отчёт JUnit:
- * `spec-doc` кладёт его в спеку как обычный стандарт.
- */
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -105,11 +96,11 @@ describe("Точка входа без теста — исключение с з
 });
 
 describe("Сверка попадает в спеку как стандарт", () => {
-  it("отчёт — JUnit в папке стандарта tests/standards/entry-points: spec-doc показывает его со шапкой главного файла", () => {
+  it("отчёт — JUnit в папке стандарта tests/standards/entry-points: spec-doc показывает его с описанием entry-points.md", () => {
     writeTree(dir, {
       "entries.json": JSON.stringify(["POST /invoices"]),
       ".spec-journal/1.jsonl": line("POST /invoices", "tests/capabilities/billing/billing.test.ts"),
-      "tests/standards/entry-points/entry-points.test.ts": "/** Каждая точка входа вызывается тестом capability. */\nexport {};\n",
+      "tests/standards/entry-points/entry-points.md": "Каждая точка входа вызывается тестом capability.\n",
     });
     expect(claims().code).toBe(0);
     const doc = runScript("spec-doc", [".spec-claims.xml", "--root", dir, "--stdout"], dir);

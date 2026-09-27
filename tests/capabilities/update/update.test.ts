@@ -1,12 +1,3 @@
-/**
- * Проверка и обновление флоу: агент первым шагом сессии узнаёт, не отстали ли правила и скиллы от main ai-dev, и одной
- * командой доводит их до актуальных — чтобы сессия работала по текущим правилам, а не по когда-то поставленным.
- *
- * Правила грузятся в контекст на старте сессии, поэтому `ai-dev check` идёт первым (AGENTS.md): он ничего не меняет и
- * отвечает кодом 0 — актуально, 1 — отстаёт, 2 — проверка недоступна. Копию (проект, машина без `--link`) сверяет
- * свежий пакет — npx берёт его из main при каждом запуске, клон `--link` — `origin/main` после `git fetch`.
- * `ai-dev update` обновляет: копию — переустановкой, клон — `git pull`.
- */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
