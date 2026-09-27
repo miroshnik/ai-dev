@@ -1,5 +1,4 @@
 import { createRequire } from "node:module";
-import { rmSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -96,14 +95,16 @@ afterEach(() => cleanup());
 const ESLINT = createRequire(import.meta.url).resolve("eslint");
 const FRAGMENT = "tests/standards/domain-no-console/eslint.ts";
 
-function project(): void {
-  writeTree(dir, {
+// ESLint кэширует модуль конфига в процессе: проект без фрагмента — в своём каталоге, а не тот же без файла
+function project(root = dir, withFragment = true): string {
+  writeTree(root, {
     "package.json": JSON.stringify({ name: "app", type: "module" }),
     "eslint.config.mjs": `import { collectEslint } from ${JSON.stringify(path.join(SCRIPTS, "eslint-config.ts"))};\nexport default [...(await collectEslint(import.meta.dirname))];\n`,
-    [FRAGMENT]: `export default [{ files: ["src/domain/**/*.js"], rules: { "no-console": "error" } }];\n`,
+    ...(withFragment ? { [FRAGMENT]: `export default [{ files: ["src/domain/**/*.js"], rules: { "no-console": "error" } }];\n` } : {}),
     "src/domain/invoice.js": "console.log(1);\n",
     "src/ui/page.js": "console.log(1);\n",
   });
+  return root;
 }
 
 /**
@@ -129,8 +130,8 @@ describe("Правило ESLint живёт в папке своего станд
     });
     const on = await outcomes((it) => examples(it, { linter: eslintLinter({ cwd: dir, module: ESLINT }), ...spec() }));
     expect(Object.values(on)).toEqual(["✓", "✓", "✓"]);
-    rmSync(path.join(dir, FRAGMENT));
-    const off = await outcomes((it) => examples(it, { linter: eslintLinter({ cwd: dir, module: ESLINT }), ...spec() }));
+    const bare = project(path.join(dir, "without-fragment"), false);
+    const off = await outcomes((it) => examples(it, { linter: eslintLinter({ cwd: bare, module: ESLINT }), ...spec() }));
     expect(off["нельзя: console.log в домене"]).toStartWith("✗ правило no-console не сработало");
   });
 });
