@@ -16,10 +16,13 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { disablesIn } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Test } from "./speclib.ts";
 
@@ -328,6 +331,131 @@ function movedLines(moved: Moved[]): string[] {
   ];
 }
 
+// ---------- решения вне названий тестов: модель, исключения, проверки харнесса ----------
+
+/** Решения одного вида на ревизии — строки для списка; снятые и добавленные — разница строк. */
+export interface Decisions {
+  model: string[];
+  exceptions: string[];
+  checks: string[];
+}
+
+/** Модуль данных проекта (модель, исключения) из текста: .json — разбор, TS/JS — импорт временного файла. */
+async function loadData(text: string, file: string): Promise<unknown> {
+  if (file.endsWith(".json")) return JSON.parse(text);
+  const dir = mkdtempSync(path.join(os.tmpdir(), "spec-diff-"));
+  try {
+    const f = path.join(dir, "data" + path.extname(file));
+    writeFileSync(f, text);
+    return ((await import(pathToFileURL(f).href)) as { default?: unknown }).default;
+  } catch {
+    return undefined; // модель с импортами за пределы файла статически не прочесть — решения модели не показываются
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+type ModelData = { modules?: Record<string, { dependsOn?: string[]; packages?: string[] }> };
+
+/** Модель → «модуль X», «зависимость X → Y», «пакет P модуля X»: по видам, внутри — по имени. */
+export function modelFacts(m: ModelData | undefined): string[] {
+  const mods = Object.keys(m?.modules ?? {}).sort();
+  const at = (n: string) => m!.modules![n]!;
+  return [
+    ...mods.map((n) => `модуль ${n}`),
+    ...mods.flatMap((n) => [...(at(n).dependsOn ?? [])].sort().map((d) => `зависимость ${n} → ${d}`)),
+    ...mods.flatMap((n) => [...(at(n).packages ?? [])].sort().map((p) => `пакет ${p} модуля ${n}`)),
+  ];
+}
+
+const REGISTRY = /\bregistry:\s*(["'`])(.+?)\1/g;
+const RULE = /\brule:\s*(["'`])(.+?)\1/g;
+
+/** Проверки харнесса в исходниках тестов: реестры invariant и правила examples по литералам вызова. */
+export function checkFacts(files: Map<string, string>): string[] {
+  const out = new Set<string>();
+  for (const [file, text] of files) {
+    const folder = path.posix.dirname(file);
+    for (const m of text.matchAll(REGISTRY)) out.add(`\`${folder}\` · реестр «${m[2]}»`);
+    for (const m of text.matchAll(RULE)) out.add(`\`${folder}\` · правило ${m[2]}`);
+  }
+  return [...out].sort();
+}
+
+const EXCEPTIONS = /(^|\/)exceptions\.(ts|mts|js|mjs|json)$/;
+const CODE = /\.[cm]?[jt]sx?$/;
+
+/** Файлы на ревизии (null — рабочее дерево) по путям от корня git: путь без префикса → текст. */
+function readFiles(rev: string | null, top: string, prefix: string, paths: string[]): Map<string, string> {
+  if (rev !== null) return filesAtRev(rev, top, prefix, paths);
+  const out = new Map<string, string>();
+  for (const p of paths) {
+    try {
+      out.set(p.slice(prefix.length), readFileSync(path.join(top, p), "utf8"));
+    } catch {
+      /* файла нет в рабочем дереве */
+    }
+  }
+  return out;
+}
+
+/** Решения на ревизии: модель, исключения (exceptions.* в tests/ и отключения линта в изменённых файлах), проверки. */
+async function decisionsAt(rev: string | null, top: string, prefix: string, changedCode: string[], tests: Map<string, string>): Promise<Decisions> {
+  const listed = rev !== null ? gitText(["ls-tree", "-r", "--name-only", "-z", rev, "--", prefix + L.TESTS], top).split("\0") : [];
+  const excPaths =
+    rev !== null
+      ? listed.filter((p) => p.startsWith(prefix) && EXCEPTIONS.test(p))
+      : walkTests(path.join(top, prefix, L.TESTS)).map((p) => prefix + p).filter((p) => EXCEPTIONS.test(p));
+  const modelPath = `${prefix}${L.TESTS}/architecture/model.ts`;
+  const files = readFiles(rev, top, prefix, [modelPath, ...excPaths, ...changedCode]);
+  const model = files.has(`${L.TESTS}/architecture/model.ts`) ? ((await loadData(files.get(`${L.TESTS}/architecture/model.ts`)!, modelPath)) as ModelData) : undefined;
+  const exceptions: string[] = [];
+  for (const p of excPaths) {
+    const rel = p.slice(prefix.length);
+    const data = await loadData(files.get(rel) ?? "[]", rel);
+    for (const e of Array.isArray(data) ? (data as { item: string; issue: number; reason: string }[]) : []) {
+      exceptions.push(`\`${path.posix.dirname(rel)}\` · ${e.item} (#${e.issue}) — ${e.reason}`);
+    }
+  }
+  for (const p of changedCode) {
+    const rel = p.slice(prefix.length);
+    const text = files.get(rel);
+    if (!text || !text.includes("eslint-disable")) continue;
+    for (const d of disablesIn(rel, text)) exceptions.push(`\`${rel}\` · ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
+  }
+  return { model: modelFacts(model), exceptions: [...new Set(exceptions)].sort(), checks: checkFacts(tests) };
+}
+
+function walkTests(dir: string, rel = L.TESTS): string[] {
+  const out: string[] = [];
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) out.push(...walkTests(path.join(dir, e.name), `${rel}/${e.name}`));
+    else out.push(`${rel}/${e.name}`);
+  }
+  return out;
+}
+
+const minus = (a: string[], b: string[]) => a.filter((x) => !b.includes(x));
+
+/** Снятые и добавленные решения по видам — разделы для тела PR; нет изменений вида — нет раздела. */
+export function decisionLines(base: Decisions, head: Decisions): string[] {
+  const lines: string[] = [];
+  const kinds: [string, keyof Decisions][] = [["Модель архитектуры", "model"], ["Исключения", "exceptions"], ["Проверки харнесса", "checks"]];
+  for (const [title, k] of kinds) {
+    const removed = minus(base[k], head[k]);
+    const added = minus(head[k], base[k]);
+    if (removed.length) lines.push(`**${title} — снято (${removed.length}):**`, "", ...removed.map((x) => `- ${L.mdText(x)}`), "");
+    if (added.length) lines.push(`**${title} — добавлено (${added.length}):**`, "", ...added.map((x) => `- ${L.mdText(x)}`), "");
+  }
+  return lines;
+}
+
 export function render(
   baseLabel: string,
   removed: Test[],
@@ -413,7 +541,7 @@ function scenarioLines(scenarios: string[] | null, fresh: Test[]): string[] {
 
 const USAGE = "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -]";
 
-export function main(argv: string[]): number {
+export async function main(argv: string[]): Promise<number> {
   let opts;
   try {
     opts = parseArgs({
@@ -440,16 +568,32 @@ export function main(argv: string[]): number {
   }
 
   let removed: Test[], changed: [Test, Test][], added: Test[], moved: Moved[], outFiles: string[];
+  let decisions: string[];
+  let decisionData: { base: Decisions; head: Decisions };
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
-    const baseTests = parseFiles(testsAtRev(base, top, prefix), v.base);
+    const baseFiles = testsAtRev(base, top, prefix);
+    const baseTests = parseFiles(baseFiles, v.base);
     const headFiles = v.worktree ? testsInWorktree(root) : testsAtRev(v.head, top, prefix);
     const headTests = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
     const changedOut = outOfTreeFiles(base, v.head, top, prefix, v.worktree);
     const { pool, count, gone } = outOfTreePool(base, v.head, top, root, prefix, changedOut, v.worktree);
     ({ removed, changed, added, moved } = diff(baseTests, headTests, pool));
     outFiles = unmovedFiles(changedOut, moved, count, gone);
+    // отключения линта — только в изменённых файлах кода: снятое или добавленное исключение всегда в диффе PR
+    const changedAll = (
+      v.worktree
+        ? gitText(["diff", "--name-only", "-z", base, "--", "."], top) + gitText(["ls-files", "--others", "--exclude-standard", "-z", "--", "."], top)
+        : gitText(["diff", "--name-only", "-z", base, v.head, "--", "."], top)
+    )
+      .split("\0")
+      .filter((f) => f.startsWith(prefix) && CODE.test(f));
+    decisionData = {
+      base: await decisionsAt(base, top, prefix, changedAll, baseFiles),
+      head: await decisionsAt(v.worktree ? null : v.head, top, prefix, changedAll, headFiles),
+    };
+    decisions = decisionLines(decisionData.base, decisionData.head);
   } catch (e) {
     const msg = (e as Error).message;
     console.error(`spec-diff: ${msg}`);
@@ -461,6 +605,15 @@ export function main(argv: string[]): number {
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
   let text = v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved);
+  if (v.json) {
+    const j = JSON.parse(text);
+    j.decisions = Object.fromEntries(
+      (["model", "exceptions", "checks"] as const).map((k) => [k, { removed: minus(decisionData.base[k], decisionData.head[k]), added: minus(decisionData.head[k], decisionData.base[k]) }]),
+    );
+    text = JSON.stringify(j, null, 2) + "\n";
+  } else if (decisions.length) {
+    text = text.trimEnd() + "\n\n" + decisions.join("\n").trimEnd() + "\n";
+  }
   if (v.scenarios !== undefined) {
     let md: string;
     try {
@@ -486,5 +639,5 @@ export function main(argv: string[]): number {
 }
 
 if (import.meta.main) {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 }
