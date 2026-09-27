@@ -387,6 +387,49 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
 });
 
 /**
+ * Соглашение видно, а не только проверено: метаданные прогона харнесса (`.spec-meta/`) дают странице стандарта код
+ * примеров и долг — исключения с задачей и причиной.
+ */
+describe("Страница стандарта показывает примеры и исключения", () => {
+  const STD = "tests/standards/no-console/no-console.test.ts";
+  const meta = (...records: object[]) => ({ ".spec-meta/1.jsonl": records.map((r) => JSON.stringify({ file: STD, ...r })).join("\n") + "\n" });
+
+  it("пример «нельзя» и «можно» — путь и код под строкой теста", () => {
+    writeTree(dir, {
+      "tests/standards/no-console/no-console.md": "Домен не пишет в консоль.\n",
+      ...meta(
+        { test: "нельзя: console.log в домене", path: "src/domain/a.ts", code: "console.log(1);" },
+        { test: "можно: логгер в домене", path: "src/domain/b.tsx", code: "log(1);\nlog(2);" },
+      ),
+    });
+    const r = doc("r.json", vitestReport(dir, { [STD]: [[[], "нельзя: console.log в домене"], [[], "можно: логгер в домене"]] }), "--stdout");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("- ✅ нельзя: console.log в домене\n  `src/domain/a.ts`\n  ```ts\n  console.log(1);\n  ```\n");
+    expect(r.stdout).toContain("- ✅ можно: логгер в домене\n  `src/domain/b.tsx`\n  ```tsx\n  log(1);\n  log(2);\n  ```\n");
+  });
+
+  it("исключение — задача и причина под строкой теста; снятое исключение пропадает вместе с тестом", () => {
+    writeTree(dir, {
+      "tests/standards/no-console/no-console.md": "Домен не пишет в консоль.\n",
+      ...meta(
+        { test: "исключение: importLegacy (#12)", issue: 12, reason: "импорт старых данных — аудит в #12" },
+        { test: "исключение: removed (#13)", issue: 13, reason: "снято" },
+      ),
+    });
+    const r = doc("r.json", vitestReport(dir, { [STD]: [[[], "исключение: importLegacy (#12)"]] }), "--stdout");
+    expect(r.stdout).toContain("- ✅ исключение: importLegacy (#12)\n  > #12 — импорт старых данных — аудит в #12\n");
+    expect(r.stdout).not.toContain("снято");
+  });
+
+  it("без метаданных прогона — страница без кода примеров, не ошибка", () => {
+    writeTree(dir, { "tests/standards/no-console/no-console.md": "Домен не пишет в консоль.\n" });
+    const r = doc("r.json", vitestReport(dir, { [STD]: [[[], "нельзя: console.log в домене"]] }), "--stdout", "--strict");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("- ✅ нельзя: console.log в домене\n\n</details>");
+  });
+});
+
+/**
  * Структура спеки — правило для всех проектов, поэтому её проверяет сама сборка документации: `--strict` в CI
  * валит PR, а без него то же видно в stderr.
  */
