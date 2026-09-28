@@ -1,0 +1,3 @@
+[test]
+# дочерние процессы bun на macOS — без JIT: tests/standards/spawn-no-jit
+preload = ["./tests/standards/spawn-no-jit/preload.ts"]
