@@ -343,6 +343,28 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.stdout).toContain("актуально");
   });
 
+  /** Напоминание владельцу: без релиза проекты этих правок не получат. Отставанием не считается — код тот же. */
+  it("в main после последнего релиза изменения флоу — строка «не в релизе» с тегом, числом и командой релиза; код 0", () => {
+    const { up, clone } = linkedClone();
+    up.repo.git("tag", "v2026.10.05");
+    up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });
+    up.repo.commit({ "tests/x.test.ts": "// тест\n" });
+    up.repo.commit({ "bin/ai-dev.mjs": read(path.join(up.dir, "bin/ai-dev.mjs")) + "// правка установщика\n" });
+    expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
+    const r = aiDev(sb, ["check", "-g"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("не в релизе: коммитов флоу после v2026.10.05 — 2");
+    expect(r.stdout).toContain(`${path.join(clone, "bin/ai-dev.mjs")} release`);
+  });
+
+  it("всё в релизе — строки «не в релизе» нет; релизов ещё нет — так и сказано", () => {
+    const { up } = linkedClone();
+    expect(aiDev(sb, ["check", "-g"]).stdout).toContain("не в релизе: релизов ещё нет");
+    up.repo.git("tag", "v2026.10.05");
+    up.repo.commit({ "tests/x.test.ts": "// тест\n" });
+    expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("не в релизе");
+  });
+
   it("старая установка без SHA — check по git; update -g пишет SHA клона", () => {
     const { up } = linkedClone();
     dropSha(sb.home);

@@ -2,13 +2,14 @@
 // @ts-check
 /**
  * ai-dev — установка флоу: общие правила, справочники и все скиллы ai-dev в проект или на машину; проверка, не
- * отстала ли установка от последнего релиза ai-dev, и обновление.
+ * отстала ли установка от последнего релиза ai-dev, обновление и выпуск релиза.
  *
  *   npx -y github:miroshnik/ai-dev install                — в проект: корень git (или текущий каталог)
  *   npx -y github:miroshnik/ai-dev install -g             — на машину: ~/.agents и агенты, которые на ней есть
  *   node <клон ai-dev>/bin/ai-dev.mjs install -g --link   — из клона: симлинки на клон, правки видны сразу
  *   npx -y github:miroshnik/ai-dev check [-g]             — отстала ли установка: 0 — нет, 1 — да, 2 — не проверить
  *   npx -y github:miroshnik/ai-dev update [-g]            — довести установку до актуальной
+ *   node <клон ai-dev>/bin/ai-dev.mjs release             — выпустить релиз: тег и список изменений флоу
  *
  * Раскладка как у скиллов (`npx skills`): канон в `.agents/` — `.agents/ai-dev/` (AGENTS.md, claude/CLAUDE.md,
  * docs/*.md) и `.agents/skills/<name>/`; Claude Code получает симлинки в `.claude/skills` и `.claude/rules`
@@ -52,6 +53,8 @@ const HOOK = { matcher: "startup|resume|clear", hooks: [{ type: "command", comma
 
 /** Файлы флоу в клоне: то, что `install` ставит из него (pathspec git). */
 const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md", "skills"];
+/** Что делает релиз нужным: флоу и установщик — его код проекты тоже получают из релиза. */
+const RELEASED = [...FLOW, "bin"];
 /** Тег релиза: vГГГГ.ММ.ДД, патч того же дня — vГГГГ.ММ.ДД.N. */
 const RELEASE_TAG = /^v(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?$/;
 /** Строк списка изменений в выводе `check` — дальше «… и ещё N». */
@@ -67,6 +70,8 @@ const USAGE = `Использование: ai-dev <команда> [-g]
                      копию сверяет последний релиз, клон --link — origin/main
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
   update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
+  release [--dry-run]  из клона ai-dev: тег vГГГГ.ММ.ДД на origin/main и GitHub Release со списком изменений флоу
+                     с прошлого релиза; --dry-run — только показать
 
 Запуск: npx -y github:${SOURCE} <команда> [-g]
 `;
@@ -559,7 +564,7 @@ function checkLink(home, clone) {
   const links = dryRun(() => installGlobal(clone, true));
   if (!files.length && !links.length) {
     const ahead = behind ? `; origin/main ${short(main)} впереди на ${behind}, флоу не затронут` : "";
-    return { code: 0, text: `ai-dev ${where}: актуально (${short(head)}${ahead})` };
+    return { code: 0, text: [`ai-dev ${where}: актуально (${short(head)}${ahead})`, ...unreleased(clone)].join("\n") };
   }
   const op = (/** @type {string} */ status) => (status === "A" ? "+" : status === "D" ? "-" : "~");
   return {
@@ -568,8 +573,26 @@ function checkLink(home, clone) {
       `ai-dev ${where}: отстаёт — клон ${short(head)}, origin/main ${short(main)}`,
       ...capped([...files.map((l) => `  ${op(l.split("\t")[0] ?? "")} ${l.split("\t")[1]}`), ...changeLines(links, home, true)]),
       `Обновить: npx -y github:${SOURCE} update -g`,
+      ...unreleased(clone),
     ].join("\n"),
   };
+}
+
+/**
+ * Напоминание владельцу на машине с клоном `--link`: в origin/main есть изменения флоу, которых нет в последнем
+ * релизе, — проекты их не получат, пока он не выйдет. Не отставание: код проверки не меняет. Не узнать — строки нет.
+ * @param {string} clone @returns {string[]}
+ */
+function unreleased(clone) {
+  const cmd = `выпустить: node ${path.join(clone, "bin/ai-dev.mjs")} release`;
+  try {
+    const last = releases("origin", clone).at(-1);
+    if (!last) return [`  не в релизе: релизов ещё нет — ${cmd}`];
+    const n = Number(git(clone, "rev-list", "--count", "--first-parent", `${last.sha}..origin/main`, "--", ...RELEASED));
+    return n ? [`  не в релизе: коммитов флоу после ${last.tag} — ${n}; ${cmd}`] : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -645,8 +668,55 @@ function updateLink(clone) {
   return spawnSync(process.execPath, [path.join(clone, "bin/ai-dev.mjs"), "install", "-g", "--link"], { stdio: "inherit" }).status ?? 2;
 }
 
+/**
+ * Релиз — шаг владельца, из клона: тег vГГГГ.ММ.ДД (дата по UTC; второй за день — .1, .2…) на origin/main и GitHub
+ * Release со списком изменений с прошлого релиза — коммиты первого родителя, затронувшие флоу или установщик (PR —
+ * заголовком и номером). Выпускать нечего — отказ (код 1): проекты не должны обновляться впустую.
+ * @param {boolean} preview `--dry-run`: показать тег и список, ничего не создавать
+ */
+function releaseCmd(preview) {
+  if (!existsSync(path.join(SRC, ".git"))) return warn("release — только из клона ai-dev: node <клон>/bin/ai-dev.mjs release"), 2;
+  let head, tags, log;
+  try {
+    git(SRC, "fetch", "--quiet", "origin", "main");
+    head = git(SRC, "rev-parse", "origin/main");
+    tags = releases("origin", SRC);
+    const last = tags.at(-1);
+    log = last ? git(SRC, "log", "--first-parent", "--format=%s%x1f%b%x1e", `${last.sha}..${head}`, "--", ...RELEASED) : "";
+  } catch (e) {
+    return warn(`release: ${reason(e)}`), 2;
+  }
+  const last = tags.at(-1);
+  if (last?.sha === head) return warn(`release: origin/main ${short(head)} уже в релизе ${last.tag}`), 1;
+  if (last && !log) return warn(`release: с ${last.tag} флоу не менялся — релиз не нужен`), 1;
+  const items = log
+    .split("\x1e")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [subject = "", body = ""] = entry.split("\x1f");
+      const pr = /^Merge pull request #(\d+) /.exec(subject);
+      const title = body.trim().split("\n")[0];
+      return pr && title ? `- ${title} (#${pr[1]})` : `- ${subject}`;
+    });
+  const notes = last ? [`Изменения флоу с ${last.tag}:`, "", ...items].join("\n") : "Первый релиз: проекты ставят и обновляют флоу по релизам ai-dev, а не по main.";
+  const day = `v${new Date().toISOString().slice(0, 10).replaceAll("-", ".")}`;
+  const names = new Set(tags.map((t) => t.tag));
+  let tag = day;
+  for (let n = 1; names.has(tag); n++) tag = `${day}.${n}`;
+  note(`${tag} → ${short(head)}\n\n${notes}`);
+  if (preview) return 0;
+  try {
+    execFileSync("gh", ["release", "create", tag, "--repo", SOURCE, "--target", head, "--title", tag, "--notes", notes], { stdio: ["ignore", "pipe", "pipe"] });
+  } catch (e) {
+    return warn(`release: gh release create — ${reason(e)}`), 2;
+  }
+  note(`\nРелиз ${tag}: https://github.com/${SOURCE}/releases/tag/${tag}`);
+  return 0;
+}
+
 /** @type {Record<string, string[]>} */
-const FLAGS = { install: ["-g", "--global", "--link"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"] };
+const FLAGS = { install: ["-g", "--global", "--link"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"] };
 
 function main(/** @type {string[]} */ argv) {
   const [cmd = "", ...flags] = argv;
@@ -658,6 +728,7 @@ function main(/** @type {string[]} */ argv) {
     return 2;
   }
   const global = flags.includes("-g") || flags.includes("--global");
+  if (cmd === "release") return releaseCmd(flags.includes("--dry-run"));
   const hookMode = cmd === "check" && flags.includes("--hook");
   // «не установлен» релиз не нужен: хук в чужом проекте не ходит в сеть зря
   if (cmd !== "check" || (hookMode ? [true, false].some((g) => target(g).installed) : target(global).installed)) {
