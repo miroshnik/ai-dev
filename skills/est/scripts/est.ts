@@ -2506,7 +2506,7 @@ export function calib(rows: Row[], last = 20): Calib {
 const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type || "";
 
 /**
- * Таблица истории: колонка меток — по самой длинной строке меток (метки решений `type:name` — первый признак
+ * Таблица истории: колонка меток — по самой длинной строке меток (метки решений — первый признак
  * аналога, обрезанными их не сравнить); `epic` — не признак, его нет.
  */
 export function historyTable(rows: Row[]): string[] {

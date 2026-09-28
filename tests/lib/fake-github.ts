@@ -61,6 +61,10 @@ export class FakeGitHub {
     if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
     if (op === "RepoLabels") return JSON.stringify({ data: { repository: { labels: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: this.labels } } } });
+    if (op === "LabelIssues") {
+      const nodes = this.allIssues().filter((i) => i.labels.nodes.some((l: Any) => l.name === variables.label)).map((i) => ({ id: i.id, number: i.number }));
+      return JSON.stringify({ data: { repository: { label: { issues: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } } });
+    }
     if (op === "SpecDecisions") return JSON.stringify({ data: { repository: this.specTree() } });
     if (op === "PrChange") return JSON.stringify(this.prChange(variables.number));
     if (op === "ModelAt") {
@@ -127,8 +131,8 @@ export class FakeGitHub {
     if (it) Object.assign(it.content, { state: "CLOSED", stateReason: reason });
   }
   /** Метка в репозитории (как будто её завели раньше). */
-  label(name: string, color: string): { id: string; name: string; color: string; description: string } {
-    const l = { id: this.id("LA"), name, color, description: "" };
+  label(name: string, color: string, description = ""): { id: string; name: string; color: string; description: string } {
+    const l = { id: this.id("LA"), name, color, description };
     this.labels.push(l);
     return l;
   }
