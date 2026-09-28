@@ -2682,6 +2682,13 @@
   "name": "копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений"
  },
  {
+  "path": "tests/standards/spawn-no-jit/spawn-no-jit.test.ts",
+  "describes": [
+   "Тест, который запускает bun, не падает от крэша macOS 27 при старте процесса: на macOS дочерний bun — без JIT"
+  ],
+  "name": "на macOS окружение прогона выключает JIT дочерним процессам, на других системах — не трогает"
+ },
+ {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
   "describes": [
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT",
