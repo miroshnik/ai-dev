@@ -1,5 +1,61 @@
 [
  {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR ждут, пока его чеки не зарегистрируются и не завершатся"
+  ],
+  "name": "сразу после push «no checks reported» — ожидание, а не ошибка"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "--context находит чек по имени среди check-runs"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "statuses и check-runs вместе — PASS, только когда pending нет ни там, ни там"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "на коммите только check-runs Actions — PASS, когда все завершились успешно"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "поздно зарегистрированный чек не проскакивает: финал — два опроса подряд без pending"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "упавший check-run — FAIL с его именем"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "чеки не завершились к сроку — TIMEOUT"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
+  ],
+  "name": "чеков на коммите ещё нет — ожидание, а не PASS"
+ },
+ {
   "path": "tests/capabilities/est/est.test.ts",
   "describes": [
    "PR достаётся задаче, которую он делает, а не той, что упомянута"
@@ -2418,6 +2474,13 @@
    "примеры"
   ],
   "name": "хелпер из модуля tests/lib, который запускает процессы сам или через другой модуль, — тоже нарушение"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/ci-wait/ci-wait.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",

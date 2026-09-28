@@ -5,6 +5,7 @@
 
 ## Что делает система
 
+- [ci-wait](capabilities/ci-wait.md) — Скилл `ci-wait`: агент дожидается исхода всех чеков PR или коммита одним скриптом — PASS, FAIL, TIMEOUT или ERROR, — а не угадывает по первому ответу GitHub, что CI прошёл.
 - [est](capabilities/est.md) — Скилл `est`: сколько часов работы агента займёт задача — по фактам похожих закрытых задач, и сколько заняла на самом деле — часы, токены и стоимость из транскриптов.
 - [github-project](capabilities/github-project.md) — Скилл `github`, `project check` и `project fix`: проект GitHub любого репозитория устроен одинаково — по канону `AGENTS.md`, и агент приводит его к канону одной командой.
 - [github-task](capabilities/github-task.md) — Скилл `github`, `task new`, `task status` и `task drop`: задачу заводят, двигают по доске и закрывают одной командой, и она всё время по канону `AGENTS.md`.
