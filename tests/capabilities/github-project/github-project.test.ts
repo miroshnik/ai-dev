@@ -390,18 +390,65 @@ describe("Метки решений — имя решения без вида, �
     expect(marks(x.out).Метки).toBe("✅");
   });
 
+  /**
+   * `task new --labels standard:quarter-format` ставит задаче метку решения, которого в основной ветке ещё нет:
+   * решение придёт с PR задачи. Пока задача открыта, метка — не лишняя, а новое решение.
+   */
+  it("метка нового решения на открытой задаче — не ❌, а строка «новое решение» с номерами открытых задач; fix её не удаляет", () => {
+    const f = fake();
+    f.label("quarter-format", STD, "Решение: tests/standards/quarter-format");
+    f.labelIssue(49, "quarter-format");
+    f.labelIssue(46, "quarter-format");
+    const r = check(f);
+    expect(r.code).toBe(0);
+    expect(marks(r.out).Метки).toBe("✅");
+    expect(r.out).toContain("○ новое решение «quarter-format»: в основной ветке ещё нет, метка на открытых задачах #49");
+    fix(f, { confirm: true });
+    expect(ops(f)).not.toContain("DeleteLabel");
+    expect(issueLabels(f, 49)).toContain("quarter-format");
+  });
+
+  it("метка без решения только на закрытых задачах — ❌, удаляется с --confirm", () => {
+    const f = fake();
+    f.label("quarter-format", STD, "Решение: tests/standards/quarter-format");
+    f.labelIssue(49, "quarter-format");
+    f.labelIssue(46, "quarter-format");
+    f.closed(49);
+    const r = check(f);
+    expect(marks(r.out).Метки).toBe("❌");
+    expect(r.out).toContain("· метка «quarter-format» без решения в основной ветке, открытых задач с ней нет");
+    expect(r.out).not.toContain("новое решение");
+    fix(f, { confirm: true });
+    expect(labelNames(f)).not.toContain("quarter-format");
+    expect(issueLabels(f, 46)).not.toContain("quarter-format");
+  });
+
+  /** Метка открытой задачи — её новое решение, а не переименованная папка: переименовать её — отнять у задачи. */
+  it("метка нового решения не переименовывается в решение без метки того же вида — тому fix создаёт свою", () => {
+    const f = fake();
+    f.tree.standards = ["audit"];
+    f.label("quarter-format", STD, "Решение: tests/standards/quarter-format");
+    f.labelIssue(49, "quarter-format");
+    const r = fix(f, { confirm: true });
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "audit", color: STD, description: "Решение: tests/standards/audit" }]);
+    expect(ops(f)).not.toContain("UpdateLabel");
+    expect(labelNames(f)).toEqual(["audit", "quarter-format"]);
+    expect(marks(r.out).Метки).toBe("✅");
+  });
+
   it("папку решения переименовали — метка переименовывается с --confirm, задачи сохраняют её", () => {
     const f = fake();
     f.tree.capabilities = ["invoicing"];
     const old = f.label("billing", CAP, "Решение: tests/capabilities/billing");
-    f.labelIssue(49, "billing");
+    // открытая задача с меткой сделала бы её новым решением — переименовывают метку только закрытых задач
+    f.labelIssue(46, "billing");
     const r = fix(f);
     expect(ops(f)).not.toContain("CreateLabel");
     expect(r.out).toContain("переименовать метку «billing» → «invoicing» (задачи сохранят её)");
     fix(f, { confirm: true });
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: old.id, name: "invoicing", color: CAP, description: "Решение: tests/capabilities/invoicing" }]);
     expect(ops(f)).not.toContain("CreateLabel");
-    expect(issueLabels(f, 49)).toContain("invoicing");
+    expect(issueLabels(f, 46)).toContain("invoicing");
   });
 
   it("метка решения чужого цвета — fix перекрашивает в цвет вида", () => {
@@ -440,6 +487,19 @@ describe("Метки решений — имя решения без вида, �
       { id: domain.id, name: "domain", color: ARCH, description: "Решение: tests/architecture — правило или модуль domain" },
     ]);
     expect(issueLabels(f, 49)).toContain("billing");
+    expect(marks(r.out).Метки).toBe("✅");
+  });
+
+  /** Старая метка нового решения — та же старая метка: имя не зависит от того, влито ли решение. */
+  it("метка старого вида `вид:имя` без решения в main — fix так же переименовывает её в имя, задачи сохраняют её", () => {
+    const f = fake();
+    const old = f.label("standard:quarter-format", STD);
+    f.labelIssue(49, "standard:quarter-format");
+    expect(check(f).out).toContain("· метка «standard:quarter-format» старого вида `вид:имя`");
+    const r = fix(f);
+    expect(r.out).toContain("+ переименовать метку «standard:quarter-format» → «quarter-format» (задачи сохранят её)");
+    expect(byOp(f, "UpdateLabel")).toEqual([{ id: old.id, name: "quarter-format", color: STD, description: "Решение: tests/standards/quarter-format" }]);
+    expect(issueLabels(f, 49)).toContain("quarter-format");
     expect(marks(r.out).Метки).toBe("✅");
   });
 

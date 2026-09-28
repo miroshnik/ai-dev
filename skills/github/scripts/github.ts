@@ -150,6 +150,8 @@ interface Label {
   name: string;
   color: string;
   description: string | null;
+  /** Открытые задачи с меткой: сколько всего и номера первых OPEN_SHOWN. */
+  open: { total: number; numbers: number[] };
 }
 /** Решения основной ветки по видам; модель не загрузилась — причина, модули в `architecture` тогда не входят. */
 export interface Decisions {
@@ -185,6 +187,8 @@ export interface Check {
   key: string;
   title: string;
   problems: { text: string; steps: Step[] }[];
+  /** Не расхождение, а положение дел (метка нового решения): строка `○`, пункт остаётся ✅. */
+  notes: string[];
 }
 
 export class GhError extends Error {}
@@ -194,6 +198,8 @@ export class GhError extends Error {}
 // ----------------------------------------------------------------------------
 
 const REF = "id number title url closed";
+/** Номера открытых задач метки в строке «новое решение»; остальные — числом. */
+const OPEN_SHOWN = 10;
 export const Q = {
   RepoState: `query RepoState($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -277,7 +283,7 @@ export const Q = {
 }`,
   RepoLabels: `query RepoLabels($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
-    labels(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id name color description } }
+    labels(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id name color description issues(states: OPEN, first: ${OPEN_SHOWN}) { totalCount nodes { number } } } }
   }
 }`,
   PrChange: `query PrChange($owner: String!, $name: String!, $number: Int!, $after: String) {
@@ -445,7 +451,10 @@ function mergedIssues(io: Io, slug: string, labels: Label[]): State["labelIssues
 
 function loadLabels(io: Io, slug: string): Label[] {
   const [owner, name] = slug.split("/") as [string, string];
-  return pages<Label>((after) => graphql(io, Q.RepoLabels, { owner, name, after }).repository.labels);
+  return pages<Any>((after) => graphql(io, Q.RepoLabels, { owner, name, after }).repository.labels).map(({ issues, ...l }) => ({
+    ...l,
+    open: { total: issues?.totalCount ?? 0, numbers: (issues?.nodes ?? []).map((i: Any) => i.number) },
+  }));
 }
 
 /**
@@ -560,9 +569,9 @@ export function analyze(s: State): Check[] {
   const p = s.project;
   const checks: Check[] = [];
   const add = (key: string, title: string) => {
-    const c: Check = { key, title, problems: [] };
+    const c: Check = { key, title, problems: [], notes: [] };
     checks.push(c);
-    return (text: string, ...steps: Step[]) => c.problems.push({ text, steps });
+    return Object.assign((text: string, ...steps: Step[]) => c.problems.push({ text, steps }), { note: (text: string) => c.notes.push(text) });
   };
 
   const link = add("link", `Проект привязан к репозиторию и называется ${q(s.repo.name)}`);
@@ -723,7 +732,9 @@ export function analyze(s: State): Check[] {
 
   // Метки решений: по дереву спеки и модели основной ветки. Удалить, переименовать по догадке, слить, сделать меткой
   // решения обычную — только с --confirm: метка стоит на задачах. Одна лишняя и одна недостающая одного вида —
-  // переименованная папка, а не два решения. Старый вид `вид:имя` → имя — сам: задачи сохраняют метку, догадки нет.
+  // переименованная папка, а не два решения. Старый вид `вид:имя` → имя — сам, есть решение или нет: задачи сохраняют
+  // метку, догадки нет. Метка без решения на открытой задаче — новое решение (task new ставит её до PR): строка ○, не
+  // удаляется и по догадке не переименовывается — это отняло бы её у задачи.
   const labels = add("labels", "Метки решений — имя решения, вид — цветом; по дереву спеки и модели в основной ветке");
   const d = s.decisions;
   if (d.modelError) labels(`модель ${MODEL_PATH} не загружается — метки модулей не сверяются: ${d.modelError}`);
@@ -735,12 +746,7 @@ export function analyze(s: State): Check[] {
   for (const l of s.labels) {
     const old = legacyDecision(l.name);
     if (!old) continue;
-    const kinds = want.get(old.name);
-    if (!kinds) {
-      orphans.push({ label: l, kinds: [old.kind] });
-      continue;
-    }
-    const to = decisionLabel(old.name, kinds);
+    const to = decisionLabel(old.name, want.get(old.name) ?? [old.kind]);
     const into = taken.get(old.name);
     if (!into) {
       taken.set(old.name, { ...l, ...to });
@@ -773,7 +779,12 @@ export function analyze(s: State): Check[] {
     labels(text, api(`${recolor ? "перекрасить" : "переписать описание"} метки ${q(l.name)}: ${to.color}, ${q(to.description)}`, { op: "UpdateLabel", input: { id: l.id, color: to.color, description: to.description } }));
   }
   const unlabeled = [...want.keys()].filter((n) => !taken.has(n));
-  const live = orphans.filter((o) => !unsure(o.kinds));
+  const sure = orphans.filter((o) => !unsure(o.kinds));
+  for (const { label: l } of sure.filter((o) => o.label.open.total)) {
+    const more = l.open.total - l.open.numbers.length;
+    labels.note(`новое решение ${q(l.name)}: в основной ветке ещё нет, метка на открытых задачах ${l.open.numbers.map((n) => `#${n}`).join(", ")}${more > 0 ? ` и ещё ${more}` : ""}`);
+  }
+  const live = sure.filter((o) => !o.label.open.total);
   const paired = new Set<string>();
   for (const kind of DECISION_KINDS) {
     const os = live.filter((o) => o.kinds.includes(kind) && !paired.has(o.label.id));
@@ -785,7 +796,7 @@ export function analyze(s: State): Check[] {
     labels(`метка ${q(o.name)} без решения, решение ${to.name} без метки`, { kind: "confirm", text: `переименовать метку ${q(o.name)} → ${q(to.name)} (задачи сохранят её)`, mutations: [{ op: "UpdateLabel", input: { id: o.id, ...to } }] });
   }
   for (const { label: o } of live.filter((x) => !paired.has(x.label.id))) {
-    labels(`метка ${q(o.name)} без решения в основной ветке`, { kind: "confirm", text: `удалить метку ${q(o.name)}`, mutations: [{ op: "DeleteLabel", input: { id: o.id } }] });
+    labels(`метка ${q(o.name)} без решения в основной ветке, открытых задач с ней нет`, { kind: "confirm", text: `удалить метку ${q(o.name)}`, mutations: [{ op: "DeleteLabel", input: { id: o.id } }] });
   }
   const fresh = unlabeled.filter((n) => !paired.has(n)).map((n) => decisionLabel(n, want.get(n)!));
   if (fresh.length) {
@@ -807,6 +818,7 @@ function report(io: Io, s: State, checks: Check[]): boolean {
   for (const c of checks) {
     io.out(`${c.problems.length ? "❌" : "✅"} ${c.title}`);
     for (const pr of c.problems) io.out(`   · ${pr.text}`);
+    for (const n of c.notes) io.out(`   ○ ${n}`);
   }
   if (s.project && !s.repo.owner.org) io.out(`➖ ${PRIORITY} и типы issue — в личном аккаунте их нет`);
   return checks.every((c) => !c.problems.length);
@@ -1239,7 +1251,7 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
   for (const l of fresh) {
     const label = decisionLabel(l, decided.get(l)!);
     const created = mutate(io, { op: "CreateLabel", input: { repositoryId: repoId, ...label } }).createLabel.label;
-    all.push({ id: created.id, ...label });
+    all.push({ id: created.id, ...label, open: { total: 0, numbers: [] } });
     io.out(`+ создана метка ${q(l)}`);
   }
   const isDecision = (n: string) => legacyDecision(n) !== null || labelKinds(all.find((x) => x.name === n)?.description) !== null;
@@ -1274,7 +1286,8 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
 
-check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки.
+check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки,
+        метка нового решения на открытой задаче — строка ○, не ❌.
 fix   — исправляет через API; шаги UI печатает со ссылками; удаление и переименование в проекте
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
