@@ -2,7 +2,7 @@
 // @ts-check
 /**
  * ai-dev — установка флоу: общие правила, справочники и все скиллы ai-dev в проект или на машину; проверка, не
- * отстала ли установка от main ai-dev, и обновление.
+ * отстала ли установка от последнего релиза ai-dev, и обновление.
  *
  *   npx -y github:miroshnik/ai-dev install                — в проект: корень git (или текущий каталог)
  *   npx -y github:miroshnik/ai-dev install -g             — на машину: ~/.agents и агенты, которые на ней есть
@@ -16,9 +16,10 @@
  * симлинк своего глобального файла правил. `.agents/ai-dev.json` — SHA ai-dev, из которого поставлено, и список
  * поставленных скиллов: по нему переустановка убирает скиллы, которых в ai-dev больше нет, и не трогает чужие.
  *
- * `check` — та же установка вхолостую: свежий пакет (npx берёт его из main при каждом запуске) перечисляет, что бы
- * он изменил. Машина с `--link` — иначе: клон сверяется с `origin/main` после `git fetch`, `update` делает
- * `git pull --ff-only` и переставляет ссылки кодом из обновлённого клона.
+ * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
+ * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
+ * пакет релиза перечисляет, что бы он изменил. Машина с `--link` — иначе: клон сверяется с `origin/main` после
+ * `git fetch`, `update` делает `git pull --ff-only` и переставляет ссылки кодом из обновлённого клона.
  *
  * JavaScript, а не TypeScript, как скрипты скиллов: npx кладёт пакет в node_modules, а там Node типы не
  * стирает (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). Без зависимостей, только node:-API.
@@ -51,18 +52,21 @@ const HOOK = { matcher: "startup|resume|clear", hooks: [{ type: "command", comma
 
 /** Файлы флоу в клоне: то, что `install` ставит из него (pathspec git). */
 const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md", "skills"];
+/** Тег релиза: vГГГГ.ММ.ДД, патч того же дня — vГГГГ.ММ.ДД.N. */
+const RELEASE_TAG = /^v(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?$/;
 /** Строк списка изменений в выводе `check` — дальше «… и ещё N». */
 const MAX_LINES = 20;
 
 const USAGE = `Использование: ai-dev <команда> [-g]
 
-  install            правила, справочники и все скиллы ai-dev — в проект (корень git или текущий каталог)
+  install            правила, справочники и все скиллы последнего релиза ai-dev — в проект (корень git или текущий
+                     каталог)
   install -g         то же на машину: ~/.agents и агенты, которые на ней есть
   install -g --link  из клона ai-dev: симлинки на клон вместо копий, правки видны сразу
-  check [-g]         отстала ли установка от main ai-dev, ничего не меняет: 0 — актуально, 1 — отстаёт,
-                     2 — проверка недоступна; копию сверяет свежий пакет, клон --link — origin/main
+  check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт, 2 — проверка недоступна;
+                     копию сверяет последний релиз, клон --link — origin/main
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
-  update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install
+  update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
 
 Запуск: npx -y github:${SOURCE} <команда> [-g]
 `;
@@ -72,6 +76,9 @@ const USAGE = `Использование: ai-dev <команда> [-g]
  * @type {{ op: "+" | "-" | "~", path: string }[] | null}
  */
 let dry = null;
+
+/** Тег релиза, из которого идёт установка (`toRelease`); null — не релиз: клон или релизов ещё нет. @type {string | null} */
+let release = null;
 
 /** @param {string} s */
 const note = (s) => dry || process.stdout.write(s + "\n");
@@ -143,6 +150,59 @@ function sourceSha(src) {
     }
   }
   return null;
+}
+
+/**
+ * Релизы ai-dev по возрастанию — теги RELEASE_TAG из `git ls-remote --tags remote` (по дате, затем по номеру патча);
+ * у аннотированного тега — SHA коммита, а не объекта тега. Чужие теги не в счёт. Ошибка git — исключение.
+ * @param {string} remote URL или имя remote в cwd @param {string} [cwd]
+ * @returns {{ tag: string, sha: string }[]}
+ */
+function releases(remote, cwd) {
+  const out = execFileSync("git", ["ls-remote", "--tags", remote], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  /** @type {Map<string, string>} */
+  const tags = new Map();
+  for (const line of out.split("\n")) {
+    const [sha, ref = ""] = line.split("\t");
+    const m = /^refs\/tags\/([^^]+)(\^\{\})?$/.exec(ref);
+    // `тег^{}` идёт после тега: коммит аннотированного тега
+    if (sha && m?.[1] && RELEASE_TAG.test(m[1]) && (m[2] || !tags.has(m[1]))) tags.set(m[1], sha);
+  }
+  const key = (/** @type {string} */ tag) => (RELEASE_TAG.exec(tag) ?? []).slice(1).map((n) => Number(n ?? 0));
+  const cmp = (/** @type {number[]} */ a, /** @type {number[]} */ b) => a.reduce((r, n, i) => r || n - (b[i] ?? 0), 0);
+  return [...tags].map(([tag, sha]) => ({ tag, sha })).sort((a, b) => cmp(key(a.tag), key(b.tag)));
+}
+
+/**
+ * Копия следует за релизами ai-dev, а не за main: пакет npx (он из main) находит последний релиз и, если сам им не
+ * является, перезапускается из него по SHA — дальше и код, и файлы релиза. AI_DEV_RELEASE — тег, из которого
+ * перезапущен: второй раз не ищет. Релизов ещё нет — работает сам, как раньше; клон ставит себя как есть. Теги —
+ * из AI_DEV_REPO (зеркало, тесты) или GitHub.
+ * @param {string[]} argv @returns {number | null} код перезапущенного; null — работать здесь
+ */
+function toRelease(argv) {
+  if (existsSync(path.join(SRC, ".git"))) return null;
+  const pinned = process.env.AI_DEV_RELEASE;
+  if (pinned) return (release = pinned), null;
+  let latest;
+  try {
+    latest = releases(process.env.AI_DEV_REPO || `https://github.com/${SOURCE}.git`).at(-1);
+  } catch (e) {
+    throw new Error(`последний релиз ai-dev не узнать — ${reason(e)}`);
+  }
+  if (!latest) return null;
+  if (latest.sha === sourceSha(SRC)) return (release = latest.tag), null;
+  const r = spawnSync("npx", ["-y", "--loglevel=error", `github:${SOURCE}#${latest.sha}`, ...argv], {
+    stdio: "inherit",
+    env: { ...process.env, AI_DEV_RELEASE: latest.tag },
+  });
+  if (r.error) throw new Error(`релиз ${latest.tag} не запустить — ${reason(r.error)}`);
+  return r.status ?? 2;
 }
 
 /** Строка симлинка dst → target, как её пишет link(). @param {string} target @param {string} dst @param {string} root */
@@ -250,7 +310,7 @@ function installRules(src, root, linkMode) {
   note(`${path.relative(root, canon)}/ ← AGENTS.md, claude/CLAUDE.md, docs/ (${docs.length})`);
 }
 
-/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, skills?: string[] }} */
+/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, skills?: string[] }} */
 function readManifest(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, ".agents/ai-dev.json"), "utf8"));
@@ -262,8 +322,8 @@ function readManifest(root) {
 /**
  * Скиллы: `.agents/skills/<name>` — копия (или симлинк на клон), Claude Code — симлинк из `.claude/skills`.
  * Чужой каталог с тем же именем не трогается; скиллы из прошлой установки, которых в ai-dev больше нет, убираются.
- * В `.agents/ai-dev.json` — SHA источника и поставленные скиллы; холостой прогон SHA не сравнивает: установка
- * актуальна, если совпадает то, что она ставит.
+ * В `.agents/ai-dev.json` — SHA источника, тег релиза и поставленные скиллы; холостой прогон SHA и тег не сравнивает:
+ * установка актуальна, если совпадает то, что она ставит (релиз с правкой одного установщика проекты не трогает).
  * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude
  */
 function installSkills(src, root, linkMode, claude) {
@@ -300,7 +360,7 @@ function installSkills(src, root, linkMode, claude) {
     return;
   }
   const sha = sourceSha(src);
-  writeFileSync(manifestPath, JSON.stringify({ source: SOURCE, ...(sha ? { sha } : {}), skills: installed }, null, 2) + "\n");
+  writeFileSync(manifestPath, JSON.stringify({ source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), skills: installed }, null, 2) + "\n");
 }
 
 /** Claude Code: правила из `.claude/rules` грузятся сами, при любом CLAUDE.md. @param {string} root */
@@ -445,28 +505,34 @@ function changeLines(changes, root, global) {
 /** Проверка упала: что и почему. @param {boolean} global @param {unknown} e @returns {Result} */
 const unavailable = (global, e) => ({ code: 2, text: `ai-dev ${global ? "на машине" : "в проекте"}: проверка недоступна — ${reason(e)}` });
 
+/** Установка на машине (global) или в проекте: корень и стоит ли там флоу. @param {boolean} global */
+function target(global) {
+  const home = os.homedir();
+  const root = global ? home : projectRoot();
+  const canon = path.join(root, ".agents/ai-dev");
+  // домашний каталог — установка машины, а не проект
+  const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || !samePath(root, home));
+  return { home, root, canon, installed };
+}
+
 /**
- * Отстала ли установка на машине (global) или в проекте. Копию сверяет этот пакет (SRC) холостой установкой, клон
- * `--link` — с `origin/main`.
+ * Отстала ли установка на машине (global) или в проекте. Копию сверяет этот пакет (SRC, релиз — `toRelease`)
+ * холостой установкой, клон `--link` — с `origin/main`.
  * @param {boolean} global @returns {Result}
  */
 function check(global) {
-  const home = os.homedir();
-  const root = global ? home : projectRoot();
+  const { home, root, canon, installed } = target(global);
   const where = global ? "на машине" : "в проекте";
-  const canon = path.join(root, ".agents/ai-dev");
-  const st = lstat(canon);
-  const installed = st || existsSync(path.join(root, ".agents/ai-dev.json"));
-  // домашний каталог — установка машины, а не проект
-  if (!installed || (!global && samePath(root, home))) return { code: 0, text: `ai-dev ${where}: не установлен`, absent: true };
-  if (global && st?.isSymbolicLink()) return checkLink(home, path.resolve(path.dirname(canon), readlinkSync(canon)));
+  if (!installed) return { code: 0, text: `ai-dev ${where}: не установлен`, absent: true };
+  if (global && lstat(canon)?.isSymbolicLink()) return checkLink(home, path.resolve(path.dirname(canon), readlinkSync(canon)));
   const changes = dryRun(() => (global ? installGlobal(SRC, false) : installProject(SRC, root)));
-  const fresh = short(sourceSha(SRC)) ?? "SHA неизвестен";
+  const fresh = release ?? short(sourceSha(SRC)) ?? "SHA неизвестен";
   if (!changes.length) return { code: 0, text: `ai-dev ${where}: актуально (${fresh})` };
+  const m = readManifest(root);
   return {
     code: 1,
     text: [
-      `ai-dev ${where}: отстаёт — стоит ${short(readManifest(root).sha) ?? "без SHA"}, свежий ${fresh}`,
+      `ai-dev ${where}: отстаёт — стоит ${m.tag ?? short(m.sha) ?? "без SHA"}, свежий ${fresh}`,
       ...capped(changeLines(changes, root, global)),
       `Обновить: npx -y github:${SOURCE} update${global ? " -g" : ""}`,
     ].join("\n"),
@@ -506,13 +572,17 @@ function checkLink(home, clone) {
   };
 }
 
-/** Хук SessionStart: машина и проект одним выводом в контекст сессии; код всегда 0, ошибки — в stdout. */
-function hook() {
+/**
+ * Хук SessionStart: машина и проект одним выводом в контекст сессии; код всегда 0, ошибки — в stdout. failed —
+ * последний релиз не узнать: установленное — «проверка недоступна».
+ * @param {unknown} [failed]
+ */
+function hook(failed) {
   /** @type {Result[]} */
   const results = [];
   for (const global of [true, false]) {
     try {
-      results.push(check(global));
+      results.push(failed && target(global).installed ? unavailable(global, failed) : check(global));
     } catch (e) {
       results.push(unavailable(global, e));
     }
@@ -539,11 +609,11 @@ function update(global) {
     return 0;
   }
   installProject(SRC, projectRoot());
-  const sha = short(sourceSha(SRC));
+  const version = release ?? short(sourceSha(SRC));
   note(
     [
       "Копию в проекте — отдельным коммитом в ветку текущей задачи:",
-      `  git add -A .agents .claude/rules .claude/skills AGENTS.md && git commit -m "chore(agents): флоу ai-dev${sha ? ` ${sha}` : ""}"`,
+      `  git add -A .agents .claude/rules .claude/skills AGENTS.md && git commit -m "chore(agents): флоу ai-dev${version ? ` ${version}` : ""}"`,
     ].join("\n"),
   );
   return 0;
@@ -588,8 +658,20 @@ function main(/** @type {string[]} */ argv) {
     return 2;
   }
   const global = flags.includes("-g") || flags.includes("--global");
+  const hookMode = cmd === "check" && flags.includes("--hook");
+  // «не установлен» релиз не нужен: хук в чужом проекте не ходит в сеть зря
+  if (cmd !== "check" || (hookMode ? [true, false].some((g) => target(g).installed) : target(global).installed)) {
+    try {
+      const code = toRelease(argv);
+      if (code !== null) return code;
+    } catch (e) {
+      if (hookMode) return hook(e);
+      if (cmd === "check") return process.stderr.write(unavailable(global, e).text + "\n"), 2;
+      return warn(`${cmd}: ${reason(e)}`), 2;
+    }
+  }
   if (cmd === "check") {
-    if (flags.includes("--hook")) return hook();
+    if (hookMode) return hook();
     /** @type {Result} */
     let r;
     try {
