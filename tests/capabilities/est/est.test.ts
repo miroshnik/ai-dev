@@ -236,6 +236,71 @@ describe("Сессия, которая ведёт задачи подряд, д�
 });
 
 /**
+ * Хеш коммита в выводе инструмента привязывает сессию к PR этого коммита. Но канон велит смотреть на соседей
+ * (`git worktree list`, `git branch -a`, `git fetch`), и их вывод перечисляет чужие коммиты — свежие, рядом по
+ * времени. Хеш из такого листинга — якорь, только если этот коммит сделала сама сессия: он есть и в выводе её
+ * `git commit`, `git push` или скрипта.
+ */
+describe("Хеш в листинге git — якорь, только если коммит сделала сама сессия", () => {
+  const SID = "55555555-6666-7777-8888-999999999999";
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+  const B = "fix/10-login";
+  let n = 0;
+  const bash = (hhmm: string, command: string, out: string, gitBranch = B) => {
+    const id = `tu${++n}`;
+    return [
+      { type: "assistant", timestamp: at(hhmm), cwd: "/repo", gitBranch, message: { content: [{ type: "tool_use", id, name: "Bash", input: { command } }] } },
+      { type: "user", timestamp: at(hhmm), cwd: "/repo", gitBranch, message: { content: [{ type: "tool_result", tool_use_id: id, content: out }] } },
+    ];
+  };
+  const work = (hhmm: string, gitBranch = "HEAD") => ({ type: "assistant", timestamp: at(hhmm), cwd: "/repo", gitBranch, message: { content: [{ type: "text", text: "…" }] } });
+  const OWN = "e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3";
+  const FOREIGN = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+  const pr20: PR = { ...pr77(), number: 20, headRefName: B, closing: [10], body: "Closes #10", mergedAt: ts("10:10"), commits: [{ oid: OWN, at: ts("10:06") }] };
+  const pr21: PR = { ...pr77(), number: 21, headRefName: "fix/12-signup", closing: [12], body: "Closes #12", commits: [{ oid: FOREIGN, at: ts("10:15") }] };
+
+  function parse(records: unknown[]): Session {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl(records));
+    return parseSessionFile(file);
+  }
+
+  // так было: `est fact 12` засчитал время сессии #10, а у #10 чужой якорь оборвал окно названия
+  it("сессия «#10 …», в выводе которой только листинг с хешем PR задачи #12, отдаёт время #10, а не #12", () => {
+    const s = parse([
+      { type: "custom-title", customTitle: "#10 Логин", sessionId: SID },
+      { type: "user", timestamp: at("10:00"), cwd: "/repo", gitBranch: B, origin: { kind: "human" }, message: { role: "user", content: "#10 почини логин" } },
+      ...bash("10:06", 'git commit -m "fix: логин"', `[${B} e4f5a6b] fix: логин`),
+      { type: "pr-link", timestamp: at("10:08"), prNumber: 20 },
+      work("10:14"), work("10:17"),
+      // после мержа — соседи по канону; wt-12 только что закоммитил PR задачи #12
+      ...bash("10:20", "git worktree list", "/repo          0a0b0c0 (detached HEAD)\n/wt-12         a1b2c3d [fix/12-signup]", "HEAD"),
+      work("10:25"), work("10:30"),
+    ]);
+    const repo = stubRepo([s], [pr20, pr21]);
+    const f12 = computeFact(repo, 12, [{ ...pr21, why: "закрыл issue" }], []);
+    expect(f12.h).toBeNull();
+    expect(f12.cov).toBe("none");
+    const f10 = computeFact(repo, 10, [{ ...pr20, why: "закрыл issue" }], []);
+    expect(f10.h).toBe(0.5); // 10:00–10:30: чужой хеш не обрывает окно названия
+  });
+
+  it("листинг git и чтение через gh дают якорем только коммит из вывода самой сессии; скрипт рядом и gh pr view — как git commit", () => {
+    const s = parse([
+      ...bash("10:06", "bun scripts/ship.ts", `проверки ок\n[${B} e4f5a6b] fix: логин`),
+      ...bash("10:20", "git log --oneline -3", "e4f5a6b fix: логин\n0a0b0c0 Merge pull request #19\n9f8e7d6 feat: регистрация"),
+      ...bash("10:21", "git fetch --prune 2>&1 && git -C ../wt-12 branch -v | head -5", "   b2c3d4e..a1b2c3d  fix/12-signup -> origin/fix/12-signup\n* fix/12-signup a1b2c3d fix: регистрация"),
+      ...bash("10:22", `gh issue view 12 --json title --jq .title; gh api graphql -f query='query{repository(owner:"o",name:"r"){pullRequest(number:21){commits(last:1){nodes{commit{oid}}}}}}'`, '{"oid":"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"}'),
+      // скрипт мог закоммитить сам, не напечатав хеш: его коммит виден только в git log той же команды
+      ...bash("10:25", "bun scripts/amend.ts && git log -1 --oneline", "c0ffee1 fix: правка ревью"),
+      // SKILL.md советует напечатать коммиты своего PR перед est fact — это якорь
+      ...bash("10:26", "gh pr view 20 --json commits --jq '.commits[].oid'", "b0b0b0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7"),
+    ]);
+    expect(s.commits).toEqual([[ts("10:06"), "e4f5a6b"], [ts("10:20"), "e4f5a6b"], [ts("10:25"), "c0ffee1"], [ts("10:26"), "b0b0b0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7"]]);
+  });
+});
+
+/**
  * Разговор в сессии одного репозитория перерастает в задачу другого: задачу заводят там же, сессию переименовывают
  * «#N …», коммит и PR — в другом репозитории. Такая сессия — гость: её транскрипт лежит в каталоге чужого
  * репозитория, а номера задач у репозиториев свои. Поэтому гостя привязывают только признаки, в которых есть
@@ -424,7 +489,7 @@ describe("Транскрипт Claude Code даёт привязки к зада
 
 /** У записей Codex нет ветки — привязка к задаче только по номеру в промпте и хешам коммитов. */
 describe("Транскрипт Codex — такой же источник факта, только без ветки", () => {
-  it("cwd и id из session_meta, промпт из UserMessage, токены раз на response_id, хеши из выводов инструментов", () => {
+  it("cwd и id из session_meta, промпт из UserMessage, токены раз на response_id, хеши из выводов инструментов, кроме чужих в листинге git", () => {
     const file = path.join(dir, "rollout-1.jsonl");
     writeFileSync(file, jsonl([
       { type: "session_meta", payload: { cwd: "/repo", id: "codex-1" } },
@@ -432,6 +497,8 @@ describe("Транскрипт Codex — такой же источник фак
       { type: "event_msg", timestamp: "2026-09-01T10:00:00Z", payload: { type: "item_completed", item: { type: "UserMessage", content: [{ type: "text", text: "#42 экспорт" }] } } },
       { type: "response_item", timestamp: "2026-09-01T10:01:00Z", payload: { type: "function_call", call_id: "c1", arguments: "{\"cmd\":\"git commit -m x\"}" } },
       { type: "response_item", timestamp: "2026-09-01T10:02:00Z", payload: { type: "function_call_output", call_id: "c1", output: "[main deadbeef1] x" } },
+      { type: "response_item", timestamp: "2026-09-01T10:02:10Z", payload: { type: "function_call", call_id: "c2", arguments: "{\"command\":[\"bash\",\"-lc\",\"git worktree list\"]}" } },
+      { type: "response_item", timestamp: "2026-09-01T10:02:20Z", payload: { type: "function_call_output", call_id: "c2", output: "/wt-12  a1b2c3d [fix/12-signup]" } },
       { type: "token_usage_record", timestamp: "2026-09-01T10:03:00Z", payload: { response_id: "resp_1", usage: { input_tokens: 1000, cached_input_tokens: 400, output_tokens: 20 } } },
       { type: "token_usage_record", timestamp: "2026-09-01T10:03:01Z", payload: { response_id: "resp_1", usage: { input_tokens: 1000, cached_input_tokens: 400, output_tokens: 20 } } },
     ]));
