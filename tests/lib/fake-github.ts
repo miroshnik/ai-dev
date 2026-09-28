@@ -35,6 +35,20 @@ export class FakeGitHub {
   tree: { capabilities: string[]; standards: string[]; architecture: string[]; model: string | null } = { capabilities: [], standards: [], architecture: [], model: null };
   /** PR по номеру (PrChange): изменённые файлы, задачи из «Closes #N», голова и модель архитектуры в ней (ModelAt). */
   prs: Record<number, { files: string[]; closes: number[]; head: string; model: string | null }> = {};
+  /**
+   * Основная ветка `main` (MergeRules) — как у ai-dev после fix: ruleset «ai-dev» со strict и обязательным `tests`;
+   * у влитых PR `tests` зелёный, `spec-publish` пропущен. Чеки головы PR: имя → вывод чека или IN_PROGRESS.
+   * `org` — ruleset организации: действует на ветку, но в rulesets репозитория его нет. `upgrade` — приватный
+   * репозиторий на Free: GraphQL отдаёт пустые правила, REST — 403.
+   */
+  merge = {
+    private: false,
+    upgrade: false,
+    protection: null as { strict: boolean; contexts: string[] } | null,
+    rulesets: [{ id: "RRS_ai-dev", name: "ai-dev", org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: true, contexts: ["tests"], admin: true }],
+    merged: Array.from({ length: 12 }, (_, i) => ({ number: 120 + i, checks: { tests: "SUCCESS", "spec-publish": "SKIPPED" } as Record<string, string> })),
+    open: [] as { number: number; checks: Record<string, string> }[],
+  };
   private seq = 0;
 
   constructor(recording: Recording) {
@@ -42,6 +56,10 @@ export class FakeGitHub {
   }
 
   gh = (args: string[], stdin?: string): string => {
+    // realGh отдаёт тело ответа и при коде ≠ 0, если это JSON
+    if (args[0] === "api" && args[1] === `repos/${this.repo.nameWithOwner}/rulesets`) {
+      return JSON.stringify(this.merge.upgrade ? { message: "Upgrade to GitHub Pro or make this repository public to enable this feature.", status: "403" } : this.merge.rulesets.filter((r) => !r.org).map((r) => ({ id: r.id, name: r.name })));
+    }
     if (args[0] !== "api" || args[1] !== "graphql") throw new Error(`fake gh: неожиданный вызов gh ${args.join(" ")}`);
     const { query, variables } = JSON.parse(stdin ?? "{}");
     const { kind, op } = opOf(query);
@@ -74,6 +92,7 @@ export class FakeGitHub {
     }
     if (op === "SpecDecisions") return JSON.stringify({ data: { repository: this.specTree() } });
     if (op === "PrChange") return JSON.stringify(this.prChange(variables.number));
+    if (op === "MergeRules") return JSON.stringify(this.mergeRules());
     if (op === "ModelAt") {
       const pr = Object.values(this.prs).find((x) => x.head === variables.expression.split(":")[0]);
       return JSON.stringify({ data: { repository: { object: pr?.model == null ? null : { text: pr.model } } } });
@@ -174,6 +193,49 @@ export class FakeGitHub {
       architecture: dir(t.architecture, t.model === null ? [] : ["model.ts"]),
       model: t.model === null ? null : { text: t.model },
     };
+  }
+  // Ref.rules — только действующие ruleset на основной ветке, rulesets репозитория — только свои
+  private mergeRules(): Any {
+    const m = this.merge;
+    const rulesets = m.upgrade ? [] : m.rulesets;
+    const parameters = (r: Any) => ({ strictRequiredStatusChecksPolicy: r.strict, requiredStatusChecks: r.contexts.map((context: string) => ({ context })) });
+    const onMain = (r: Any) => r.enforcement === "ACTIVE" && r.include.some((x: string) => x === "~DEFAULT_BRANCH" || x === "~ALL");
+    const head = (pr: { number: number; checks: Record<string, string> }) => {
+      const nodes = Object.entries(pr.checks).map(([name, v]) => ({ __typename: "CheckRun", name, status: v === "IN_PROGRESS" ? "IN_PROGRESS" : "COMPLETED", conclusion: v === "IN_PROGRESS" ? null : v }));
+      return { number: pr.number, baseRefName: "main", commits: { nodes: [{ commit: { statusCheckRollup: nodes.length ? { contexts: { nodes } } : null } }] } };
+    };
+    return {
+      data: {
+        repository: {
+          isPrivate: m.private,
+          defaultBranchRef: {
+            name: "main",
+            branchProtectionRule: m.protection && { requiresStrictStatusChecks: m.protection.strict, requiredStatusCheckContexts: m.protection.contexts },
+            rules: { nodes: rulesets.filter(onMain).map((r) => ({ type: "REQUIRED_STATUS_CHECKS", repositoryRuleset: { name: r.name }, parameters: parameters(r) })) },
+          },
+          rulesets: {
+            nodes: rulesets
+              .filter((r) => !r.org)
+              .map((r) => ({
+                id: r.id,
+                name: r.name,
+                enforcement: r.enforcement,
+                conditions: { refName: { include: r.include } },
+                bypassActors: { nodes: r.admin ? [{ bypassMode: "ALWAYS", repositoryRoleDatabaseId: 5 }] : [] },
+                rules: { nodes: [{ type: "REQUIRED_STATUS_CHECKS", parameters: parameters(r) }] },
+              })),
+          },
+          merged: { nodes: m.merged.map(head) },
+          open: { nodes: m.open.map(head) },
+        },
+      },
+    };
+  }
+  /** Ruleset основной ветки (как будто его завели раньше): strict и обязательные чеки. */
+  ruleset(r: Partial<FakeGitHub["merge"]["rulesets"][number]> & { name: string }): FakeGitHub["merge"]["rulesets"][number] {
+    const out = { id: this.id("RRS"), org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: true, contexts: [], admin: false, ...r };
+    this.merge.rulesets.push(out);
+    return out;
   }
   setPriority(number: number, name: string | null): void {
     this.issue(number).issueFieldValues = { nodes: name === null ? [] : [{ __typename: "IssueFieldSingleSelectValue", name, field: { name: "Priority" } }] };
@@ -449,6 +511,17 @@ export class FakeGitHub {
       Object.assign(this.repo.owner.issueTypes.nodes.find((t: Any) => t.id === issueTypeId), patch);
       return { updateIssueType: { issueType: { id: issueTypeId } } };
     },
+    // Имя ruleset в репозитории уникально; update заменяет правила и обходы целиком.
+    CreateRuleset: (input: Any) => {
+      if (this.merge.rulesets.some((r) => !r.org && r.name === input.name)) throw new GitHubError("createRepositoryRuleset", "Name must be unique");
+      const r = { id: this.id("RRS"), org: false, ...rulesetOf(input) };
+      this.merge.rulesets.push(r);
+      return { createRepositoryRuleset: { ruleset: { id: r.id } } };
+    },
+    UpdateRuleset: ({ repositoryRulesetId, ...input }: Any) => {
+      Object.assign(this.merge.rulesets.find((r) => r.id === repositoryRulesetId)!, rulesetOf(input));
+      return { updateRepositoryRuleset: { ruleset: { id: repositoryRulesetId } } };
+    },
   };
 
   private allProjects(): Any[] {
@@ -459,6 +532,19 @@ export class FakeGitHub {
   private allViews(): Any[] {
     return this.allProjects().flatMap((p) => p.views.nodes);
   }
+}
+
+/** Ruleset из input мутации: действует ли, на какие ветки, strict, обязательные чеки, обход admin (роль 5). */
+function rulesetOf(input: Any) {
+  const sc = input.rules?.find((x: Any) => x.type === "REQUIRED_STATUS_CHECKS")?.parameters.requiredStatusChecks;
+  return {
+    name: input.name as string,
+    enforcement: input.enforcement as string,
+    include: input.conditions.refName.include as string[],
+    strict: !!sc?.strictRequiredStatusChecksPolicy,
+    contexts: (sc?.requiredStatusChecks ?? []).map((c: Any) => c.context as string),
+    admin: (input.bypassActors ?? []).some((b: Any) => b.repositoryRoleDatabaseId === 5 && b.bypassMode === "ALWAYS"),
+  };
 }
 
 /** Ошибка GitHub на мутацию: поле мутации в data — null, текст — в errors. */
