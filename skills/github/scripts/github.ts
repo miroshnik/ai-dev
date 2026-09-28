@@ -14,7 +14,8 @@
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
  * Метки решений сверяются с деревом спеки основной ветки; модель архитектуры читает отдельный процесс того же
- * рантайма (`modelModules`).
+ * рантайма (`modelModules`). Мерж в основную ветку — ruleset `ai-dev`: strict и обязательные чеки, зелёные на
+ * последних влитых PR.
  */
 
 import { spawnSync } from "node:child_process";
@@ -65,6 +66,15 @@ export const WORKFLOW_CLOSED = "Item closed";
 export const WORKFLOW_AUTO_ADD = "Auto-add to project";
 /** Эталон: новый проект — его копия (представления, поля, настроенные workflow, кроме auto-add). */
 export const DEFAULT_TEMPLATE = "miroshnik/6";
+/**
+ * Ruleset основной ветки, который ставит fix: GitHub не даёт влить отставшую ветку (strict) и ветку с красным
+ * обязательным чеком. strict без обязательных чеков не действует — поэтому в нём и чеки.
+ */
+export const RULESET = "ai-dev";
+/** Обязательный чек — зелёный на каждом из стольких последних влитых PR с чеками. */
+export const STABLE_PRS = 10;
+/** Роль admin репозитория (`repositoryRoleDatabaseId`) обходит ruleset: прямой push, `gh pr merge --admin`. */
+const ADMIN_ROLE = 5;
 
 // Варианты Status нового проекта и их канонические имена: переименование с тем же id сохраняет значения
 // задач и цель workflow «Item closed» (замена вариантов целиком даёт новые id).
@@ -158,6 +168,34 @@ export interface Decisions {
   names: Record<DecisionKind, string[]>;
   modelError: string | null;
 }
+/** Чек головы PR: зелёный, ещё идёт или иначе (красный, пропущен, отменён). */
+type CheckState = "success" | "pending" | "other";
+interface Head {
+  number: number;
+  checks: Record<string, CheckState>;
+}
+interface Ruleset {
+  id: string;
+  enforcement: string;
+  include: string[];
+  strict: boolean;
+  contexts: string[];
+  bypassAdmin: boolean;
+}
+/** Мерж в основную ветку: её действующие правила с обязательными чеками и чеки голов PR в неё. */
+export interface Merge {
+  branch: string;
+  /** Правила ветки недоступны на тарифе (приватный репозиторий на Free) — причина от GitHub. */
+  unavailable: string | null;
+  /** Действующие правила с обязательными чеками: ruleset любого уровня и классическая защита ветки. */
+  rules: { source: string; strict: boolean; contexts: string[] }[];
+  /** Свой ruleset — `RULESET` этого репозитория, в любом состоянии. */
+  own: Ruleset | null;
+  /** Последние `STABLE_PRS` влитых PR с чеками, от старых к новым. */
+  merged: Head[];
+  /** Открытые PR, у которых все чеки уже завершились: чека, которого у них нет, не будет. */
+  open: Head[];
+}
 export interface State {
   repo: { id: string; name: string; nameWithOwner: string; owner: Owner; linked: ProjectRef[] };
   project: Project | null;
@@ -166,6 +204,8 @@ export interface State {
   /** Задачи старых меток `вид:имя`, которые сливаются с уже занятым именем: по id метки. */
   labelIssues: Record<string, { id: string; number: number }[]>;
   decisions: Decisions;
+  /** Пустой репозиторий (нет основной ветки) — null. */
+  merge: Merge | null;
 }
 
 interface Mutation {
@@ -189,6 +229,8 @@ export interface Check {
   problems: { text: string; steps: Step[] }[];
   /** Не расхождение, а положение дел (метка нового решения): строка `○`, пункт остаётся ✅. */
   notes: string[];
+  /** Пункт неприменим (тариф, нет чеков): строка `➖` с причиной вместо ✅/❌. */
+  skip?: string;
 }
 
 export class GhError extends Error {}
@@ -298,6 +340,32 @@ export const Q = {
   ModelAt: `query ModelAt($owner: String!, $name: String!, $expression: String!) {
   repository(owner: $owner, name: $name) { object(expression: $expression) { ... on Blob { text } } }
 }`,
+  // Ref.rules — правила действующих ruleset (репозитория и организации), которые GitHub применяет к ветке
+  MergeRules: `query MergeRules($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    isPrivate
+    defaultBranchRef {
+      name
+      branchProtectionRule { requiresStrictStatusChecks requiredStatusCheckContexts }
+      rules(first: 100) { nodes { type repositoryRuleset { name } parameters { ...StatusChecks } } }
+    }
+    rulesets(first: 100) {
+      nodes {
+        id name enforcement
+        conditions { refName { include } }
+        bypassActors(first: 50) { nodes { bypassMode repositoryRoleDatabaseId } }
+        rules(first: 100) { nodes { type parameters { ...StatusChecks } } }
+      }
+    }
+    merged: pullRequests(states: MERGED, last: 30) { nodes { ...Head } }
+    open: pullRequests(states: OPEN, last: 30) { nodes { ...Head } }
+  }
+}
+fragment StatusChecks on RuleParameters { ... on RequiredStatusChecksParameters { strictRequiredStatusChecksPolicy requiredStatusChecks { context } } }
+fragment Head on PullRequest {
+  number baseRefName
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
+}`,
   IssueSearch: `query IssueSearch($q: String!) {
   search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
 }`,
@@ -344,6 +412,8 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   AddBlockedBy: ["addBlockedBy", "AddBlockedByInput", "issue { id }"],
   SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
   CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
+  CreateRuleset: ["createRepositoryRuleset", "CreateRepositoryRulesetInput", "ruleset { id }"],
+  UpdateRuleset: ["updateRepositoryRuleset", "UpdateRepositoryRulesetInput", "ruleset { id }"],
 };
 
 function mutationQuery(op: string): string {
@@ -432,7 +502,68 @@ export function loadState(io: Io, slug: string): State {
   const openIssues = pages<{ id: string; number: number }>((after) => graphql(io, Q.RepoIssues, { owner, name, after }).repository.issues);
   const main = mainProject(repo);
   const labels = loadLabels(io, slug);
-  return { repo, project: main ? loadProject(io, main.id) : null, openIssues, labels, labelIssues: mergedIssues(io, slug, labels), decisions: loadDecisions(io, slug) };
+  return { repo, project: main ? loadProject(io, main.id) : null, openIssues, labels, labelIssues: mergedIssues(io, slug, labels), decisions: loadDecisions(io, slug), merge: loadMerge(io, slug) };
+}
+
+const statusChecks = (rule: Any): { strict: boolean; contexts: string[] } | null =>
+  rule?.type === "REQUIRED_STATUS_CHECKS" ? { strict: !!rule.parameters?.strictRequiredStatusChecksPolicy, contexts: (rule.parameters?.requiredStatusChecks ?? []).map((c: Any) => c.context) } : null;
+
+/** Чеки головы PR по имени; перезапуск того же чека — зелёный, если зелёный хоть один. */
+function headChecks(pr: Any): Record<string, CheckState> {
+  const out: Record<string, CheckState> = {};
+  for (const c of pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []) {
+    if (!c) continue;
+    const run = c.__typename === "CheckRun";
+    const name: string = run ? c.name : c.context;
+    const state: CheckState = run ? (c.status !== "COMPLETED" ? "pending" : c.conclusion === "SUCCESS" ? "success" : "other") : c.state === "SUCCESS" ? "success" : c.state === "PENDING" || c.state === "EXPECTED" ? "pending" : "other";
+    if (out[name] !== "success") out[name] = state;
+  }
+  return out;
+}
+
+/** Приватный репозиторий на Free: GraphQL молча отдаёт пустые правила, REST — 403 «Upgrade to GitHub Pro…». */
+function rulesetsUnavailable(io: Io, slug: string): string | null {
+  const out = io.gh(["api", `repos/${slug}/rulesets`]);
+  let res: Any;
+  try {
+    res = JSON.parse(out);
+  } catch {
+    throw new GhError(`gh api repos/${slug}/rulesets: ответ не JSON: ${out.slice(0, 200)}`);
+  }
+  return !Array.isArray(res) && /upgrade/i.test(res?.message ?? "") ? String(res.message) : null;
+}
+
+function loadMerge(io: Io, slug: string): Merge | null {
+  const [owner, name] = slug.split("/") as [string, string];
+  const r = graphql(io, Q.MergeRules, { owner, name })?.repository;
+  const b = r?.defaultBranchRef;
+  if (!b) return null;
+  const heads = (nodes: Any[]): Head[] =>
+    (nodes ?? []).filter((p) => p && p.baseRefName === b.name).map((p) => ({ number: p.number, checks: headChecks(p) })).filter((h) => Object.keys(h.checks).length);
+  const bp = b.branchProtectionRule;
+  const rules = (b.rules?.nodes ?? []).flatMap((x: Any) => {
+    const sc = statusChecks(x);
+    return sc ? [{ source: `ruleset ${q(x.repositoryRuleset?.name ?? "?")}`, ...sc }] : [];
+  });
+  if (bp?.requiresStrictStatusChecks || bp?.requiredStatusCheckContexts?.length) rules.push({ source: "защита ветки", strict: !!bp.requiresStrictStatusChecks, contexts: bp.requiredStatusCheckContexts ?? [] });
+  const o = (r.rulesets?.nodes ?? []).find((x: Any) => x?.name === RULESET);
+  const osc = o ? ((o.rules?.nodes ?? []).map(statusChecks).find(Boolean) ?? { strict: false, contexts: [] }) : null;
+  return {
+    branch: b.name,
+    unavailable: r.isPrivate ? rulesetsUnavailable(io, slug) : null,
+    rules,
+    own: o
+      ? {
+          id: o.id,
+          enforcement: o.enforcement,
+          include: o.conditions?.refName?.include ?? [],
+          ...osc!,
+          bypassAdmin: (o.bypassActors?.nodes ?? []).some((a: Any) => a?.repositoryRoleDatabaseId === ADMIN_ROLE && a.bypassMode === "ALWAYS"),
+        }
+      : null,
+    merged: heads(r.merged?.nodes).slice(-STABLE_PRS),
+    open: heads(r.open?.nodes).filter((h) => Object.values(h.checks).every((c) => c !== "pending")),
+  };
 }
 
 /** Задачи старых меток, чьё имя уже занято (другой меткой или старой меткой раньше в списке), — их сольёт fix. */
@@ -571,12 +702,15 @@ export function analyze(s: State): Check[] {
   const add = (key: string, title: string) => {
     const c: Check = { key, title, problems: [], notes: [] };
     checks.push(c);
-    return Object.assign((text: string, ...steps: Step[]) => c.problems.push({ text, steps }), { note: (text: string) => c.notes.push(text) });
+    return Object.assign((text: string, ...steps: Step[]) => c.problems.push({ text, steps }), { note: (text: string) => c.notes.push(text), skip: (why: string) => void (c.skip = why) });
   };
 
   const link = add("link", `Проект привязан к репозиторию и называется ${q(s.repo.name)}`);
+  // правило основной ветки от проекта не зависит
+  const merge = () => s.merge && analyzeMerge(s.merge, s.repo.id, add("merge", `Мерж в ${s.merge.branch} — только актуальной ветки с зелёными обязательными чеками`));
   if (!p) {
     link("к репозиторию не привязан ни один открытый проект", { kind: "api", text: `найти, скопировать с эталона или создать проект ${q(s.repo.name)} и привязать к ${s.repo.nameWithOwner}` });
+    merge();
     return checks;
   }
   const used = p.items.length > 0;
@@ -803,7 +937,59 @@ export function analyze(s: State): Check[] {
     labels(`решения без метки: ${fresh.map((x) => x.name).join(", ")}`, api(`создать метки ${fresh.map((x) => q(x.name)).join(", ")}`, ...fresh.map((x) => ({ op: "CreateLabel", input: { repositoryId: s.repo.id, ...x } }))));
   }
 
+  merge();
   return checks;
+}
+
+/** Ruleset `RULESET`: основная ветка, strict, обязательные чеки, обход — admin (прямой push владельца). */
+function rulesetInput(contexts: string[]): Record<string, unknown> {
+  return {
+    name: RULESET,
+    target: "BRANCH",
+    enforcement: "ACTIVE",
+    conditions: { refName: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+    rules: [{ type: "REQUIRED_STATUS_CHECKS", parameters: { requiredStatusChecks: { requiredStatusChecks: contexts.map((context) => ({ context })), strictRequiredStatusChecksPolicy: true } } }],
+    bypassActors: [{ repositoryRoleDatabaseId: ADMIN_ROLE, bypassMode: "ALWAYS" }],
+  };
+}
+
+/**
+ * Мерж: правило канона «подъехал чужой PR — rebase» и «мерж только при зелёных чеках» держит GitHub, а не память
+ * агента. Обязательные — чеки, зелёные на каждом из последних влитых PR; чек, которого нет у свежей головы (последний
+ * влитый PR, открытые с завершёнными чеками), держал бы PR вечно — он из списка уходит, а не попадает в него.
+ * Чужое правило со strict и чеками не дублируется.
+ */
+function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...steps: Step[]) => void) & { skip: (why: string) => void }): void {
+  if (m.unavailable) return merge.skip(`правила ветки недоступны: ${m.unavailable}`);
+  const fresh = [...m.merged.slice(-1), ...m.open];
+  const gone = (c: string) => fresh.find((h) => !(c in h.checks));
+  const stable = Object.keys(m.merged[0]?.checks ?? {})
+    .filter((c) => m.merged.every((h) => h.checks[c] === "success") && !gone(c))
+    .sort();
+  const enforced = m.rules.some((r) => r.strict && r.contexts.length);
+  const list = (cs: string[]) => cs.map(q).join(", ");
+  const none = `у последних влитых PR нет общего зелёного чека — обязательным делать нечего, strict без чеков не действует`;
+  const own = m.own;
+  if (!own) {
+    if (enforced) return;
+    if (!stable.length) return merge.skip(none);
+    const text = `создать ruleset ${q(RULESET)} на ${m.branch}: strict, обязательные ${list(stable)}, обход — admin`;
+    const step: Step = { kind: "api", text, mutations: [{ op: "CreateRuleset", input: { sourceId: repositoryId, ...rulesetInput(stable) } }] };
+    const half = m.rules.find((r) => r.contexts.length && !r.strict) ?? m.rules.find((r) => r.strict);
+    return merge(half ? (half.strict ? `${half.source}: strict без обязательных чеков не действует` : `${half.source}: strict выключен — отставшую ветку можно влить`) : `нет правила: отставшую ветку и ветку с красным чеком можно влить`, step);
+  }
+  const want = [...new Set([...own.contexts.filter((c) => !gone(c)), ...stable])].sort();
+  const step: Step = { kind: "api", text: `ruleset ${q(RULESET)}: основная ветка, strict, обязательные ${list(want) || "—"}, обход — admin`, mutations: [{ op: "UpdateRuleset", input: { repositoryRulesetId: own.id, ...rulesetInput(want) } }] };
+  const why: string[] = [];
+  if (own.enforcement !== "ACTIVE") why.push(`ruleset ${q(RULESET)} — ${own.enforcement}, не действует`);
+  if (!own.include.includes("~DEFAULT_BRANCH")) why.push(`ruleset ${q(RULESET)} не на основной ветке: ${own.include.join(", ") || "—"}`);
+  if (!own.strict) why.push(`ruleset ${q(RULESET)}: strict выключен — отставшую ветку можно влить`);
+  if (!own.bypassAdmin) why.push(`ruleset ${q(RULESET)}: admin не может обойти — прямой push в ${m.branch} невозможен`);
+  for (const c of own.contexts.filter((x) => gone(x))) why.push(`обязательный ${q(c)} не пришёл на PR #${gone(c)!.number} — PR ждал бы его вечно`);
+  const add = stable.filter((c) => !own.contexts.includes(c));
+  if (add.length) why.push(`не обязательны зелёные на последних ${m.merged.length} влитых PR: ${list(add)}`);
+  for (const w of why) merge(w, step);
+  if (!why.length && !enforced && !want.length) merge.skip(none);
 }
 
 // ----------------------------------------------------------------------------
@@ -816,6 +1002,10 @@ function header(io: Io, s: State): void {
 
 function report(io: Io, s: State, checks: Check[]): boolean {
   for (const c of checks) {
+    if (c.skip) {
+      io.out(`➖ ${c.title} — ${c.skip}`);
+      continue;
+    }
     io.out(`${c.problems.length ? "❌" : "✅"} ${c.title}`);
     for (const pr of c.problems) io.out(`   · ${pr.text}`);
     for (const n of c.notes) io.out(`   ○ ${n}`);
@@ -883,6 +1073,8 @@ export function cmdFix(io: Io, slug: string, opts: { confirm: boolean; template:
       .filter((st) => st.mutations?.length && (st.kind === "api" || (st.kind === "confirm" && opts.confirm)) && !tried.has(st.text));
     if (!steps.length) break;
     for (const st of steps) {
+      // у нескольких расхождений бывает один шаг (правка ruleset целиком) — он делается один раз
+      if (tried.has(st.text)) continue;
       tried.add(st.text);
       try {
         for (const m of st.mutations!) mutate(io, m);

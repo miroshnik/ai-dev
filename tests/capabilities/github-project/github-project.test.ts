@@ -47,7 +47,7 @@ describe("check показывает каждое расхождение с ка
     const r = check(fake());
     expect(r.code).toBe(0);
     expect(r.out).toStartWith(`Проект ${REPO}: ${PROJECT_URL}`);
-    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅", Метки: "✅" });
+    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅", Метки: "✅", Мерж: "✅" });
     expect(r.out).toContain("➖ Priority и типы issue — в личном аккаунте их нет");
   });
 
@@ -112,13 +112,13 @@ describe("check показывает каждое расхождение с ка
     expect(r.out).toContain("· без Status: #42");
   });
 
-  it("к репозиторию не привязан проект — единственный пункт ❌, остальное без проекта не проверить", () => {
+  it("к репозиторию не привязан проект — из пунктов проекта только этот ❌, остальные без проекта не проверить; правило основной ветки сверяется", () => {
     const f = fake();
     f.unlinkAll();
     const r = check(f);
     expect(r.code).toBe(1);
     expect(r.out).toStartWith(`Проект ${REPO}: нет`);
-    expect(marks(r.out)).toEqual({ Проект: "❌" });
+    expect(marks(r.out)).toEqual({ Проект: "❌", Мерж: "✅" });
   });
 
   it("облачная сессия — объяснение и код 2, а не сбой gh на Projects v2", () => {
@@ -533,6 +533,115 @@ describe("Метки решений — имя решения без вида, �
     expect(ops(f)).not.toContain("UpdateLabel");
     fix(f, { confirm: true });
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: CAP, description: "Решение: tests/capabilities/documentation" }]);
+  });
+});
+
+/**
+ * Правило канона «подъехал чужой PR — rebase» держит GitHub: отставшую ветку он не вливает (strict). strict без
+ * обязательных чеков не действует, поэтому обязательны чеки, зелёные на каждом из последних влитых PR. Без правила
+ * публикация спеки на мерж PR откатывает ветку spec: смёржена голова без чужого PR.
+ */
+describe("Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками", () => {
+  const MERGE = "Мерж в main — только актуальной ветки с зелёными обязательными чеками";
+  function bare(f: FakeGitHub = fake()): FakeGitHub {
+    f.merge.rulesets = [];
+    return f;
+  }
+
+  it("правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, strict, обязательные — зелёные на всех последних влитых PR, обход — admin", () => {
+    const f = bare();
+    const r = check(f);
+    expect(r.code).toBe(1);
+    expect(marks(r.out).Мерж).toBe("❌");
+    expect(r.out).toContain("· нет правила: отставшую ветку и ветку с красным чеком можно влить");
+    const x = fix(f);
+    expect(x.code).toBe(0);
+    // spec-publish на PR пропускается — не зелёный, в обязательные не идёт
+    expect(byOp(f, "CreateRuleset")).toEqual([
+      {
+        sourceId: f.repo.id,
+        name: "ai-dev",
+        target: "BRANCH",
+        enforcement: "ACTIVE",
+        conditions: { refName: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+        rules: [{ type: "REQUIRED_STATUS_CHECKS", parameters: { requiredStatusChecks: { requiredStatusChecks: [{ context: "tests" }], strictRequiredStatusChecksPolicy: true } } }],
+        bypassActors: [{ repositoryRoleDatabaseId: 5, bypassMode: "ALWAYS" }],
+      },
+    ]);
+    expect(x.out).toContain("+ создать ruleset «ai-dev» на main: strict, обязательные «tests», обход — admin");
+    expect(marks(x.out).Мерж).toBe("✅");
+  });
+
+  it("strict выключен или без обязательных чеков — ❌ с причиной; чужое правило fix не правит, а ставит свой ruleset", () => {
+    const f = bare();
+    f.merge.protection = { strict: false, contexts: ["tests"] };
+    expect(check(f).out).toContain("· защита ветки: strict выключен — отставшую ветку можно влить");
+    const g = bare();
+    g.ruleset({ name: "release", strict: true, contexts: [] });
+    expect(check(g).out).toContain("· ruleset «release»: strict без обязательных чеков не действует");
+    fix(g);
+    expect(ops(g)).toEqual(["CreateRuleset"]);
+    expect(marks(check(g).out).Мерж).toBe("✅");
+  });
+
+  it("чужое правило со strict и обязательными чеками — ✅, свой ruleset не дублирует", () => {
+    const f = bare();
+    f.ruleset({ name: "main-policy", org: true, strict: true, contexts: ["build"] });
+    expect(marks(check(f).out).Мерж).toBe("✅");
+    fix(f);
+    expect(ops(f)).toEqual([]);
+  });
+
+  // job e2e убрали: на открытом PR с завершёнными чеками его нет, а ruleset его всё ещё требует
+  it("обязательный чек не пришёл на открытый PR с завершёнными чеками — ❌, PR ждал бы его вечно; fix убирает его и добавляет новый стабильный", () => {
+    const f = fake();
+    f.merge.rulesets[0]!.contexts = ["e2e", "tests"];
+    for (const pr of f.merge.merged) pr.checks = { tests: "SUCCESS", e2e: "SUCCESS", lint: "SUCCESS" };
+    f.merge.open = [
+      { number: 140, checks: { tests: "SUCCESS", lint: "FAILURE" } },
+      // чеки ещё идут — отсутствие e2e и lint у такой головы ничего не значит
+      { number: 141, checks: { tests: "IN_PROGRESS" } },
+    ];
+    const r = check(f);
+    expect(marks(r.out).Мерж).toBe("❌");
+    expect(r.out).toContain("· обязательный «e2e» не пришёл на PR #140 — PR ждал бы его вечно");
+    expect(r.out).toContain("· не обязательны зелёные на последних 10 влитых PR: «lint»");
+    fix(f);
+    expect(byOp(f, "UpdateRuleset").map((u) => u.rules[0].parameters.requiredStatusChecks.requiredStatusChecks)).toEqual([[{ context: "lint" }, { context: "tests" }]]);
+    expect(marks(check(f).out).Мерж).toBe("✅");
+  });
+
+  it("свой ruleset выключен, без strict или без обхода admin — ❌ по каждой причине; fix возвращает всё одной правкой", () => {
+    const f = fake();
+    Object.assign(f.merge.rulesets[0]!, { enforcement: "DISABLED", strict: false, admin: false });
+    const r = check(f);
+    expect(r.out).toContain("· ruleset «ai-dev» — DISABLED, не действует");
+    expect(r.out).toContain("· ruleset «ai-dev»: strict выключен — отставшую ветку можно влить");
+    expect(r.out).toContain("· ruleset «ai-dev»: admin не может обойти — прямой push в main невозможен");
+    fix(f);
+    expect(ops(f)).toEqual(["UpdateRuleset"]);
+    expect(f.merge.rulesets[0]).toMatchObject({ enforcement: "ACTIVE", strict: true, admin: true, contexts: ["tests"] });
+  });
+
+  it("приватный репозиторий на Free — ➖ с причиной от GitHub, а не ❌; fix ничего не ставит", () => {
+    const f = bare();
+    Object.assign(f.merge, { private: true, upgrade: true });
+    const r = check(f);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(`➖ ${MERGE} — правила ветки недоступны: Upgrade to GitHub Pro or make this repository public to enable this feature.`);
+    fix(f);
+    expect(ops(f)).toEqual([]);
+  });
+
+  it("у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего, strict без чеков не действует", () => {
+    const f = bare();
+    f.merge.merged = [
+      { number: 1, checks: { build: "SUCCESS" } },
+      { number: 2, checks: { test: "SUCCESS" } },
+    ];
+    const r = check(f);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(`➖ ${MERGE} — у последних влитых PR нет общего зелёного чека`);
   });
 });
 
