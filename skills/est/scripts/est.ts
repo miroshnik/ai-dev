@@ -120,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 16; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link, 16 = хеши листинга git и gh — только свои
+const SESSION_CACHE_V = 17; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link, 16 = хеши листинга git и gh — только свои, 17 = ключевые слова оболочки в листинге
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -981,7 +981,11 @@ function collectHashes(into: [number, string][], ts: number, txt: string): void 
 const LIST_GIT = new Set(["worktree", "branch", "log", "show", "status", "fetch", "switch", "checkout", "rev-parse", "rev-list", "reflog", "for-each-ref", "show-ref", "cherry", "describe", "diff", "ls-remote", "remote", "name-rev", "merge-base", "shortlog", "blame", "ls-files", "ls-tree", "cat-file"]);
 const LIST_GH = new Set(["issue", "run", "project", "label", "search", "pr list", "pr checks", "pr status", "pr diff", "repo view", "api"]);
 // оболочка вокруг листинга: коммитов не делает; всё прочее (скрипт, bun, make…) может коммитить — не листинг
-const LIST_SHELL = new Set(["cd", "pwd", "echo", "printf", "true", "set", "export", "head", "tail", "grep", "rg", "sed", "awk", "cut", "tr", "sort", "uniq", "wc", "cat", "ls", "column", "jq", "date"]);
+const LIST_SHELL = new Set(["cd", "pwd", "echo", "printf", "true", "set", "export", "read", "head", "tail", "grep", "rg", "sed", "awk", "cut", "tr", "sort", "uniq", "wc", "cat", "ls", "column", "jq", "date"]);
+// ключевые слова оболочки (#142): перед командой — снимаются, и проверяется сама команда (условие `if`/`while` — тоже);
+// заголовок `for … in …` и `case … in` — не команда; закрывающие — пропускаются
+const SHELL_PREFIX = new Set(["do", "then", "else", "elif", "if", "while", "until", "!", "{"]);
+const SHELL_SKIP = new Set(["for", "case", "done", "fi", "esac", "}"]);
 
 /** Команда — только листинг git и gh (с оболочкой вокруг): хеши её вывода не якоря, если коммит не сделала сама сессия. */
 function gitListingOnly(cmd: string): boolean {
@@ -993,8 +997,8 @@ function gitListingOnly(cmd: string): boolean {
   const segs = bare.replace(/\d*[<>]+&?\s*[^\s;&|()]*/g, " ").replace(/\$\(|`/g, ";").split(/&&|\|\||[;|&\n()]/);
   for (const seg of segs) {
     const w = seg.trim().split(/\s+/).filter(Boolean);
-    while (w.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!)) w.shift(); // VAR=… перед командой
-    if (!w.length) continue;
+    while (w.length && (SHELL_PREFIX.has(w[0]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!))) w.shift(); // VAR=… перед командой
+    if (!w.length || SHELL_SKIP.has(w[0]!)) continue;
     if (w[0] === "git") {
       let i = 1;
       while (i < w.length && w[i]!.startsWith("-")) i += w[i] === "-C" || w[i] === "-c" ? 2 : 1;
