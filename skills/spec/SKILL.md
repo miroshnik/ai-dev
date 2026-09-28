@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и на main (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и после мержа (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
 allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
@@ -16,8 +16,8 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
   документ в stdout);
 - `spec-diff.ts` — названия тестов на базовой ветке и в HEAD → три списка для
   тела PR: удалены, изменены, добавлены;
-- `spec-publish.ts` — собранный `docs/spec` → ветка `spec` (CI после мержа в
-  `main`); в `main` документации нет;
+- `spec-publish.ts` — собранный `docs/spec` → ветка `spec` (CI после мержа:
+  прогон на `main` или артефакт прогона PR); в `main` документации нет;
 - `spec-claims.ts` — после прогона: каждая точка входа вызвана тестом
   capability (журнал `journal` харнесса), отчёт JUnit — в `spec-doc`;
 - `harness.ts` — библиотека для тестов проекта: механическая проверка
@@ -38,7 +38,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 |---|---|
 | Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc --strict` — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff --scenarios <тело задачи>` → раздел «Спека (тесты)» со сверкой сценариев в тело PR |
 | В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, нет главного файла или `<папка>.md`, шапка у файла теста, `rule.test.ts`, название не по-русски — код 1); `spec-diff` в summary |
-| В CI на `main` после мержа | прогон → `spec-doc` → `spec-publish`: ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
+| В CI после мержа | прогон на `main` → `spec-doc` → `spec-publish`; без CI на `main` — `docs/spec` из артефакта прогона PR и `spec-publish --source <SHA мержа>` (`ci.md`). Ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
 | Прочитать спеку проекта | `git fetch origin spec && git show origin/spec:README.md` (страницы — `capabilities/<name>.md`…) или сами тесты |
 | Просят документацию, «что делает система» | `spec-doc <отчёт> --stdout` — один документ, файлы не трогаются |
 | Спрашивают, какие требования снял PR | `spec-diff` — список «Удалены» идёт первым |
@@ -283,8 +283,9 @@ bun <каталог скилла>/scripts/spec-publish.ts [--dir docs/spec] [--b
 ```
 
 Корень ветки `spec` — содержимое `docs/spec`; в сообщении коммита — `Source:
-<SHA>`, из которого собрано (по умолчанию `HEAD`). Рабочая копия и `HEAD` не
-трогаются: дерево собирается во временном индексе, коммит — поверх
+<SHA>`, из которого собрано (по умолчанию `HEAD`; публикация на мерж PR без
+CI на `main` — SHA мержа, `ci.md`: его предков ищет `spec-diff`). Рабочая
+копия и `HEAD` не трогаются: дерево собирается во временном индексе, коммит — поверх
 опубликованного, история публикаций сохраняется. То же содержимое — без
 нового коммита («без изменений»). После пуша ветка читается с remote и
 сверяется с каталогом: опубликовано ровно собранное, а не «пуш прошёл».
@@ -362,6 +363,8 @@ Actions.
    при красных тестах. Фрагмент для pnpm (в `package.json` —
    `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
    разделу правил «CI: параллельные задачи» — фрагмент workflow в `ci.md` рядом.
+   Весь CI на PR, тестов на `main` нет — публикация на мерж PR из артефакта
+   его прогона, второй вариант в `ci.md`.
 
 ## Ограничения, о которых надо знать
 
