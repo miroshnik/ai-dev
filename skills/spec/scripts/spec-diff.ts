@@ -619,7 +619,8 @@ export async function main(argv: string[]): Promise<number> {
       const branch = v["spec-branch"]!;
       const specBase = specTestsAt(branch, base, top);
       if (specBase) {
-        const inTree = (t: Test) => t.path.startsWith(L.TESTS + "/");
+        // как исходники (wanted): tests/lib не спека — его тесты (setup-проекты e2e) в tests.json не попадают
+        const inTree = (t: Test) => t.path.startsWith(L.TESTS + "/") && L.classify(t.path)[0] !== "lib";
         const reported = L.mergeTests(v.report.flatMap((r) => L.loadReport(r, root))).filter(inTree);
         baseTests = union(baseTests, specBase.tests);
         headTests = union(headTests, reported);

@@ -430,6 +430,21 @@ describe("Тесты харнесса — в диффе спеки: назван
     expect(r.stdout).toContain("нарушитель не проходит: без аудита");
   });
 
+  // setup-проекты Playwright в tests/lib отчёт называет, а tests.json ветки spec — нет: без фильтра каждый PR
+  // «добавлял» бы их заново
+  it("служебные тесты tests/lib из отчёта — не спека и в дифф не попадают", () => {
+    const base = repo.commit({ [STD]: registry });
+    publishSpec(base, [t("a пишет аудит")]);
+    repo.commit({ [STD]: registry + "// реестр сменился\n" });
+    writeFileSync(
+      path.join(dir, "r.json"),
+      vitestReport(dir, { [STD]: [[[], "a пишет аудит"]], "tests/lib/e2e/auth.setup.ts": [[[], "authenticate"]] }),
+    );
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Тесты не менялись.");
+  });
+
   it("без базы в ветке spec — дифф по исходникам, и это сказано", () => {
     const base = repo.commit({ [STD]: ts(`it("a пишет аудит", () => {});`) });
     repo.commit({ [STD]: registry });
