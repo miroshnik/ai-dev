@@ -6,7 +6,7 @@
  *   github project check — сверка с каноном по пунктам ✅/❌
  *   github project fix   — довести до канона: API, шаги UI со ссылками, удаление и переименование — с --confirm
  *   github task new      — задача одной командой: тип или метка, проект и Бэклог, Priority, эпик, blocked by, milestone,
- *                          метки решений `type:name`
+ *                          метки решений (имя решения, вид — цветом)
  *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
  *   github task drop     — закрыть без выполнения и убрать из проекта
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
@@ -47,13 +47,15 @@ export const DEFAULT_PRIORITY = "Medium";
 export const EPIC_LABEL = { name: "epic", color: "8250DF", description: "Эпик: большая задача с подзадачами" };
 export const ISSUE_TYPES = ["Задача", "Баг", "Эпик"] as const;
 /**
- * Метки решений `type:name`: вид — папка дерева спеки, цвет — по виду. У архитектуры решение — правило
+ * Метки решений: имя — имя решения (папка дерева спеки или модуль модели), вид — цветом. Решения разных видов с
+ * одним именем — одна метка: цвет старшего вида (порядок здесь), в описании все. У архитектуры решение — правило
  * `tests/architecture/<name>` или модуль модели `tests/architecture/model.ts`.
  */
 export const DECISIONS = {
   capability: { dir: "capabilities", color: "0E8A16" },
   standard: { dir: "standards", color: "1D76DB" },
-  architecture: { dir: "architecture", color: "FBCA04" },
+  // не FBCA04: он у метки «вопросы», а вид метки решения виден только цветом
+  architecture: { dir: "architecture", color: "D93F0B" },
 } as const;
 export type DecisionKind = keyof typeof DECISIONS;
 const DECISION_KINDS = Object.keys(DECISIONS) as DecisionKind[];
@@ -147,7 +149,7 @@ interface Label {
   id: string;
   name: string;
   color: string;
-  description: string;
+  description: string | null;
 }
 /** Решения основной ветки по видам; модель не загрузилась — причина, модули в `architecture` тогда не входят. */
 export interface Decisions {
@@ -159,6 +161,8 @@ export interface State {
   project: Project | null;
   openIssues: { id: string; number: number }[];
   labels: Label[];
+  /** Задачи старых меток `вид:имя`, которые сливаются с уже занятым именем: по id метки. */
+  labelIssues: Record<string, { id: string; number: number }[]>;
   decisions: Decisions;
 }
 
@@ -264,6 +268,11 @@ export const Q = {
     standards: object(expression: "HEAD:tests/standards") { ... on Tree { entries { name type } } }
     architecture: object(expression: "HEAD:tests/architecture") { ... on Tree { entries { name type } } }
     model: object(expression: "HEAD:${MODEL_PATH}") { ... on Blob { text } }
+  }
+}`,
+  LabelIssues: `query LabelIssues($owner: String!, $name: String!, $label: String!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    label(name: $label) { issues(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id number } } }
   }
 }`,
   RepoLabels: `query RepoLabels($owner: String!, $name: String!, $after: String) {
@@ -416,7 +425,22 @@ export function loadState(io: Io, slug: string): State {
   const repo = loadRepo(io, slug);
   const openIssues = pages<{ id: string; number: number }>((after) => graphql(io, Q.RepoIssues, { owner, name, after }).repository.issues);
   const main = mainProject(repo);
-  return { repo, project: main ? loadProject(io, main.id) : null, openIssues, labels: loadLabels(io, slug), decisions: loadDecisions(io, slug) };
+  const labels = loadLabels(io, slug);
+  return { repo, project: main ? loadProject(io, main.id) : null, openIssues, labels, labelIssues: mergedIssues(io, slug, labels), decisions: loadDecisions(io, slug) };
+}
+
+/** Задачи старых меток, чьё имя уже занято (другой меткой или старой меткой раньше в списке), — их сольёт fix. */
+function mergedIssues(io: Io, slug: string, labels: Label[]): State["labelIssues"] {
+  const [owner, name] = slug.split("/") as [string, string];
+  const seen = new Set(labels.filter((l) => !legacyDecision(l.name)).map((l) => l.name));
+  const out: State["labelIssues"] = {};
+  for (const l of labels) {
+    const old = legacyDecision(l.name);
+    if (!old) continue;
+    if (seen.has(old.name)) out[l.id] = pages<{ id: string; number: number }>((after) => graphql(io, Q.LabelIssues, { owner, name, label: l.name, after }).repository.label.issues);
+    seen.add(old.name);
+  }
+  return out;
 }
 
 function loadLabels(io: Io, slug: string): Label[] {
@@ -465,15 +489,37 @@ export function loadDecisions(io: Io, slug: string): Decisions {
   return { names, modelError };
 }
 
-/** `capability:billing` → вид и имя решения; другая метка — null. */
-export function decisionOf(label: string): { kind: DecisionKind; name: string } | null {
+/** `capability:billing` → вид и имя решения; другое — null. Метка старого вида или вид нового решения в `--labels`. */
+export function legacyDecision(label: string): { kind: DecisionKind; name: string } | null {
   const i = label.indexOf(":");
   const kind = label.slice(0, i) as DecisionKind;
   return i > 0 && DECISION_KINDS.includes(kind) && label.length > i + 1 ? { kind, name: label.slice(i + 1) } : null;
 }
 
+/** Признак метки решения — описание: цвет у обычной метки может совпасть, имя — тоже. */
+const DECISION_MARK = "Решение: ";
 const decisionPath = (kind: DecisionKind, name: string) => (kind === "architecture" ? `tests/architecture — правило или модуль ${name}` : `tests/${DECISIONS[kind].dir}/${name}`);
-const decisionLabel = (kind: DecisionKind, name: string) => ({ name: `${kind}:${name}`, color: DECISIONS[kind].color, description: `Решение: ${decisionPath(kind, name)}` });
+
+/** Метка решения: цвет старшего вида, в описании пути всех видов; длиннее 100 символов GitHub не примет — тогда виды. */
+export function decisionLabel(name: string, kinds: DecisionKind[]): { name: string; color: string; description: string } {
+  const ks = DECISION_KINDS.filter((k) => kinds.includes(k));
+  const full = DECISION_MARK + ks.map((k) => decisionPath(k, name)).join("; ");
+  return { name, color: DECISIONS[ks[0]!].color, description: full.length <= 100 ? full : DECISION_MARK + ks.join(", ") };
+}
+
+/** Виды метки решения — по описанию; обычная метка — null. */
+export function labelKinds(description: string | null | undefined): DecisionKind[] | null {
+  if (!description?.startsWith(DECISION_MARK)) return null;
+  const parts = description.slice(DECISION_MARK.length).split(/; |, /);
+  return DECISION_KINDS.filter((k) => parts.some((p) => p === k || p.startsWith(`tests/${DECISIONS[k].dir}`)));
+}
+
+/** Решения основной ветки по имени: имя → его виды (старший первым). */
+function decisionsByName(d: Decisions): Map<string, DecisionKind[]> {
+  const out = new Map<string, DecisionKind[]>();
+  for (const k of DECISION_KINDS) for (const n of d.names[k]) out.set(n, [...(out.get(n) ?? []), k]);
+  return out;
+}
 
 function loadProject(io: Io, id: string, withItems = true): Project {
   const p = graphql(io, Q.ProjectState, { id }).node;
@@ -675,33 +721,75 @@ export function analyze(s: State): Check[] {
   const noStatus = issues.filter((it) => it.issue!.state === "OPEN" && !it.status);
   if (noStatus.length) open(`без ${STATUS}: ${nums(noStatus.map((it) => it.issue!))}`, ...(statusReady ? [api(`${STATUS} ${q(BACKLOG)}: ${nums(noStatus.map((it) => it.issue!))}`, ...noStatus.map((it) => setStatus(it, BACKLOG)))] : []));
 
-  // Метки решений: по дереву спеки и модели основной ветки. Удалить или переименовать метку — только с --confirm:
-  // она стоит на задачах. Одна лишняя и одна недостающая одного вида — переименованная папка, а не два решения.
-  const labels = add("labels", "Метки решений `type:name` — по дереву спеки и модели в основной ветке, цвет — по виду");
+  // Метки решений: по дереву спеки и модели основной ветки. Удалить, переименовать по догадке, слить, сделать меткой
+  // решения обычную — только с --confirm: метка стоит на задачах. Одна лишняя и одна недостающая одного вида —
+  // переименованная папка, а не два решения. Старый вид `вид:имя` → имя — сам: задачи сохраняют метку, догадки нет.
+  const labels = add("labels", "Метки решений — имя решения, вид — цветом; по дереву спеки и модели в основной ветке");
   const d = s.decisions;
   if (d.modelError) labels(`модель ${MODEL_PATH} не загружается — метки модулей не сверяются: ${d.modelError}`);
-  const byName = new Map(s.labels.map((l) => [l.name, l]));
+  const want = decisionsByName(d);
+  // модель не прочитана — неизвестно, какие модули есть: метки архитектуры не удаляем и не переописываем
+  const unsure = (kinds: DecisionKind[]) => !!d.modelError && kinds.includes("architecture");
+  const taken = new Map(s.labels.filter((l) => !legacyDecision(l.name)).map((l) => [l.name, l]));
+  const orphans: { label: Label; kinds: DecisionKind[] }[] = [];
+  for (const l of s.labels) {
+    const old = legacyDecision(l.name);
+    if (!old) continue;
+    const kinds = want.get(old.name);
+    if (!kinds) {
+      orphans.push({ label: l, kinds: [old.kind] });
+      continue;
+    }
+    const to = decisionLabel(old.name, kinds);
+    const into = taken.get(old.name);
+    if (!into) {
+      taken.set(old.name, { ...l, ...to });
+      labels(`метка ${q(l.name)} старого вида \`вид:имя\``, api(`переименовать метку ${q(l.name)} → ${q(old.name)} (задачи сохранят её)`, { op: "UpdateLabel", input: { id: l.id, ...to } }));
+      continue;
+    }
+    const issues = s.labelIssues[l.id] ?? [];
+    labels(`метка ${q(l.name)} старого вида, метка ${q(old.name)} уже есть`, {
+      kind: "confirm",
+      text: `слить метку ${q(l.name)} в ${q(old.name)}: ${issues.length ? `${nums(issues)} получат ${q(old.name)}, ` : ""}старая удаляется`,
+      mutations: [...issues.map((i) => ({ op: "AddLabels", input: { labelableId: i.id, labelIds: [into.id] } })), { op: "DeleteLabel", input: { id: l.id } }],
+    });
+  }
+  for (const l of s.labels) {
+    if (legacyDecision(l.name)) continue;
+    const kinds = labelKinds(l.description);
+    const w = want.get(l.name);
+    if (!w) {
+      if (kinds) orphans.push({ label: l, kinds });
+      continue;
+    }
+    const to = decisionLabel(l.name, w);
+    if (!kinds) {
+      labels(`метка ${q(l.name)} — не метка решения, а решение ${l.name} есть в основной ветке`, { kind: "confirm", text: `сделать ${q(l.name)} меткой решения: цвет ${to.color}, описание ${q(to.description)}`, mutations: [{ op: "UpdateLabel", input: { id: l.id, color: to.color, description: to.description } }] });
+      continue;
+    }
+    const recolor = l.color.toLowerCase() !== to.color.toLowerCase();
+    if (!recolor && (l.description === to.description || unsure(kinds))) continue;
+    const text = recolor ? `метка ${q(l.name)} цвета ${l.color}, а не ${to.color}` : `метка ${q(l.name)}: в описании не те виды решения`;
+    labels(text, api(`${recolor ? "перекрасить" : "переписать описание"} метки ${q(l.name)}: ${to.color}, ${q(to.description)}`, { op: "UpdateLabel", input: { id: l.id, color: to.color, description: to.description } }));
+  }
+  const unlabeled = [...want.keys()].filter((n) => !taken.has(n));
+  const live = orphans.filter((o) => !unsure(o.kinds));
+  const paired = new Set<string>();
   for (const kind of DECISION_KINDS) {
-    const want = new Set(d.names[kind]);
-    const have = s.labels.filter((l) => decisionOf(l.name)?.kind === kind);
-    // модель не прочитана — неизвестно, какие модули есть: метки архитектуры не удаляем
-    const orphans = kind === "architecture" && d.modelError ? [] : have.filter((l) => !want.has(decisionOf(l.name)!.name));
-    const missing = d.names[kind].filter((n) => !byName.has(`${kind}:${n}`));
-    if (orphans.length === 1 && missing.length === 1) {
-      const o = orphans[0]!;
-      const to = decisionLabel(kind, missing[0]!);
-      labels(`метка ${q(o.name)} без решения, решение ${to.name} без метки`, { kind: "confirm", text: `переименовать метку ${q(o.name)} → ${q(to.name)} (задачи сохранят её)`, mutations: [{ op: "UpdateLabel", input: { id: o.id, ...to } }] });
-    } else {
-      for (const o of orphans) labels(`метка ${q(o.name)} без решения в основной ветке`, { kind: "confirm", text: `удалить метку ${q(o.name)}`, mutations: [{ op: "DeleteLabel", input: { id: o.id } }] });
-      if (missing.length) {
-        const fresh = missing.map((n) => decisionLabel(kind, n));
-        labels(`решения без метки: ${fresh.map((x) => x.name).join(", ")}`, api(`создать метки ${fresh.map((x) => q(x.name)).join(", ")}`, ...fresh.map((x) => ({ op: "CreateLabel", input: { repositoryId: s.repo.id, ...x } }))));
-      }
-    }
-    const color = DECISIONS[kind].color;
-    for (const l of have.filter((x) => want.has(decisionOf(x.name)!.name) && x.color.toLowerCase() !== color.toLowerCase())) {
-      labels(`метка ${q(l.name)} цвета ${l.color}, а не ${color}`, api(`перекрасить метку ${q(l.name)} в ${color}`, { op: "UpdateLabel", input: { id: l.id, color } }));
-    }
+    const os = live.filter((o) => o.kinds.includes(kind) && !paired.has(o.label.id));
+    const ms = unlabeled.filter((n) => want.get(n)!.includes(kind) && !paired.has(n));
+    if (os.length !== 1 || ms.length !== 1) continue;
+    const o = os[0]!.label;
+    const to = decisionLabel(ms[0]!, want.get(ms[0]!)!);
+    paired.add(o.id).add(to.name);
+    labels(`метка ${q(o.name)} без решения, решение ${to.name} без метки`, { kind: "confirm", text: `переименовать метку ${q(o.name)} → ${q(to.name)} (задачи сохранят её)`, mutations: [{ op: "UpdateLabel", input: { id: o.id, ...to } }] });
+  }
+  for (const { label: o } of live.filter((x) => !paired.has(x.label.id))) {
+    labels(`метка ${q(o.name)} без решения в основной ветке`, { kind: "confirm", text: `удалить метку ${q(o.name)}`, mutations: [{ op: "DeleteLabel", input: { id: o.id } }] });
+  }
+  const fresh = unlabeled.filter((n) => !paired.has(n)).map((n) => decisionLabel(n, want.get(n)!));
+  if (fresh.length) {
+    labels(`решения без метки: ${fresh.map((x) => x.name).join(", ")}`, api(`создать метки ${fresh.map((x) => q(x.name)).join(", ")}`, ...fresh.map((x) => ({ op: "CreateLabel", input: { repositoryId: s.repo.id, ...x } }))));
   }
 
   return checks;
@@ -914,7 +1002,7 @@ export interface NewTask {
   milestone?: string;
   blockedBy: number[];
   priority?: string;
-  /** Метки: решения `type:name` (нет — создаётся с цветом вида) и существующие обычные. */
+  /** Метки: решение по имени или новое решение `вид:имя` (нет метки — создаётся с цветом вида), обычные — существующие. */
   labels?: string[];
 }
 
@@ -954,12 +1042,21 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   if (dup) throw new GhError(`открытая задача с таким заголовком уже есть: #${dup.number}`);
   const wanted = [...new Set(o.labels ?? [])];
   const repoLabels = wanted.length ? loadLabels(io, slug) : [];
-  for (const l of wanted) {
-    if (!decisionOf(l) && !repoLabels.some((x) => x.name === l)) {
-      throw new GhError(`метки ${q(l)} в репозитории нет; новая создаётся только для решения: ${DECISION_KINDS.map((k) => `${k}:<name>`).join(", ")}`);
+  const has = (n: string) => repoLabels.find((x) => x.name === n);
+  // решение по имени — из основной ветки; `вид:имя` — и новое, которого там ещё нет
+  const decisions = wanted.some((l) => legacyDecision(l) || !has(l)) ? loadDecisions(io, slug) : null;
+  const inMain = decisions ? decisionsByName(decisions) : new Map<string, DecisionKind[]>();
+  const plan = wanted.map((l) => {
+    const dec = legacyDecision(l);
+    const name = dec?.name ?? l;
+    const label = has(name);
+    const main = inMain.get(name) ?? [];
+    const kinds = dec && !main.includes(dec.kind) ? [...main, dec.kind] : main;
+    if (!label && !kinds.length) {
+      throw new GhError(`метки ${q(l)} в репозитории нет, решения ${l} в основной ветке тоже; новое решение — вид:имя (${DECISION_KINDS.map((k) => `${k}:${l}`).join(", ")})`);
     }
-  }
-  const decisions = wanted.some((l) => decisionOf(l)) ? loadDecisions(io, slug) : null;
+    return { name, label, kinds, decision: dec !== null || (label ? labelKinds(label.description) !== null : true), fresh: dec && !main.includes(dec.kind) ? `${name} — новое решение: ${decisionPath(dec.kind, name)} в основной ветке ещё нет` : null };
+  });
 
   const done: string[] = [];
   const input: Record<string, unknown> = { repositoryId: ctx.repo.id, title, body: o.body, projectV2Ids: [ctx.project.id] };
@@ -976,24 +1073,19 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
     input.labelIds = [labelId];
     done.push(`метка ${q(EPIC_LABEL.name)} — тип в личном аккаунте`);
   }
-  if (wanted.length) {
+  if (plan.length) {
     const ids: string[] = [];
-    const fresh: string[] = [];
-    for (const l of wanted) {
-      let id = repoLabels.find((x) => x.name === l)?.id;
-      const dec = decisionOf(l);
-      if (!id && dec) {
-        id = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...decisionLabel(dec.kind, dec.name) } }).createLabel.label.id as string;
-        done.push(`создана метка ${q(l)}`);
+    for (const x of plan) {
+      let id = x.label?.id;
+      if (!id) {
+        id = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...decisionLabel(x.name, x.kinds) } }).createLabel.label.id as string;
+        done.push(`создана метка ${q(x.name)}`);
       }
-      ids.push(id!);
-      // решение появится в PR этой задачи — метка говорит об этом, а не падает
-      if (dec && decisions && !decisions.names[dec.kind].includes(dec.name)) {
-        fresh.push(`${l} — новое решение: ${decisionPath(dec.kind, dec.name)} в основной ветке ещё нет`);
-      }
+      ids.push(id);
     }
     input.labelIds = [...((input.labelIds as string[] | undefined) ?? []), ...ids];
-    done.push(`метки: ${wanted.join(", ")}`, ...fresh);
+    // решение появится в PR этой задачи — метка говорит об этом, а не падает
+    done.push(`метки: ${plan.map((x) => x.name).join(", ")}`, ...plan.flatMap((x) => (x.fresh ? [x.fresh] : [])));
   }
   if (milestone) input.milestoneId = milestone.id;
   if (epic) input.parentIssueId = epic.id;
@@ -1017,9 +1109,10 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   }
   if (milestone) done.push(`milestone ${q(milestone.title)}`);
   // эпик копит метки решений подзадач
-  if (epic && wanted.some((l) => decisionOf(l))) {
+  const decided = plan.filter((x) => x.decision).map((x) => x.name);
+  if (epic && decided.length) {
     const all = loadLabels(io, slug);
-    const line = addLabels(io, epic, wanted.filter((l) => decisionOf(l)), all);
+    const line = addLabels(io, epic, decided, all);
     if (line) done.push(`эпик #${epic.number}: ${line}`);
   }
   // эпик — не ниже самой срочной открытой подзадачи
@@ -1094,24 +1187,26 @@ function addLabels(io: Io, issue: Pick<Issue, "id" | "labels">, names: string[],
 /**
  * Решения, которые трогает дифф: папка дерева спеки — само решение, файл кода — модуль модели с самым длинным
  * подходящим каталогом (вложенный модуль точнее объемлющего). `tests/lib` и файлы вне модулей — не решения.
+ * Имя решения → его виды в диффе, имена по алфавиту.
  */
-export function decisionsOfFiles(files: string[], modules: Record<string, string[]>): string[] {
-  const out = new Set<string>();
+export function decisionsOfFiles(files: string[], modules: Record<string, string[]>): Map<string, DecisionKind[]> {
+  const out = new Map<string, Set<DecisionKind>>();
+  const add = (name: string, kind: DecisionKind) => out.set(name, (out.get(name) ?? new Set()).add(kind));
   const byDir = Object.fromEntries(DECISION_KINDS.map((k) => [DECISIONS[k].dir, k])) as Record<string, DecisionKind>;
   for (const f of files) {
     const parts = f.split("/");
     if (parts[0] === "tests") {
       const kind = byDir[parts[1] ?? ""];
-      if (kind && parts.length > 3) out.add(`${kind}:${parts[2]}`);
+      if (kind && parts.length > 3) add(parts[2]!, kind);
       continue;
     }
     let best: [string, number] | null = null;
     for (const [m, dirs] of Object.entries(modules)) {
       for (const d of dirs) if ((f === d || f.startsWith(d + "/")) && (!best || d.length > best[1])) best = [m, d.length];
     }
-    if (best) out.add(`architecture:${best[0]}`);
+    if (best) add(best[0], "architecture");
   }
-  return [...out].sort();
+  return new Map([...out.keys()].sort().map((n) => [n, DECISION_KINDS.filter((k) => out.get(n)!.has(k))]));
 }
 
 export function cmdPrLabels(io: Io, slug: string, number: number): number {
@@ -1133,7 +1228,8 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     if (typeof m === "string") io.err(`предупреждение: модель ${MODEL_PATH} головы PR не загружается — модули не учтены: ${m}`);
     else modules = m;
   }
-  const want = decisionsOfFiles(files, modules);
+  const decided = decisionsOfFiles(files, modules);
+  const want = [...decided.keys()];
   io.out(`PR #${number} → ${closes.map((n) => `#${n}`).join(", ")}: ${want.join(", ") || "решений в диффе нет"}`);
   if (!want.length) return 0;
 
@@ -1141,18 +1237,19 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
   const fresh = want.filter((l) => !all.some((x) => x.name === l));
   const repoId = fresh.length ? loadRepo(io, slug).id : "";
   for (const l of fresh) {
-    const d = decisionOf(l)!;
-    const created = mutate(io, { op: "CreateLabel", input: { repositoryId: repoId, ...decisionLabel(d.kind, d.name) } }).createLabel.label;
-    all.push({ id: created.id, name: l, color: DECISIONS[d.kind].color, description: "" });
+    const label = decisionLabel(l, decided.get(l)!);
+    const created = mutate(io, { op: "CreateLabel", input: { repositoryId: repoId, ...label } }).createLabel.label;
+    all.push({ id: created.id, ...label });
     io.out(`+ создана метка ${q(l)}`);
   }
+  const isDecision = (n: string) => legacyDecision(n) !== null || labelKinds(all.find((x) => x.name === n)?.description) !== null;
   const epics = new Map<number, Issue>();
   for (const n of closes) {
     const issue = loadIssue(io, slug, n);
     const added = addLabels(io, issue, want, all);
     if (added) io.out(`+ #${n}: ${added}`);
     // прежние метки не снимаем: задача могла трогать решение и другим PR
-    for (const l of issue.labels.filter((x) => decisionOf(x) && !want.includes(x))) io.out(`= #${n}: ${l} — решения нет в диффе PR, метка не снята`);
+    for (const l of issue.labels.filter((x) => isDecision(x) && !want.includes(x))) io.out(`= #${n}: ${l} — решения нет в диффе PR, метка не снята`);
     if (issue.parent && !epics.has(issue.parent.number)) epics.set(issue.parent.number, loadIssue(io, slug, issue.parent.number));
   }
   for (const epic of epics.values()) {
@@ -1172,7 +1269,7 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github project fix   [--repo owner/repo] [--confirm] [--template owner/N | none]
   github task new      --title "…" [--body "…" | --body-file F] [--type Задача|Баг|Эпик] [--epic N]
                        [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
-                       [--labels capability:<name>,standard:<name>,architecture:<name>] [--repo owner/repo]
+                       [--labels <решение>,<вид>:<новое решение>,<метка>] [--repo owner/repo]
   github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
