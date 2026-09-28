@@ -298,6 +298,24 @@ describe("Хеш в листинге git — якорь, только если �
     ]);
     expect(s.commits).toEqual([[ts("10:06"), "e4f5a6b"], [ts("10:20"), "e4f5a6b"], [ts("10:25"), "c0ffee1"], [ts("10:26"), "b0b0b0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7"]]);
   });
+
+  // так было (#142): ключевые слова цикла делали всю проверку соседей «скриптом», и хеш wt-12 оставался якорем
+  it("проверка соседей одной командой с циклом for по задачам — листинг: хеш соседнего worktree не якорь", () => {
+    const s = parse([
+      ...bash("10:20", `cd /repo && git fetch -q --prune origin; gh pr list --state open --json number,title,headRefName --jq '.[] | "pr \\(.number) \\(.headRefName)"'; git branch -a --list "*/1[0-9]-*" | sed 's/^/br /'; git worktree list | sed 's/^/wt /'; for n in 11 12 13; do gh issue view $n --json number,labels,body --jq '.number'; done`, "wt /wt-12         a1b2c3d [fix/12-signup]"),
+      ...bash("10:21", "git branch --format='%(refname:short)' | while read b; do if git merge-base --is-ancestor $b origin/main; then echo \"влита $b\"; else git log -1 --oneline $b; fi; done", "a1b2c3d fix: регистрация"),
+    ]);
+    expect(s.commits).toEqual([]);
+  });
+
+  // сторож от перекоррекции: цикл и условие не делают листингом команду внутри них
+  it("цикл или условие с git commit внутри — не листинг: хеш коммита — якорь", () => {
+    const s = parse([
+      ...bash("10:06", `for f in a b; do git add $f && git commit -m "fix: $f"; done`, `[${B} e4f5a6b] fix: a`),
+      ...bash("10:08", "if git diff --quiet; then git log -1 --oneline; else git commit -am 'fix: ревью'; fi", `[${B} c0ffee1] fix: ревью`),
+    ]);
+    expect(s.commits).toEqual([[ts("10:06"), "e4f5a6b"], [ts("10:08"), "c0ffee1"]]);
+  });
 });
 
 /**

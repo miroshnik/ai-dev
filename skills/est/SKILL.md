@@ -232,7 +232,8 @@ await cloudExport("session_…", true)
   `gh pr view <N> --json headRefName,mergeCommit,commits` отдельным вызовом.
   Хеш в выводе листинга (`git worktree list`, `git branch`, `git log`,
   `git fetch`, чтение через `gh`, кроме `gh pr view`; команда только из них и
-  утилит вроде `head`, `grep`) привязывает, лишь если этот коммит есть и в
+  утилит вроде `head`, `grep`, в том числе в цикле `for`, `while` и условии
+  `if`) привязывает, лишь если этот коммит есть и в
   выводе самой сессии: `git log` соседнего worktree не отдаёт время сессии
   чужой задаче.
 
