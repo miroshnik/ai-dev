@@ -10,7 +10,7 @@ import {
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
-import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -848,10 +848,10 @@ describe("Неверный вызов — справка или ошибка д�
   const run = (...args: string[]) => spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "" } });
 
   it("без команды — справка и код 2, неизвестная команда — ошибка", () => {
-    expect(run().status).toBe(2);
+    expect(exitOf(run())).toBe(2);
     expect(run().stdout).toContain("est history");
     const r = run("frobnicate");
-    expect(r.status).toBe(1);
+    expect(exitOf(r)).toBe(1);
     expect(r.stderr).toContain("ошибка: неизвестная команда «frobnicate»");
   });
 
@@ -860,6 +860,6 @@ describe("Неверный вызов — справка или ошибка д�
     expect(run("fact", "1", "--sweep", "--repo", "o/r").stderr).toContain("номер issue и --sweep несовместимы");
     expect(run("estimate", "1", "--repo", "o/r").stderr).toContain("--type обязателен");
     expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("укажите номер issue");
-    expect(run("fact", "--repo", "o/r", "--bogus").status).toBe(2);
+    expect(exitOf(run("fact", "--repo", "o/r", "--bogus"))).toBe(2);
   });
 });
