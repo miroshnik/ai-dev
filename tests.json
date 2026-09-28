@@ -1180,6 +1180,55 @@
   "name": "неизвестная команда — код 2 и справка"
  },
  {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "PR, влитый merge-коммитом, — строкой с заголовком PR и номером, без коммитов его ветки"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "origin/main уже в релизе или с прошлого релиза флоу не менялся — отказ, код 1"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "release — GitHub Release командой gh: тег, коммит origin/main, заголовок и список изменений"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "в списке — изменения флоу и установщика с прошлого релиза, остальные коммиты — нет; --dry-run ничего не создаёт"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "не из клона ai-dev — отказ, код 2"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "первый релиз — без списка изменений, с пометкой «Первый релиз»"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
+  ],
+  "name": "релиз того же дня уже есть — патч: .1, затем .2"
+ },
+ {
   "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
   "describes": [
    "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
@@ -2409,6 +2458,20 @@
   "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
+  "name": "в main после последнего релиза изменения флоу — строка «не в релизе» с тегом, числом и командой релиза; код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "всё в релизе — строки «не в релизе» нет; релизов ещё нет — так и сказано"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
   "name": "клон на origin/main — актуально, код 0"
  },
  {
@@ -2480,6 +2543,69 @@
    "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
   ],
   "name": "старая установка без SHA и без хука SessionStart — отстаёт; update -g ставит хук и пишет SHA"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "install ставит последний релиз, а не голову main: его файлы, тег и SHA в .agents/ai-dev.json"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "main ушёл вперёд, нового релиза нет — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "update ставит последний релиз, а не голову main; подсказка коммита — с тегом; после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "вышел релиз новее установленного — отстаёт, код 1: стоящий и свежий тег; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "машина копией (-g) — тоже по релизам: main ушёл вперёд — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "последний релиз не узнать (нет сети) — check: проверка недоступна, код 2; install и update — отказ, код 2; флоу не стоит — релиз не ищет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "последний релиз — по дате, затем по номеру патча; аннотированный тег — его коммит; чужие теги не в счёт"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "релизов ещё нет — ставит голову main, как раньше, без тега"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "хук: последний релиз не узнать — код 0, в выводе — проверка недоступна"
  },
  {
   "path": "tests/standards/cloud-session/cloud-session.test.ts",
@@ -2607,6 +2733,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/install/install.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/release/release.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
