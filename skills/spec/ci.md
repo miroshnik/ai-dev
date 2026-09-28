@@ -4,7 +4,8 @@
 — `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
 разделу правил «CI: параллельные задачи». Шарды пишут blob-отчёты, job `spec`
 склеивает их средствами раннеров и собирает `docs/spec` с `--strict`; на
-`main` отдаёт его артефактом job `spec-publish` — у неё одной токен на запись.
+`main` отдаёт его артефактом job `spec-publish` — у неё одной токен на запись
+(без CI на `main` — публикация на мерж PR, раздел в конце).
 `spec-diff` — своя лёгкая job после `spec`: git-история, Node и склеенные
 отчёты (тесты харнесса видны только в отчёте; база для них — `tests.json`
 ветки `spec`).
@@ -120,3 +121,60 @@ jobs:
 `spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами,
 `spec:doc`, артефакт на `main`; `spec-publish` — так же отдельно. ai-dev сам на
 Bun — его `.github/workflows/ci.yml` образцом для проекта на Node не служит.
+
+## Без CI на `main` — публикация на мерж PR
+
+Проект, где весь CI — на PR, а тесты на `main` не гоняются, публикует из
+прогона самого PR: job `spec` отдаёт `docs/spec` артефактом и на PR, лёгкий
+workflow на мерж скачивает его и зовёт `spec-publish`. Есть CI на `main` —
+вариант выше: он собирает то, что в `main` действительно оказалось. Нет —
+этот, возвращать CI на `main` ради документации не нужно.
+
+В workflow выше: `on` — только `pull_request`, job `spec-publish` нет, а в
+job `spec` артефакт `docs-spec` — на каждом прогоне и живёт дольше, чем PR
+ждёт мержа:
+
+```yaml
+      - uses: actions/upload-artifact@v7
+        with: { name: docs-spec, path: docs/spec/, retention-days: 30 }
+```
+
+Публикация — свой workflow, `.github/workflows/spec-publish.yml`:
+
+```yaml
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  spec-publish:
+    if: github.event.pull_request.merged == true # закрытый без мержа PR не публикует
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read } # пуш ветки spec, артефакт прогона PR
+    concurrency: { group: spec-publish, cancel-in-progress: false }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: '${{ github.event.pull_request.merge_commit_sha }}' }
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, package-manager-cache: false }
+      - name: docs/spec из прогона CI головы PR
+        run: |
+          run=$(gh run list --workflow ci.yml --commit "$HEAD_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          [ -n "$run" ] || { echo "нет успешного прогона ci.yml на $HEAD_SHA — публиковать нечего" >&2; exit 1; }
+          gh run download "$run" --name docs-spec --dir docs/spec
+      - run: node .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
+```
+
+- `--source` — SHA мержа, а не головы PR: после squash и rebase голова в
+  историю `main` не попадает, а `spec-diff` берёт базу тестов харнесса из
+  публикации, чей `Source:` — предок merge-base.
+- `spec` точна, когда голова PR совпадает с `main` после мержа — правило
+  канона «перед push — rebase на свежий `origin/main`». Смёржен отставший
+  PR — в `spec` нет чужих изменений до следующего мержа.
+- Прогона нет или артефакт истёк — job падает с причиной, `spec` догонит
+  следующий мерж.
