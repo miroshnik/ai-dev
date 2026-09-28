@@ -11,8 +11,10 @@
   это «ещё не зарегистрированы», не «упали» и не «прошли». Коды выхода
   0 / 1 (упавшие) / 8 (`pending`) выставляются только **без** `--json`; с
   `--json` exit 0 и при `pending`, и при `fail`.
-- По полному SHA коммита (деплой, внешний чек, прогон на `main`):
-  `gh api repos/{owner}/{repo}/commits/<sha>/status` (поле `state` и список
-  `statuses` по контекстам) или `gh run list --commit <sha>`; `gh pr checks`
-  SHA не принимает.
+- По полному SHA коммита (деплой, внешний чек, прогон на `main`) чеки лежат
+  в двух местах: статусы хостингов и внешних сервисов —
+  `gh api repos/{owner}/{repo}/commits/<sha>/status` (список `statuses` по
+  контекстам), GitHub Actions — `commits/<sha>/check-runs` (`status`,
+  `conclusion`). Ждать оба: на коммите, где весь CI — Actions, статусов нет
+  вовсе. `gh pr checks` SHA не принимает.
 - Без branch protection `gh pr merge --auto` мержит, не дожидаясь CI.
