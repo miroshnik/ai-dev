@@ -449,7 +449,7 @@
   "describes": [
    "check показывает каждое расхождение с каноном отдельным пунктом"
   ],
-  "name": "к репозиторию не привязан проект — единственный пункт ❌, остальное без проекта не проверить"
+  "name": "к репозиторию не привязан проект — из пунктов проекта только этот ❌, остальные без проекта не проверить; правило основной ветки сверяется"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -569,6 +569,55 @@
    "В организации сверяются ещё поле Priority и типы issue"
   ],
   "name": "типы Task, Bug, Feature — переименовать, создать Эпик, выключить лишний; всё — только с --confirm"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "strict выключен или без обязательных чеков — ❌ с причиной; чужое правило fix не правит, а ставит свой ruleset"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "обязательный чек не пришёл на открытый PR с завершёнными чеками — ❌, PR ждал бы его вечно; fix убирает его и добавляет новый стабильный"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, strict, обязательные — зелёные на всех последних влитых PR, обход — admin"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "приватный репозиторий на Free — ➖ с причиной от GitHub, а не ❌; fix ничего не ставит"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "свой ruleset выключен, без strict или без обхода admin — ❌ по каждой причине; fix возвращает всё одной правкой"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего, strict без чеков не действует"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+  ],
+  "name": "чужое правило со strict и обязательными чеками — ✅, свой ruleset не дублирует"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
