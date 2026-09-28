@@ -120,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 14; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link
+const SESSION_CACHE_V = 16; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link, 16 = хеши листинга git и gh — только свои
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -937,6 +937,7 @@ interface Acc {
   ev: Any[][];
   prlinks: [number, number, string?][];
   commits: [number, string][];
+  listed: [number, string][]; // хеши из вывода листинга git — в commits только свои (finishCommits)
   first_refs: number[] | null;
   first_urls: string[];
   usage: Any[][];
@@ -946,7 +947,7 @@ interface Acc {
   titles: [number, string][];
 }
 
-const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [] });
+const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [] });
 
 function* jsonlRecords(file: string): Generator<Any> {
   const text = readFileSync(file, "utf8");
@@ -962,15 +963,61 @@ function* jsonlRecords(file: string): Generator<Any> {
 }
 
 /** Хеши коммитов из вывода инструмента (не больше 60 на вывод, 5000 на сессию). */
-function collectHashes(acc: Acc, ts: number, txt: string): void {
+function collectHashes(into: [number, string][], ts: number, txt: string): void {
   const seen = new Set<string>();
   for (const m of txt.matchAll(HASH_RE)) {
     const h = m[0];
-    if (!seen.has(h) && seen.size < 60 && acc.commits.length < 5000) {
+    if (!seen.has(h) && seen.size < 60 && into.length < 5000) {
       seen.add(h);
-      acc.commits.push([ts, h]);
+      into.push([ts, h]);
     }
   }
+}
+
+// Листинг: git и gh, которые коммитов не делают, а перечисляют — в том числе чужие (соседние worktree, ветки, лог,
+// fetch, PR и issue через API). Канон велит смотреть на соседей до работы и после мержа, и свежий хеш чужого PR в таком
+// выводе рядом по времени с его коммитом — ложный якорь (#134). `gh pr view` — не листинг: SKILL.md советует напечатать
+// им коммиты своего PR перед `est fact`, это якорь.
+const LIST_GIT = new Set(["worktree", "branch", "log", "show", "status", "fetch", "switch", "checkout", "rev-parse", "rev-list", "reflog", "for-each-ref", "show-ref", "cherry", "describe", "diff", "ls-remote", "remote", "name-rev", "merge-base", "shortlog", "blame", "ls-files", "ls-tree", "cat-file"]);
+const LIST_GH = new Set(["issue", "run", "project", "label", "search", "pr list", "pr checks", "pr status", "pr diff", "repo view", "api"]);
+// оболочка вокруг листинга: коммитов не делает; всё прочее (скрипт, bun, make…) может коммитить — не листинг
+const LIST_SHELL = new Set(["cd", "pwd", "echo", "printf", "true", "set", "export", "head", "tail", "grep", "rg", "sed", "awk", "cut", "tr", "sort", "uniq", "wc", "cat", "ls", "column", "jq", "date"]);
+
+/** Команда — только листинг git и gh (с оболочкой вокруг): хеши её вывода не якоря, если коммит не сделала сама сессия. */
+function gitListingOnly(cmd: string): boolean {
+  if (/\bmutation\b/.test(cmd)) return false; // GraphQL-мутация может создать коммит (createCommitOnBranch)
+  let quotedSub = false;
+  const bare = cmd.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, (q) => ((quotedSub ||= q[0] === '"' && /\$\(|`/.test(q)), "''"));
+  if (quotedSub) return false; // "$(…)" — команда внутри кавычек не видна разбору
+  let list = false;
+  const segs = bare.replace(/\d*[<>]+&?\s*[^\s;&|()]*/g, " ").replace(/\$\(|`/g, ";").split(/&&|\|\||[;|&\n()]/);
+  for (const seg of segs) {
+    const w = seg.trim().split(/\s+/).filter(Boolean);
+    while (w.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!)) w.shift(); // VAR=… перед командой
+    if (!w.length) continue;
+    if (w[0] === "git") {
+      let i = 1;
+      while (i < w.length && w[i]!.startsWith("-")) i += w[i] === "-C" || w[i] === "-c" ? 2 : 1;
+      if (!LIST_GIT.has(w[i] ?? "")) return false;
+      list = true;
+    } else if (w[0] === "gh") {
+      if (!LIST_GH.has(w[1] ?? "") && !LIST_GH.has(`${w[1]} ${w[2]}`)) return false;
+      if (w[1] === "api" && w.some((x) => /^(-X|--method)/.test(x))) return false; // PUT contents — коммит
+      list = true;
+    } else if (!LIST_SHELL.has(w[0]!)) return false;
+  }
+  return list;
+}
+
+/**
+ * Хеши листинга — в якоря, только если тот же коммит есть в выводах самой сессии (git commit, push, скрипт):
+ * свой коммит в `git log` продлевает окно, чужой в `git worktree list` не привязывает. Затем — по времени.
+ */
+function finishCommits(acc: Acc): void {
+  const own = new Map<string, string[]>();
+  for (const [, h] of acc.commits) own.set(h.slice(0, 7), [...(own.get(h.slice(0, 7)) ?? []), h]);
+  for (const c of acc.listed) if (hashMatches(c[1], own.get(c[1].slice(0, 7)) ?? [])) acc.commits.push(c);
+  acc.commits.sort(byTs);
 }
 
 /**
@@ -990,6 +1037,7 @@ function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
 /** То же по готовым записям: у облачной сессии они собираются из её событий (parseCloudFile). */
 function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void {
   const commitToolIds = new Set<string>();
+  const listingToolIds = new Set<string>();
   let hint = ""; // подсказка задачи для записей субагента: "N" или "owner/repo#N"
   let hintDone = !subagent;
   let pending: string[] = []; // переименования без времени: время — у следующей записи
@@ -1071,16 +1119,17 @@ function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void 
       if (t === "assistant" && b.type === "tool_use") {
         const cmd = b.input && typeof b.input === "object" ? b.input.command : null;
         if (typeof cmd === "string" && cmd.includes("git commit")) commitToolIds.add(b.id);
+        if (typeof cmd === "string" && gitListingOnly(cmd)) listingToolIds.add(b.id);
       } else if (t === "user" && b.type === "tool_result") {
         // Хеши берём из ЛЮБОГО tool_result, не только после `git commit`: коммит часто делает
         // скрипт (проверки + commit + push), и хеш всплывает в его выводе. Ложные якоря (старые
         // хеши из git log) отсекает ANCHOR_TOLERANCE — хеш должен появиться рядом по времени с
-        // authoredDate коммита.
+        // authoredDate коммита; свежие чужие из листинга git (соседние worktree) — finishCommits.
         let txt = textOfContent(b.content);
         const tur = r.toolUseResult;
         if (tur && typeof tur === "object") txt += "\n" + String(tur.stdout ?? "") + "\n" + String(tur.stderr ?? "");
         if (!commitToolIds.has(b.tool_use_id) && !txt.includes("git") && txt.length > 20000) continue; // огромный вывод без git — не тратим время
-        collectHashes(acc, ts, txt);
+        collectHashes(listingToolIds.has(b.tool_use_id) ? acc.listed : acc.commits, ts, txt);
       }
     }
   }
@@ -1116,7 +1165,7 @@ export function parseSessionFile(file: string): Session {
   }
   acc.ev.sort(byTs);
   acc.prlinks.sort(byTs);
-  acc.commits.sort(byTs);
+  finishCommits(acc);
   return {
     sid: path.basename(file).slice(0, -6),
     cwd: acc.cwd,
@@ -1139,6 +1188,21 @@ export function parseSessionFile(file: string): Session {
   };
 }
 
+/** Команда shell из аргументов вызова Codex: `{"cmd": "…"}` или `{"command": ["bash", "-lc", "…"]}`. */
+function codexCommand(args: unknown): string {
+  let a: Any;
+  try {
+    a = typeof args === "string" ? JSON.parse(args) : args;
+  } catch {
+    return "";
+  }
+  const c = a && typeof a === "object" ? (a.command ?? a.cmd) : null;
+  if (typeof c === "string") return c;
+  if (!Array.isArray(c)) return "";
+  const argv = c.map(String);
+  return /^(ba|z)?sh$/.test(argv[0] ?? "") && /^-l?c$/.test(argv[1] ?? "") ? argv.slice(2).join(" ") : argv.join(" ");
+}
+
 function codexText(out: unknown): string {
   if (typeof out === "string") return out;
   if (Array.isArray(out)) return out.map((b) => (b && typeof b === "object" ? String((b as Any).text || "") : "")).join(" ");
@@ -1158,6 +1222,7 @@ export function parseCodexFile(file: string): Session {
   let sid: string | null = null;
   let model: string | null = null;
   const commitCalls = new Set<string>();
+  const listingCalls = new Set<string>();
   for (const r of jsonlRecords(file)) {
     const t = r.type;
     const p: Any = r.payload && typeof r.payload === "object" ? r.payload : {};
@@ -1209,16 +1274,17 @@ export function parseCodexFile(file: string): Session {
     else if (pt === "custom_tool_call" || pt === "function_call") {
       const inp = pt === "custom_tool_call" ? p.input : p.arguments;
       if (typeof inp === "string" && inp.includes("git commit")) commitCalls.add(p.call_id);
+      if (pt === "function_call" && gitListingOnly(codexCommand(inp))) listingCalls.add(p.call_id);
       acc.ev.push([ts, "", 0, "", -1]);
     } else if (pt === "custom_tool_call_output" || pt === "function_call_output") {
       const txt = codexText(p.output);
       acc.ev.push([ts, "", 0, "", -1]);
       if (!commitCalls.has(p.call_id) && !txt.includes("git") && txt.length > 20000) continue;
-      collectHashes(acc, ts, txt);
+      collectHashes(listingCalls.has(p.call_id) ? acc.listed : acc.commits, ts, txt);
     }
   }
   acc.ev.sort(byTs);
-  acc.commits.sort(byTs);
+  finishCommits(acc);
   return {
     sid: sid || path.basename(file).slice(0, -6),
     cwd: acc.cwd,
@@ -1298,7 +1364,7 @@ export function parseCloudFile(file: string): Session {
   scanRecords(top, acc, false);
   for (const recs of subs.values()) scanRecords(recs, acc, true);
   acc.ev.sort(byTs);
-  acc.commits.sort(byTs);
+  finishCommits(acc);
   return {
     sid: data.session,
     cwd: acc.cwd,
