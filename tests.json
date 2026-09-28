@@ -393,7 +393,7 @@
   "describes": [
    "Транскрипт Codex — такой же источник факта, только без ветки"
   ],
-  "name": "cwd и id из session_meta, промпт из UserMessage, токены раз на response_id, хеши из выводов инструментов"
+  "name": "cwd и id из session_meta, промпт из UserMessage, токены раз на response_id, хеши из выводов инструментов, кроме чужих в листинге git"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -422,6 +422,20 @@
    "Факт — активные часы работы над задачей по её сессиям"
   ],
   "name": "сессия на чужой ветке не привязывается — покрытие none, факт недоступен"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Хеш в листинге git — якорь, только если коммит сделала сама сессия"
+  ],
+  "name": "листинг git и чтение через gh дают якорем только коммит из вывода самой сессии; скрипт рядом и gh pr view — как git commit"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Хеш в листинге git — якорь, только если коммит сделала сама сессия"
+  ],
+  "name": "сессия «#10 …», в выводе которой только листинг с хешем PR задачи #12, отдаёт время #10, а не #12"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
