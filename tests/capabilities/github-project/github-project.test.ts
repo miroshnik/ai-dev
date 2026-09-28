@@ -318,80 +318,161 @@ const MODEL = `import type { Model } from "../../.agents/skills/spec/scripts/arc
 export default { modules: { domain: { path: "src/domain", purpose: "правила" } } } satisfies Model;
 `;
 const labelNames = (f: FakeGitHub) => f.labels.map((l) => l.name).sort();
+const CAP = "0E8A16";
+const STD = "1D76DB";
+const ARCH = "D93F0B";
+const issueLabels = (f: FakeGitHub, n: number) => f.issue(n).labels.nodes.map((l: { name: string }) => l.name);
 
 /**
- * Метка `type:name` связывает задачу с решением: capability, стандартом, правилом или модулем архитектуры. Набор
- * меток сверяется с деревом спеки и моделью основной ветки: метка без решения путает историю задач, решение без
- * метки — задачи по нему не найти.
+ * Метка решения связывает задачу с решением: capability, стандартом, правилом или модулем архитектуры. Имя метки —
+ * имя решения, вид виден по цвету. Набор меток сверяется с деревом спеки и моделью основной ветки: метка без
+ * решения путает историю задач, решение без метки — задачи по нему не найти.
  */
-describe("Метки решений `type:name` сверяются с деревом спеки и моделью в основной ветке", () => {
-  it("решение в main без метки — ❌, fix создаёт метку с цветом вида", () => {
+describe("Метки решений — имя решения без вида, вид — цветом; набор сверяется с деревом спеки и моделью в основной ветке", () => {
+  it("решение в main без метки — ❌, fix создаёт метку с именем решения и цветом вида", () => {
     const f = fake();
     Object.assign(f.tree, { capabilities: ["billing"], standards: ["audit"], architecture: ["boundaries"], model: MODEL });
     const r = check(f);
     expect(r.code).toBe(1);
     expect(marks(r.out).Метки).toBe("❌");
-    expect(r.out).toContain("· решения без метки: capability:billing");
+    expect(r.out).toContain("· решения без метки: billing, audit, boundaries, domain");
     const x = fix(f);
     expect(byOp(f, "CreateLabel")).toEqual([
-      { repositoryId: f.repo.id, name: "capability:billing", color: "0E8A16", description: "Решение: tests/capabilities/billing" },
-      { repositoryId: f.repo.id, name: "standard:audit", color: "1D76DB", description: "Решение: tests/standards/audit" },
-      { repositoryId: f.repo.id, name: "architecture:boundaries", color: "FBCA04", description: "Решение: tests/architecture — правило или модуль boundaries" },
-      { repositoryId: f.repo.id, name: "architecture:domain", color: "FBCA04", description: "Решение: tests/architecture — правило или модуль domain" },
+      { repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" },
+      { repositoryId: f.repo.id, name: "audit", color: STD, description: "Решение: tests/standards/audit" },
+      { repositoryId: f.repo.id, name: "boundaries", color: ARCH, description: "Решение: tests/architecture — правило или модуль boundaries" },
+      { repositoryId: f.repo.id, name: "domain", color: ARCH, description: "Решение: tests/architecture — правило или модуль domain" },
     ]);
     expect(marks(x.out).Метки).toBe("✅");
+  });
+
+  /** Совпавшие имена — обычно одна тема (модуль billing делает capability billing): по одной метке их и ищут. */
+  it("одно имя у решений разных видов — одна метка цвета старшего вида, в описании оба пути", () => {
+    const f = fake();
+    Object.assign(f.tree, { capabilities: ["domain"], model: MODEL });
+    fix(f);
+    expect(byOp(f, "CreateLabel")).toEqual([
+      { repositoryId: f.repo.id, name: "domain", color: CAP, description: "Решение: tests/capabilities/domain; tests/architecture — правило или модуль domain" },
+    ]);
+    expect(marks(check(f).out).Метки).toBe("✅");
+  });
+
+  it("описание длиннее 100 символов GitHub не примет — в нём только виды решения", () => {
+    const f = fake();
+    Object.assign(f.tree, { capabilities: ["domain"], standards: ["domain"], model: MODEL });
+    fix(f);
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "domain", color: CAP, description: "Решение: capability, standard, architecture" }]);
+    expect(marks(check(f).out).Метки).toBe("✅");
+  });
+
+  it("у метки решения появился второй вид — fix дописывает его в описание", () => {
+    const f = fake();
+    Object.assign(f.tree, { capabilities: ["domain"], model: MODEL });
+    const l = f.label("domain", ARCH, "Решение: tests/architecture — правило или модуль domain");
+    expect(check(f).out).toContain(`· метка «domain» цвета ${ARCH}, а не ${CAP}`);
+    fix(f);
+    expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: CAP, description: "Решение: tests/capabilities/domain; tests/architecture — правило или модуль domain" }]);
   });
 
   it("метка решения без папки или модуля в main — ❌, удаляется только с --confirm", () => {
     const f = fake();
     f.tree.capabilities = ["billing"];
-    f.label("capability:billing", "0E8A16");
-    f.label("capability:old", "0E8A16");
-    f.label("standard:gone", "1D76DB");
+    f.label("billing", CAP, "Решение: tests/capabilities/billing");
+    f.label("old", CAP, "Решение: tests/capabilities/old");
+    f.label("gone", STD, "Решение: tests/standards/gone");
     f.label("вопросы", "FBCA04");
-    expect(check(f).out).toContain("· метка «capability:old» без решения в основной ветке");
+    expect(check(f).out).toContain("· метка «old» без решения в основной ветке");
     const r = fix(f);
     expect(ops(f)).not.toContain("DeleteLabel");
-    expect(r.out).toContain("удалить метку «standard:gone»");
+    expect(r.out).toContain("удалить метку «gone»");
     const x = fix(f, { confirm: true });
-    expect(labelNames(f)).toEqual(["capability:billing", "вопросы"]);
+    expect(labelNames(f)).toEqual(["billing", "вопросы"]);
     expect(marks(x.out).Метки).toBe("✅");
   });
 
   it("папку решения переименовали — метка переименовывается с --confirm, задачи сохраняют её", () => {
     const f = fake();
     f.tree.capabilities = ["invoicing"];
-    const old = f.label("capability:billing", "0E8A16");
-    f.labelIssue(49, "capability:billing");
+    const old = f.label("billing", CAP, "Решение: tests/capabilities/billing");
+    f.labelIssue(49, "billing");
     const r = fix(f);
     expect(ops(f)).not.toContain("CreateLabel");
-    expect(r.out).toContain("переименовать метку «capability:billing» → «capability:invoicing» (задачи сохранят её)");
+    expect(r.out).toContain("переименовать метку «billing» → «invoicing» (задачи сохранят её)");
     fix(f, { confirm: true });
-    expect(byOp(f, "UpdateLabel")).toEqual([{ id: old.id, name: "capability:invoicing", color: "0E8A16", description: "Решение: tests/capabilities/invoicing" }]);
+    expect(byOp(f, "UpdateLabel")).toEqual([{ id: old.id, name: "invoicing", color: CAP, description: "Решение: tests/capabilities/invoicing" }]);
     expect(ops(f)).not.toContain("CreateLabel");
-    expect(f.issue(49).labels.nodes.map((l: { name: string }) => l.name)).toContain("capability:invoicing");
+    expect(issueLabels(f, 49)).toContain("invoicing");
   });
 
   it("метка решения чужого цвета — fix перекрашивает в цвет вида", () => {
     const f = fake();
     f.tree.standards = ["audit"];
-    const l = f.label("standard:audit", "ededed");
-    expect(check(f).out).toContain("· метка «standard:audit» цвета ededed, а не 1D76DB");
+    const l = f.label("audit", "ededed", "Решение: tests/standards/audit");
+    expect(check(f).out).toContain(`· метка «audit» цвета ededed, а не ${STD}`);
     fix(f);
-    expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: "1D76DB" }]);
+    expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: STD, description: "Решение: tests/standards/audit" }]);
   });
 
   it("модель не загружается — метки модулей не сверяются и не удаляются, check называет причину", () => {
     const f = fake();
     Object.assign(f.tree, { architecture: ["boundaries"], model: "export default {\n" });
-    f.label("architecture:boundaries", "FBCA04");
-    f.label("architecture:domain", "FBCA04");
+    f.label("boundaries", ARCH, "Решение: tests/architecture — правило или модуль boundaries");
+    f.label("domain", ARCH, "Решение: tests/architecture — правило или модуль domain");
     const r = check(f);
     expect(marks(r.out).Метки).toBe("❌");
     expect(r.out).toContain("· модель tests/architecture/model.ts не загружается — метки модулей не сверяются");
     fix(f, { confirm: true });
     expect(ops(f)).not.toContain("DeleteLabel");
-    expect(labelNames(f)).toEqual(["architecture:boundaries", "architecture:domain"]);
+    expect(labelNames(f)).toEqual(["boundaries", "domain"]);
+  });
+
+  it("метка старого вида `вид:имя` — fix переименовывает её в имя без --confirm, задачи сохраняют её", () => {
+    const f = fake();
+    Object.assign(f.tree, { capabilities: ["billing"], model: MODEL });
+    const billing = f.label("capability:billing", CAP);
+    const domain = f.label("architecture:domain", "FBCA04");
+    f.labelIssue(49, "capability:billing");
+    expect(check(f).out).toContain("· метка «capability:billing» старого вида `вид:имя`");
+    const r = fix(f);
+    expect(r.out).toContain("+ переименовать метку «capability:billing» → «billing» (задачи сохранят её)");
+    expect(byOp(f, "UpdateLabel")).toEqual([
+      { id: billing.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" },
+      { id: domain.id, name: "domain", color: ARCH, description: "Решение: tests/architecture — правило или модуль domain" },
+    ]);
+    expect(issueLabels(f, 49)).toContain("billing");
+    expect(marks(r.out).Метки).toBe("✅");
+  });
+
+  it("старая метка, чьё имя уже занято, — сливается с --confirm: задачи получают метку с именем, старая удаляется", () => {
+    const f = fake();
+    Object.assign(f.tree, { capabilities: ["audit"], standards: ["audit"] });
+    f.label("capability:audit", CAP);
+    f.label("standard:audit", STD);
+    f.labelIssue(49, "capability:audit");
+    f.labelIssue(47, "standard:audit");
+    const r = fix(f);
+    expect(r.out).toContain("слить метку «standard:audit» в «audit»: #47 получат «audit», старая удаляется");
+    expect(ops(f)).not.toContain("DeleteLabel");
+    expect(issueLabels(f, 47)).toEqual(["standard:audit"]);
+    const x = fix(f, { confirm: true });
+    expect(labelNames(f)).toEqual(["audit"]);
+    expect(f.labels[0]!.description).toBe("Решение: tests/capabilities/audit; tests/standards/audit");
+    expect(issueLabels(f, 47)).toEqual(["audit"]);
+    expect(issueLabels(f, 49)).toEqual(["audit"]);
+    expect(marks(x.out).Метки).toBe("✅");
+  });
+
+  /** Обычная метка с чужим смыслом уже стоит на задачах: стать меткой решения она может только по решению человека. */
+  it("обычная метка с именем решения — ❌, меткой решения становится только с --confirm", () => {
+    const f = fake();
+    f.tree.capabilities = ["documentation"];
+    const l = f.label("documentation", "0075ca", "Improvements or additions to documentation");
+    expect(check(f).out).toContain("· метка «documentation» — не метка решения, а решение documentation есть в основной ветке");
+    fix(f);
+    expect(ops(f)).not.toContain("CreateLabel");
+    expect(ops(f)).not.toContain("UpdateLabel");
+    fix(f, { confirm: true });
+    expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: CAP, description: "Решение: tests/capabilities/documentation" }]);
   });
 });
 

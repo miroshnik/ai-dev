@@ -747,13 +747,13 @@ describe("Вывод читается человеком: часы без хво
     expect(() => parseSince("вчера")).toThrow(EstError);
   });
 
-  it("метки `type:name` в est history видны целиком — колонка по самой длинной", () => {
+  it("метки решений в est history видны целиком — колонка по самой длинной", () => {
     const row = (number: number, labels: string[]): Row => ({
       item_id: "", issue_id: "", number, title: `Задача ${number}`, state: "CLOSED", stateReason: "COMPLETED", closedAt: 0, createdAt: 0, labels,
       est: 1, fact: 0.5, status: "Готово", est_marker: { type: "feat" }, fact_marker: { cov: "full", tok: { total: 2e6 }, usd: 1.5 },
     });
-    const lines = historyTable([row(12, ["capability:spec-harness", "standard:spawn-timeout"]), row(13, ["epic"])]);
-    expect(lines[1]).toContain(" capability:spec-harness,standard:spawn-timeout | Задача 12");
+    const lines = historyTable([row(12, ["spec-harness", "spawn-timeout", "github-project"]), row(13, ["epic"])]);
+    expect(lines[1]).toContain(" spec-harness,spawn-timeout,github-project | Задача 12");
     // заголовок и строки — одной ширины до названия задачи: колонки не съезжают
     expect(new Set(lines.map((l) => l.lastIndexOf(" | "))).size).toBe(1);
   });

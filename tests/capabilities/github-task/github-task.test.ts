@@ -125,28 +125,31 @@ describe("task new заводит задачу со всем сразу", () => 
 
 const issueLabels = (f: FakeGitHub, n: number) => f.issue(n).labels.nodes.map((l: { name: string }) => l.name);
 
+const CAP = "0E8A16";
+
 /** Метка решения ставится при создании: по ней задачу находят из спеки, а `est` — аналоги по тому же решению. */
-describe("task new ставит метки решений `type:name`", () => {
-  it("--labels ставит метки решений; метки нет — создаётся с цветом вида", () => {
+describe("task new ставит метки решений — по имени решения, новое решение — `вид:имя`", () => {
+  it("--labels ставит метки решений по имени; метки нет — создаётся с цветом вида", () => {
     const f = new FakeGitHub(REC);
     Object.assign(f.tree, { capabilities: ["billing"], standards: ["audit"] });
-    const audit = f.label("standard:audit", "1D76DB");
-    const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:billing,standard:audit"]);
+    const audit = f.label("audit", "1D76DB", "Решение: tests/standards/audit");
+    const r = task(f, ["new", "--title", "Экспорт", "--labels", "billing,audit"]);
     expect(r.code).toBe(0);
-    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "capability:billing", color: "0E8A16", description: "Решение: tests/capabilities/billing" }]);
-    const billing = f.labels.find((l) => l.name === "capability:billing")!;
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" }]);
+    const billing = f.labels.find((l) => l.name === "billing")!;
     expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([billing.id, audit.id]);
-    expect(issueLabels(f, 50)).toEqual(["capability:billing", "standard:audit"]);
-    expect(r.out).toContain("+ создана метка «capability:billing»");
-    expect(r.out).toContain("+ метки: capability:billing, standard:audit");
+    expect(issueLabels(f, 50)).toEqual(["billing", "audit"]);
+    expect(r.out).toContain("+ создана метка «billing»");
+    expect(r.out).toContain("+ метки: billing, audit");
   });
 
-  it("метка решения, которого нет в main, — задача создаётся, строка называет решение новым", () => {
+  it("новое решение — `вид:имя`: метка с именем, строка называет решение новым", () => {
     const f = new FakeGitHub(REC);
     const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export"]);
     expect(r.code).toBe(0);
-    expect(issueLabels(f, 50)).toEqual(["capability:export"]);
-    expect(r.out).toContain("+ capability:export — новое решение: tests/capabilities/export в основной ветке ещё нет");
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "export", color: CAP, description: "Решение: tests/capabilities/export" }]);
+    expect(issueLabels(f, 50)).toEqual(["export"]);
+    expect(r.out).toContain("+ export — новое решение: tests/capabilities/export в основной ветке ещё нет");
   });
 
   it("метка не решения, которой нет в репозитории, — ошибка до создания задачи", () => {
@@ -154,16 +157,19 @@ describe("task new ставит метки решений `type:name`", () => {
     const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export,срочно"]);
     expect(r.code).toBe(2);
     expect(r.err).toContain("метки «срочно» в репозитории нет");
+    expect(r.err).toContain("новое решение — вид:имя");
     expect(byOp(f, "CreateIssue")).toEqual([]);
     expect(byOp(f, "CreateLabel")).toEqual([]);
   });
 
   it("task new --epic — метки решений задачи добавляются эпику", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "capability:billing"]);
+    f.tree.capabilities = ["billing"];
+    f.label("срочно", "B60205");
+    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "billing,срочно"]);
     expect(r.code).toBe(0);
-    expect(issueLabels(f, 45)).toEqual(["epic", "capability:billing"]);
-    expect(r.out).toContain("+ эпик #45: capability:billing");
+    expect(issueLabels(f, 45)).toEqual(["epic", "billing"]);
+    expect(r.out).toContain("+ эпик #45: billing");
   });
 });
 
@@ -188,50 +194,53 @@ function prLabels(f: FakeGitHub, number: number) {
 describe("pr labels ставит задаче метки решений по диффу PR, эпику — объединение", () => {
   it("задача из «Closes #N» получает метки решений по папкам спеки в диффе PR", () => {
     const f = new FakeGitHub(REC);
-    f.label("capability:billing", "0E8A16");
-    f.label("standard:audit", "1D76DB");
+    f.label("billing", CAP, "Решение: tests/capabilities/billing");
+    f.label("audit", "1D76DB", "Решение: tests/standards/audit");
     const files = ["tests/capabilities/billing/billing.test.ts", "tests/capabilities/billing/billing.md", "tests/standards/audit/eslint.ts", "tests/lib/fake.ts", "README.md"];
     f.prs[120] = { files, closes: [49], head: HEAD, model: null };
     const r = prLabels(f, 120);
     expect(r.code).toBe(0);
-    expect(issueLabels(f, 49)).toEqual(["capability:billing", "standard:audit"]);
-    expect(r.out).toContain("+ #49: capability:billing, standard:audit");
+    expect(issueLabels(f, 49)).toEqual(["audit", "billing"]);
+    expect(r.out).toContain("+ #49: audit, billing");
   });
 
   it("изменённый код — метка модуля модели из головы PR, путь модуля — самый длинный подходящий", () => {
     const f = new FakeGitHub(REC);
     f.prs[120] = { files: ["src/domain/invoice.ts", "src/web/page.tsx", "lib/domain/money.ts", "docs/readme.md"], closes: [49], head: HEAD, model: MODEL };
     expect(prLabels(f, 120).code).toBe(0);
-    expect(issueLabels(f, 49)).toEqual(["architecture:domain", "architecture:web"]);
+    expect(issueLabels(f, 49)).toEqual(["domain", "web"]);
   });
 
   it("метки решения нет в репозитории — создаётся с цветом вида", () => {
     const f = new FakeGitHub(REC);
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [49], head: HEAD, model: null };
     const r = prLabels(f, 120);
-    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "capability:billing", color: "0E8A16", description: "Решение: tests/capabilities/billing" }]);
-    expect(r.out).toContain("+ создана метка «capability:billing»");
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" }]);
+    expect(r.out).toContain("+ создана метка «billing»");
   });
 
   it("прежняя метка решения, которого нет в диффе, — не снимается, строка в выводе", () => {
     const f = new FakeGitHub(REC);
-    f.label("capability:old", "0E8A16");
-    f.labelIssue(49, "capability:old");
+    f.label("old", CAP, "Решение: tests/capabilities/old");
+    f.label("срочно", "B60205");
+    f.labelIssue(49, "old");
+    f.labelIssue(49, "срочно");
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [49], head: HEAD, model: null };
     const r = prLabels(f, 120);
-    expect(issueLabels(f, 49)).toEqual(["capability:old", "capability:billing"]);
-    expect(r.out).toContain("= #49: capability:old — решения нет в диффе PR, метка не снята");
+    expect(issueLabels(f, 49)).toEqual(["old", "срочно", "billing"]);
+    expect(r.out).toContain("= #49: old — решения нет в диффе PR, метка не снята");
+    expect(r.out).not.toContain("= #49: срочно");
   });
 
   it("эпик задачи получает метки подзадачи — объединение", () => {
     const f = new FakeGitHub(REC);
-    f.label("capability:est", "0E8A16");
-    f.labelIssue(45, "capability:est");
+    f.label("est", CAP, "Решение: tests/capabilities/est");
+    f.labelIssue(45, "est");
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts", "tests/capabilities/est/est.test.ts"], closes: [47], head: HEAD, model: null };
     const r = prLabels(f, 120);
-    expect(issueLabels(f, 47)).toEqual(["capability:billing", "capability:est"]);
-    expect(issueLabels(f, 45)).toEqual(["epic", "capability:est", "capability:billing"]);
-    expect(r.out).toContain("+ эпик #45: capability:billing");
+    expect(issueLabels(f, 47)).toEqual(["billing", "est"]);
+    expect(issueLabels(f, 45)).toEqual(["epic", "est", "billing"]);
+    expect(r.out).toContain("+ эпик #45: billing");
   });
 
   it("PR без «Closes #N» — ошибка, ничего не меняется", () => {
