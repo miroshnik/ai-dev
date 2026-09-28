@@ -60,7 +60,14 @@ export class FakeGitHub {
     }
     if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
-    if (op === "RepoLabels") return JSON.stringify({ data: { repository: { labels: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: this.labels } } } });
+    if (op === "RepoLabels") {
+      // у метки — её открытые задачи, как issues(states: OPEN) у GitHub
+      const nodes = this.labels.map((l) => {
+        const open = this.allIssues().filter((i) => i.state === "OPEN" && i.labels.nodes.some((x: Any) => x.name === l.name));
+        return { ...l, issues: { totalCount: open.length, nodes: open.map((i) => ({ number: i.number })) } };
+      });
+      return JSON.stringify({ data: { repository: { labels: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
+    }
     if (op === "LabelIssues") {
       const nodes = this.allIssues().filter((i) => i.labels.nodes.some((l: Any) => l.name === variables.label)).map((i) => ({ id: i.id, number: i.number }));
       return JSON.stringify({ data: { repository: { label: { issues: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } } });
