@@ -3,7 +3,7 @@
  * правками, снимок дерева. Не спека — в документацию не попадает.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -75,6 +75,33 @@ export type AiDevPackage = ReturnType<typeof aiDevPackage>;
 export function copyPackage(pkg: AiDevPackage, dir: string): AiDevPackage {
   cpSync(pkg.dir, dir, { recursive: true });
   return { dir, bin: path.join(dir, "bin/ai-dev.mjs"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
+}
+
+/**
+ * Пакет ai-dev, как его кладёт npx по `github:miroshnik/ai-dev[#<sha>]`: файлы src без `.git` — в
+ * `<dir>/node_modules/ai-dev`, коммит — в `resolved` lock-файла npm. Установщик в нём — не клон. Возвращает его bin.
+ */
+export function npxPackage(dir: string, src: string, sha: string): string {
+  const pkg = path.join(dir, "node_modules/ai-dev");
+  cpSync(src, pkg, { recursive: true, filter: (p) => path.basename(p) !== ".git" });
+  const resolved = `git+ssh://git@github.com/miroshnik/ai-dev.git#${sha}`;
+  writeFileSync(path.join(dir, "node_modules/.package-lock.json"), JSON.stringify({ packages: { "node_modules/ai-dev": { resolved } } }));
+  return path.join(pkg, "bin/ai-dev.mjs");
+}
+
+/**
+ * npx песочницы отдаёт пакеты из dir (npxPackage): `github:miroshnik/ai-dev#<sha>` — `<dir>/<sha>`, без `#` —
+ * `<dir>/main`; аргументы после пакета — установщику.
+ */
+export function npxServesPackages(sb: Sandbox, dir: string) {
+  rmSync(path.join(sb.bin, "npx"), { force: true });
+  const script = [
+    "#!/bin/sh",
+    'while [ "$#" -gt 0 ]; do case "$1" in github:*) spec="$1"; shift; break ;; *) shift ;; esac; done',
+    'case "$spec" in *#*) pkg="${spec#*#}" ;; *) pkg=main ;; esac',
+    `exec node "${dir}/$pkg/node_modules/ai-dev/bin/ai-dev.mjs" "$@"`,
+  ].join("\n");
+  writeFileSync(path.join(sb.bin, "npx"), script + "\n", { mode: 0o755 });
 }
 
 /** Дерево каталога: путь → содержимое файла или «-> цель» симлинка; в `.git` не заходит. */

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, copyPackage, REPO, sandbox, snapshot, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, aiDevPackage, copyPackage, npxPackage, npxServesPackages, REPO, sandbox, snapshot, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
@@ -145,6 +145,160 @@ describe("Копия на машине (-g) сверяется и обновля
   });
 });
 
+// ai-dev с релизами: upstream — git-репозиторий, откуда установщик берёт теги (AI_DEV_REPO); npx песочницы отдаёт
+// пакеты его коммитов — голову main по `github:miroshnik/ai-dev` и релиз по SHA тега
+function withReleases() {
+  const up = copyPackage(base, path.join(sb.tmp, "upstream"));
+  const pkgs = path.join(sb.tmp, "npx");
+  npxServesPackages(sb, pkgs);
+  const head = () => up.repo.git("rev-parse", "HEAD");
+  const serveMain = () => (rmSync(path.join(pkgs, "main"), { recursive: true, force: true }), npxPackage(path.join(pkgs, "main"), up.dir, head()));
+  const bin = serveMain();
+  return {
+    up,
+    /** коммит в main upstream: npx теперь отдаёт его */
+    commit(files: Record<string, string | null>) {
+      const sha = up.repo.commit(files);
+      serveMain();
+      return sha;
+    },
+    /** релиз — тег на голову main (annotated — аннотированный), npx отдаёт его пакет по SHA коммита */
+    release(tag: string, { annotated = false } = {}) {
+      const sha = head();
+      if (annotated) up.repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "tag", "-a", "-m", tag, tag);
+      else up.repo.git("tag", tag);
+      npxPackage(path.join(pkgs, sha), up.dir, sha);
+      return sha;
+    },
+    /** установщик — пакет npx из main, как его запускает `npx -y github:miroshnik/ai-dev` */
+    run: (args: string[], env: Record<string, string> = {}) => aiDev(sb, args, { bin, env: { AI_DEV_REPO: up.dir, ...env } }),
+  };
+}
+
+/**
+ * Проекты и машина копией следуют за релизами ai-dev (теги vГГГГ.ММ.ДД), а не за main: коммит в main без релиза их
+ * «отставшими» не делает. Пакет npx из main находит последний релиз и перезапускается из него — дальше и код, и
+ * файлы релиза.
+ */
+describe("Копия следует за релизами ai-dev, а не за main", () => {
+  const rule = (up: AiDevPackage, text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
+
+  it("install ставит последний релиз, а не голову main: его файлы, тег и SHA в .agents/ai-dev.json", () => {
+    const r = withReleases();
+    const sha = r.release("v2026.10.05");
+    r.commit(rule(r.up, "Правило из main."));
+    expect(r.run(["install"]).code).toBe(0);
+    expect(read(path.join(sb.proj, ".agents/ai-dev/AGENTS.md"))).not.toContain("Правило из main.");
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ tag: "v2026.10.05", sha });
+  });
+
+  it("main ушёл вперёд, нового релиза нет — актуально, код 0", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило из main."));
+    const c = r.run(["check"]);
+    expect(c.code).toBe(0);
+    expect(c.stdout).toContain("в проекте: актуально (v2026.10.05)");
+  });
+
+  it("вышел релиз новее установленного — отстаёт, код 1: стоящий и свежий тег; check ничего не меняет", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило релиза."));
+    r.release("v2026.10.12");
+    const before = snapshot(sb.proj);
+    const c = r.run(["check"]);
+    expect(c.code).toBe(1);
+    expect(c.stdout).toContain("в проекте: отстаёт — стоит v2026.10.05, свежий v2026.10.12");
+    expect(c.stdout).toContain("~ .agents/ai-dev/AGENTS.md");
+    expect(snapshot(sb.proj)).toEqual(before);
+  });
+
+  it("update ставит последний релиз, а не голову main; подсказка коммита — с тегом; после него check — актуально", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило релиза."));
+    const sha = r.release("v2026.10.12");
+    r.commit(rule(r.up, "Правило из main."));
+    const u = r.run(["update"]);
+    expect(u.code).toBe(0);
+    expect(u.stdout).toContain("chore(agents): флоу ai-dev v2026.10.12");
+    const agents = read(path.join(sb.proj, ".agents/ai-dev/AGENTS.md"));
+    expect(agents).toContain("Правило релиза.");
+    expect(agents).not.toContain("Правило из main.");
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ tag: "v2026.10.12", sha });
+    expect(r.run(["check"]).code).toBe(0);
+  });
+
+  /** Аннотированный тег ls-remote отдаёт объектом тега — ставится коммит, на который он указывает. */
+  it("последний релиз — по дате, затем по номеру патча; аннотированный тег — его коммит; чужие теги не в счёт", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.commit(rule(r.up, "Патч."));
+    const sha = r.release("v2026.10.05.1", { annotated: true });
+    r.commit(rule(r.up, "Правило из main."));
+    r.release("v2026.09.30");
+    r.up.repo.git("tag", "v9.0.0");
+    r.run(["install"]);
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ tag: "v2026.10.05.1", sha });
+    expect(read(path.join(sb.proj, ".agents/ai-dev/AGENTS.md"))).not.toContain("Правило из main.");
+  });
+
+  it("машина копией (-g) — тоже по релизам: main ушёл вперёд — актуально", () => {
+    mkdirSync(path.join(sb.home, ".claude"));
+    const r = withReleases();
+    r.release("v2026.10.05");
+    expect(r.run(["install", "-g"]).code).toBe(0);
+    r.commit(rule(r.up, "Правило из main."));
+    const c = r.run(["check", "-g"]);
+    expect(c.code).toBe(0);
+    expect(c.stdout).toContain("на машине: актуально (v2026.10.05)");
+    expect(JSON.parse(read(manifest(sb.home))).tag).toBe("v2026.10.05");
+  });
+
+  it("релизов ещё нет — ставит голову main, как раньше, без тега", () => {
+    const r = withReleases();
+    const sha = r.commit(rule(r.up, "Правило из main."));
+    expect(r.run(["install"]).code).toBe(0);
+    expect(read(path.join(sb.proj, ".agents/ai-dev/AGENTS.md"))).toContain("Правило из main.");
+    const m = JSON.parse(read(manifest(sb.proj)));
+    expect(m.sha).toBe(sha);
+    expect(m.tag).toBeUndefined();
+  });
+
+  it("последний релиз не узнать (нет сети) — check: проверка недоступна, код 2; install и update — отказ, код 2; флоу не стоит — релиз не ищет", () => {
+    const r = withReleases();
+    const offline = { AI_DEV_REPO: path.join(sb.tmp, "nowhere") };
+    const absent = r.run(["check"], offline);
+    expect(absent.code).toBe(0);
+    expect(absent.stdout).toContain("в проекте: не установлен");
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    const before = snapshot(sb.proj);
+    const c = r.run(["check"], offline);
+    expect(c.code).toBe(2);
+    expect(c.stderr).toContain("в проекте: проверка недоступна — последний релиз ai-dev не узнать");
+    for (const cmd of ["install", "update"]) {
+      const u = r.run([cmd], offline);
+      expect(u.code).toBe(2);
+      expect(u.stderr).toContain("последний релиз ai-dev не узнать");
+    }
+    expect(snapshot(sb.proj)).toEqual(before);
+  });
+
+  it("хук: последний релиз не узнать — код 0, в выводе — проверка недоступна", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    const h = r.run(["check", "--hook"], { AI_DEV_REPO: path.join(sb.tmp, "nowhere") });
+    expect(h.code).toBe(0);
+    expect(h.stdout).toContain("в проекте: проверка недоступна — последний релиз ai-dev не узнать");
+  });
+});
+
 describe("Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя", () => {
   const RULE = "\nНовое правило.\n";
 
@@ -187,6 +341,28 @@ describe("Клон --link сверяется с origin/main, update подтяг
     const r = aiDev(sb, ["check", "-g"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("актуально");
+  });
+
+  /** Напоминание владельцу: без релиза проекты этих правок не получат. Отставанием не считается — код тот же. */
+  it("в main после последнего релиза изменения флоу — строка «не в релизе» с тегом, числом и командой релиза; код 0", () => {
+    const { up, clone } = linkedClone();
+    up.repo.git("tag", "v2026.10.05");
+    up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });
+    up.repo.commit({ "tests/x.test.ts": "// тест\n" });
+    up.repo.commit({ "bin/ai-dev.mjs": read(path.join(up.dir, "bin/ai-dev.mjs")) + "// правка установщика\n" });
+    expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
+    const r = aiDev(sb, ["check", "-g"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("не в релизе: коммитов флоу после v2026.10.05 — 2");
+    expect(r.stdout).toContain(`${path.join(clone, "bin/ai-dev.mjs")} release`);
+  });
+
+  it("всё в релизе — строки «не в релизе» нет; релизов ещё нет — так и сказано", () => {
+    const { up } = linkedClone();
+    expect(aiDev(sb, ["check", "-g"]).stdout).toContain("не в релизе: релизов ещё нет");
+    up.repo.git("tag", "v2026.10.05");
+    up.repo.commit({ "tests/x.test.ts": "// тест\n" });
+    expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("не в релизе");
   });
 
   it("старая установка без SHA — check по git; update -g пишет SHA клона", () => {
