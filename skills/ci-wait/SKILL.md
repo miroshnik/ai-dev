@@ -1,6 +1,6 @@
 ---
 name: ci-wait
-description: Ожидание чеков PR или статуса коммита (деплой, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой; всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса.
+description: Ожидание всех чеков PR или коммита (CI в GitHub Actions, деплой хостинга, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой; всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса.
 allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks *) Bash(gh pr view *) Bash(git rev-parse *)
 ---
 
@@ -16,7 +16,7 @@ allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks
 
 ```bash
 bash <каталог скилла>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0]
-bash <каталог скилла>/scripts/wait-ci.sh status <sha> --context <имя> [--interval 20] [--timeout 1200]
+bash <каталог скилла>/scripts/wait-ci.sh status <sha> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0]
 ```
 
 ## Когда что
@@ -24,15 +24,15 @@ bash <каталог скилла>/scripts/wait-ci.sh status <sha> --context <и
 | Момент | Команда |
 |---|---|
 | Запушил ветку PR, перед мержем | `pr <N>` — ждёт все чеки PR |
-| Смёржил, мерж запускает деплой | `status <sha> --context <имя>` — ждёт статус коммита (например, контекст хостинга или внешнего чека) |
-| Нужен статус конкретного коммита `main` | `status <sha> --context <имя>` |
+| Смёржил, мерж запускает деплой или CI на `main` | `status <sha>` — ждёт все чеки коммита: check-runs GitHub Actions и статусы хостинга и внешних сервисов |
+| Нужен один чек коммита (деплой среди прочих) | `status <sha> --context <имя>` |
 
 `<sha>` — полный, только из git: `git fetch origin && SHA=$(git rev-parse origin/main)`.
 Короткий не достраивать: по несуществующему SHA API молча отдаёт пустой
 статус, и ожидание висит до таймаута с ложным «не готово».
 
-Имя контекста — как в списке статусов коммита:
-`gh api repos/{owner}/{repo}/commits/<sha>/status --jq '.statuses[].context'`.
+Имя для `--context` — контекст статуса или имя check-run (job Actions), их
+печатают строки `CHECK` запуска без `--context`.
 
 ## Как читать результат
 
@@ -58,6 +58,10 @@ bash <каталог скилла>/scripts/wait-ci.sh status <sha> --context <и
 
 - Пустой список чеков и `no checks reported` — это pending, а не «прошли»:
   чеки регистрируются с опозданием после push.
+- У коммита чеки в двух местах: статусы (`commits/<sha>/status`) пишут
+  хостинги и внешние сервисы, check-runs (`commits/<sha>/check-runs`) —
+  GitHub Actions. Ожидание одних статусов на коммите, где весь CI — Actions,
+  висит до таймаута; `status` ждёт оба.
 - Финал засчитывается, только когда снимок без pending повторился два опроса
   подряд; `--expect N` — минимальное число чеков, меньше которого ждём дальше.
 - Без branch protection `gh pr merge --auto` мержит, не дожидаясь CI, —
