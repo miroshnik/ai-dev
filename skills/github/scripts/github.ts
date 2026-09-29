@@ -332,7 +332,7 @@ export const Q = {
   PrChange: `query PrChange($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      number headRefOid
+      number headRefOid body
       closingIssuesReferences(first: 20) { nodes { number } }
       files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path } }
     }
@@ -1429,6 +1429,16 @@ export function decisionsOfFiles(files: string[], modules: Record<string, string
   return new Map([...out.keys()].sort().map((n) => [n, DECISION_KINDS.filter((k) => out.get(n)!.has(k))]));
 }
 
+/**
+ * Задачи, которые закрывает PR, по телу — как их понимает GitHub: ключевое слово (close, fix, resolve в любой форме)
+ * перед каждым `#N`; «Closes #1, #2» закрывает только #1.
+ */
+function closingInBody(body: string): number[] {
+  const out: number[] = [];
+  for (const m of body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)) if (!out.includes(Number(m[1]))) out.push(Number(m[1]));
+  return out;
+}
+
 export function cmdPrLabels(io: Io, slug: string, number: number): number {
   const [owner, name] = slug.split("/") as [string, string];
   let head: Any = null;
@@ -1438,7 +1448,9 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     head ??= pr;
     return pr.files;
   }).map((x) => x.path);
-  const closes: number[] = (head.closingIssuesReferences?.nodes ?? []).map((x: Any) => x.number);
+  let closes: number[] = (head.closingIssuesReferences?.nodes ?? []).map((x: Any) => x.number);
+  // сразу после создания PR GitHub ещё не связал его с задачей — те же ключевые слова в теле
+  if (!closes.length) closes = closingInBody(head.body ?? "");
   if (!closes.length) throw new GhError(`в PR #${number} нет «Closes #N» — метки ставить некуда`);
   // модули — из головы PR: PR может добавить модуль или перенести его каталог
   const model = graphql(io, Q.ModelAt, { owner, name, expression: `${head.headRefOid}:${MODEL_PATH}` })?.repository?.object;

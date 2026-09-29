@@ -34,7 +34,7 @@ export class FakeGitHub {
   /** Дерево спеки в основной ветке (SpecDecisions): папки решений и текст модели архитектуры. */
   tree: { capabilities: string[]; standards: string[]; architecture: string[]; model: string | null } = { capabilities: [], standards: [], architecture: [], model: null };
   /** PR по номеру (PrChange): изменённые файлы, задачи из «Closes #N», голова и модель архитектуры в ней (ModelAt). */
-  prs: Record<number, { files: string[]; closes: number[]; head: string; model: string | null }> = {};
+  prs: Record<number, { files: string[]; closes: number[]; body?: string; head: string; model: string | null }> = {};
   /**
    * Открытые PR (MergeQueue): ветка, черновик, отставание от основной ветки (`null` — ветки нет), сводный статус CI
    * головы (`null` — чеков ещё нет). Ставит `pull`.
@@ -182,6 +182,7 @@ export class FakeGitHub {
           pullRequest: {
             number,
             headRefOid: pr.head,
+            body: pr.body ?? "",
             closingIssuesReferences: { nodes: pr.closes.map((n) => ({ number: n })) },
             files: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: pr.files.map((path) => ({ path })) },
           },
