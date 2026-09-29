@@ -211,9 +211,9 @@ node bin/ai-dev.mjs release --dry-run   # что войдёт в релиз; б�
 Механика, на которую ссылается канон; агент читает их по мере надобности.
 
 - [`docs/pr-checks.md`](docs/pr-checks.md) — ожидание чеков PR и коммита: опрос, `bucket`, ловушки пустого списка.
-- [`docs/ci-concurrency.md`](docs/ci-concurrency.md) — фрагменты workflow: параллельные ветки, неотменяемый `main`, очередь деплоя.
+- [`docs/ci-concurrency.md`](docs/ci-concurrency.md) — CI параллельных задач: правило целиком и фрагменты workflow — параллельные ветки, неотменяемый `main`, очередь деплоя.
 - [`docs/testing.md`](docs/testing.md) — как тестировать: итог прогона по сводке раннера, окружение, e2e без флаки.
-- [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — параллельные worktree: свой порт и своя база для сервера и e2e.
+- [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — параллельные worktree: правило целиком, свой порт и своя база для сервера и e2e.
 - [`docs/cloud-sessions.md`](docs/cloud-sessions.md) — облачная сессия Claude Code: что ей недоступно и как закрыть задачу оттуда.
 
 ## Устройство репозитория
@@ -226,6 +226,8 @@ skills/<name>/     SKILL.md + scripts/ — TypeScript под Bun, без зав�
 tests/             спека самого ai-dev: capabilities/ и standards/
 bin/ai-dev.mjs     установщик — JavaScript: npx запускает его из node_modules, где Node типы не стирает
 ```
+
+**Скилл = промпт + скрипты** по открытому стандарту [Agent Skills](https://agentskills.io): папка `<name>/` с `SKILL.md` (frontmatter `name` = имя папки, `description`; тело < 500 строк) и `scripts/` для детерминированной части; при необходимости `reference.md`. Скрипты — TypeScript под Bun (`bun script.ts`: без сборки, без зависимостей, импорт с `.ts`); тесты скриптов — `bun test` в `tests/` ai-dev по тому же дереву. Исключение — установщик `bin/ai-dev.mjs`: JavaScript, потому что npx запускает его из `node_modules`, где Node типы не стирает. Всё, что зависит от конкретных репозиториев, — в локальную конфигурацию, не в скилл.
 
 ai-dev живёт по собственному флоу: спека — [`tests/`](tests), документация по ней — в [ветке `spec`](https://github.com/miroshnik/ai-dev/tree/spec), задачи — в [Issues](https://github.com/miroshnik/ai-dev/issues) и [проекте ai-dev](https://github.com/users/miroshnik/projects/6).
 
