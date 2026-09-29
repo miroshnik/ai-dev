@@ -135,8 +135,9 @@ scope conventional commit — по-английски; описание комм
 - **PR:** заголовок — conventional commit (`feat(scope): описание`), в теле
   `Closes #263`. Способ мержа задаёт репозиторий (`AGENTS.md` или настройки
   `gh repo view`); при squash заголовок PR становится заголовком коммита, при
-  rebase и merge в `main` уходят сами коммиты — conventional commit и у PR,
-  и у каждого коммита. В репо без PR — `Closes #N` в сообщении коммита.
+  rebase и merge в `main` уходят сами коммиты — conventional commit у
+  каждого, и `Closes` в любом закроет задачу: в коммитах — `Refs #263`. В
+  репо без PR — `Closes #N` в последнем коммите.
 
 ### Открытые вопросы — в начале работы
 
