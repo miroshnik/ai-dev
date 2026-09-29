@@ -383,7 +383,7 @@ function outSection(out: Map<string, Test[]>): string[] {
 }
 
 /** Исключение для старого названия, которое ещё не утверждение: `--strict` его пропускает, пока оно в списке. */
-type NameException = { file: string; name: string; issue: number; reason: string };
+type NameException = { file: string; name: string; issue: number; reason: string; src?: string };
 // исключения, которые сейчас действуют (название всё ещё не утверждение): долг, видный в оглавлении
 let NAME_DEBT: NameException[] = [];
 
@@ -543,8 +543,33 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
   return problems;
 }
 
-/** Исключения для названий — в папке стандарта структуры спеки, как у остальных проверок. */
+/** Общий файл исключений названий — прежнее место; читается, пока проект не разложил исключения по папкам. */
 const NAMES_EXCEPTIONS = `${L.TESTS}/standards/spec-names/exceptions.ts`;
+/** Исключения названий папки решения — рядом с её тестами: параллельные PR не правят один файл. */
+const FOLDER_NAMES = "names.exceptions.ts";
+const FOLDER_NAMES_RE = /^names\.exceptions\.(ts|mts|js|mjs)$/;
+
+/** Папка решения теста: `tests/<вид>/<имя>`. */
+const decisionFolder = (file: string) => file.split("/").slice(0, 3).join("/");
+
+/** Файлы исключений названий в папках решений (от корня проекта). */
+function folderNameFiles(root: string): string[] {
+  const out: string[] = [];
+  const walk = (rel: string) => {
+    let entries;
+    try {
+      entries = readdirSync(path.join(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) walk(`${rel}/${e.name}`);
+      else if (FOLDER_NAMES_RE.test(e.name)) out.push(`${rel}/${e.name}`);
+    }
+  };
+  walk(L.TESTS);
+  return out.sort();
+}
 
 async function loadNameExceptions(file: string): Promise<NameException[]> {
   if (!existsSync(file)) return [];
@@ -637,12 +662,13 @@ export async function main(argv: string[]): Promise<number> {
   const { groups, out, libFiles } = build(tests);
   const { missing, headers, legacy, undescribed } = attachDocs(groups, root);
   const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);
-  // названия: старые — исключениями с задачей, новые нарушения и ненужные исключения — ошибки
+  // названия: старые — исключениями с задачей (в папках решений и в общем файле), новые нарушения и ненужные
+  // исключения — ошибки
   const namesRel = values["names-exceptions"] ?? NAMES_EXCEPTIONS;
-  const namesFile = path.resolve(root, namesRel);
-  let nameExceptions: NameException[];
+  const sources = [namesRel, ...folderNameFiles(root).filter((f) => f !== namesRel)];
+  let nameExceptions: NameException[] = [];
   try {
-    nameExceptions = await loadNameExceptions(namesFile);
+    for (const src of sources) nameExceptions.push(...(await loadNameExceptions(path.resolve(root, src))).map((x) => ({ ...x, src })));
   } catch (e) {
     console.error(`spec-doc: ${(e as Error).message}`);
     return 2;
@@ -657,21 +683,35 @@ export async function main(argv: string[]): Promise<number> {
     }
     const have = new Set(nameExceptions.map((x) => nameKey(x.file, x.name)));
     const badKeys = new Set(bad.map(([n, f]) => nameKey(f, n)));
+    // новые — в файл, названный --names-exceptions, иначе — в папку решения своего теста
+    const target = (file: string) => (values["names-exceptions"] ? namesRel : `${decisionFolder(file)}/${FOLDER_NAMES}`);
     nameExceptions = [
       ...nameExceptions.filter((x) => badKeys.has(nameKey(x.file, x.name))),
-      ...bad.filter(([n, f]) => !have.has(nameKey(f, n))).map(([name, file]) => ({ file, name, issue, reason: `название — не утверждение; переписать в #${issue}` })),
+      ...bad.filter(([n, f]) => !have.has(nameKey(f, n))).map(([name, file]) => ({ file, name, issue, reason: `название — не утверждение; переписать в #${issue}`, src: target(file) })),
     ];
-    writeNameExceptions(namesFile, nameExceptions);
-    console.error(`spec-doc: ${namesRel}: исключений названий — ${nameExceptions.length} (#${issue})`);
+    // каждый файл-источник переписывается своими исключениями: ненужные уходят, файл без исключений удаляется
+    const bySrc = new Map<string, NameException[]>(sources.filter((f) => existsSync(path.resolve(root, f))).map((f) => [f, []]));
+    for (const x of nameExceptions) bySrc.set(x.src!, [...(bySrc.get(x.src!) ?? []), x]);
+    for (const [src, list] of bySrc) {
+      if (list.length) writeNameExceptions(path.resolve(root, src), list);
+      else unlinkSync(path.resolve(root, src));
+      console.error(`spec-doc: ${src}: исключений названий — ${list.length} (#${issue})`);
+    }
   }
   const excepted = new Set(nameExceptions.map((x) => nameKey(x.file, x.name)));
   const names = bad.filter(([n, f]) => !excepted.has(nameKey(f, n)));
   const badKeys = new Set(bad.map(([n, f]) => nameKey(f, n)));
   const allNames = new Set([...groups.values()].flatMap((g) => g.tests.flatMap((t) => [...t.describes, t.name].map((n) => nameKey(t.path, n)))));
   NAME_DEBT = nameExceptions.filter((x) => badKeys.has(nameKey(x.file, x.name)));
-  const staleNames = nameExceptions
-    .filter((x) => !badKeys.has(nameKey(x.file, x.name)))
-    .map((x) => `исключение названия «${x.name}» (${x.file}) не нужно — ${allNames.has(nameKey(x.file, x.name)) ? "уже утверждение" : "теста нет"}, убери из ${namesRel}`);
+  const staleNames = [
+    ...nameExceptions
+      .filter((x) => !badKeys.has(nameKey(x.file, x.name)))
+      .map((x) => `исключение названия «${x.name}» (${x.file}) не нужно — ${allNames.has(nameKey(x.file, x.name)) ? "уже утверждение" : "теста нет"}, убери из ${x.src}`),
+    // исключение папки — только для её тестов: иначе владелец папки снимает чужой долг
+    ...nameExceptions
+      .filter((x) => x.src !== namesRel && decisionFolder(x.file) !== path.posix.dirname(x.src!))
+      .map((x) => `исключение названия «${x.name}» (${x.file}) — не в папке своего теста: перенеси из ${x.src} в ${decisionFolder(x.file)}/${FOLDER_NAMES}`),
+  ];
   const marks = embedMarks(groups, model);
 
   if (values.stdout) {
@@ -697,7 +737,7 @@ export async function main(argv: string[]): Promise<number> {
   for (const file of noMain) console.error(`spec-doc: нет главного файла ${file} — его describe открывают страницу`);
   for (const [name, file] of names) console.error(`spec-doc: название — не утверждение по-русски: «${name}» (${file})`);
   for (const m of staleNames) console.error(`spec-doc: ${m}`);
-  if (NAME_DEBT.length) console.error(`spec-doc: названий в исключениях — ${NAME_DEBT.length} (${namesRel})`);
+  if (NAME_DEBT.length) console.error(`spec-doc: названий в исключениях — ${NAME_DEBT.length}`);
   for (const file of headers) {
     const [kind, name] = L.classify(file);
     console.error(`spec-doc: шапка файла в документацию не идёт — перенеси в ${descriptionPath({ kind, name: name! })}: ${file}`);

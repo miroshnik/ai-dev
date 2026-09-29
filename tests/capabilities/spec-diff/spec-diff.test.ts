@@ -405,6 +405,13 @@ describe("Решения вне названий тестов — модель, 
     expect(out.match(/^- `tests\/standards\/spec-names` · /gm)).toHaveLength(3);
   });
 
+  it("снятое исключение названия из папки решения — в разделе «Исключения»", () => {
+    const FOLDER = "tests/capabilities/billing/names.exceptions.ts";
+    const base = repo.commit({ [FOLDER]: names([{ file: BILLING, name: "returns 201", issue: 7, reason: "переписать" }]) });
+    repo.commit({ [FOLDER]: names([]) });
+    expect(diffFrom(base).stdout).toContain(`**Исключения — снято (1):**\n\n- \`tests/capabilities/billing\` · «returns 201» в \`${BILLING}\` (#7) — переписать\n`);
+  });
+
   it("исключения одного элемента из разных соглашений папки — разные строки", () => {
     const EXC = "tests/standards/audit/exceptions.ts";
     const base = repo.commit({ [EXC]: names(["audit", "cancel"].map((rule) => ({ item: "a", issue: 1, reason: "r", rule }))) });
