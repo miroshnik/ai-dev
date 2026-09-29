@@ -10,6 +10,7 @@
  *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
  *   github task drop     — закрыть без выполнения и убрать из проекта
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
+ *   github pr queue      — голова ли PR в очереди мержа: push, CI и мерж — только у головы
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
@@ -365,6 +366,21 @@ fragment StatusChecks on RuleParameters { ... on RequiredStatusChecksParameters 
 fragment Head on PullRequest {
   number baseRefName
   commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
+}`,
+  DefaultBranch: `query DefaultBranch($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) { defaultBranchRef { name } }
+}`,
+  // headRef.compare(headRef: основная ветка): aheadBy — коммиты основной ветки, которых нет в ветке PR (отставание)
+  MergeQueue: `query MergeQueue($owner: String!, $name: String!, $base: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, baseRefName: $base, first: 100) {
+      nodes {
+        number title isDraft headRefName
+        headRef { compare(headRef: $base) { aheadBy } }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
+  }
 }`,
   IssueSearch: `query IssueSearch($q: String!) {
   search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
@@ -1464,6 +1480,79 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
 }
 
 // ----------------------------------------------------------------------------
+// Очередь мержа
+// ----------------------------------------------------------------------------
+
+interface QueuePr {
+  number: number;
+  title: string;
+  head: string;
+  draft: boolean;
+  /** Коммитов основной ветки, которых нет в ветке PR; `null` — ветки PR нет. */
+  behind: number | null;
+  /** Сводный статус CI головы PR; `null` — чеков ещё нет. */
+  ci: string | null;
+}
+
+/** Почему PR очередь не держит; держит — null. Чеков ещё нет — держит: CI вот-вот начнётся. */
+function outOfQueue(p: QueuePr, base: string): string | null {
+  if (p.draft) return "черновик";
+  if (p.behind === null) return "ветки нет";
+  if (p.behind > 0) return `отстаёт от ${base} на ${p.behind}`;
+  if (p.ci === "FAILURE" || p.ci === "ERROR") return "CI красный";
+  return null;
+}
+const ciText = (ci: string | null) => (ci === "SUCCESS" ? "CI зелёный, ждёт мержа" : ci === null ? "чеков ещё нет" : "CI идёт");
+
+/**
+ * Голова очереди мержа — открытый PR в основную ветку, который от неё не отстаёт и у которого CI зелёный или идёт;
+ * из нескольких — меньший номер. Своя ветка вне очереди (отстаёт, красная, PR ещё нет) — впереди все PR очереди.
+ * Код 0 — голова, 1 — не голова.
+ */
+export function cmdPrQueue(io: Io, slug: string, who: { number: number } | { head: string }): number {
+  const [owner, name] = slug.split("/") as [string, string];
+  const base: string | undefined = graphql(io, Q.DefaultBranch, { owner, name })?.repository?.defaultBranchRef?.name;
+  if (!base) throw new GhError(`у ${slug} нет основной ветки`);
+  const prs: QueuePr[] = (graphql(io, Q.MergeQueue, { owner, name, base })?.repository?.pullRequests?.nodes ?? [])
+    .filter(Boolean)
+    .map((p: Any) => ({
+      number: p.number,
+      title: p.title,
+      head: p.headRefName,
+      draft: !!p.isDraft,
+      // сравнение невозможно (ветка в форке) — считаем актуальной: лучше подождать, чем гонять CI впустую
+      behind: p.headRef ? (p.headRef.compare?.aheadBy ?? 0) : null,
+      ci: p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null,
+    }))
+    .sort((a: QueuePr, b: QueuePr) => a.number - b.number);
+  const own = "number" in who ? prs.find((p) => p.number === who.number) : prs.find((p) => p.head === who.head);
+  if ("number" in who && !own) throw new GhError(`PR #${who.number} — не открытый PR в ${base} репозитория ${slug}`);
+
+  io.out(`Очередь мержа ${slug} → ${base}`);
+  const holds = (p: QueuePr) => outOfQueue(p, base) === null;
+  const ownHolds = !!own && holds(own);
+  const others = prs.filter((p) => p !== own);
+  for (const p of others) {
+    const why = outOfQueue(p, base);
+    if (why) io.out(`○ #${p.number} — ${why}, очередь не держит`);
+  }
+  const branch = "head" in who ? who.head : "";
+  const me = own ? `#${own.number}` : `ветка ${branch}`;
+  if (!own) io.out(`у ветки ${branch} ещё нет PR`);
+  const ahead = others.filter((p) => holds(p) && (!ownHolds || p.number < own!.number));
+  if (ahead.length) {
+    io.out(`⚠ ${me} — не голова очереди: впереди ${ahead.map((p) => `#${p.number} ${q(p.title)} (${ciText(p.ci)})`).join(", ")}`);
+    io.out(`  ребейз — локально, push — после их мержа: голова напишет «влит, твоя очередь»`);
+    return 1;
+  }
+  const state = own && !ownHolds ? ` (сейчас: ${outOfQueue(own, base)})` : "";
+  io.out(`✅ ${me} — голова очереди: ребейз на ${base}, push, CI и мерж — твои${state}`);
+  const next = others.filter(holds);
+  if (next.length) io.out(`  за тобой: ${nums(next)} — после мержа напиши им «влит, твоя очередь»`);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
@@ -1477,6 +1566,7 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
+  github pr queue      [<N> | --head <ветка>] [--repo owner/repo]
 
 check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки,
         метка нового решения на открытой задаче — строка ○, не ❌.
@@ -1484,7 +1574,9 @@ fix   — исправляет через API; шаги UI печатает со
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
 task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).
-pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает.`;
+pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает.
+pr queue  — голова ли PR (по умолчанию — PR текущей ветки) в очереди мержа основной ветки: код 0 — голова,
+            push, CI и мерж — твои; 1 — не голова, впереди названы PR; ребейз — локально, push — после их мержа.`;
 
 const issueNumber = (s: string | undefined, what: string): number => {
   const m = /^#?(\d+)$/.exec((s ?? "").trim());
@@ -1499,6 +1591,13 @@ function detectRepo(): string {
   return `${m[1]}/${m[2]}`;
 }
 
+function currentBranch(): string {
+  const r = spawnSync("git", ["branch", "--show-current"], { encoding: "utf8" });
+  const b = (r.stdout ?? "").trim();
+  if (r.status !== 0 || !b) throw new GhError("не удалось определить текущую ветку (detached HEAD?); укажите номер PR или --head <ветка>");
+  return b;
+}
+
 export function main(argv: string[], io: Io): number {
   try {
     const [group, cmd, ...rest] = argv;
@@ -1506,9 +1605,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop"], pr: ["labels"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop"], pr: ["labels", "queue"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop или pr labels`);
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop или pr labels|queue`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true") {
@@ -1521,9 +1620,15 @@ export function main(argv: string[], io: Io): number {
       return slug;
     };
     if (group === "pr") {
-      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" } } });
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" }, head: { type: "string" } } });
       if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
       const m = /^#?(\d+)$/.exec((positionals[0] ?? "").trim());
+      if (cmd === "queue") {
+        if (positionals.length && !m) throw new GhError(`pr queue: ожидается номер PR, а не «${positionals[0]}»`);
+        if (m && values.head) throw new GhError("номер PR или --head, не оба");
+        return cmdPrQueue(io, repoOf(values.repo), m ? { number: Number(m[1]) } : { head: values.head ?? currentBranch() });
+      }
+      if (values.head) throw new GhError("--head — только у pr queue");
       if (!m) throw new GhError(`pr labels: ожидается номер PR, а не «${positionals[0] ?? ""}»`);
       return cmdPrLabels(io, repoOf(values.repo), Number(m[1]));
     }
