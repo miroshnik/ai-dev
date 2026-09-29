@@ -898,6 +898,27 @@
   "describes": [
    "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
   ],
+  "name": "механическая правка рядом с содержательной в той же папке — метка решения ставится"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "переименование файла в папке решения не даёт метку этого решения"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "правка только `exceptions.ts` не даёт метку решения"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
   "name": "прежняя метка решения, которого нет в диффе, — не снимается, строка в выводе"
  },
  {
@@ -906,6 +927,13 @@
    "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
   ],
   "name": "связь PR с задачей ещё не появилась — задачи берутся из «Closes #N» в теле PR"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
+  "name": "удалённые файлы не дают метку ни решению, ни модулю модели"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
