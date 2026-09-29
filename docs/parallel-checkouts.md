@@ -1,0 +1,86 @@
+# Параллельные чекауты: свой порт и своя база к разделу «Субагенты и worktree»
+
+Правило — в `AGENTS.md`. Здесь фрагменты и проверки. Поведение `webServer`
+сверено с документацией Playwright («Web server», `TestConfig.webServer`):
+`reuseExistingServer: false` падает, если на `url` уже кто-то слушает;
+`env` ложится поверх `process.env`.
+
+## Конфиг раннера: порт из окружения
+
+```ts
+// playwright.config.ts — без PORT (CI) всё на прежнем 3000
+import { defineConfig } from '@playwright/test';
+
+const port = Number(process.env.PORT ?? 3000);
+const baseURL = `http://localhost:${port}`;
+
+export default defineConfig({
+  use: { baseURL },
+  webServer: {
+    command: `npm run dev -- --port ${port}`,
+    url: baseURL,
+    reuseExistingServer: false,   // занятый порт — ошибка, а не чужой сервер
+    env: {
+      APP_URL: baseURL,           // всё, что строит абсолютные ссылки, —
+      NEXTAUTH_URL: baseURL,      // на тот же порт (чек-лист ниже)
+    },
+  },
+});
+```
+
+`reuseExistingServer: !process.env.CI` из шаблона Playwright вне CI молча
+берёт сервер соседа на том же порту: тесты идут против чужого кода и чужой
+базы. На порту уже свой сервер, поднятый руками, — раннер упадёт: погасить
+его, раннер поднимет свой.
+
+## Свободный порт
+
+```bash
+for p in $(seq 3000 3099); do lsof -ti tcp:$p -sTCP:LISTEN >/dev/null || { echo $p; break; }; done
+```
+
+Два чекаута взяли один порт одновременно — второй раннер упадёт на
+`reuseExistingServer: false`, а не уйдёт на чужой сервер.
+
+## Что переезжает с портом
+
+- `use.baseURL`, `webServer.url` и порт в команде старта сервера.
+- Базовый URL приложения: `APP_URL`, `NEXTAUTH_URL` / `AUTH_URL`,
+  `NEXT_PUBLIC_*_URL`. Публичные переменные вшиваются при сборке: прогон по
+  собранному приложению (`build && start`) — пересобрать с новым портом.
+- Колбэки и редиректы: OAuth redirect URI, вебхуки, ссылки в письмах.
+- Эмуляторы и вспомогательные сервисы, которые поднимает прогон (почта,
+  платежи, хранилище): свой порт у каждого и адрес в переменных приложения.
+- Проверка: старый порт нигде не остался —
+  `grep -rn "localhost:3000" .env* playwright.config.*`.
+
+## Чей сервер на порту
+
+```bash
+lsof -nP -iTCP:3000 -sTCP:LISTEN                    # PID и команда
+lsof -a -p <PID> -d cwd -Fn | sed -n 's/^n//p'      # cwd — чей это чекаут
+```
+
+cwd — свой worktree: гасить можно. Чужой — не трогать (`kill` по порту
+обрывает чужой прогон), взять другой порт.
+
+## Своя база на прогон
+
+Общая dev-база стоит на миграции того, кто накатил последним, её контейнер
+перезапускают соседи. Прогону — свой контейнер на случайном порту:
+
+```bash
+docker run -d --name e2e-db-<задача> -e POSTGRES_PASSWORD=postgres -p 127.0.0.1::5432 postgres:17-alpine
+docker port e2e-db-<задача> 5432                    # → 127.0.0.1:55261
+until docker exec e2e-db-<задача> pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
+```
+
+`pg_isready` — по TCP (`-h 127.0.0.1`): через сокет он отвечает «готово»
+ещё во время initdb, и миграция упадёт на перезапуске сервера.
+
+- Адрес — во **все** переменные подключения: `DATABASE_URL`, `DIRECT_URL`,
+  `SHADOW_DATABASE_URL`, `PG*` — какие читает проект. Одна забытая уводит
+  миграции или сиды в общую базу.
+- Миграции и сиды — своей ветки, на эту базу, до старта сервера.
+- После прогона или мержа — `docker rm -f e2e-db-<задача>` (раздел «Git, PR
+  и мерж»: временные ресурсы сессии).
