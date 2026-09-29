@@ -236,6 +236,59 @@ describe("pr labels ставит задаче метки решений по д�
     expect(r.out).not.toContain("= #49: срочно");
   });
 
+  // механическая правка решение не меняет: её метка — шум, который в проекте с массовыми правками чистят руками (#192)
+  it("переименование файла в папке решения не даёт метку этого решения", () => {
+    const f = new FakeGitHub(REC);
+    const files = [
+      { path: "tests/capabilities/billing/invoice.test.ts", changeType: "RENAMED", additions: 0, deletions: 0 },
+      { path: "tests/capabilities/export/export.test.ts", changeType: "RENAMED", additions: 3, deletions: 1 },
+    ];
+    f.prs[120] = { files, closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 49)).toEqual(["export"]);
+    expect(r.out).toContain("PR #120 → #49: export");
+    expect(r.out).toContain("○ billing — только механическая правка");
+  });
+
+  it("правка только `exceptions.ts` не даёт метку решения", () => {
+    const f = new FakeGitHub(REC);
+    f.label("audit", "1D76DB", "Решение: tests/standards/audit");
+    f.prs[120] = { files: [{ path: "tests/standards/audit/exceptions.ts", changeType: "MODIFIED", additions: 0, deletions: 4 }], closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(f.mutations).toEqual([]);
+    expect(r.out).toContain("PR #120 → #49: решений в диффе нет");
+    expect(r.out).toContain("○ audit — только механическая правка");
+  });
+
+  it("удалённые файлы не дают метку ни решению, ни модулю модели", () => {
+    const f = new FakeGitHub(REC);
+    const files = [
+      { path: "tests/capabilities/legacy/legacy.test.ts", changeType: "DELETED", additions: 0, deletions: 40 },
+      { path: "src/domain/old.ts", changeType: "DELETED", additions: 0, deletions: 12 },
+      { path: "src/web/page.tsx", changeType: "MODIFIED", additions: 2, deletions: 2 },
+    ];
+    f.prs[120] = { files, closes: [49], head: HEAD, model: MODEL };
+    const r = prLabels(f, 120);
+    expect(issueLabels(f, 49)).toEqual(["web"]);
+    expect(r.out).toContain("○ domain — только механическая правка");
+    expect(r.out).toContain("○ legacy — только механическая правка");
+  });
+
+  // сторож от перекоррекции: механический файл не отменяет содержательную правку решения
+  it("механическая правка рядом с содержательной в той же папке — метка решения ставится", () => {
+    const f = new FakeGitHub(REC);
+    const files = [
+      { path: "tests/capabilities/billing/billing.test.ts", changeType: "MODIFIED", additions: 5, deletions: 0 },
+      { path: "tests/capabilities/billing/exceptions.ts", changeType: "MODIFIED", additions: 1, deletions: 0 },
+    ];
+    f.prs[120] = { files, closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(issueLabels(f, 49)).toEqual(["billing"]);
+    expect(r.out).not.toContain("○ billing");
+  });
+
   it("эпик задачи получает метки подзадачи — объединение", () => {
     const f = new FakeGitHub(REC);
     f.label("est", CAP, "Решение: tests/capabilities/est");
