@@ -1413,9 +1413,58 @@
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
   "describes": [
+   "Большой PR — сводка по папкам, полный список — в summary джоба"
+  ],
+  "name": "--full — полный список при любом размере"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Большой PR — сводка по папкам, полный список — в summary джоба"
+  ],
+  "name": "дифф выше порога — сводка по папкам, а не список названий"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Большой PR — сводка по папкам, полный список — в summary джоба"
+  ],
+  "name": "порог — целое число больше нуля, иначе ошибка запуска"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Большой PR — сводка по папкам, полный список — в summary джоба"
+  ],
+  "name": "решения выше порога — число на папку, а не список"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Большой PR — сводка по папкам, полный список — в summary джоба"
+  ],
+  "name": "удалённые при сводке — списком: снятое требование видно поимённо"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Большой PR — сводка по папкам, полный список — в summary джоба"
+  ],
+  "name": "удалённых больше порога — сводкой и они"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
    "Изменён — только очевидное переименование, иначе удалён и добавлен"
   ],
   "name": "непохожее имя в том же describe — удалён и добавлен, не переименование"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменён — только очевидное переименование, иначе удалён и добавлен"
+  ],
+  "name": "одинаковое тело у нескольких тестов файла — не переименование, а удалён и добавлен"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -1430,6 +1479,13 @@
    "Изменён — только очевидное переименование, иначе удалён и добавлен"
   ],
   "name": "переименование в другом файле — не изменение, а удалён и добавлен"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Изменён — только очевидное переименование, иначе удалён и добавлен"
+  ],
+  "name": "тест с новыми describe и it и тем же телом — переименование"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -1647,6 +1703,13 @@
    "Тесты харнесса — в диффе спеки: названия по отчёту, база — ветка spec"
   ],
   "name": "без базы в ветке spec — дифф по исходникам, и это сказано"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Тесты харнесса — в диффе спеки: названия по отчёту, база — ветка spec"
+  ],
+  "name": "в сводке по папкам видно, сколько тестов порождено харнессом"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
