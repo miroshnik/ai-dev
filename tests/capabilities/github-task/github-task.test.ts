@@ -243,6 +243,18 @@ describe("pr labels ставит задаче метки решений по д�
     expect(r.out).toContain("+ эпик #45: billing");
   });
 
+  // GitHub связывает PR с задачей не сразу после создания: pr labels зовут как раз тогда (#164)
+  it("связь PR с задачей ещё не появилась — задачи берутся из «Closes #N» в теле PR", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [], body: "Экспорт счетов.\n\nCloses #49, fixes #47, #45", head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 49)).toEqual(["billing"]);
+    expect(issueLabels(f, 47)).toEqual(["billing"]);
+    // «, #45» без ключевого слова GitHub не закрывает: задачи PR — только #49 и #47 (#45 — их эпик)
+    expect(r.out).toContain("PR #120 → #49, #47: billing");
+  });
+
   it("PR без «Closes #N» — ошибка, ничего не меняется", () => {
     const f = new FakeGitHub(REC);
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [], head: HEAD, model: null };
