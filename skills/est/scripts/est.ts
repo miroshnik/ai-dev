@@ -895,6 +895,30 @@ const SKIP_PROMPT_PREFIXES = ["<task-notification", "<\\task-notification", "<lo
 const refsIn = (txt: string) => uniqSortedNums([...txt.matchAll(ISSUE_REF_RE)].map((m) => parseInt(m[1]!, 10)));
 const urlsIn = (txt: string) => uniqSortedStrs([...txt.matchAll(ISSUE_URL_RE)].map((m) => `${m[1]}#${parseInt(m[2]!, 10)}`));
 
+// Задание субагенту: номер или ссылка сразу после слова «задача» либо в самом начале — задача; после «эпик» и «PR» — нет
+const ISSUE_ALT = String.raw`#(\d{1,6})(?![\p{L}\p{N}_])|(?:https?:\/\/)?github\.com\/([\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+)\/issues\/(\d{1,6})(?!\d)`;
+const TASK_WORD_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])задача\s+(?:${ISSUE_ALT})`, "iu");
+const TASK_LEAD_RE = new RegExp(String.raw`^\s*(?:${ISSUE_ALT})`, "u");
+const NOT_TASK_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:эпик\p{L}*|epic|PR)\s*[:—-]?\s*(?:${ISSUE_ALT})`, "giu");
+
+/**
+ * Задача из задания субагенту: «Задача #42 (эпик #40). …» — 42, «#42 (эпик #40): …» — 42, ссылка на issue — с
+ * репозиторием (`o/r#42`). Без этих примет — как раньше: ровно один номер без ссылок или ровно одна ссылка (и
+ * совпадающий с ней номер), не считая номеров после «эпик» и «PR». Подсказка жёсткая (своя запись — целиком, чужая —
+ * ноль, ветки и окна не смотрятся), поэтому при неясности её нет: «посмотри #42 и #39» — пусто, записи идут по ветке.
+ */
+function taskHintIn(txt: string): string {
+  const key = (m: RegExpExecArray) => (m[1] ? String(parseInt(m[1], 10)) : `${m[2]}#${parseInt(m[3]!, 10)}`);
+  const m = TASK_WORD_RE.exec(txt) ?? TASK_LEAD_RE.exec(txt);
+  if (m) return key(m);
+  const rest = txt.replace(NOT_TASK_RE, " ");
+  const nums = refsIn(rest);
+  const urls = urlsIn(rest);
+  if (urls.length === 1 && (!nums.length || (nums.length === 1 && nums[0] === parseInt(urls[0]!.split("#")[1]!, 10)))) return urls[0]!;
+  if (nums.length === 1 && !urls.length) return String(nums[0]);
+  return "";
+}
+
 function textOfContent(c: unknown): string {
   if (typeof c === "string") return c;
   if (Array.isArray(c)) {
@@ -1031,7 +1055,7 @@ function finishCommits(acc: Acc): void {
  * Субагенты (<sid>/subagents/**\/*.jsonl — Agent/Workflow) — часть той же сессии: их записи идут в
  * таймлайн и дают якоря по коммитам, но «человеческие» промпты в них — это задания от оркестратора,
  * а не от человека, поэтому n_human и первый промпт берём только с верхнего уровня. Зато задание
- * субагенту часто называет задачу («#N» или URL issue): если в нём ровно один номер, все записи
+ * субагенту называет задачу («Задача #N (эпик #M)», «#N» или URL issue — taskHintIn): все записи
  * этого субагента получают подсказку hint=N — так работа параллельных субагентов в workflow
  * привязывается к своим задачам, а не делится по порядку коммитов.
  */
@@ -1091,10 +1115,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
       const txt = textOfContent(content);
       if (txt.trim()) {
         hintDone = true;
-        const nums = refsIn(txt);
-        const urls = urlsIn(txt);
-        if (urls.length === 1 && (!nums.length || (nums.length === 1 && nums[0] === parseInt(urls[0]!.split("#")[1]!, 10)))) hint = urls[0]!;
-        else if (nums.length === 1 && !urls.length) hint = String(nums[0]);
+        hint = taskHintIn(txt);
       }
     }
     // Токены: usage дублируется на каждой записи одного ответа (по блоку контента) —
