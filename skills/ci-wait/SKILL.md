@@ -12,7 +12,9 @@ allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks
 происходит, а ручной опрос забывают повторить. Скрипт `scripts/wait-ci.sh`
 рядом с этим файлом делает всё детерминированно; агент только читает исход.
 
-Запуск — из каталога репозитория (или с `GH_REPO=owner/repo`):
+Запуск — из каталога репозитория (или с `GH_REPO=owner/repo`); фоновый — из
+каталога, который переживёт ожидание (главный чекаут, а не worktree, который
+удалят раньше): удалённый за это время каталог даёт `ERROR getcwd`.
 
 ```bash
 bash <каталог скилла>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0]
@@ -49,7 +51,9 @@ bash <каталог скилла>/scripts/wait-ci.sh status <sha> [--context <�
 - **PASS** — мерж (или доклад «готово»).
 - **FAIL** — читать логи упавшего чека (`gh run view <id> --log-failed`),
   чинить причину; «известный красный первый билд» — перезапустить свой прогон
-  (`gh run rerun <id> --failed`) и снова `ci-wait`. Не мержить.
+  (`gh run rerun <id> --failed`) и снова `ci-wait`. Не мержить. Джобы не
+  стартовали с аннотацией «recent account payments have failed…» — биллинг
+  владельца, не код (`docs/pr-checks.md`).
 - **TIMEOUT** — не считать ни успехом, ни провалом: посмотреть, зарегистрированы
   ли чеки вообще (`gh pr checks <N>`), не завис ли раннер; при необходимости
   повторить с большим `--timeout`.
