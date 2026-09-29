@@ -739,6 +739,15 @@ describe("Облачная сессия считается по событиям
       expect(res.sessions).toBe(1);
     });
 
+    it("облачная часть несёт ходы, хвост и контекст; локальный расчёт складывает ходы и хвост с местными, преамбулу берёт у самой ранней, контекст в конце — у самой поздней", () => {
+      const withSteps: CloudPart = { ...part, iv: [[ts("09:50"), ts("10:12")]], steps: 5, steps_agents: 2, tail: 1, preamble: 90_000, ctx_end: 300_000 };
+      const local = parseCloudFile(exportFile(events()));
+      local.sid = "local-session";
+      local.source = "claude";
+      const res = fact([local], [withSteps]);
+      expect(res).toMatchObject({ steps: 8, steps_agents: 3, tail: 1, preamble: 90_000, ctx_end: 300_000 });
+    });
+
     it("части собираются из всех комментариев с маркером факта; по сессии — последняя", () => {
       const body = (p: CloudPart) => `Факт (облако): …\n<!-- fact ${JSON.stringify({ v: 1, h: p.h, src: "cloud", cloud: [p] })} -->`;
       const later = { ...part, h: 0.3 };
@@ -965,5 +974,77 @@ describe("Неверный вызов — справка или ошибка д�
     expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("укажите номер issue");
     expect(run("estimate", "1", "--repo", "o/r", "--type", "feat", "--analogs", "2,3", "--tok-mult", "2.5").stderr).toContain("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
     expect(exitOf(run("fact", "--repo", "o/r", "--bogus"))).toBe(2);
+  });
+});
+
+/**
+ * Цена задачи растёт квадратично от числа ходов: каждый ход заново читает весь контекст. Факт показывает ходы,
+ * преамбулу (контекст первого хода), контекст в конце и хвост (ходы на контексте больше 400 тыс.) — иначе эффект
+ * правил про субагентов и число ходов невидим.
+ */
+describe("Факт — ходы и контекст задачи", () => {
+  const SID = "44444444-5555-6666-7777-888888888888";
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+  const step = (hhmm: string, id: string, cr: number, branch = "feat/42-x") => ({ type: "assistant", timestamp: at(hhmm), gitBranch: branch, message: { id, model: "claude-opus-5-5", usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: cr }, content: [{ type: "text", text: "…" }] } });
+  const prompt = (hhmm: string, text: string, branch = "feat/42-x") => ({ type: "user", timestamp: at(hhmm), cwd: "/repo", gitBranch: branch, message: { role: "user", content: text } });
+  function session(top: unknown[], sub: unknown[] = []): Session {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl(top));
+    if (sub.length) {
+      mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+      writeFileSync(path.join(dir, SID, "subagents", "agent-1.jsonl"), jsonl(sub));
+    }
+    return parseSessionFile(file);
+  }
+  const fact = (s: Session, closing: Record<string, number[]> = {}) => computeFact(stubRepo([s], [pr77()], closing), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+
+  it("ход — один ответ модели: повтор usage того же message.id и ответы субагента другой задачи не считаются", () => {
+    const file = claudeFixture(); // верхний уровень: один ответ, записанный дважды; субагент задачи — один ответ
+    const subs = path.join(dir, "11111111-2222-3333-4444-555555555555", "subagents");
+    writeFileSync(path.join(subs, "agent-2.jsonl"), jsonl([
+      { type: "user", timestamp: at("10:09"), gitBranch: "claude/agent-9z8y7x", message: { content: "Задача #43: другое" } },
+      step("10:09", "msg_other", 1000, "claude/agent-9z8y7x"),
+    ]));
+    const res = fact(parseSessionFile(file));
+    expect(res.steps).toBe(2);
+    expect(res.steps_agents).toBe(1);
+  });
+
+  it("преамбула — контекст первого хода сессии, контекст в конце — последнего; хвост — ходы с контекстом больше 400 тыс., включая субагентов", () => {
+    const s = session(
+      [prompt("10:00", "#42 сделай"), step("10:01", "m1", 100_000), step("10:02", "m2", 450_000), step("10:03", "m3", 500_000)],
+      [{ type: "user", timestamp: at("10:02"), gitBranch: "feat/42-x", message: { content: "Задача #42: проверь" } }, step("10:02", "s1", 600_000)],
+    );
+    const res = fact(s);
+    expect(res).toMatchObject({ steps: 4, steps_agents: 1, tail: 3, preamble: 100_010, ctx_end: 500_010 });
+  });
+
+  it("общий PR на две задачи делит токены, но не ходы — ход целый у каждой", () => {
+    const res = fact(parseSessionFile(claudeFixture()), { "77": [43] });
+    expect(res.shared).toEqual([{ unit: "PR #77", with: [43], k: 2 }]);
+    expect(res.steps).toBe(2);
+    expect(res.tok.total).toBeLessThan(6165);
+  });
+
+  it("строка «Ходы: …» в комментарии «Факт» и поля в маркере; без ответов модели строки нет", () => {
+    const res = fact(parseSessionFile(claudeFixture()));
+    const body = factCommentBody(res, 0.25, [], 0, null);
+    expect(body).toContain("Ходы: 2 (субагентов 1, их ходов 1), преамбула 6 тыс., контекст в конце 6 тыс., ходов с контекстом > 400 тыс. — 0 %.");
+    expect(parseMarker(body, "fact")).toMatchObject({ steps: 2, steps_agents: 1, tail: 0, preamble: 6100, ctx_end: 6100 });
+    const bare = session([prompt("10:00", "#42 сделай"), { type: "assistant", timestamp: at("10:05"), gitBranch: "feat/42-x", message: { content: [{ type: "text", text: "без usage" }] } }]);
+    const noSteps = factCommentBody(fact(bare), 0.25, [], 0, null);
+    expect(noSteps).not.toContain("Ходы:");
+    expect(parseMarker(noSteps, "fact").steps).toBeUndefined();
+  });
+
+  it("история показывает ходы задачи; у факта без признака — прочерк", () => {
+    const row = (number: number, steps?: number): Row => ({
+      item_id: "", issue_id: "", number, title: `Задача ${number}`, state: "CLOSED", stateReason: "COMPLETED", closedAt: 0, createdAt: 0, labels: [],
+      est: 1, fact: 0.5, status: "Готово", est_marker: { type: "feat" }, fact_marker: { cov: "full", tok: { total: 2e6 }, usd: 1.5, agents: 0, ...(steps === undefined ? {} : { steps }) },
+    });
+    const lines = historyTable([row(12, 250), row(13)]);
+    expect(lines[0]).toContain(" | ходы | ");
+    expect(lines[1]).toMatch(/ \|\s+250 \| /);
+    expect(lines[2]).toMatch(/ \|\s+— \| /);
   });
 });
