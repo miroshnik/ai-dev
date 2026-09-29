@@ -18,6 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
+import { skipString } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
@@ -248,7 +249,73 @@ export interface Disable {
 
 const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage"]);
-const DIRECTIVE = /(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\/|$)([^\n]*?)(?:\*\/|$)/gm;
+const DIRECTIVE = /^(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\/|$)([^\n]*?)(?:\*\/|$)/m;
+// после них `/` начинает регулярное выражение, а не деление
+const BEFORE_REGEX = "(,=:[!&|?{};+-*%<>~^";
+const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await", "delete", "throw", "instanceof", "new"]);
+
+/** i — открывающий `/` регулярного выражения; индекс после флагов. Классы `[…]` и экранирование учтены. */
+function skipRegex(s: string, i: number): number {
+  let j = i + 1;
+  let cls = false;
+  while (j < s.length && s[j] !== "\n") {
+    const c = s[j]!;
+    if (c === "\\") j++;
+    else if (c === "[") cls = true;
+    else if (c === "]") cls = false;
+    else if (c === "/" && !cls) break;
+    j++;
+  }
+  j++;
+  while (j < s.length && /[a-z]/i.test(s[j]!)) j++;
+  return j;
+}
+
+/**
+ * Комментарии кода — [начало, текст]: строки, шаблоны и регулярные выражения пропускаются. ESLint читает директивы
+ * только в комментариях: `// eslint-disable` в строке — фикстура или сообщение, а не отключение.
+ */
+function commentsIn(s: string): [number, string][] {
+  const out: [number, string][] = [];
+  let prev = ""; // последний значащий символ кода
+  let word = ""; // последнее слово кода
+  for (let i = 0; i < s.length; ) {
+    const c = s[i]!;
+    if (c === "/" && (s[i + 1] === "/" || s[i + 1] === "*")) {
+      const j = s[i + 1] === "/" ? s.indexOf("\n", i) : s.indexOf("*/", i + 2);
+      const end = j < 0 ? s.length : s[i + 1] === "/" ? j : j + 2;
+      out.push([i, s.slice(i, end)]);
+      i = end;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === "`") {
+      i = skipString(s, i);
+      prev = c;
+      word = "";
+      continue;
+    }
+    if (c === "/" && (prev === "" || BEFORE_REGEX.includes(prev) || REGEX_WORDS.has(word))) {
+      i = skipRegex(s, i);
+      prev = "/";
+      word = "";
+      continue;
+    }
+    if (/[\w$]/.test(c)) {
+      let j = i;
+      while (j < s.length && /[\w$]/.test(s[j]!)) j++;
+      word = s.slice(i, j);
+      prev = s[j - 1]!;
+      i = j;
+      continue;
+    }
+    if (!/\s/.test(c)) {
+      prev = c;
+      word = "";
+    }
+    i++;
+  }
+  return out;
+}
 
 /** Файл кода для реестра над исходниками: путь от корня и текст. */
 export interface SourceFile {
@@ -301,11 +368,13 @@ function codeFiles(root: string, dirs: string[]): string[] {
 /** Отключения линт-правил в файле: `// eslint-disable-next-line a, b -- #12 причина` и такие же блочные комментарии. */
 export function disablesIn(file: string, text: string): Disable[] {
   const out: Disable[] = [];
-  for (const m of text.matchAll(DIRECTIVE)) {
+  for (const [at, comment] of commentsIn(text)) {
+    const m = DIRECTIVE.exec(comment);
+    if (!m) continue;
     const [head, ...desc] = m[1]!.split(/\s--\s|\s--$/);
     out.push({
       file,
-      line: text.slice(0, m.index).split("\n").length,
+      line: text.slice(0, at).split("\n").length,
       rules: head!.split(",").map((r) => r.trim()).filter(Boolean),
       description: desc.join(" -- ").trim(),
     });
