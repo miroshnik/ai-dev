@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и после мержа (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
-allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
+description: Спецификация из тестов — детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет); spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; spec-break поломкой доказывает, что проверка умеет упасть (сломать → прогнать → всегда откатить); harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и после мержа (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда надо доказать, что унаследованный или новый тест ловит поломку («покрыто» ли на деле); когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(node *skills/spec/scripts/spec-break.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
 # spec — документация из названий тестов, дифф спеки в PR
@@ -20,6 +20,8 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
   прогон на `main` или артефакт прогона PR); в `main` документации нет;
 - `spec-claims.ts` — после прогона: каждая точка входа вызвана тестом
   capability (журнал `journal` харнесса), отчёт JUnit — в `spec-doc`;
+- `spec-break.ts` — проверка поломкой: правка кода, прогон теста, откат
+  всегда (и после обрыва); ✅ упал / ❌ не упал по каждой поломке;
 - `harness.ts` — библиотека для тестов проекта: механическая проверка
   регистрирует обычные тесты раннера и попадает в спеку (раздел «Проверки»).
 
@@ -44,6 +46,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | Спрашивают, какие требования снял PR | `spec-diff` — список «Удалены» идёт первым |
 | Проект переходит на тест-спек | раздел «Подключение в репозиторий»: установка флоу, скрипты под Node, workflow |
 | Соглашение для всех элементов (мутации, маршруты, файлы) | `invariant` в `tests/standards/<name>/<name>.test.ts` — раздел «Проверки» |
+| Доказать, что проверка умеет упасть (перенос старой спеки, ревью «покрыто») | `spec-break` — поломка под проверку, по одной на прогон |
 | После прогона всех тестов и шардов | `spec-claims` — каждая точка входа вызвана тестом capability; его отчёт — в `spec-doc` вместе с отчётами раннеров |
 
 ## Отчёты для spec-doc
@@ -305,6 +308,31 @@ CI на `main` — SHA мержа, `ci.md`: его предков ищет `spec
 опубликовано или совпадает, 1 — расхождение или пуш отклонён, 2 — нет
 каталога или не git. Без настроенного `git user` коммит — от бота GitHub
 Actions.
+
+## spec-break
+
+```bash
+bun <каталог скилла>/scripts/spec-break.ts --file <файл> --find <фрагмент> --replace <замена> [--name <название>] [--no-baseline] -- <команда теста…>
+bun <каталог скилла>/scripts/spec-break.ts --plan breaks.json [--no-baseline] [-- <команда теста…>]
+bun <каталог скилла>/scripts/spec-break.ts --restore
+```
+
+Проверка решения обязана уметь упасть: поломка — правка кода, от которой
+она должна покраснеть. Поломку выбирает агент под одну проверку (не
+мутационное тестирование): фрагмент `--find` встречается в файле ровно один
+раз, иначе код 2 до прогона. План — JSON `[{ name, file, find, replace, cmd? }]`
+(`cmd` — строка для `sh -c`, без неё — команда после `--`); каждая поломка —
+отдельный прогон: первый красный тест в serial-группе прячет остальные.
+Перед поломками — базовый прогон каждой команды: красный и без поломки — код
+2, поломки не применяются (`--no-baseline` — пропустить).
+
+Вывод — `✅ упал: <название> (<файл>)` / `❌ не упал: …` и итог; коды: 0 —
+упали от всех, 1 — есть ❌, 2 — ошибка. Откат — всегда: после прогона; по
+SIGINT/SIGTERM/SIGHUP (команда теста убивается со всеми процессами); после
+обрыва без отката (kill -9, закрытая сессия) — по журналу
+`.git/spec-break.json`, который пишется до правки: следующий запуск или
+`--restore` возвращает файл; файл правили после обрыва — журнал не
+применяется, код 2 — сверить руками.
 
 ## Проверки — `harness.ts`, `architecture.ts`, `spec-claims.ts`
 
