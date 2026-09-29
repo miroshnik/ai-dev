@@ -120,7 +120,7 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 17; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link, 16 = хеши листинга git и gh — только свои, 17 = ключевые слова оболочки в листинге
+const SESSION_CACHE_V = 18; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link, 16 = хеши листинга git и gh — только свои, 17 = ключевые слова оболочки в листинге, 18 = номер агента у записи (фан-аут задачи)
 const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
 const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
 // Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
@@ -422,7 +422,7 @@ export interface Session {
   cwd: string | null;
   cwds?: string[]; // все каталоги записей по порядку появления: сессия может перейти в репозиторий по ходу работы
   n_human: number;
-  ev: Any[][]; // [ts, ветка, human, hint?, uidx?]
+  ev: Any[][]; // [ts, ветка, human, hint?, uidx?, агент? (0 — сама сессия, k — k-й субагент)]
   prlinks: [number, number, string?][]; // [ts, номер PR, репозиторий PR owner/name — у Claude Code prRepository]
   commits: [number, string][];
   first_refs: number[];
@@ -450,6 +450,7 @@ export interface CloudPart {
   h: number;
   iv: [number, number][];
   prompts: number;
+  agents?: number; // субагенты облачной сессии, чья работа привязана к задаче
   tok: { in: number; out: number; cw: number; cr: number; total: number } | null;
   models: Record<string, { mtok: number; usd: number | null }>;
 }
@@ -1034,12 +1035,16 @@ function finishCommits(acc: Acc): void {
  * этого субагента получают подсказку hint=N — так работа параллельных субагентов в workflow
  * привязывается к своим задачам, а не делится по порядку коммитов.
  */
-function scanJsonl(file: string, acc: Acc, subagent: boolean): void {
-  scanRecords(jsonlRecords(file), acc, subagent);
+function scanJsonl(file: string, acc: Acc, agent: number): void {
+  scanRecords(jsonlRecords(file), acc, agent);
 }
 
-/** То же по готовым записям: у облачной сессии они собираются из её событий (parseCloudFile). */
-function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void {
+/**
+ * То же по готовым записям: у облачной сессии они собираются из её событий (parseCloudFile). agent — 0 у самой
+ * сессии, k у k-го субагента: номер уходит в запись, по нему факт считает фан-аут задачи.
+ */
+function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
+  const subagent = agent > 0;
   const commitToolIds = new Set<string>();
   const listingToolIds = new Set<string>();
   let hint = ""; // подсказка задачи для записей субагента: "N" или "owner/repo#N"
@@ -1111,7 +1116,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, subagent: boolean): void 
         acc.usage.push([mid.slice(-12), acc.models.indexOf(model), Math.trunc(u.input_tokens || 0), Math.trunc(u.output_tokens || 0), cw5, cw1, Math.trunc(u.cache_read_input_tokens || 0), u.speed === "fast" ? 1 : 0]);
       }
     }
-    acc.ev.push([ts, r.gitBranch || "", human ? 1 : 0, hint, uidx]);
+    acc.ev.push([ts, r.gitBranch || "", human ? 1 : 0, hint, uidx, agent]);
     if (human && acc.first_refs === null) {
       const txt = promptText(content);
       acc.first_refs = refsIn(txt);
@@ -1158,11 +1163,11 @@ const byTs = (a: Any[], b: Any[]) => (a[0] as number) - (b[0] as number);
 /** Компактная сводка одной сессии: jsonl верхнего уровня + её субагенты. */
 export function parseSessionFile(file: string): Session {
   const acc = newAcc();
-  scanJsonl(file, acc, false);
+  scanJsonl(file, acc, 0);
   const subs = subagentFiles(file);
-  for (const sf of subs) {
+  for (const [k, sf] of subs.entries()) {
     try {
-      scanJsonl(sf, acc, true);
+      scanJsonl(sf, acc, k + 1);
     } catch {
       continue;
     }
@@ -1365,8 +1370,8 @@ export function parseCloudFile(file: string): Session {
     if (e.event_type === "user") branch = gitBranchIn(textOfContent(p.message?.content) + "\n" + String(p.tool_use_result?.stdout ?? "")) ?? branch;
   }
   const acc = newAcc();
-  scanRecords(top, acc, false);
-  for (const recs of subs.values()) scanRecords(recs, acc, true);
+  scanRecords(top, acc, 0);
+  for (const [k, recs] of [...subs.values()].entries()) scanRecords(recs, acc, k + 1);
   acc.ev.sort(byTs);
   finishCommits(acc);
   return {
@@ -1836,6 +1841,7 @@ export interface Fact {
   cov: "full" | "partial" | "none";
   sessions: number;
   prompts: number;
+  agents?: number; // субагенты, чья работа привязана к задаче (фан-аут); нет — факт посчитан до признака
   prs: number[];
   commits: number;
   diff: number;
@@ -1982,6 +1988,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   const seenHashes = new Set<string>();
   let nSessions = 0;
   let nPrompts = 0;
+  let nAgents = 0; // субагенты, чья работа привязана к задаче: признак фан-аута
   let firstTs: number | null = null;
   let lastTs: number | null = null;
   const details: Detail[] = [];
@@ -2178,6 +2185,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     let sLast: number | null = null;
     const brs: Record<string, number> = {};
     const sessIv: [number, number][] = [];
+    const sessAgents = new Set<number>();
     const sessUsage: [Any[], number][] = []; // (usage-запись, доля) для привязанных ответов модели
     const sUsage = s.usage ?? [];
     const sModels = s.models ?? [];
@@ -2188,6 +2196,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       if (human && !w && i + 1 < ev.length && attributed[i + 1]! && ev[i + 1]![0] - ts <= gap) prompts++;
       if (!w) continue;
       if (e.length > 4 && e[4] >= 0 && e[4] < sUsage.length) sessUsage.push([sUsage[e[4]]!, w]);
+      if (e[5] > 0) sessAgents.add(e[5]);
       prompts += human;
       sFirst = sFirst === null ? ts : sFirst;
       sLast = ts;
@@ -2205,6 +2214,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     if (sessIv.length) iv[sid8] = mergeIntervals([...(iv[sid8] ?? []), ...sessIv]).map(([a, b]) => [Math.floor(a), Math.ceil(b)]);
     nSessions++;
     nPrompts += prompts;
+    nAgents += sessAgents.size;
     rawTotal += sessRaw;
     weightedTotal += sessW;
     for (const [u, w] of sessUsage) {
@@ -2242,6 +2252,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     iv[sidKey(p.session)] = piv;
     nSessions++;
     nPrompts += p.prompts || 0;
+    nAgents += p.agents || 0;
     if (p.tok) {
       tok.in += p.tok.in || 0;
       tok.out += p.tok.out || 0;
@@ -2295,6 +2306,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     cov,
     sessions: nSessions,
     prompts: nPrompts,
+    agents: nAgents,
     prs: prObjs.map((p) => p.number),
     commits: prObjs.reduce((s, p) => s + (p.commits_total || p.commits.length), 0) + closers.length,
     diff,
@@ -2400,7 +2412,9 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
     const estTxt = est ? `оценка ${fmtH(est)} ч${ratio}` : "оценки нет";
     const ns = res.sessions;
     const npr = res.prompts;
-    text = `Факт: ${fmtH(h)} ч активных в ${agentsTxt(res)} (${estTxt}). ${ns} ${plural(ns, "сессия", "сессии", "сессий")}, ${npr} ${plural(npr, "промпт", "промпта", "промптов")}, стена ${fmtH(res.wall, 1)} ч, покрытие ${res.cov}.`;
+    const na = res.agents ?? 0;
+    const agents = na ? ` ${na} ${plural(na, "субагент", "субагента", "субагентов")},` : "";
+    text = `Факт: ${fmtH(h)} ч активных в ${agentsTxt(res)} (${estTxt}). ${ns} ${plural(ns, "сессия", "сессии", "сессий")}, ${npr} ${plural(npr, "промпт", "промпта", "промптов")},${agents} стена ${fmtH(res.wall, 1)} ч, покрытие ${res.cov}.`;
   }
   text += res.prs.length ? " PR " + res.prs.map((p) => `#${p}`).join(", ") + ";" : " PR нет;";
   const nc = res.commits;
@@ -2410,7 +2424,7 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   for (const x of res.overlap ?? []) text += ` Пересечение с фактом #${x.issue}: ${fmtH(x.h)} ч — пересчитать #${x.issue}.`;
   for (const sid of res.cloud_missing ?? []) text += ` Облачная сессия https://claude.ai/code/${sid} не импортирована — est cloud-import.`;
   if (res.tok) text += "\n" + tokensTxt(res);
-  const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, prs: res.prs, commits: res.commits, diff: res.diff, cause };
+  const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, agents: res.agents ?? 0, prs: res.prs, commits: res.commits, diff: res.diff, cause };
   if (res.tok) {
     marker.tok = res.tok;
     marker.usd = res.usd ?? null;
@@ -2464,6 +2478,7 @@ function cloudOwnPart(number: number, session: string, gap: number): CloudPart |
     h: res.h,
     iv: (res.intervals ?? []).map(([a, b]) => [Math.floor(a), Math.ceil(b)] as [number, number]),
     prompts: res.prompts,
+    agents: res.agents ?? 0,
     tok: t ? { in: t.in, out: t.out, cw: t.cw, cr: t.cr, total: t.total } : null,
     models: res.models ?? {},
   };
@@ -2582,13 +2597,15 @@ const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type ||
 export function historyTable(rows: Row[]): string[] {
   const labelsOf = (r: Row) => r.labels.filter((l) => l !== "epic").join(",");
   const w = Math.max("метки".length, ...rows.map((r) => labelsOf(r).length));
-  const out = [`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("тип", 8)} | ${pad("метки", w)} | заголовок`];
+  const out = [`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("аг.", 3, true)} | ${pad("тип", 8)} | ${pad("метки", w)} | заголовок`];
   for (const r of rows) {
     const fm = r.fact_marker ?? {};
     const cov = fm.cov || "—";
     const mt = fm.tok ? fmtMtok(fm.tok.total) : "—";
     const usd = fm.usd !== undefined && fm.usd !== null ? Number(fm.usd).toFixed(2) : "—";
-    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
+    // субагенты задачи — признак фан-аута; факт, посчитанный до признака, — прочерк
+    const ag = typeof fm.agents === "number" ? String(fm.agents) : "—";
+    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 3, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
   }
   return out;
 }
@@ -2965,8 +2982,22 @@ interface EstimateArgs {
   type: string;
   analogs: string;
   mult: number;
+  tokMult?: number; // поправка токенов и стоимости; без неё — как у часов
+  tokNote?: string;
   note: string;
   write: boolean;
+}
+
+/** Ступени поправки токенов: фан-аут в пилоте давал ×2,5 к токенам при ×0,8 к часам — поэтому есть и ×3. */
+const TOK_MULTS = [0.5, 1, 1.5, 2, 3];
+
+/**
+ * Прогноз по фактам аналогов: часы — медиана × поправка часов, к ступени шкалы; токены и стоимость — медиана ×
+ * поправка токенов (без неё — та же, что у часов): у фан-аута токены растут, а часы сжимаются.
+ */
+export function forecast(facts: number[], toks: number[], usds: number[], mult: number, tokMult = mult): { raw: number; h: number; tok: number | null; usd: number | null } {
+  const raw = median(facts) * mult;
+  return { raw, h: roundScale(raw), tok: toks.length ? median(toks) * tokMult : null, usd: usds.length ? median(usds) * tokMult : null };
 }
 
 /**
@@ -2976,11 +3007,13 @@ interface EstimateArgs {
 function cmdEstimate(args: EstimateArgs): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
   const registry = loadRegistry();
-  const repo = new Repo(resolveRepo(args.repo), registry);
-  const meta = repo.projectMeta();
   if (!(EST_TYPES as readonly string[]).includes(args.type)) throw new EstError(`--type должен быть одним из: ${EST_TYPES.join(", ")}`);
   if (args.hours !== undefined && !(args.hours > 0)) throw new EstError(`--hours должен быть больше 0, получено ${fmtH(args.hours)}`);
   if (![0.5, 1, 1.5, 2].includes(args.mult)) throw new EstError("--mult допускает только 0.5, 1, 1.5 или 2");
+  if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
+  const tokMult = args.tokMult ?? args.mult;
+  const repo = new Repo(resolveRepo(args.repo), registry);
+  const meta = repo.projectMeta();
   // аналоги: номер issue этого репо (254) или задача другого репо из реестра (owner/repo#254)
   const analogs: (number | string)[] = []; // number — этот репо; "owner/repo#N" — другой
   for (let a of args.analogs.split(",")) {
@@ -3066,10 +3099,11 @@ function cmdEstimate(args: EstimateArgs): void {
   let h: number;
   let basis: string;
   if (facts.length) {
-    raw = median(facts) * args.mult;
-    h = roundScale(raw);
-    if (toks.length) tokF = median(toks) * args.mult;
-    if (usds.length) usdF = median(usds) * args.mult;
+    const f = forecast(facts, toks, usds, args.mult, tokMult);
+    raw = f.raw;
+    h = f.h;
+    tokF = f.tok;
+    usdF = f.usd;
     const mn = Math.min(...facts);
     const mx = Math.max(...facts);
     if (mn > 0 && mx / mn > 3) spreadTxt = ` Разброс фактов аналогов ${fmtH(mn)}…${fmtH(mx)} ч — взята медиана.`;
@@ -3090,14 +3124,15 @@ function cmdEstimate(args: EstimateArgs): void {
   const sameType = rows.filter((r) => r.state === "CLOSED" && r.fact !== null && (r.fact_marker?.cov ?? "full") === "full" && rowType(r) === args.type).length;
   const counted = facts.length;
   const conf = expert ? "C" : counted >= 3 && sameType >= 5 ? "A" : "B";
-  let forecast = `Оценка: ${fmtH(h)} ч`;
-  if (tokF !== null) forecast += `, ≈ ${fmtH(tokF, tokF < 1 ? 2 : 1)} млн токенов`;
-  if (usdF !== null) forecast += usdF < 1 ? `, ≈ $${usdF.toFixed(2)}` : `, ≈ $${usdF.toFixed(0)}`;
-  if (facts.length && (toks.length < facts.length || usds.length < facts.length)) forecast += ` (токены и стоимость по ${Math.min(toks.length, usds.length)} из ${facts.length} аналогов)`;
+  let headline = `Оценка: ${fmtH(h)} ч`;
+  if (tokF !== null) headline += `, ≈ ${fmtH(tokF, tokF < 1 ? 2 : 1)} млн токенов`;
+  if (usdF !== null) headline += usdF < 1 ? `, ≈ $${usdF.toFixed(2)}` : `, ≈ $${usdF.toFixed(0)}`;
+  if (facts.length && (toks.length < facts.length || usds.length < facts.length)) headline += ` (токены и стоимость по ${Math.min(toks.length, usds.length)} из ${facts.length} аналогов)`;
   const note = args.note ? ` (${args.note})` : "";
-  const multTxt = facts.length ? ` Поправка: ×${fmtH(args.mult)}${note}.` : "";
+  let multTxt = facts.length ? ` Поправка: ×${fmtH(args.mult)}${note}.` : "";
+  if (facts.length && tokMult !== args.mult) multTxt += ` Поправка токенов и стоимости: ×${fmtH(tokMult)}${args.tokNote ? ` (${args.tokNote})` : ""}.`;
   const kTxt = c.n ? `k=${c.k} (n=${c.n}, уровень «${level}»; справочно, к прогнозу не применяется)` : "k: истории нет";
-  const text = `${forecast} (тип ${args.type}, доверие ${conf}; ${basis}). Аналоги: ${analogTxt}.${multTxt}${spreadTxt ?? ""} ${kTxt}.`;
+  const text = `${headline} (тип ${args.type}, доверие ${conf}; ${basis}). Аналоги: ${analogTxt}.${multTxt}${spreadTxt ?? ""} ${kTxt}.`;
   const marker = {
     v: 2,
     h,
@@ -3105,6 +3140,7 @@ function cmdEstimate(args: EstimateArgs): void {
     type: args.type,
     analogs,
     mult: args.mult,
+    tok_mult: tokMult,
     tok: tokF !== null ? round2(tokF) : null,
     usd: usdF !== null ? round2(usdF) : null,
     expert,
@@ -3139,7 +3175,7 @@ const USAGE = `est — оценка задач по истории проект�
   est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
   est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
   est fact --sweep [--since 90d] [--repo o/r] [--write]
-  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult 0.5|1|1.5|2] [--note "причина"] [--write]
+  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult 0.5|1|1.5|2] [--note "причина"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
   est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Облачная сессия») в источники факта
   <type> — ${EST_TYPES.join(" ")}`;
@@ -3211,12 +3247,12 @@ export function main(argv: string[]): number {
       const { values, positionals } = parseArgs({
         args: rest,
         allowPositionals: true,
-        options: { repo: { type: "string" }, hours: { type: "string" }, type: { type: "string" }, analogs: { type: "string", default: "" }, mult: { type: "string", default: "1" }, note: { type: "string", default: "" }, write: { type: "boolean", default: false } },
+        options: { repo: { type: "string" }, hours: { type: "string" }, type: { type: "string" }, analogs: { type: "string", default: "" }, mult: { type: "string", default: "1" }, note: { type: "string", default: "" }, "tok-mult": { type: "string" }, "tok-note": { type: "string" }, write: { type: "boolean", default: false } },
       });
       const number = intArg(positionals[0], "номер issue");
       if (number === undefined) throw new EstError("укажите номер issue");
       if (!values.type) throw new EstError(`--type обязателен: ${EST_TYPES.join(", ")}`);
-      cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, note: values.note, write: values.write });
+      cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, tokMult: floatArg(values["tok-mult"], "--tok-mult"), tokNote: values["tok-note"], note: values.note, write: values.write });
       return 0;
     }
     throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact или estimate`);
