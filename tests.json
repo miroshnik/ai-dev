@@ -1180,6 +1180,62 @@
   "name": "неизвестная команда — код 2 и справка"
  },
  {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "PR не открыт в основную ветку — ошибка"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "PR с красным CI, черновик и PR без ветки очередь не держат"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "других PR в фазе мержа нет — ветка голова, предупреждения нет"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "другой PR репозитория с идущим CI — ветка не голова, предупреждение называет PR впереди"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "зелёный PR ждёт мержа и PR, чьи чеки ещё не зарегистрированы, — держат очередь"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "оба PR актуальны и в CI — голова тот, у кого номер меньше; ему — кто за ним"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "отставший от основной ветки PR очередь не держит"
+ },
+ {
+  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
+  "describes": [
+   "Push, CI и мерж — только у головы очереди мержа"
+  ],
+  "name": "у ветки ещё нет PR — впереди все PR в фазе мержа; PR ветки находится по её имени"
+ },
+ {
   "path": "tests/capabilities/release/release.test.ts",
   "describes": [
    "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
