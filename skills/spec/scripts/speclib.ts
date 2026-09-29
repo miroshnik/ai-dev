@@ -24,6 +24,7 @@ export interface Test {
   status: Status;
   reason: string; // причина пропуска, если отчёт её знает
   variants: number; // одинаковые записи из нескольких отчётов (проекты Playwright) свёрнуты
+  body?: string; // аргументы вызова после названия без пробелов — только из разбора исходника (тело теста)
 }
 
 export function makeTest(
@@ -567,7 +568,10 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
             pending = { name, paren: p0 };
             addDoc(docs.describes, chain, d?.text ?? "");
           } else {
-            out.push(makeTest(file, chain.slice(0, -1), name));
+            // тело — остаток аргументов вызова: переименованный тест с той же проверкой узнаётся по нему
+            const t = makeTest(file, chain.slice(0, -1), name);
+            t.body = s.slice(end, Math.max(end, skipBalanced(s, end) - 1)).replace(/\s+/g, "");
+            out.push(t);
             addDoc(docs.tests, chain, d?.text ?? "");
           }
           i = end;

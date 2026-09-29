@@ -241,6 +241,9 @@ function pair(
   return pairs;
 }
 
+/** Тело без проверки: `() => {}`, `async () => {}`, `function () {}` — без пробелов, как в `Test.body`. */
+const EMPTY_BODY = /^,(?:async)?(?:\([^)]*\)=>|function\w*\([^)]*\))\{\}$/;
+
 const sameDescribes = (r: Test, a: Test) => r.describes.length === a.describes.length && r.describes.every((d, i) => d === a.describes[i]);
 
 export function diff(
@@ -273,9 +276,20 @@ export function diff(
     movedKeys.add(L.keyOf(t));
   }
   added = added.filter((a) => !movedKeys.has(L.keyOf(a)));
-  // 1) тот же файл и describe, похожее имя — переименован тест
-  const changed = pair(removed, added, (r, a) => r.path === a.path && sameDescribes(r, a), (r, a) => ratio(r.name, a.name), RENAME_RATIO);
-  // 2) та же папка и имя, другой describe — переименован describe или тест переложен в другой раздел,
+  // 1) тот же файл и то же тело, единственное в файле среди снятых и среди новых, — переименован тест, даже если
+  // сменились и describe, и имя (перевод названий в утверждения). Пустое тело — не признак: проверки в нём нет
+  const bodyKey = (t: Test) => (t.body && !EMPTY_BODY.test(t.body) ? JSON.stringify([t.path, t.body]) : "");
+  const once = (list: Test[]) => {
+    const n = new Map<string, number>();
+    for (const t of list) if (bodyKey(t)) n.set(bodyKey(t), (n.get(bodyKey(t)) ?? 0) + 1);
+    return n;
+  };
+  const [inRemoved, inAdded] = [once(removed), once(added)];
+  const unique = (t: Test) => !!bodyKey(t) && inRemoved.get(bodyKey(t)) === 1 && inAdded.get(bodyKey(t)) === 1;
+  const changed = pair(removed, added, (r, a) => unique(r) && bodyKey(r) === bodyKey(a), () => 1, 1);
+  // 2) тот же файл и describe, похожее имя — переименован тест
+  changed.push(...pair(removed, added, (r, a) => r.path === a.path && sameDescribes(r, a), (r, a) => ratio(r.name, a.name), RENAME_RATIO));
+  // 3) та же папка и имя, другой describe — переименован describe или тест переложен в другой раздел,
   // в том числе из другого файла папки: текст требования тот же, сменился раздел
   changed.push(
     ...pair(
@@ -309,6 +323,8 @@ function changedEntry([o, n]: [Test, Test]): string {
     const prefix = n.describes.length ? md(n.describes) + " › " : "";
     return `- \`${L.folderOf(n)}\` · ${prefix}~~${L.mdText(o.name)}~~ → ${L.mdText(n.name)}${outMark(n)}`;
   }
+  // сменились и describe, и имя (или describe не было) — зачёркнуто старое название целиком
+  if (o.name !== n.name || !o.describes.length) return `- \`${L.folderOf(n)}\` · ~~${L.titleOf(o)}~~ → ${L.titleOf(n)}${outMark(n)}`;
   return `- \`${L.folderOf(n)}\` · ~~${md(o.describes)}~~ → ${md(n.describes)} › ${L.mdText(n.name)}${outMark(n)}`;
 }
 
