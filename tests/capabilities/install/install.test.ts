@@ -118,25 +118,35 @@ describe("В проект — копия, которую видят облачн
   });
 });
 
-describe("На машину (-g) — всем агентам, что на ней есть", () => {
-  it("правила и скиллы — в ~/.agents; агентам, что есть на машине, — симлинки, отсутствующим каталоги не создаются", () => {
+/**
+ * Правила грузятся из проекта: вторая копия на машине читалась бы Claude Code на каждом ходу каждого агента
+ * (~20k токенов). На машине — только скиллы и хук.
+ */
+describe("На машину (-g) — только скиллы и хук, правила грузятся из проекта", () => {
+  const gone = (p: string) => lstatSync(p, { throwIfNoEntry: false }) === undefined;
+
+  it("install -g ставит скиллы в ~/.agents/skills и ~/.claude/skills и хук SessionStart; правил на машине нет — ни ~/.agents/ai-dev, ни ~/.claude/rules, ни файлов правил Codex, Gemini CLI, Copilot, OpenCode, Amp", () => {
     mkdirSync(path.join(home, ".claude"));
     mkdirSync(path.join(home, ".codex"));
     expect(install(["-g"]).code).toBe(0);
-    expect(read(path.join(home, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
     expect(isLink(path.join(home, ".agents/skills/spec"))).toBe(false);
     expect(readlinkSync(path.join(home, ".claude/skills/spec"))).toBe("../../.agents/skills/spec");
-    expect(readlinkSync(path.join(home, ".claude/rules/ai-dev.md"))).toBe("../../.agents/ai-dev/AGENTS.md");
-    expect(realpathSync(path.join(home, ".codex/AGENTS.md"))).toBe(realpathSync(path.join(home, ".agents/ai-dev/AGENTS.md")));
-    expect(existsSync(path.join(home, ".gemini"))).toBe(false);
+    expect(read(path.join(home, ".claude/settings.json"))).toContain("check --hook");
+    for (const p of [".agents/ai-dev", ".claude/rules", ".codex/AGENTS.md", ".gemini", ".copilot", ".config/opencode", ".config/amp"]) expect(gone(path.join(home, p))).toBe(true);
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
   });
 
-  it("чужой непустой файл правил агента не трогается — предупреждение", () => {
-    writeTree(home, { ".codex/AGENTS.md": "мои правила\n" });
-    const r = install(["-g"]);
-    expect(read(path.join(home, ".codex/AGENTS.md"))).toBe("мои правила\n");
-    expect(r.stderr).toContain(".codex/AGENTS.md");
+  it("повторный install -g убирает правила прошлой установки — ~/.agents/ai-dev, симлинки ~/.claude/rules/ai-dev*.md и симлинки агентов на канон; свой файл правил агента остаётся", () => {
+    writeTree(home, { ".agents/ai-dev/AGENTS.md": "старый канон\n", ".agents/ai-dev/claude/CLAUDE.md": "старый\n", ".gemini/GEMINI.md": "мои правила\n" });
+    mkdirSync(path.join(home, ".claude/rules"), { recursive: true });
+    symlinkSync("../../.agents/ai-dev/AGENTS.md", path.join(home, ".claude/rules/ai-dev.md"));
+    symlinkSync("../../.agents/ai-dev/claude/CLAUDE.md", path.join(home, ".claude/rules/ai-dev-claude.md"));
+    mkdirSync(path.join(home, ".codex"));
+    symlinkSync("../.agents/ai-dev/AGENTS.md", path.join(home, ".codex/AGENTS.md"));
+    expect(install(["-g"]).code).toBe(0);
+    for (const p of [".agents/ai-dev", ".claude/rules/ai-dev.md", ".claude/rules/ai-dev-claude.md", ".codex/AGENTS.md"]) expect(gone(path.join(home, p))).toBe(true);
+    expect(read(path.join(home, ".gemini/GEMINI.md"))).toBe("мои правила\n");
+    expect(read(path.join(home, ".agents/ai-dev.json"))).toContain('"skills"');
   });
 
   it("старый симлинк install.sh ~/.claude/CLAUDE.md → claude/CLAUDE.md убирается — правила не грузятся дважды", () => {
@@ -152,15 +162,14 @@ describe("На машину (-g) — всем агентам, что на ней
     expect(read(path.join(home, ".claude/CLAUDE.md"))).toBe("мои заметки\n");
   });
 
-  it("--link из клона — симлинки на клон вместо копий: правка в клоне видна сразу", () => {
+  it("--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json", () => {
     mkdirSync(path.join(home, ".claude"));
     expect(install(["-g", "--link"]).code).toBe(0);
-    // клон вне HOME — ссылка абсолютная: относительная ломается, если путь к HOME идёт через симлинк
-    // (macOS: /var → /private/var, а HOME=/var/… здесь)
-    expect(path.isAbsolute(readlinkSync(path.join(home, ".agents/ai-dev")))).toBe(true);
-    expect(realpathSync(path.join(home, ".agents/ai-dev"))).toBe(realpathSync(REPO));
     expect(realpathSync(path.join(home, ".agents/skills/spec"))).toBe(realpathSync(path.join(REPO, "skills/spec")));
-    expect(realpathSync(path.join(home, ".claude/rules/ai-dev.md"))).toBe(realpathSync(path.join(REPO, "AGENTS.md")));
+    expect(realpathSync(path.join(home, ".claude/skills/spec"))).toBe(realpathSync(path.join(REPO, "skills/spec")));
+    expect(gone(path.join(home, ".agents/ai-dev"))).toBe(true);
+    expect(gone(path.join(home, ".claude/rules"))).toBe(true);
+    expect(realpathSync(JSON.parse(read(path.join(home, ".agents/ai-dev.json"))).clone)).toBe(realpathSync(REPO));
   });
 
   /** Хук проверяет флоу в начале каждой сессии Claude Code; что он делает — capability `update`. */

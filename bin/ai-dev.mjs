@@ -5,7 +5,7 @@
  * отстала ли установка от последнего релиза ai-dev, обновление и выпуск релиза.
  *
  *   npx -y github:miroshnik/ai-dev install                — в проект: корень git (или текущий каталог)
- *   npx -y github:miroshnik/ai-dev install -g             — на машину: ~/.agents и агенты, которые на ней есть
+ *   npx -y github:miroshnik/ai-dev install -g             — на машину: только скиллы и хук, правила — из проекта
  *   node <клон ai-dev>/bin/ai-dev.mjs install -g --link   — из клона: симлинки на клон, правки видны сразу
  *   npx -y github:miroshnik/ai-dev check [-g]             — отстала ли установка: 0 — нет, 1 — да, 2 — не проверить
  *   npx -y github:miroshnik/ai-dev update [-g]            — довести установку до актуальной
@@ -13,9 +13,11 @@
  *
  * Раскладка как у скиллов (`npx skills`): канон в `.agents/` — `.agents/ai-dev/` (AGENTS.md, claude/CLAUDE.md,
  * docs/*.md) и `.agents/skills/<name>/`; Claude Code получает симлинки в `.claude/skills` и `.claude/rules`
- * (грузит их сам, независимо от CLAUDE.md проекта), остальные агенты — ссылку в `AGENTS.md` проекта или
- * симлинк своего глобального файла правил. `.agents/ai-dev.json` — SHA ai-dev, из которого поставлено, и список
- * поставленных скиллов: по нему переустановка убирает скиллы, которых в ai-dev больше нет, и не трогает чужие.
+ * (грузит их сам, независимо от CLAUDE.md проекта), остальные агенты — ссылку в `AGENTS.md` проекта. На машине
+ * (`-g`) правил нет — только скиллы (`~/.agents/skills`, `~/.claude/skills`) и хук: правила грузятся из проекта,
+ * вторая копия на машине стоила бы ~20k токенов на каждом ходу каждого агента. `.agents/ai-dev.json` — SHA ai-dev,
+ * из которого поставлено, список поставленных скиллов (по нему переустановка убирает скиллы, которых в ai-dev
+ * больше нет, и не трогает чужие) и у машины с `--link` — путь клона.
  *
  * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
  * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
@@ -64,7 +66,8 @@ const USAGE = `Использование: ai-dev <команда> [-g]
 
   install            правила, справочники и все скиллы последнего релиза ai-dev — в проект (корень git или текущий
                      каталог)
-  install -g         то же на машину: ~/.agents и агенты, которые на ней есть
+  install -g         на машину только скиллы (~/.agents/skills, ~/.claude/skills) и хук SessionStart; правила —
+                     из проекта, копию на машине прошлой установки убирает
   install -g --link  из клона ai-dev: симлинки на клон вместо копий, правки видны сразу
   check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт, 2 — проверка недоступна;
                      копию сверяет последний релиз, клон --link — origin/main
@@ -315,7 +318,7 @@ function installRules(src, root, linkMode) {
   note(`${path.relative(root, canon)}/ ← AGENTS.md, claude/CLAUDE.md, docs/ (${docs.length})`);
 }
 
-/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, skills?: string[] }} */
+/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[] }} */
 function readManifest(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, ".agents/ai-dev.json"), "utf8"));
@@ -359,13 +362,14 @@ function installSkills(src, root, linkMode, claude) {
     if (lstat(path.join(root, ".claude/skills", name))?.isSymbolicLink()) rmSync(path.join(root, ".claude/skills", name));
     note(`${path.relative(root, dst)} — убран: в ai-dev его больше нет`);
   }
+  const clone = linkMode ? path.resolve(src) : undefined; // машина с --link: по нему check и update находят клон
   if (dry) {
     const m = readManifest(root);
-    if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed)) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
+    if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
     return;
   }
   const sha = sourceSha(src);
-  writeFileSync(manifestPath, JSON.stringify({ source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), skills: installed }, null, 2) + "\n");
+  writeFileSync(manifestPath, JSON.stringify({ source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed }, null, 2) + "\n");
 }
 
 /** Claude Code: правила из `.claude/rules` грузятся сами, при любом CLAUDE.md. @param {string} root */
@@ -418,12 +422,26 @@ function agentsBlock(root) {
   note("AGENTS.md — блок со ссылкой на .agents/ai-dev/AGENTS.md");
 }
 
+/** Корень git-репозитория текущего каталога; null — не репозиторий. */
+function gitRoot() {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Корень проекта: корень git или текущий каталог. */
 function projectRoot() {
+  return gitRoot() ?? process.cwd();
+}
+
+/** Клон ai-dev: канон в нём — корневой AGENTS.md, ставить флоу в него не нужно. @param {string} root */
+function isAiDevClone(root) {
   try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || process.cwd();
+    return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).name === "ai-dev";
   } catch {
-    return process.cwd();
+    return false;
   }
 }
 
@@ -435,38 +453,55 @@ function installProject(src, root) {
   agentsBlock(root);
 }
 
+/** Глобальные файлы правил агентов, которые прошлая установка делала симлинками на `~/.agents/ai-dev/AGENTS.md`. */
+const AGENT_RULE_FILES = [".codex/AGENTS.md", ".gemini/GEMINI.md", ".copilot/copilot-instructions.md", ".config/opencode/AGENTS.md", ".config/amp/AGENTS.md"];
+
+/**
+ * Правил на машине нет: их грузит проект (`.claude/rules`, `AGENTS.md`), а вторая копия с машины — те же ~20k токенов
+ * на каждом ходу каждого агента. Прошлая установка их ставила — убираем: `~/.agents/ai-dev` (копия или симлинк на
+ * клон), симлинки `~/.claude/rules/ai-dev*.md` и симлинки глобальных файлов агентов на канон. Чужой файл и чужой
+ * симлинк не трогаем.
+ * @param {string} home
+ */
+function removeGlobalRules(home) {
+  const canon = path.join(home, ".agents/ai-dev");
+  const st = lstat(canon);
+  if (st) {
+    if (dry) change("-", canon + "/");
+    else if (st.isSymbolicLink()) rmSync(canon);
+    else rmSync(canon, { recursive: true, force: true });
+  }
+  /** @type {string[]} */
+  const removed = [];
+  for (const rel of [".claude/rules/ai-dev.md", ".claude/rules/ai-dev-claude.md", ...AGENT_RULE_FILES]) {
+    const file = path.join(home, rel);
+    const ls = lstat(file);
+    if (!ls?.isSymbolicLink() || !path.resolve(path.dirname(file), readlinkSync(file)).startsWith(canon + path.sep)) continue;
+    if (dry) change("-", file);
+    else rmSync(file), removed.push(rel);
+  }
+  if (!dry && (st || removed.length)) note(`правила на машине убраны (${[st ? ".agents/ai-dev/" : "", ...removed].filter(Boolean).join(", ")}): правила грузятся из проекта`);
+}
+
 /** @param {string} src @param {boolean} linkMode */
 function installGlobal(src, linkMode) {
   const home = os.homedir();
   const has = (/** @type {string} */ dir, /** @type {string} */ cmd = "") => existsSync(path.join(home, dir)) || (cmd !== "" && onPath(cmd));
   const claude = has(".claude", "claude");
-  installRules(src, home, linkMode);
   installSkills(src, home, linkMode, claude);
+  removeGlobalRules(home);
 
   if (claude) {
-    claudeRules(home);
     claudeHook(home);
-    // install.sh ставил ~/.claude/CLAUDE.md симлинком на claude/CLAUDE.md, а тот импортировал AGENTS.md: с
-    // ~/.claude/rules правила загрузились бы дважды
+    // install.sh ставил ~/.claude/CLAUDE.md симлинком на claude/CLAUDE.md, а тот импортировал AGENTS.md
     const old = path.join(home, ".claude/CLAUDE.md");
     if (lstat(old)?.isSymbolicLink() && readlinkSync(old).endsWith(path.join("claude", "CLAUDE.md"))) {
       if (dry) change("-", old);
-      else rmSync(old), note(".claude/CLAUDE.md — старый симлинк install.sh убран: правила теперь в .claude/rules");
+      else rmSync(old), note(".claude/CLAUDE.md — старый симлинк install.sh убран: правила теперь только из проекта");
     }
   }
 
-  const canon = path.join(home, ".agents/ai-dev/AGENTS.md");
-  /** @type {[boolean, string][]} */
-  const agents = [
-    [has(".codex", "codex"), ".codex/AGENTS.md"],
-    [has(".gemini"), ".gemini/GEMINI.md"],
-    [has(".copilot"), ".copilot/copilot-instructions.md"],
-    [has(".config/opencode"), ".config/opencode/AGENTS.md"],
-    [has(".config/amp"), ".config/amp/AGENTS.md"],
-  ];
-  for (const [present, file] of agents) if (present) link(canon, path.join(home, file), home);
-
-  if (has(".cursor")) note("Cursor: глобального файла правил нет — вставь ~/.agents/ai-dev/AGENTS.md в Settings → Rules → User Rules; скиллы он видит в ~/.agents/skills");
+  if (has(".cursor")) note("Cursor: скиллы видит в ~/.agents/skills; правила — из AGENTS.md проекта");
 
   const priv = process.env.AI_DEV_PRIVATE;
   if (priv) {
@@ -510,6 +545,18 @@ function changeLines(changes, root, global) {
 /** Проверка упала: что и почему. @param {boolean} global @param {unknown} e @returns {Result} */
 const unavailable = (global, e) => ({ code: 2, text: `ai-dev ${global ? "на машине" : "в проекте"}: проверка недоступна — ${reason(e)}` });
 
+/**
+ * Клон, на который ссылается установка `--link` на машине: путь из манифеста; у установки прошлой версии — симлинк
+ * `~/.agents/ai-dev` (его `update -g` уберёт и запишет путь). null — копия или не установлено.
+ * @param {string} home
+ */
+function linkedClone(home) {
+  const m = readManifest(home);
+  if (typeof m.clone === "string") return m.clone;
+  const canon = path.join(home, ".agents/ai-dev");
+  return lstat(canon)?.isSymbolicLink() ? path.resolve(path.dirname(canon), readlinkSync(canon)) : null;
+}
+
 /** Установка на машине (global) или в проекте: корень и стоит ли там флоу. @param {boolean} global */
 function target(global) {
   const home = os.homedir();
@@ -526,10 +573,11 @@ function target(global) {
  * @param {boolean} global @returns {Result}
  */
 function check(global) {
-  const { home, root, canon, installed } = target(global);
+  const { home, root, installed } = target(global);
   const where = global ? "на машине" : "в проекте";
   if (!installed) return { code: 0, text: `ai-dev ${where}: не установлен`, absent: true };
-  if (global && lstat(canon)?.isSymbolicLink()) return checkLink(home, path.resolve(path.dirname(canon), readlinkSync(canon)));
+  const clone = global ? linkedClone(home) : null;
+  if (clone) return checkLink(home, clone);
   const changes = dryRun(() => (global ? installGlobal(SRC, false) : installProject(SRC, root)));
   const fresh = release ?? short(sourceSha(SRC)) ?? "SHA неизвестен";
   if (!changes.length) return { code: 0, text: `ai-dev ${where}: актуально (${fresh})` };
@@ -545,8 +593,9 @@ function check(global) {
 }
 
 /**
- * Машина с `--link`: клон против `origin/main` после `git fetch` — файлы флоу, которых в клоне ещё нет, и ссылки,
- * которых не хватает (новый скилл, хук). Коммиты в main без файлов флоу — не отставание.
+ * Машина с `--link`: клон против `origin/main` после `git fetch` — файлы скиллов, которых в клоне ещё нет, и ссылки,
+ * которых не хватает (новый скилл, хук). Правила и справочники в main машину не задевают (их грузит проект), коммиты
+ * без файлов скиллов — не отставание.
  * @param {string} home @param {string} clone @returns {Result}
  */
 function checkLink(home, clone) {
@@ -557,7 +606,7 @@ function checkLink(home, clone) {
     head = git(clone, "rev-parse", "HEAD");
     main = git(clone, "rev-parse", "origin/main");
     behind = Number(git(clone, "rev-list", "--count", "HEAD..origin/main"));
-    files = git(clone, "diff", "--no-renames", "--name-status", "HEAD...origin/main", "--", ...FLOW).split("\n").filter(Boolean);
+    files = git(clone, "diff", "--no-renames", "--name-status", "HEAD...origin/main", "--", "skills").split("\n").filter(Boolean);
   } catch (e) {
     return { code: 2, text: `ai-dev ${where}: проверка недоступна — ${reason(e)}` };
   }
@@ -611,6 +660,9 @@ function hook(failed) {
     }
   }
   const shown = results.filter((r) => !r.absent);
+  // правила грузятся только из проекта: git-репозиторий без флоу — как поставить (клон ai-dev — сам канон)
+  const root = gitRoot();
+  if (results[1]?.absent && root && !isAiDevClone(root)) shown.push({ code: 0, text: `ai-dev в проекте: не установлен — поставь: npx -y github:${SOURCE} install` });
   if (!shown.length) return 0;
   const tail = [];
   if (shown.some((r) => r.code === 1)) tail.push("Отстаёт — update, копию в проекте закоммитить, перечитать обновлённое.");
@@ -626,8 +678,8 @@ function hook(failed) {
  */
 function update(global) {
   if (global) {
-    const canon = path.join(os.homedir(), ".agents/ai-dev");
-    if (lstat(canon)?.isSymbolicLink()) return updateLink(path.resolve(path.dirname(canon), readlinkSync(canon)));
+    const clone = linkedClone(os.homedir());
+    if (clone) return updateLink(clone);
     installGlobal(SRC, false);
     return 0;
   }
