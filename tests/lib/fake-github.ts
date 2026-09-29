@@ -33,8 +33,15 @@ export class FakeGitHub {
   labels: { id: string; name: string; color: string; description: string }[] = [];
   /** Дерево спеки в основной ветке (SpecDecisions): папки решений и текст модели архитектуры. */
   tree: { capabilities: string[]; standards: string[]; architecture: string[]; model: string | null } = { capabilities: [], standards: [], architecture: [], model: null };
-  /** PR по номеру (PrChange): изменённые файлы, задачи из «Closes #N», голова и модель архитектуры в ней (ModelAt). */
-  prs: Record<number, { files: string[]; closes: number[]; body?: string; head: string; model: string | null }> = {};
+  /**
+   * PR по номеру (PrChange, closedByPullRequestsReferences в IssueRef): изменённые файлы, задачи из «Closes #N»,
+   * голова, модель архитектуры в ней (ModelAt); `merged`, `state`, `base` — для `task close`.
+   */
+  prs: Record<number, { files: string[]; closes: number[]; body?: string; head: string; model: string | null; merged?: boolean; state?: string; base?: string }> = {};
+  /** Задача → id milestone (IssueRef.milestone); открытые задачи milestone считаются по состоянию записей. */
+  issueMilestones: Record<number, string> = {};
+  /** Номера milestone, закрытых REST-запросом `PATCH repos/…/milestones/<n>`. */
+  closedMilestones: number[] = [];
   /**
    * Открытые PR (MergeQueue): ветка, черновик, отставание от основной ветки (`null` — ветки нет), сводный статус CI
    * головы (`null` — чеков ещё нет). Ставит `pull`.
@@ -64,6 +71,11 @@ export class FakeGitHub {
     // realGh отдаёт тело ответа и при коде ≠ 0, если это JSON
     if (args[0] === "api" && args[1] === `repos/${this.repo.nameWithOwner}/rulesets`) {
       return JSON.stringify(this.merge.upgrade ? { message: "Upgrade to GitHub Pro or make this repository public to enable this feature.", status: "403" } : this.merge.rulesets.filter((r) => !r.org).map((r) => ({ id: r.id, name: r.name })));
+    }
+    const patch = args[0] === "api" && args[1] === "-X" && args[2] === "PATCH" ? /^repos\/[^/]+\/[^/]+\/milestones\/(\d+)$/.exec(args[3] ?? "") : null;
+    if (patch && args.includes("state=closed")) {
+      this.closedMilestones.push(Number(patch[1]));
+      return JSON.stringify({ number: Number(patch[1]), state: "closed" });
     }
     if (args[0] !== "api" || args[1] !== "graphql") throw new Error(`fake gh: неожиданный вызов gh ${args.join(" ")}`);
     const { query, variables } = JSON.parse(stdin ?? "{}");
@@ -135,6 +147,15 @@ export class FakeGitHub {
       return { data: { repository: { issue: out } } };
     }
     out.projectItems = { nodes: this.allProjects().flatMap((p) => this.items(p.id).filter((it: Any) => it.content?.id === i.id).map((it: Any) => ({ id: it.id, project: { id: p.id }, status: it.status ?? null }))) };
+    out.closedByPullRequestsReferences = {
+      nodes: Object.entries(this.prs)
+        .filter(([, p]) => p.closes.includes(number))
+        .map(([n, p]) => ({ number: Number(n), state: p.state ?? (p.merged ? "MERGED" : "OPEN"), merged: Boolean(p.merged), headRefName: p.head, baseRefName: p.base ?? "main" })),
+    };
+    const mid = this.issueMilestones[number];
+    const m = mid ? this.taskContext.milestones.nodes.find((x: Any) => x.id === mid) : null;
+    const openIn = (id: string) => this.allIssues().filter((x) => x.state === "OPEN" && this.issueMilestones[x.number] === id).length;
+    out.milestone = m ? { id: m.id, number: m.number, title: m.title, issues: { totalCount: openIn(m.id) } } : null;
     return { data: { repository: { issue: out } } };
   }
   // поиск GitHub по заголовку: подстрока в кавычках, is:open — только открытые
@@ -147,7 +168,7 @@ export class FakeGitHub {
     return this.find("TaskContext").data.repository;
   }
   milestone(title: string): Any {
-    const m = { id: this.id("MI"), title };
+    const m = { id: this.id("MI"), number: this.taskContext.milestones.nodes.length + 1, title };
     this.taskContext.milestones.nodes.push(m);
     return m;
   }

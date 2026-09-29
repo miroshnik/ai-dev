@@ -1,10 +1,14 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { main } from "../../../skills/github/scripts/github.ts";
+import { main, realRun } from "../../../skills/github/scripts/github.ts";
+import type { Io } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { gitRepo, tmpDir } from "../../lib/spec.ts";
 
 // модель архитектуры скилл читает отдельным процессом bun
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -15,10 +19,10 @@ const REPO = "miroshnik/ai-dev";
 const ORG = "acme/ai-dev";
 
 let pauses = 0;
-function task(f: FakeGitHub, args: string[], repo = REPO) {
+function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, sleep: () => void pauses++ });
+  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, sleep: () => void pauses++, ...io });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const byOp = (f: FakeGitHub, op: string) => f.mutations.filter((m) => m.op === op).map((m) => m.input);
@@ -410,5 +414,203 @@ describe("Статус ставится, даже если проект ещё �
     const r = task(f, ["status", "49", "В работе"]);
     expect(r.code).toBe(2);
     expect(r.err).toContain("#49 уже в проекте, но элемент не виден — повторить: github task status 49");
+  });
+});
+
+/**
+ * После мержа PR сессия делала ещё ≈21 ход на пиковом контексте — факт, статус, milestone, уборка ветки. `task close`
+ * сворачивает это в один вызов; актуализацию блока делает субагент со свежим контекстом.
+ */
+describe("task close закрывает задачу одной командой", () => {
+  const FACT = "Факт: 0.25 ч активных в Claude Code (оценка 0.25 ч, ×1.00). 1 сессия, 2 промпта, стена 0.3 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.";
+  // est — подпроцесс (внешний край): в тестах подменяется, его вывод печатается как есть
+  const est =
+    (calls: string[][], r: { status: number; stdout?: string; stderr?: string } = { status: 0, stdout: FACT + "\nкомментарий «Факт» создан\n" }) =>
+    (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
+  const mergedPr = (f: FakeGitHub, closes: number, head = `fix/${closes}-x`) => (f.prs[77] = { files: [], closes: [closes], head, base: "main", model: null, merged: true });
+
+  it("PR задачи влит: задача закрыта, факт записан est, Status «Готово» — в выводе всё сделанное и следующий шаг", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 49);
+    const calls: string[][] = [];
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CloseIssue")).toEqual([{ issueId: f.issue(49).id, stateReason: "COMPLETED" }]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.slice(-5)).toEqual(["fact", "49", "--repo", REPO, "--write"]);
+    expect(calls[0]![1]).toMatch(/skills\/est\/scripts\/est\.ts$/);
+    expect(statusSet(f)).toEqual([[49, "Готово"]]);
+    expect(r.out).toContain("+ #49 закрыта: PR #77 влит");
+    expect(r.out).toContain(FACT);
+    expect(r.out).toContain("+ #49: Status «Готово»");
+    expect(r.out).toContain("Дальше: актуализация блока — субагентом со свежим контекстом (задача #49)");
+  });
+
+  it("PR открыт или закрыт без мержа — ошибка до изменений, ничего не тронуто", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[78] = { files: [], closes: [49], head: "fix/49-x", model: null, merged: false, state: "OPEN" };
+    const calls: string[][] = [];
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("PR #78 открыт");
+    expect(f.mutations).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("задача закрыта без PR — факт и «Готово», задачу повторно не закрывает", () => {
+    const f = new FakeGitHub(REC);
+    f.closed(49);
+    const calls: string[][] = [];
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CloseIssue")).toEqual([]);
+    expect(calls).toHaveLength(1);
+    expect(statusSet(f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("est не установлен рядом — «факт недоступен: est не установлен», остальное сделано", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 49);
+    const calls: string[][] = [];
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls), env: { AI_DEV_EST: "/nowhere/est.ts" } });
+    expect(r.code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(r.out).toContain("○ факт недоступен: est не установлен");
+    expect(statusSet(f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("est упал — его ошибка строкой «!», остальное сделано", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 49);
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([], { status: 1, stderr: "EstError: у репозитория нет paths в реестре\n" }) });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("! est fact: EstError: у репозитория нет paths в реестре");
+    expect(statusSet(f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("последняя подзадача — эпик закрыт и в «Готово»", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 47);
+    const r = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) });
+    expect(byOp(f, "CloseIssue").map((m) => m.issueId)).toEqual([f.issue(47).id, f.issue(45).id]);
+    expect(statusSet(f)).toEqual([[47, "Готово"], [45, "Готово"]]);
+    expect(r.out).toContain("+ эпик #45 закрыт и в «Готово»: все подзадачи закрыты");
+  });
+
+  it("есть открытые подзадачи — эпик не трогается", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 46);
+    const r = task(f, ["close", "46", "--no-git"], REPO, { run: est([]) });
+    expect(byOp(f, "CloseIssue")).toEqual([]);
+    expect(statusSet(f)).toEqual([[46, "Готово"]]);
+    expect(r.out).toContain("○ эпик #45: открытых подзадач 1");
+  });
+
+  it("последняя открытая задача milestone — milestone закрыт", () => {
+    const f = new FakeGitHub(REC);
+    const m = f.milestone("Релиз 2026-10");
+    f.issueMilestones[49] = m.id;
+    mergedPr(f, 49);
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
+    expect(f.closedMilestones).toEqual([m.number]);
+    expect(r.out).toContain("+ milestone «Релиз 2026-10» закрыт: открытых задач не осталось");
+  });
+
+  it("в milestone остались открытые задачи — не закрыт", () => {
+    const f = new FakeGitHub(REC);
+    const m = f.milestone("Релиз 2026-10");
+    f.issueMilestones[49] = m.id;
+    f.issueMilestones[42] = m.id;
+    mergedPr(f, 49);
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
+    expect(f.closedMilestones).toEqual([]);
+    expect(r.out).toContain("○ milestone «Релиз 2026-10»: открытых задач 1");
+  });
+
+  it("облачная сессия — объяснение со ссылкой на docs/cloud-sessions.md, код 2, без мутаций", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 49);
+    const r = task(f, ["close", "49"], REPO, { env: { CLAUDE_CODE_REMOTE: "true" } });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("docs/cloud-sessions.md");
+    expect(r.err).toContain("est fact 49");
+    expect(f.mutations).toEqual([]);
+  });
+});
+
+/** Влитое убирается по разделу канона «Сразу после мержа PR»: чекаут — на origin/main, ветка — долой локально и на хостинге. */
+describe("task close убирает влитое", () => {
+  // репозиторий задачи: bare origin с путём вида …/miroshnik/ai-dev.git, чекаут на ветке задачи
+  function checkout(branch: string, { merged = true } = {}) {
+    const { dir, cleanup } = tmpDir();
+    const origin = path.join(dir, "miroshnik/ai-dev.git");
+    mkdirSync(path.dirname(origin), { recursive: true });
+    execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+    const work = path.join(dir, "work");
+    mkdirSync(work);
+    const repo = gitRepo(work);
+    repo.commit({ "README.md": "x\n" }, "init");
+    repo.git("remote", "add", "origin", origin);
+    repo.git("push", "-q", "-u", "origin", "main");
+    repo.git("switch", "-q", "-c", branch);
+    repo.commit({ "a.txt": "a\n" }, "work");
+    repo.git("push", "-q", "-u", "origin", branch);
+    if (merged) {
+      repo.git("switch", "-q", "main");
+      repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "merge", "-q", "--no-ff", "-m", "merge", branch);
+      repo.git("push", "-q", "origin", "main");
+      repo.git("switch", "-q", branch);
+    }
+    return { work, origin, cleanup };
+  }
+  const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  // git — настоящий во временном репозитории, est — подменён
+  const noEst = (cmd: string, args: string[], cwd?: string) => (cmd === "bun" ? { status: 0, stdout: "Факт: …\n", stderr: "" } : realRun(cmd, args, cwd));
+
+  it("чекаут на ветке задачи, PR влит: после close — detach на origin/main, локальной и удалённой ветки нет", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x");
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(git(work, "branch", "--show-current")).toBe("");
+      expect(git(work, "rev-parse", "HEAD")).toBe(git(work, "rev-parse", "origin/main"));
+      expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
+      expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
+      expect(r.out).toContain("+ чекаут — на origin/main (detached)");
+      expect(r.out).toContain("+ локальная ветка fix/49-x удалена");
+      expect(r.out).toContain("+ удалённая ветка fix/49-x удалена");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("ветка не влита — не тронута, строка ○", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x", { merged: false });
+    try {
+      const f = new FakeGitHub(REC);
+      f.closed(49);
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("○ ветка fix/49-x не влита в origin/main — не тронута");
+      expect(git(work, "branch", "--show-current")).toBe("fix/49-x");
+      expect(git(origin, "branch", "--list", "fix/49-x")).toContain("fix/49-x");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("текущий каталог — не чекаут репозитория задачи: ветки не трогаются", () => {
+    const { dir, cleanup } = tmpDir();
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: dir });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("○ ветки не трогаю: текущий каталог — не чекаут miroshnik/ai-dev");
+    } finally {
+      cleanup();
+    }
   });
 });

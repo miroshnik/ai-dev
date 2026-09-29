@@ -20,7 +20,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -97,6 +97,21 @@ export interface Io {
   env: Record<string, string | undefined>;
   /** Пауза перед перечитыванием (GitHub показывает добавленное не сразу); в тестах — без ожидания. */
   sleep?: (ms: number) => void;
+  /** Подпроцесс (`est`, `git` у `task close`) — внешний край: в тестах подменяется. */
+  run?: (cmd: string, args: string[], cwd?: string) => RunResult;
+  /** Каталог git-шагов `task close`; по умолчанию — текущий. */
+  cwd?: string;
+}
+
+export interface RunResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+export function realRun(cmd: string, args: string[], cwd?: string): RunResult {
+  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return { status: r.error ? null : r.status, stdout: r.stdout ?? "", stderr: r.error ? String(r.error.message) : (r.stderr ?? "") };
 }
 
 const pause = (ms: number) => void Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -299,6 +314,8 @@ export const Q = {
       labels(first: 20) { nodes { name } }
       parent { id number }
       subIssues(first: 100) { nodes { number state } }
+      milestone { id number title issues(states: OPEN) { totalCount } }
+      closedByPullRequestsReferences(first: 20, includeClosedPrs: true) { nodes { number state merged headRefName baseRefName } }
       projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: "${STATUS}") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } }
       issueFieldValues(first: 20) { nodes { __typename ... on IssueFieldSingleSelectValue { name field { ... on IssueFieldSingleSelect { name } } } } }
     }
@@ -1138,6 +1155,10 @@ interface Issue {
   labels: string[];
   parent: { id: string; number: number } | null;
   subIssues: { number: number; state: string }[];
+  /** Milestone задачи и число открытых задач в нём (включая эту, если открыта). */
+  milestone: { id: string; number: number; title: string; open: number } | null;
+  /** PR, закрывающие задачу («Closes #N»), включая закрытые: влит ли, голова и база. */
+  prs: { number: number; state: string; merged: boolean; head: string; base: string }[];
   items: { id: string; projectId: string; status: string | null }[];
   priority: string | null;
 }
@@ -1157,6 +1178,8 @@ function loadIssue(io: Io, slug: string, number: number): Issue {
     labels: (i.labels?.nodes ?? []).map((l: Any) => l.name),
     parent: i.parent ? { id: i.parent.id, number: i.parent.number } : null,
     subIssues: i.subIssues?.nodes ?? [],
+    milestone: i.milestone ? { id: i.milestone.id, number: i.milestone.number, title: i.milestone.title, open: i.milestone.issues?.totalCount ?? 0 } : null,
+    prs: (i.closedByPullRequestsReferences?.nodes ?? []).map((p: Any) => ({ number: p.number, state: p.state ?? "", merged: Boolean(p.merged), head: p.headRefName ?? "", base: p.baseRefName ?? "main" })),
     items: (i.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: it.status?.name ?? null })),
     priority: (i.issueFieldValues?.nodes ?? []).find((v: Any) => v?.field?.name === PRIORITY)?.name ?? null,
   };
@@ -1392,6 +1415,103 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 }
 
 // ----------------------------------------------------------------------------
+// Закрытие задачи одной командой
+// ----------------------------------------------------------------------------
+
+/**
+ * Ритуал закрытия после мержа PR — факт, Status «Готово», эпик, milestone, уборка влитой ветки — одним вызовом:
+ * сессия делала его по шагу на ход на самом большом контексте. Актуализация блока (пять проверок канона) —
+ * не здесь: её делает субагент со свежим контекстом, команда лишь называет это следующим шагом.
+ */
+export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
+  const ctx = taskContext(io, slug);
+  const issue = loadIssue(io, slug, number);
+  const merged = issue.prs.filter((p) => p.merged);
+  const closedNoPr = !issue.prs.length && issue.state === "CLOSED" && issue.stateReason === "COMPLETED";
+  if (!merged.length && !closedNoPr) {
+    const prs = issue.prs.map((p) => `#${p.number} ${p.state === "OPEN" ? "открыт" : "закрыт без мержа"}`).join(", ");
+    throw new GhError(`#${number} закрывать рано: ${prs ? `PR ${prs}` : "задача открыта, PR нет"} — close после мержа PR или закрытия задачи`);
+  }
+  const wasOpen = issue.state === "OPEN";
+  if (wasOpen) {
+    mutate(io, { op: "CloseIssue", input: { issueId: issue.id, stateReason: "COMPLETED" } });
+    io.out(`+ #${number} закрыта: PR ${merged.map((p) => `#${p.number}`).join(", ")} влит`);
+  }
+  runFact(io, slug, number);
+  const item = ensureItem(io, ctx, issue);
+  setStatus(io, ctx, item.id, DONE);
+  io.out(`+ #${number}: ${STATUS} ${q(DONE)}${item.added ? " (добавлена в проект)" : ""}`);
+  closeMilestone(io, slug, issue, wasOpen);
+  if (issue.parent) {
+    const epic = loadIssue(io, slug, issue.parent.number);
+    const open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
+    if (epic.state === "OPEN" && epic.subIssues.length && !open) {
+      mutate(io, { op: "CloseIssue", input: { issueId: epic.id, stateReason: "COMPLETED" } });
+      setStatus(io, ctx, ensureItem(io, ctx, epic).id, DONE);
+      io.out(`+ эпик #${epic.number} закрыт и в ${q(DONE)}: все подзадачи закрыты`);
+      closeMilestone(io, slug, epic, true);
+    } else if (epic.state === "OPEN") io.out(`○ эпик #${epic.number}: открытых подзадач ${open}`);
+  }
+  if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
+  io.out(`Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), раздел канона «Актуализация блока при закрытии задачи».`);
+  return 0;
+}
+
+/** Факт — скрипт est рядом со скиллом (`../est/scripts/est.ts`: так лежат копия в проекте, `~/.agents/skills` и клон). */
+function runFact(io: Io, slug: string, number: number): void {
+  const est = io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
+  if (!existsSync(est)) return io.out(`○ факт недоступен: est не установлен (${est}) — est fact ${number} --write после установки`);
+  const r = (io.run ?? realRun)("bun", [est, "fact", String(number), "--repo", slug, "--write"], io.cwd);
+  for (const line of r.stdout.split("\n")) if (line.trim() && !line.startsWith("<!--")) io.out(line);
+  if (r.status !== 0) io.out(`! est fact: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `код ${r.status}`}`);
+}
+
+/** Мутации milestone в GraphQL нет — REST. wasOpen — задача была открыта при чтении: в счёте открытых она есть. */
+function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): void {
+  const m = issue.milestone;
+  if (!m) return;
+  const open = m.open - (wasOpen ? 1 : 0);
+  if (open > 0) return io.out(`○ milestone ${q(m.title)}: открытых задач ${open}`);
+  io.gh(["api", "-X", "PATCH", `repos/${slug}/milestones/${m.number}`, "-f", "state=closed"]);
+  io.out(`+ milestone ${q(m.title)} закрыт: открытых задач не осталось`);
+}
+
+/**
+ * Влитое — долой (канон, «Сразу после мержа PR»): чекаут с ветки задачи на origin/<base> detached, локальная и
+ * удалённая ветка удаляются. «Влито» — PR merged, без PR — `git cherry`; не влита, чужая или не тот чекаут — не трогаем.
+ */
+function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string; base: string } | null): void {
+  const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd);
+  const remote = git("remote", "get-url", "origin");
+  if (remote.status !== 0 || !remote.stdout.includes(slug)) return io.out(`○ ветки не трогаю: текущий каталог — не чекаут ${slug}`);
+  const base = pr?.base || "main";
+  const current = git("branch", "--show-current").stdout.trim();
+  const isTask = (b: string) => b === pr?.head || new RegExp(`(^|/)[a-z]+/${number}-`).test(b);
+  const branch = current && isTask(current) ? current : (pr?.head ?? "");
+  if (!branch) return io.out("○ ветка задачи не найдена — ветки не трогаю");
+  git("fetch", "--prune", "origin");
+  const local = git("branch", "--list", branch).stdout.trim() !== "";
+  const cherry = pr || !local ? null : git("cherry", `origin/${base}`, branch);
+  if (cherry && (cherry.status !== 0 || cherry.stdout.split("\n").some((l) => l.startsWith("+")))) return io.out(`○ ветка ${branch} не влита в origin/${base} — не тронута`);
+  if (current === branch) {
+    const sw = git("switch", "--detach", `origin/${base}`);
+    if (sw.status !== 0) return io.out(`! git switch --detach origin/${base}: ${sw.stderr.trim()}`);
+    io.out(`+ чекаут — на origin/${base} (detached)`);
+  }
+  if (local) {
+    const d = git("branch", "-D", branch);
+    io.out(d.status === 0 ? `+ локальная ветка ${branch} удалена` : `! git branch -D ${branch}: ${d.stderr.trim()}`);
+  }
+  if (git("ls-remote", "--heads", "origin", branch).stdout.trim()) {
+    const d = git("push", "origin", "--delete", branch);
+    io.out(d.status === 0 ? `+ удалённая ветка ${branch} удалена` : `! git push origin --delete ${branch}: ${d.stderr.trim()}`);
+  } else io.out(`○ удалённой ветки ${branch} уже нет`);
+  const top = git("rev-parse", "--show-toplevel").stdout.trim();
+  const common = git("rev-parse", "--git-common-dir").stdout.trim();
+  if (top && common && path.resolve(io.cwd ?? process.cwd(), common) !== path.join(top, ".git")) io.out(`Дальше: worktree ${top} убрать из главного чекаута: git worktree remove ${top}`);
+}
+
+// ----------------------------------------------------------------------------
 // Метки решений по PR
 // ----------------------------------------------------------------------------
 
@@ -1577,6 +1697,7 @@ const USAGE = `github — проект и задачи GitHub репозитор
                        [--labels <решение>,<вид>:<новое решение>,<метка>] [--repo owner/repo]
   github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
+  github task close    <N> [--no-git] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
   github pr queue      [<N> | --head <ветка>] [--repo owner/repo]
 
@@ -1586,6 +1707,8 @@ fix   — исправляет через API; шаги UI печатает со
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
 task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).
+task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
+        эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает.
 pr queue  — голова ли PR (по умолчанию — PR текущей ветки) в очереди мержа основной ветки: код 0 — голова,
             push, CI и мерж — твои; 1 — не голова, впереди названы PR; ребейз — локально, push — после их мержа.`;
@@ -1617,9 +1740,14 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop"], pr: ["labels", "queue"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "close"], pr: ["labels", "queue"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop или pr labels|queue`);
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|close или pr labels|queue`);
+      return 2;
+    }
+    if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
+      const n = /^#?(\d+)$/.exec(rest.find((a) => !a.startsWith("--")) ?? "")?.[1] ?? "<N>";
+      io.err(`облачная сессия: task close ей недоступен — GitHub Projects в облаке нет (docs/cloud-sessions.md). Факт — комментарий «Факт (облако)» печатает est fact ${n}; «Готово» поставит workflow проекта «Item closed»; ветка и контейнер облака временные, убирать нечего.`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true") {
@@ -1660,6 +1788,7 @@ export function main(argv: string[], io: Io): number {
           priority: { type: "string" },
           "duplicate-of": { type: "string" },
           labels: { type: "string" },
+          "no-git": { type: "boolean", default: false },
         },
       });
       const slug = repoOf(values.repo);
@@ -1676,6 +1805,7 @@ export function main(argv: string[], io: Io): number {
       const number = issueNumber(positionals[0], `task ${cmd}`);
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));
       if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
+      if (cmd === "close") return cmdTaskClose(io, slug, number, { git: !values["no-git"] });
       return cmdTaskDrop(io, slug, number, values["duplicate-of"] === undefined ? undefined : issueNumber(values["duplicate-of"], "--duplicate-of"));
     }
     const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, confirm: { type: "boolean", default: false }, template: { type: "string", default: DEFAULT_TEMPLATE } } });
