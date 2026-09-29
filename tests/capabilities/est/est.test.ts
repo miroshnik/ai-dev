@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudPartsIn, cloudSessionsIn, fmtH, guestTranscripts, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  cloudPartsIn, cloudSessionsIn, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
   roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
@@ -121,6 +121,40 @@ describe("Факт — активные часы работы над задач�
     const res = computeFact(stubRepo([s], []), 42, [], [], 30);
     expect(res.h).toBe(0.25); // 10 + 5 минут, без двух часов паузы
     expect(res.wall).toBe(2.1);
+  });
+});
+
+/**
+ * Задачу, которую делают параллельные субагенты, часы сжимаются, а токены растут: каждый субагент заново читает
+ * контекст. Число субагентов задачи — признак, по которому подбираются аналоги с тем же фан-аутом.
+ */
+describe("Фан-аут задачи — число её субагентов в факте и в истории", () => {
+  it("число субагентов задачи — в факте, в комментарии и в маркере; субагенты другой задачи не в счёт", () => {
+    const file = claudeFixture();
+    const subs = path.join(dir, "11111111-2222-3333-4444-555555555555", "subagents");
+    const sub = (hhmm: string, task: string) =>
+      jsonl([
+        { type: "user", timestamp: `2026-09-01T${hhmm}:00Z`, gitBranch: "feat/42-export", message: { content: task } },
+        { type: "assistant", timestamp: `2026-09-01T${hhmm}:30Z`, gitBranch: "feat/42-export", message: { id: `msg_${hhmm}`, model: "claude-haiku-4-5-20251001", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "ok" }] } },
+      ]);
+    writeFileSync(path.join(subs, "agent-2.jsonl"), sub("10:09", "Задача #42: проверь линт"));
+    writeFileSync(path.join(subs, "agent-3.jsonl"), sub("10:09", "Задача #43: другое"));
+    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    expect(res.agents).toBe(2);
+    const body = factCommentBody(res, 0.25, [], 0, null);
+    expect(body).toContain("1 сессия, 3 промпта, 2 субагента,");
+    expect(body).toContain('"agents": 2');
+  });
+
+  it("история показывает число субагентов задачи; у факта без признака — прочерк", () => {
+    const row = (number: number, agents?: number): Row => ({
+      item_id: "", issue_id: "", number, title: `Задача ${number}`, state: "CLOSED", stateReason: "COMPLETED", closedAt: 0, createdAt: 0, labels: [],
+      est: 1, fact: 0.5, status: "Готово", est_marker: { type: "feat" }, fact_marker: { cov: "full", tok: { total: 2e6 }, usd: 1.5, ...(agents === undefined ? {} : { agents }) },
+    });
+    const lines = historyTable([row(12, 4), row(13)]);
+    expect(lines[0]).toContain(" | аг. | ");
+    expect(lines[1]).toMatch(/ \|\s+4 \| /);
+    expect(lines[2]).toMatch(/ \|\s+— \| /);
   });
 });
 
@@ -742,7 +776,7 @@ describe("Комментарии «Оценка» и «Факт» обновля
     const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
     res.type = "feat";
     const body = factCommentBody(res, 1, ["+ вручную: 1 ч"], 1, null);
-    expect(body).toContain("Факт: 0.22 ч активных в Claude Code (оценка 1 ч, ×0.22). 1 сессия, 3 промпта, стена 0.2 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.");
+    expect(body).toContain("Факт: 0.22 ч активных в Claude Code (оценка 1 ч, ×0.22). 1 сессия, 3 промпта, 1 субагент, стена 0.2 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.");
     // разбивка по моделям в скобках — только когда ценой обладают две и больше; у haiku здесь $0.00
     expect(body).toContain("Токены: 0.01 млн (вход 0 · выход 0 · запись кэша 0 · чтение кэша 0.01); стоимость по API-тарифам ≈ $0.02.\n");
     expect(body).toContain("\n+ вручную: 1 ч\n");
@@ -779,6 +813,19 @@ describe("Стоимость — API-эквивалент по публичны�
 });
 
 /** Ступени 0,1 · 0,25 · 0,5 · 1 · 1,5 · 2 · 3 · 5 · 8 · 13 ч: точнее по аналогам не угадать, а больше 13 ч — задачу надо дробить. */
+/** Фан-аут меняет токены сильнее часов: у поправки токенов и стоимости своя ступень. */
+describe("Прогноз по фактам аналогов — медиана с поправкой", () => {
+  it("поправка токенов задаётся отдельно от поправки часов", () => {
+    const f = forecast([0.2, 0.4], [10, 20], [5, 10], 1, 2);
+    expect([f.h, f.tok, f.usd]).toEqual([0.25, 30, 15]);
+  });
+
+  it("без поправки токенов токены и стоимость следуют поправке часов", () => {
+    const f = forecast([0.2, 0.4], [10, 20], [5, 10], 2);
+    expect([f.h, f.tok, f.usd]).toEqual([0.5, 30, 15]);
+  });
+});
+
 describe("Оценка — ступень шкалы от 0,1 до 13 ч", () => {
   it("округляет к ближайшей ступени, при равном расстоянии — к меньшей, выше 13 не бывает", () => {
     expect(roundScale(2.6)).toBe(3);
@@ -860,6 +907,7 @@ describe("Неверный вызов — справка или ошибка д�
     expect(run("fact", "1", "--sweep", "--repo", "o/r").stderr).toContain("номер issue и --sweep несовместимы");
     expect(run("estimate", "1", "--repo", "o/r").stderr).toContain("--type обязателен");
     expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("укажите номер issue");
+    expect(run("estimate", "1", "--repo", "o/r", "--type", "feat", "--analogs", "2,3", "--tok-mult", "2.5").stderr).toContain("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
     expect(exitOf(run("fact", "--repo", "o/r", "--bogus"))).toBe(2);
   });
 });
