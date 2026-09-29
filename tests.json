@@ -3140,6 +3140,132 @@
   "name": "хук: последний релиз не узнать — код 0, в выводе — проверка недоступна"
  },
  {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "AGENTS.md не больше 30 КиБ"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "claude/CLAUDE.md не больше 5 КиБ"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "docs/ci-concurrency.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "docs/cloud-sessions.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "docs/parallel-checkouts.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "docs/pr-checks.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "docs/testing.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "skills/ci-wait/SKILL.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "skills/est/SKILL.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "skills/github/SKILL.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "skills/spec/SKILL.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "бюджет считается по байтам файла в UTF-8, блоки кода не исключаются"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "нарушитель не проходит (существуют): ссылка ядра на удалённый скилл"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "нарушитель не проходит: файл на байт больше бюджета"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "реестр «скиллы и справочники docs/, на которые ядро отправляет читателя» находит skills/est/SKILL.md, skills/github/SKILL.md, skills/spec/SKILL.md, docs/ci-concurrency.md, docs/parallel-checkouts.md (существуют)"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "реестр «скиллы и справочники docs/, на которые ядро отправляет читателя» не пуст (существуют)"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "реестр «файлы ядра канона с бюджетом» находит AGENTS.md, claude/CLAUDE.md"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "реестр «файлы ядра канона с бюджетом» не пуст"
+ },
+ {
   "path": "tests/standards/cloud-session/cloud-session.test.ts",
   "describes": [
    "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть",
