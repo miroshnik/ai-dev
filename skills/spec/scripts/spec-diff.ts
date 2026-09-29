@@ -384,6 +384,15 @@ export function checkFacts(files: Map<string, string>): string[] {
 }
 
 const EXCEPTIONS = /(^|\/)exceptions\.(ts|mts|js|mjs|json)$/;
+
+/** Пункт exceptions.*: элемент реестра харнесса (`rule` — соглашение) или название теста (spec-names: `file`, `name`). */
+type ExceptionEntry = { item?: string; rule?: string; file?: string; name?: string; issue: number; reason: string };
+
+/** Строка исключения: что исключено, задача и причина — у каждого пункта своя, одинаковые не схлопываются. */
+function exceptionLine(folder: string, e: ExceptionEntry): string {
+  const what = e.item !== undefined ? e.item : `«${e.name}» в \`${e.file}\``;
+  return `\`${folder}\` · ${what} (${e.rule ? `${e.rule}, ` : ""}#${e.issue}) — ${e.reason}`;
+}
 const CODE = /\.[cm]?[jt]sx?$/;
 
 /** Файлы на ревизии (null — рабочее дерево) по путям от корня git: путь без префикса → текст. */
@@ -414,9 +423,7 @@ async function decisionsAt(rev: string | null, top: string, prefix: string, chan
   for (const p of excPaths) {
     const rel = p.slice(prefix.length);
     const data = await loadData(files.get(rel) ?? "[]", rel);
-    for (const e of Array.isArray(data) ? (data as { item: string; issue: number; reason: string }[]) : []) {
-      exceptions.push(`\`${path.posix.dirname(rel)}\` · ${e.item} (#${e.issue}) — ${e.reason}`);
-    }
+    for (const e of Array.isArray(data) ? (data as ExceptionEntry[]) : []) exceptions.push(exceptionLine(path.posix.dirname(rel), e));
   }
   for (const p of changedCode) {
     const rel = p.slice(prefix.length);
@@ -424,7 +431,7 @@ async function decisionsAt(rev: string | null, top: string, prefix: string, chan
     if (!text || !text.includes("eslint-disable")) continue;
     for (const d of disablesIn(rel, text)) exceptions.push(`\`${rel}\` · ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
   }
-  return { model: modelFacts(model), exceptions: [...new Set(exceptions)].sort(), checks: checkFacts(tests) };
+  return { model: modelFacts(model), exceptions: exceptions.sort(), checks: checkFacts(tests) };
 }
 
 function walkTests(dir: string, rel = L.TESTS): string[] {
@@ -442,7 +449,16 @@ function walkTests(dir: string, rel = L.TESTS): string[] {
   return out;
 }
 
-const minus = (a: string[], b: string[]) => a.filter((x) => !b.includes(x));
+/** Разность с повторами: одинаковые строки — разные пункты (два одинаковых отключения линта), снят один — в разнице один. */
+function minus(a: string[], b: string[]): string[] {
+  const left = new Map<string, number>();
+  for (const x of b) left.set(x, (left.get(x) ?? 0) + 1);
+  return a.filter((x) => {
+    const n = left.get(x) ?? 0;
+    left.set(x, n - 1);
+    return n <= 0;
+  });
+}
 
 /** Снятые и добавленные решения по видам — разделы для тела PR; нет изменений вида — нет раздела. */
 export function decisionLines(base: Decisions, head: Decisions): string[] {
