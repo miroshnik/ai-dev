@@ -554,6 +554,8 @@ export function render(
   }
   const limit = opts.limit ?? SUMMARY_LIMIT;
   if (removed.length + changed.length + added.length > limit) {
+    // удалённый тест — снятое требование: в теле PR поимённо, пока их самих не больше порога
+    if (removed.length && removed.length <= limit) lines.push(`**Удалены (${removed.length}):**`, "", ...removed.map(entry), "");
     lines.push(...summaryLines(removed, changed, added, limit, opts.harness));
     if (moved.length) lines.push(...movedLines(moved));
     if (outFiles.length) lines.push(`**Вне дерева \`${L.TESTS}/\`** изменены файлы тестов: ${outFiles.map((p) => `\`${p}\``).join(", ")}.`, "");

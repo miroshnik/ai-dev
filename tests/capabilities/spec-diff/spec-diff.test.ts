@@ -543,6 +543,23 @@ describe("Большой PR — сводка по папкам, полный с�
     expect(out).not.toContain("складывает");
   });
 
+  it("удалённые при сводке — списком: снятое требование видно поимённо", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("снято", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("выставляется", () => {}); it("отправляется", () => {}); it("оплачивается", () => {});`) });
+    const out = diffFrom(base, "--limit", "3").stdout;
+    expect(out).toContain("**Удалены (1):**\n\n- `tests/capabilities/billing` · снято\n");
+    expect(out).toContain("| `tests/capabilities/billing` | 1 | 0 | 3 |");
+    expect(out).not.toContain("выставляется");
+  });
+
+  it("удалённых больше порога — сводкой и они", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("первое", () => {}); it("второе", () => {}); it("третье", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    const out = diffFrom(base, "--limit", "2").stdout;
+    expect(out).toContain("| `tests/capabilities/billing` | 3 | 0 | 1 |");
+    expect(out).not.toContain("первое");
+  });
+
   it("--full — полный список при любом размере", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
     repo.commit({ [BILLING]: ts(`it("x", () => {}); it("выставляется", () => {}); it("отправляется", () => {});`) });
