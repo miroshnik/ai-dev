@@ -365,6 +365,41 @@ describe("Решения вне названий тестов — модель, 
     expect(out).toContain("**Исключения — добавлено (2):**\n\n- `src/b.ts` · eqeqeq — #6 новое\n- `tests/standards/audit` · b (#2) — r2\n");
   });
 
+  // исключения названий пишет spec-doc --names-baseline, и схема у них другая — { file, name }, а не { item }
+  const NAMES = "tests/standards/spec-names/exceptions.ts";
+  const names = (list: object[]) => `export default ${JSON.stringify(list)};\n`;
+
+  it("снятое исключение названия — с файлом теста и названием, без «undefined»", () => {
+    const base = repo.commit({ [NAMES]: names([{ file: BILLING, name: "invoice total", issue: 7, reason: "переписать" }]) });
+    repo.commit({ [NAMES]: names([]) });
+    const out = diffFrom(base).stdout;
+    expect(out).not.toContain("undefined");
+    expect(out).toContain(`**Исключения — снято (1):**\n\n- \`tests/standards/spec-names\` · «invoice total» в \`${BILLING}\` (#7) — переписать\n`);
+  });
+
+  // у исключений baseline одна задача и одна причина на всех: разницу даёт только название
+  it("снято N исключений названий — в разделе N строк", () => {
+    const base = repo.commit({ [NAMES]: names(["a", "b", "c"].map((name) => ({ file: BILLING, name, issue: 7, reason: "переписать" }))) });
+    repo.commit({ [NAMES]: names([]) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Исключения — снято (3):**");
+    expect(out.match(/^- `tests\/standards\/spec-names` · /gm)).toHaveLength(3);
+  });
+
+  it("исключения одного элемента из разных соглашений папки — разные строки", () => {
+    const EXC = "tests/standards/audit/exceptions.ts";
+    const base = repo.commit({ [EXC]: names(["audit", "cancel"].map((rule) => ({ item: "a", issue: 1, reason: "r", rule }))) });
+    repo.commit({ [EXC]: names([]) });
+    expect(diffFrom(base).stdout).toContain("**Исключения — снято (2):**\n\n- `tests/standards/audit` · a (audit, #1) — r\n- `tests/standards/audit` · a (cancel, #1) — r\n");
+  });
+
+  it("снято одно из двух одинаковых отключений линта в файле — в разделе одна строка", () => {
+    const off = "// eslint-disable-next-line no-console -- #5 отладка\nconsole.log(1);\n";
+    const base = repo.commit({ "src/a.ts": off + off });
+    repo.commit({ "src/a.ts": off + "export {};\n" });
+    expect(diffFrom(base).stdout).toContain("**Исключения — снято (1):**\n\n- `src/a.ts` · no-console — #5 отладка\n");
+  });
+
   it("реестр invariant и правило examples: добавленные и снятые", () => {
     const STD = "tests/standards/audit/audit.test.ts";
     const src = (registry: string, rule: string) =>
