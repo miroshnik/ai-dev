@@ -1285,6 +1285,55 @@
   "name": "релиз того же дня уже есть — патч: .1, затем .2"
  },
  {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Отчёт — умеет ли проверка упасть от каждой поломки"
+  ],
+  "name": "пачка — отчёт по каждой, файлы в исходном виде"
+ },
+ {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Отчёт — умеет ли проверка упасть от каждой поломки"
+  ],
+  "name": "прогон красный и без поломки — ошибка, поломки не применяются"
+ },
+ {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Отчёт — умеет ли проверка упасть от каждой поломки"
+  ],
+  "name": "тест, который от неё не падает, — ❌ с названием поломки"
+ },
+ {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Отчёт — умеет ли проверка упасть от каждой поломки"
+  ],
+  "name": "фрагмент не найден или встречается не один раз — ошибка до прогона"
+ },
+ {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Поломка всегда откатывается: файл возвращается в исходный вид, что бы ни случилось с прогоном"
+  ],
+  "name": "обрыв без отката — следующий запуск возвращает файл по журналу"
+ },
+ {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Поломка всегда откатывается: файл возвращается в исходный вид, что бы ни случилось с прогоном"
+  ],
+  "name": "откатывается, даже если прогон прерван"
+ },
+ {
+  "path": "tests/capabilities/spec-break/spec-break.test.ts",
+  "describes": [
+   "Поломка всегда откатывается: файл возвращается в исходный вид, что бы ни случилось с прогоном"
+  ],
+  "name": "файл правили после обрыва — журнал правку не затирает и говорит об этом"
+ },
+ {
   "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
   "describes": [
    "Каждая точка входа вызывается хотя бы одним тестом capability — по журналу, а не по покрытию"
@@ -2798,6 +2847,13 @@
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
   ],
+  "name": "spec-break печатает под Node тот же отчёт, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
   "name": "spec-claims пишет под Node тот же отчёт, что под Bun"
  },
  {
@@ -2894,6 +2950,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/release/release.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-break/spec-break.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
