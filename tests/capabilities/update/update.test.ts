@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -115,19 +115,35 @@ describe("Копия на машине (-g) сверяется и обновля
     expect(r.stdout).toContain("на машине: актуально");
   });
 
-  it("ai-dev ушёл вперёд — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального", () => {
+  it("ai-dev ушёл вперёд (новый скилл) — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального, правил на машине по-прежнему нет", () => {
     aiDev(sb, ["install", "-g"]);
     const before = snapshot(sb.home);
     const r = aiDev(sb, ["check", "-g"], { bin: newer.bin });
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain("~ ~/.agents/ai-dev/AGENTS.md");
     expect(r.stdout).toContain("+ ~/.agents/skills/fresh/");
     expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update -g");
     expect(snapshot(sb.home)).toEqual(before);
     expect(aiDev(sb, ["update", "-g"], { bin: newer.bin }).code).toBe(0);
-    expect(read(path.join(sb.home, ".agents/ai-dev/AGENTS.md"))).toContain("Новое правило.");
+    expect(existsSync(path.join(sb.home, ".agents/skills/fresh"))).toBe(true);
+    expect(existsSync(path.join(sb.home, ".agents/ai-dev"))).toBe(false);
     expect(JSON.parse(read(manifest(sb.home))).sha).toBe(newer.sha);
     expect(aiDev(sb, ["check", "-g"], { bin: newer.bin }).code).toBe(0);
+  });
+
+  it("поставлено прошлой версией с правилами на машине — отстаёт: в списке «- ~/.agents/ai-dev/» и «- ~/.claude/rules/ai-dev.md»; update -g убирает их, после него check — актуально", () => {
+    aiDev(sb, ["install", "-g"]);
+    mkdirSync(path.join(sb.home, ".agents/ai-dev"), { recursive: true });
+    writeFileSync(path.join(sb.home, ".agents/ai-dev/AGENTS.md"), "старый канон\n");
+    mkdirSync(path.join(sb.home, ".claude/rules"), { recursive: true });
+    symlinkSync("../../.agents/ai-dev/AGENTS.md", path.join(sb.home, ".claude/rules/ai-dev.md"));
+    const r = aiDev(sb, ["check", "-g"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("- ~/.agents/ai-dev/");
+    expect(r.stdout).toContain("- ~/.claude/rules/ai-dev.md");
+    expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
+    expect(existsSync(path.join(sb.home, ".agents/ai-dev"))).toBe(false);
+    expect(lstatSync(path.join(sb.home, ".claude/rules/ai-dev.md"), { throwIfNoEntry: false })).toBeUndefined();
+    expect(aiDev(sb, ["check", "-g"]).code).toBe(0);
   });
 
   it("старая установка без SHA и без хука SessionStart — отстаёт; update -g ставит хук и пишет SHA", () => {
@@ -309,14 +325,14 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.stdout).toContain("актуально");
   });
 
-  it("в main новое правило и новый скилл — отстаёт, код 1: файлы флоу из origin/main; клон и ~/.agents не тронуты", () => {
+  it("в main новое правило и новый скилл — отстаёт по скиллу, код 1; правило машину не задевает; клон и ~/.agents не тронуты", () => {
     const { up, clone } = linkedClone();
     up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE, "skills/fresh/SKILL.md": "---\nname: fresh\n---\n" });
     const head = git(clone, "rev-parse", "HEAD");
     const before = snapshot(sb.home);
     const r = aiDev(sb, ["check", "-g"]);
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain("~ AGENTS.md");
+    expect(r.stdout).not.toContain("AGENTS.md");
     expect(r.stdout).toContain("+ skills/fresh/SKILL.md");
     expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update -g");
     expect(git(clone, "rev-parse", "HEAD")).toBe(head);
@@ -329,7 +345,7 @@ describe("Клон --link сверяется с origin/main, update подтяг
     const sha = up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE, "skills/fresh/SKILL.md": "---\nname: fresh\n---\n" });
     expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
     expect(git(clone, "rev-parse", "HEAD")).toBe(sha);
-    expect(read(path.join(sb.home, ".agents/ai-dev/AGENTS.md"))).toContain("Новое правило.");
+    expect(existsSync(path.join(sb.home, ".agents/ai-dev"))).toBe(false);
     expect(realpathSync(path.join(sb.home, ".agents/skills/fresh"))).toBe(realpathSync(path.join(clone, "skills/fresh")));
     expect(realpathSync(path.join(sb.home, ".claude/skills/fresh"))).toBe(realpathSync(path.join(clone, "skills/fresh")));
     expect(aiDev(sb, ["check", "-g"]).code).toBe(0);
@@ -368,12 +384,28 @@ describe("Клон --link сверяется с origin/main, update подтяг
   it("старая установка без SHA — check по git; update -g пишет SHA клона", () => {
     const { up } = linkedClone();
     dropSha(sb.home);
-    const sha = up.repo.commit({ "docs/new.md": "# Новый справочник\n" });
+    const sha = up.repo.commit({ "skills/est/new.md": "# Новый справочник скилла\n" });
     const r = aiDev(sb, ["check", "-g"]);
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain("+ docs/new.md");
+    expect(r.stdout).toContain("+ skills/est/new.md");
     expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
     expect(JSON.parse(read(manifest(sb.home))).sha).toBe(sha);
+  });
+
+  it("поставлено прошлой версией — симлинк ~/.agents/ai-dev на клон, пути клона в манифесте нет: check находит клон по симлинку, update -g убирает симлинк и пишет путь", () => {
+    const { clone } = linkedClone();
+    const m = JSON.parse(read(manifest(sb.home)));
+    delete m.clone;
+    writeFileSync(manifest(sb.home), JSON.stringify(m, null, 2) + "\n");
+    symlinkSync(clone, path.join(sb.home, ".agents/ai-dev"));
+    const r = aiDev(sb, ["check", "-g"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain(`клон ${clone}`);
+    expect(r.stdout).toContain("- ~/.agents/ai-dev/");
+    expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
+    expect(lstatSync(path.join(sb.home, ".agents/ai-dev"), { throwIfNoEntry: false })).toBeUndefined();
+    expect(realpathSync(JSON.parse(read(manifest(sb.home))).clone)).toBe(realpathSync(clone));
+    expect(aiDev(sb, ["check", "-g"]).code).toBe(0);
   });
 
   it("update -g: в клоне изменения в отслеживаемых файлах — отказ с причиной, код 1, клон не тронут", () => {
@@ -448,6 +480,15 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("ai-dev на машине: отстаёт");
     expect(r.stdout).toContain("ai-dev в проекте: отстаёт");
+  });
+
+  it("в git-репозитории без флоу вывод хука зовёт поставить его в проект; вне git-репозитория строки про проект нет", () => {
+    aiDev(sb, ["install", "-g"]);
+    npxServes(base.bin);
+    const r = runHook();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("ai-dev в проекте: не установлен — поставь: npx -y github:miroshnik/ai-dev install");
+    expect(aiDev(sb, ["check", "--hook"], { cwd: sb.tmp }).stdout).not.toContain("в проекте");
   });
 
   it("npx недоступен — код хука 0, в выводе — что проверка недоступна", () => {
