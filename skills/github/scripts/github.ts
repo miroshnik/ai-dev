@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 /**
- * github — проект и задачи GitHub репозитория по канону AGENTS.md (раздел «Ведение задач»).
+ * github — проект и задачи GitHub репозитория по канону AGENTS.md (раздел «Ведение задач»; правила целиком —
+ * reference.md рядом со SKILL.md: типы, метки решений, эпики, проект, milestones, актуализация блока).
  *
  * Подкоманды:
  *   github project check — сверка с каноном по пунктам ✅/❌
@@ -1453,7 +1454,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     } else if (epic.state === "OPEN") io.out(`○ эпик #${epic.number}: открытых подзадач ${open}`);
   }
   if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
-  io.out(`Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), раздел канона «Актуализация блока при закрытии задачи».`);
+  io.out(`Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), пять проверок — reference.md скилла github, «Актуализация блока при закрытии задачи».`);
   return 0;
 }
 
@@ -1477,7 +1478,8 @@ function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): v
 }
 
 /**
- * Влитое — долой (канон, «Сразу после мержа PR»): чекаут с ветки задачи на origin/<base> detached, локальная и
+ * Влитое — долой (SKILL.md, «Git, PR и мерж — механика», пункт «Сразу после мержа PR»): чекаут с ветки задачи на
+ * origin/<base> detached, локальная и
  * удалённая ветка удаляются. «Влито» — PR merged, без PR — `git cherry`; не влита, чужая или не тот чекаут — не трогаем.
  */
 function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string; base: string } | null): void {

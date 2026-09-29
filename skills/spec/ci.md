@@ -2,7 +2,7 @@
 
 Раздел «Подключение в репозиторий» в `SKILL.md`, п. 4: pnpm (в `package.json`
 — `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
-разделу правил «CI: параллельные задачи». Шарды пишут blob-отчёты, job `spec`
+`docs/ci-concurrency.md`. Шарды пишут blob-отчёты, job `spec`
 склеивает их средствами раннеров и собирает `docs/spec` с `--strict`; на
 `main` отдаёт его артефактом job `spec-publish` — у неё одной токен на запись
 (без CI на `main` — публикация на мерж PR, раздел в конце).
