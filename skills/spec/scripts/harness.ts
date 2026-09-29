@@ -365,6 +365,17 @@ function codeFiles(root: string, dirs: string[]): string[] {
   return out.sort();
 }
 
+/** Текст без комментариев (заменены пробелами, переводы строк сохранены): сканеры кода не видят прозу и старый код. */
+export function codeOnly(text: string): string {
+  let out = "";
+  let at = 0;
+  for (const [i, c] of commentsIn(text)) {
+    out += text.slice(at, i) + c.replace(/[^\n]/g, " ");
+    at = i + c.length;
+  }
+  return out + text.slice(at);
+}
+
 /** Отключения линт-правил в файле: `// eslint-disable-next-line a, b -- #12 причина` и такие же блочные комментарии. */
 export function disablesIn(file: string, text: string): Disable[] {
   const out: Disable[] = [];
@@ -417,13 +428,22 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
 
 // файл теста в стеке вызова: *.test.* / *.spec.* / *.e2e.* (V8 и JavaScriptCore; file:// — у ESM)
 // у кадра верхнего уровня модуля Bun пишет только строку, без колонки: «at /…/x.test.ts:4»
-const STACK_FILE = /(?:\(|\bat\s+)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+)/g;
+// V8 пишет анонимную async-функцию после await кадром «at async <путь>» — без имени и скобок
+const STACK_FILE = /(?:\(|\bat\s+(?:async\s+)?)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+)/g;
 const seen = new Set<string>();
 let journalFile: string | null = null;
 
 /** Файл теста, из которого идёт вызов, от корня проекта — по стеку; не из теста — null. */
 function callerTest(root: string): string | null {
-  for (const m of (new Error().stack ?? "").matchAll(STACK_FILE)) {
+  return testFileIn(new Error().stack ?? "", root);
+}
+
+/**
+ * Файл теста в стеке вызова, от корня проекта: первый кадр `*.test.*` / `*.spec.*` / `*.e2e.*` (V8 и
+ * JavaScriptCore, `file://` у ESM, `at async` после await); не из теста — null.
+ */
+export function testFileIn(stack: string, root: string): string | null {
+  for (const m of stack.matchAll(STACK_FILE)) {
     const abs = m[1]!;
     const rel = path.relative(root, abs).split(path.sep).join("/");
     if (!rel.startsWith("..")) return rel;
@@ -546,7 +566,22 @@ const KNIP: [string, string, string[]][] = [
   ["нет зависимостей без импорта", "dependency", ["dependencies", "devDependencies", "optionalPeerDependencies"]],
   ["нет импортов неустановленных пакетов", "unlisted", ["unlisted"]],
   ["нет нерезолвящихся импортов", "unresolved", ["unresolved"]],
+  // виды knip 6 (JSONReportEntry): члены перечислений и пространств имён, дубли экспортов, бинарники, каталог pnpm
+  ["нет членов перечислений без потребителя", "enumMember", ["enumMembers"]],
+  ["нет членов пространств имён без потребителя", "nsMember", ["namespaceMembers"]],
+  ["нет экспортов-дублей", "duplicate", ["duplicates"]],
+  ["нет вызовов неустановленных бинарников", "binary", ["binaries"]],
+  ["нет лишних записей каталога пакетов", "catalog", ["catalog"]],
 ];
+
+type KnipItem = { name: string; namespace?: string };
+
+/** Находка knip для показа и ключа исключения: файл — путь, пакет и бинарник — имя, остальное — `<файл>#<имя>`. */
+function knipShown(kind: string, file: string, item: KnipItem | KnipItem[]): string {
+  if (Array.isArray(item)) return `${file}#${item.map((x) => x.name).join(" = ")}`; // дубли — группа имён одного экспорта
+  if (["file", "dependency", "unlisted", "binary", "catalog"].includes(kind)) return item.name;
+  return `${file}#${item.namespace ? item.namespace + "." : ""}${item.name}`;
+}
 
 /** Находки knip по видам: ключ вида (`file:…`, `export:<файл>#<имя>`, `dependency:<пакет>`) → то, что показать. */
 function knipFindings(report: { issues?: Record<string, unknown>[] }): Map<string, Map<string, string>> {
@@ -555,8 +590,8 @@ function knipFindings(report: { issues?: Record<string, unknown>[] }): Map<strin
     const file = String(issue.file ?? "");
     for (const [, kind, keys] of KNIP) {
       for (const k of keys) {
-        for (const item of (issue[k] as { name: string }[] | undefined) ?? []) {
-          const shown = kind === "file" ? item.name : kind === "dependency" || kind === "unlisted" ? item.name : `${file}#${item.name}`;
+        for (const item of (issue[k] as (KnipItem | KnipItem[])[] | undefined) ?? []) {
+          const shown = knipShown(kind, file, item);
           out.get(kind)!.set(`${kind}:${shown}`, shown);
         }
       }
@@ -571,18 +606,24 @@ function knipFindings(report: { issues?: Record<string, unknown>[] }): Map<strin
  * запуск knip проекта (`node_modules/.bin/knip`). Исключение — ключ находки (`file:src/legacy.ts`,
  * `export:src/math.ts#factorial`, `dependency:lodash`) с задачей: зелёное, пока knip его находит, иначе — «убери».
  */
-export function deadCode(it: It, opts: { root: string; report?: string; exceptions?: readonly Exception[] }): void {
+export function deadCode(it: It, opts: { root: string; report?: string; args?: readonly string[]; exceptions?: readonly Exception[] }): void {
   let findings: Map<string, Map<string, string>> | null = null;
   const load = (): Map<string, Map<string, string>> => {
     if (findings) return findings;
     let text: string;
     if (opts.report) text = readFileSync(path.resolve(opts.root, opts.report), "utf8");
     else {
-      const r = spawnSync(path.join(opts.root, "node_modules", ".bin", "knip"), ["--reporter", "json"], { cwd: opts.root, encoding: "utf8" });
+      const r = spawnSync(path.join(opts.root, "node_modules", ".bin", "knip"), ["--reporter", "json", ...(opts.args ?? [])], { cwd: opts.root, encoding: "utf8" });
       if (r.error) throw new Error(`knip не запустился: ${r.error.message} — установи knip в проект или передай report`);
+      // 0 — чисто, 1 — есть находки; иное — сбой knip, а не «мёртвого кода нет»
+      if (r.status !== 0 && r.status !== 1) throw new Error(`knip завершился с кодом ${r.status ?? r.signal}: ${(r.stderr || r.stdout).trim().slice(0, 1000)}`);
       text = r.stdout;
     }
-    findings = knipFindings(JSON.parse(text || "{}"));
+    try {
+      findings = knipFindings(JSON.parse(text));
+    } catch {
+      throw new Error(`knip вывел не JSON — отчёт не разобрать: ${text.trim().slice(0, 300)}`);
+    }
     return findings;
   };
   const excepted = new Map((opts.exceptions ?? []).map((e) => [e.item, e]));
@@ -608,8 +649,15 @@ const ENV_SERVICE = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV
 
 /** Переменные окружения, которые читает код: имя → файлы. */
 /** Имена переменных окружения, которые читает исходник. */
-export function envNamesIn(text: string): string[] {
+export function envNamesIn(source: string): string[] {
+  const text = codeOnly(source);
   const out = new Set<string>();
+  // process.env под другим именем: параметр по умолчанию `(env = process.env)` или `const e = process.env`
+  for (const [, alias] of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=\s*process\.env\b(?!\s*[.[])/g)) {
+    const a = alias!.replace(/\$/g, "\\$");
+    const reads = new RegExp(`(?<![\\w$.])${a}(?:\\.([A-Z_][A-Z0-9_]*)|\\[\\s*["']([A-Z_][A-Z0-9_]*)["']\\s*\\])`, "g");
+    for (const m of text.matchAll(reads)) out.add(m[1] ?? m[2]!);
+  }
   for (const m of text.matchAll(ENV_READ)) {
     const names = m[4] ? m[4].split(",").map((x) => x.split(":")[0]!.trim()).filter((x) => /^[A-Z_][A-Z0-9_]*$/.test(x)) : [m[1] ?? m[2] ?? m[3]!];
     for (const n of names) out.add(n);
@@ -633,31 +681,53 @@ function envReads(root: string, dirs: string[]): Map<string, string[]> {
  */
 export function envVars(
   it: It,
-  opts: { root: string; dirs?: string[]; declared: readonly string[]; ignore?: readonly string[]; exceptions?: readonly Exception[] },
+  opts: {
+    root: string;
+    dirs?: string[];
+    declared: readonly string[];
+    outside?: readonly { item: string; reason: string }[];
+    /** Устарело: без причины и храповика — упавший тест «перенеси в outside». */
+    ignore?: readonly string[];
+    exceptions?: readonly Exception[];
+  },
 ): void {
   const skip = new Set([...ENV_SERVICE, ...(opts.ignore ?? [])]);
+  if (opts.ignore?.length) {
+    it(`вне охвата без причины: ${[...opts.ignore].sort().join(", ")}`, () => {
+      throw new Error("ignore не держит причину — перенеси в outside: [{ item, reason }] (причина — на странице, пропала — «убери из охвата»)");
+    });
+  }
   const reads = envReads(opts.root, opts.dirs ?? ["src"]);
   const declared = new Set(opts.declared);
+  const readItems = [...reads.keys()].filter((v) => !skip.has(v));
+  const declaredItems = [...declared].filter((v) => !skip.has(v));
+  // исключение и «вне охвата» — у проверки, в чьём реестре есть переменная; нет ни в одном — у первой: там «убери»
+  const inReads = new Set(readItems);
+  const inDeclared = new Set(declaredItems);
+  const forReads = <T extends { item: string }>(xs?: readonly T[]) => xs?.filter((x) => inReads.has(x.item) || !inDeclared.has(x.item));
+  const forDeclared = <T extends { item: string }>(xs?: readonly T[]) => xs?.filter((x) => inDeclared.has(x.item));
   invariant(it, {
     registry: "переменные окружения в коде",
-    items: [...reads.keys()].filter((v) => !skip.has(v)),
+    items: readItems,
     name: (v) => `${v} объявлена`,
     key: (v) => v,
     check: (v) => {
       if (!declared.has(v)) throw new Error(`${v} читается в ${reads.get(v)!.join(", ")}, но не объявлена в схеме окружения`);
     },
     violator: { name: "переменная без объявления", item: "__НЕ_ОБЪЯВЛЕНА__" },
-    exceptions: opts.exceptions,
+    exceptions: forReads(opts.exceptions),
+    outside: forReads(opts.outside),
   });
   invariant(it, {
     registry: "объявленные переменные окружения",
-    items: [...declared].filter((v) => !skip.has(v)),
+    items: declaredItems,
     name: (v) => `${v} читается в коде`,
     key: (v) => v,
     check: (v) => {
       if (!reads.has(v)) throw new Error(`${v} объявлена, но не читается — убери из схемы окружения`);
     },
     violator: { name: "объявлена и не читается", item: "__НЕ_ЧИТАЕТСЯ__" },
-    exceptions: opts.exceptions,
+    exceptions: forDeclared(opts.exceptions),
+    outside: forDeclared(opts.outside),
   });
 }

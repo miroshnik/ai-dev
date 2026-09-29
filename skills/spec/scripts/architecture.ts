@@ -15,8 +15,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 
-import { envNamesIn, invariant } from "./harness.ts";
-import type { Exception, It } from "./harness.ts";
+import { codeOnly, envNamesIn, invariant } from "./harness.ts";
+import type { Exception, Invariant, It } from "./harness.ts";
 
 export interface Module {
   /** Каталог модуля от корня проекта (или несколько). */
@@ -141,7 +141,10 @@ export function boundariesConfig(model: Model, boundaries: object, opts: { files
       files: opts.files ?? roots.map((r) => `${r}/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}`),
       plugins: { boundaries },
       settings: {
-        "boundaries/elements": all.flatMap((name) => paths(model.modules[name]!).map((p) => ({ type: name, pattern: p }))),
+        // первым — самый длинный путь: плагин берёт первый подходящий элемент, а src/lib вложен в src
+        "boundaries/elements": all
+          .flatMap((name) => paths(model.modules[name]!).map((p) => ({ type: name, pattern: p })))
+          .sort((a, b) => b.pattern.length - a.pattern.length),
         "import/resolver": { node: { extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts"] } },
         ...opts.settings,
       },
@@ -179,12 +182,24 @@ interface Source {
 
 // литерал URL в коде: "https://api.example.com/…" — хост; локальные адреса и IP — не внешние системы
 const URL_HOST = /["'`]https?:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?::\d+)?(?=[\/"'`?#])/gi;
+// локальные адреса и IP — не внешние системы: сеть до них в тестах разрешена (networkGuard)
 const isLocal = (h: string) => h === "localhost" || h.endsWith(".localhost") || h.endsWith(".test") || /^\d+(\.\d+){3}$/.test(h) || h === "::1";
+// домены для примеров и документации (RFC 2606, RFC 6761) — в коде это не внешняя система; но запрос к ним в тестах —
+// настоящая сеть, поэтому networkGuard их не пропускает (там — isLocal)
+const isReserved = (h: string) => /(^|\.)(example|invalid)$|(^|\.)example\.(com|net|org)$/.test(h);
+// URI пространства имён XML — не адрес сервиса: атрибут xmlns и пространства W3C (createElementNS)
+const XMLNS = /xmlns(?::[\w-]+)?\s*=\s*$/;
+const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
 
-/** Хосты внешних систем в литералах URL исходника. */
-export function hostsIn(text: string): string[] {
+/** Хосты внешних систем в литералах URL исходника; комментарии, пространства имён и зарезервированные домены — нет. */
+export function hostsIn(source: string): string[] {
+  const text = codeOnly(source);
   const out = new Set<string>();
-  for (const m of text.matchAll(URL_HOST)) if (!isLocal(m[1]!.toLowerCase())) out.add(m[1]!.toLowerCase());
+  for (const m of text.matchAll(URL_HOST)) {
+    const h = m[1]!.toLowerCase();
+    if (isLocal(h) || isReserved(h) || NAMESPACE_HOSTS.has(h) || XMLNS.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
+    out.add(h);
+  }
   return [...out];
 }
 
@@ -211,27 +226,43 @@ function sources(root: string, model: Model): Source[] {
   return out.sort((a, b) => (a.file < b.file ? -1 : 1));
 }
 
-/** Модули, чьему каталогу принадлежит путь (каталог модуля или вложенный в него). */
+/**
+ * Модули, чьему каталогу принадлежит путь: самый длинный подходящий путь модуля (`src/lib` вложен в `src` — каталог
+ * `src/lib/x` у модуля `src/lib`); несколько — один и тот же путь у нескольких модулей, это конфликт модели.
+ */
 function owners(model: Model, dir: string): string[] {
-  return names(model).filter((n) => paths(model.modules[n]!).some((p) => dir === p || dir.startsWith(p + "/")));
+  let best = -1;
+  let out: string[] = [];
+  for (const n of names(model)) {
+    for (const p of paths(model.modules[n]!)) {
+      if (dir !== p && !dir.startsWith(p + "/")) continue;
+      if (p.length > best) [best, out] = [p.length, [n]];
+      else if (p.length === best && !out.includes(n)) out.push(n);
+    }
+  }
+  return out;
 }
 
 /**
- * Тесты модели: «<каталог> → <модуль>» на каждый каталог с кодом (вне модулей или в нескольких — красный),
+ * Тесты модели: «каталог <каталог> — в модуле <модуль>» на каждый каталог с кодом (модуль — с самым длинным
+ * подходящим путём; вне модулей или один путь у нескольких — красный),
  * «<модуль> импортирует <пакет>» на каждый внешний пакет, который модуль импортирует (не разрешён — красный),
  * «<модуль> использует разрешённый пакет <пакет>» на каждый пакет модели (не импортируется — красный: убери из модели).
  * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions.ts`.
  */
 export function architecture(it: It, opts: { root: string; model: Model; exceptions?: readonly Exception[] }): void {
   const { model } = opts;
+  // реестры собираются целиком, потом регистрируются: исключение уходит только в реестр, где есть его элемент
+  const specs: Invariant<unknown>[] = [];
+  const add: Add = (spec) => void specs.push(spec as Invariant<unknown>);
   const src = sources(opts.root, model);
   const dirs = sorted([...new Set(src.map((s) => s.dir))]);
   const moduleOf = (dir: string) => owners(model, dir);
 
-  invariant(it, {
+  add({
     registry: "каталоги кода",
     items: dirs,
-    name: (d) => `${d} → ${moduleOf(d).length === 1 ? moduleOf(d)[0] : "?"}`,
+    name: (d) => `каталог ${d} — в модуле ${moduleOf(d).length === 1 ? moduleOf(d)[0] : "?"}`,
     key: (d) => d,
     check: (d) => {
       const own = moduleOf(d);
@@ -239,7 +270,6 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
       if (own.length > 1) throw new Error(`${d}: каталог в нескольких модулях — ${own.join(", ")}`);
     },
     violator: { name: "каталог вне модулей", item: "__вне_модели__" },
-    exceptions: opts.exceptions,
   });
 
   // пакеты, которые модуль импортирует на деле: модуль → пакет → файлы
@@ -253,7 +283,7 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
   }
   const imports = [...used].flatMap(([mod, byPkg]) => [...byPkg].map(([pkg, files]) => ({ mod, pkg, files })));
   const allowed = (mod: string) => model.modules[mod]?.packages ?? [];
-  invariant(it, {
+  add({
     registry: "внешние пакеты модулей",
     items: imports,
     name: (i) => `${i.mod} импортирует ${i.pkg}`,
@@ -262,11 +292,10 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
       if (!allowed(i.mod).includes(i.pkg)) throw new Error(`модулю ${i.mod} пакет ${i.pkg} не разрешён: ${i.files.join(", ")}`);
     },
     violator: { name: "пакет, не разрешённый модулю", item: { mod: names(model)[0] ?? "", pkg: "__не_разрешён__", files: ["__нарушитель__"] } },
-    exceptions: opts.exceptions,
   });
 
   const declared = names(model).flatMap((mod) => allowed(mod).map((pkg) => ({ mod, pkg })));
-  invariant(it, {
+  add({
     registry: "разрешённые пакеты модели",
     items: declared,
     name: (d) => `${d.mod} использует разрешённый пакет ${d.pkg}`,
@@ -275,11 +304,30 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
       if (!used.get(d.mod)?.has(d.pkg)) throw new Error(`модуль ${d.mod} не импортирует ${d.pkg} — убери пакет из модели или поправь код`);
     },
     violator: { name: "разрешённый пакет без импорта", item: { mod: "__нет_модуля__", pkg: "__не_используется__" } },
-    exceptions: opts.exceptions,
   });
 
-  if (model.externals) c1(it, model, src, opts.exceptions);
-  if (model.containers) c2(it, opts.root, model, src, opts.exceptions);
+  if (model.externals) c1(add, model, src);
+  if (model.containers) c2(add, opts.root, model, src);
+  const routed = routeExceptions(opts.exceptions ?? [], specs);
+  for (const [i, spec] of specs.entries()) invariant(it, { ...spec, exceptions: routed[i] });
+}
+
+type Add = <T>(spec: Invariant<T>) => void;
+
+/**
+ * Исключения по реестрам: с `rule` — реестру с этим именем, без — реестрам, в которых есть его элемент; элемента нет
+ * нигде — первому реестру, чтобы храповик сказал «убери исключение», а не молчал.
+ */
+function routeExceptions(exceptions: readonly Exception[], specs: Invariant<unknown>[]): Exception[][] {
+  const keys = specs.map((sp) => new Set(sp.items.map((x) => String((sp.key ?? sp.name)(x)))));
+  const out: Exception[][] = specs.map(() => []);
+  for (const e of exceptions) {
+    const byRule = e.rule ? specs.findIndex((sp) => sp.registry === e.rule) : -1;
+    let to = byRule >= 0 ? [byRule] : keys.flatMap((k, i) => (!e.rule && k.has(e.item) ? [i] : []));
+    if (!to.length) to = [0];
+    for (const i of to) out[i]!.push({ item: e.item, issue: e.issue, reason: e.reason });
+  }
+  return out;
 }
 
 /**
@@ -287,10 +335,10 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
  * `uses`); развёртываемые единицы конфигов и модели совпадают в обе стороны; клиент хранилища — только в контейнере
  * со связью `uses` с этим хранилищем.
  */
-function c2(it: It, root: string, model: Model, src: Source[], exceptions?: readonly Exception[]): void {
+function c2(add: Add, root: string, model: Model, src: Source[]): void {
   const cont = model.containers!;
   const containerOf = (m: string) => Object.keys(cont).filter((c) => (cont[c]!.modules ?? []).includes(m)).sort();
-  invariant(it, {
+  add({
     registry: "модули в контейнерах",
     items: names(model),
     name: (m) => `модуль ${m} — в контейнере ${containerOf(m).length === 1 ? containerOf(m)[0] : "?"}`,
@@ -301,12 +349,11 @@ function c2(it: It, root: string, model: Model, src: Source[], exceptions?: read
       if (c.length > 1) throw new Error(`модуль ${m} — в нескольких контейнерах: ${c.join(", ")}`);
     },
     violator: { name: "модуль вне контейнеров", item: "__вне_контейнеров__" },
-    exceptions,
   });
 
   const edges = names(model).flatMap((m) => (model.modules[m]!.dependsOn ?? []).map((d) => ({ m, d })));
   if (edges.length) {
-    invariant(it, {
+    add({
       registry: "зависимости модулей",
       items: edges,
       name: (e) => `зависимость ${e.m} → ${e.d} — внутри контейнера`,
@@ -314,17 +361,17 @@ function c2(it: It, root: string, model: Model, src: Source[], exceptions?: read
       check: (e) => {
         const a = containerOf(e.m)[0];
         const b = containerOf(e.d)[0];
-        if (a !== b) throw new Error(`${e.m} (${a ?? "?"}) зависит от ${e.d} (${b ?? "?"}) — между контейнерами только связь uses`);
+        // модуль вне контейнеров — тоже не «внутри контейнера»: иначе у нарушителя undefined === undefined
+        if (!a || a !== b) throw new Error(`${e.m} (${a ?? "?"}) зависит от ${e.d} (${b ?? "?"}) — между контейнерами только связь uses`);
       },
       violator: { name: "зависимость через контейнер", item: { m: "__a__", d: "__b__" } },
-      exceptions,
     });
   }
 
   const found = deployUnits(root);
   const declared = new Map<string, string>();
   for (const [c, x] of Object.entries(cont)) for (const d of x.deploy ?? []) declared.set(d, c);
-  invariant(it, {
+  add({
     registry: "развёртываемые единицы",
     items: sorted([...new Set([...found, ...declared.keys()])]),
     name: (u) => `развёртываемая единица ${u} — контейнер ${declared.get(u) ?? "?"}`,
@@ -334,7 +381,6 @@ function c2(it: It, root: string, model: Model, src: Source[], exceptions?: read
       if (!found.includes(u)) throw new Error(`${u} контейнера ${declared.get(u)} нет в конфигах деплоя — модель разошлась с деплоем`);
     },
     violator: { name: "единица вне модели", item: "__вне_модели__" },
-    exceptions,
   });
 
   // клиенты хранилищ: какой контейнер их импортирует на деле
@@ -354,7 +400,7 @@ function c2(it: It, root: string, model: Model, src: Source[], exceptions?: read
         uses.set(k, u);
       }
     }
-    invariant(it, {
+    add({
       registry: "клиенты хранилищ в контейнерах",
       items: [...uses.values()],
       name: (u) => `клиент ${u.pkg} хранилища ${u.s} — в контейнере ${u.c}`,
@@ -365,7 +411,6 @@ function c2(it: It, root: string, model: Model, src: Source[], exceptions?: read
         }
       },
       violator: { name: "клиент без связи", item: { s: "__хранилище__", pkg: "__клиент__", c: "__контейнер__", files: [] } },
-      exceptions,
     });
   }
 }
@@ -375,7 +420,7 @@ function c2(it: It, root: string, model: Model, src: Source[], exceptions?: read
  * адаптера (модель без противоречий), ключ окружения внешней системы — читает только адаптер. Реестры — из модели и
  * кода; реестр, которого модель не объявляет (у внешних систем нет пакетов), не регистрируется.
  */
-function c1(it: It, model: Model, src: Source[], exceptions?: readonly Exception[]): void {
+function c1(add: Add, model: Model, src: Source[]): void {
   const ext = model.externals!;
   const moduleOfFile = (s: Source) => owners(model, s.dir);
   const inAdapter = (s: Source, adapter: string) => moduleOfFile(s).includes(adapter);
@@ -385,7 +430,7 @@ function c1(it: It, model: Model, src: Source[], exceptions?: readonly Exception
   for (const s of src) for (const h of s.hosts) hostFiles.set(h, [...(hostFiles.get(h) ?? []), s]);
   const hosts = sorted([...new Set([...hostOwner.keys(), ...hostFiles.keys()])]);
   if (hosts.length) {
-    invariant(it, {
+    add({
       registry: "хосты внешних систем",
       items: hosts,
       name: (h) => `хост ${h} — только в адаптере ${hostOwner.has(h) ? ext[hostOwner.get(h)!]!.adapter : "?"}`,
@@ -398,12 +443,11 @@ function c1(it: It, model: Model, src: Source[], exceptions?: readonly Exception
         if (outside.length) throw new Error(`хост ${h} внешней системы ${owner} — вне её адаптера ${ext[owner]!.adapter}: ${outside.map((s) => s.file).join(", ")}`);
       },
       violator: { name: "хост вне модели", item: "__вне_модели__.example" },
-      exceptions,
     });
   }
   const pkgs = Object.entries(ext).flatMap(([x, e]) => (e.packages ?? []).map((p) => ({ x, p, a: e.adapter })));
   if (pkgs.length) {
-    invariant(it, {
+    add({
       registry: "пакеты внешних систем",
       items: pkgs,
       name: (i) => `пакет ${i.p} внешней системы ${i.x} — только у адаптера ${i.a}`,
@@ -414,22 +458,21 @@ function c1(it: It, model: Model, src: Source[], exceptions?: readonly Exception
         if (others.length) throw new Error(`пакет ${i.p} внешней системы ${i.x} разрешён не только адаптеру: ${others.join(", ")}`);
       },
       violator: { name: "пакет без адаптера", item: { x: "__нарушитель__", p: "__нет__", a: "__нет_модуля__" } },
-      exceptions,
     });
   }
-  const keys = Object.entries(ext).flatMap(([x, e]) => (e.env ?? []).map((k) => ({ x, k, a: e.adapter })));
+  const keys: { x: string; k: string; a: string; src?: Source[] }[] = Object.entries(ext).flatMap(([x, e]) => (e.env ?? []).map((k) => ({ x, k, a: e.adapter })));
   if (keys.length) {
-    invariant(it, {
+    add({
       registry: "ключи окружения внешних систем",
       items: keys,
       name: (i) => `ключ ${i.k} внешней системы ${i.x} читает только адаптер ${i.a}`,
       key: (i) => `${i.x}:${i.k}`,
       check: (i) => {
-        const outside = src.filter((s) => s.env.includes(i.k) && !inAdapter(s, i.a));
+        const outside = (i.src ?? src).filter((s) => s.env.includes(i.k) && !inAdapter(s, i.a));
         if (outside.length) throw new Error(`ключ ${i.k} внешней системы ${i.x} читается вне адаптера ${i.a}: ${outside.map((s) => s.file).join(", ")}`);
       },
-      violator: { name: "ключ вне адаптера", item: { x: "__нарушитель__", k: "__КЛЮЧ__", a: "__нет_модуля__" } },
-      exceptions,
+      // нарушителю — свой исходник, который читает ключ вне адаптера: в коде проекта такого ключа нет
+      violator: { name: "ключ вне адаптера", item: { x: "__нарушитель__", k: "__КЛЮЧ__", a: "__нет_модуля__", src: [{ file: "__нарушитель__.ts", dir: "__вне_модели__", packages: [], hosts: [], env: ["__КЛЮЧ__"] }] } },
     });
   }
 }

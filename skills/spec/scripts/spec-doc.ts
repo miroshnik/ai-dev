@@ -610,7 +610,14 @@ export async function main(argv: string[]): Promise<number> {
 
   const root = findRoot(values.root);
   let tests: Test[] = [];
+  // CI задан — отчёт обязан быть: прогон, который его не написал, иначе молча выкинет свои тесты из спеки
+  const inCi = !!process.env.CI && !["0", "false"].includes(process.env.CI);
   for (const r of positionals) {
+    if (!existsSync(r)) {
+      console.error(`spec-doc: отчёта ${r} нет — его тесты в спеку не попали${inCi ? "" : " (локально — предупреждение, в CI — ошибка)"}`);
+      if (inCi) return 2;
+      continue;
+    }
     try {
       tests.push(...L.loadReport(r, root));
     } catch (e) {

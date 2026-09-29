@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { testFileIn } from "../../../skills/spec/scripts/harness.ts";
 import { runScript, SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -37,6 +38,18 @@ it("счёт создаётся", () => { createInvoice(); });
 
   // Покрытие говорит «строка выполнилась», а не «её вызвал тест capability»: вызов из теста стандарта или из
   // хелпера вне тестов заявленным поведением не считается
+  // V8 (Vitest) пишет анонимную async-функцию теста после await кадром `at async <путь>` — без имени и скобок
+  it("вызов после await в анонимной async-функции теста — файл теста из кадра «at async»", () => {
+    const stack = [
+      "Error",
+      "    at journal (/repo/.agents/skills/spec/scripts/harness.ts:470:5)",
+      "    at createInvoice (/repo/src/helpers/api.ts:12:3)",
+      "    at async /repo/tests/capabilities/billing/billing.test.ts:8:5",
+    ].join("\n");
+    expect(testFileIn(stack, "/repo")).toBe("tests/capabilities/billing/billing.test.ts");
+    expect(testFileIn(stack.replace("at async /repo", "at async file:///repo"), "/repo")).toBe("tests/capabilities/billing/billing.test.ts");
+  });
+
   it("точка входа без вызова из теста capability — упавший тест сверки и код 1; вызов из теста стандарта не засчитан", () => {
     writeTree(dir, {
       "entries.json": JSON.stringify(["POST /invoices", "GET /reports", "job:cleanup"]),
