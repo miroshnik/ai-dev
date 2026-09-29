@@ -146,6 +146,22 @@ describe("Фан-аут задачи — число её субагентов в
     expect(body).toContain('"agents": 2');
   });
 
+  it("субагент с заданием «Задача #42 (эпик #40)» считается задаче 42 целиком; «Задача #40 (эпик #42)» — нет", () => {
+    const file = claudeFixture();
+    const subs = path.join(dir, "11111111-2222-3333-4444-555555555555", "subagents");
+    // ветка субагента — worktree без номера задачи: без подсказки его записи ни ветке, ни окнам не достаются
+    const sub = (hhmm: string, task: string) =>
+      jsonl([
+        { type: "user", timestamp: `2026-09-01T${hhmm}:00Z`, gitBranch: "claude/agent-1a2b3c", message: { content: task } },
+        { type: "assistant", timestamp: `2026-09-01T${hhmm}:30Z`, gitBranch: "claude/agent-1a2b3c", message: { id: `msg_${hhmm}`, model: "claude-haiku-4-5-20251001", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "ok" }] } },
+      ]);
+    writeFileSync(path.join(subs, "agent-2.jsonl"), sub("10:09", "Задача #42 (эпик #40): перенеси спеку в тесты"));
+    writeFileSync(path.join(subs, "agent-3.jsonl"), sub("10:09", "Задача #40 (эпик #42): другое"));
+    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    expect(res.agents).toBe(2);
+    expect(res.details[0]!.rules["субагент"]).toBe(4); // agent-1 и agent-2 — по две записи
+  });
+
   it("история показывает число субагентов задачи; у факта без признака — прочерк", () => {
     const row = (number: number, agents?: number): Row => ({
       item_id: "", issue_id: "", number, title: `Задача ${number}`, state: "CLOSED", stateReason: "COMPLETED", closedAt: 0, createdAt: 0, labels: [],
@@ -503,6 +519,38 @@ describe("Транскрипт Claude Code даёт привязки к зада
     expect(s.routine).toBe(false);
   });
 
+  /** Подсказка задачи у записей субагента по его заданию; ветка субагента — worktree без номера задачи. */
+  const subHints = (task: string) => {
+    const sid = "22222222-3333-4444-5555-666666666666";
+    const file = path.join(dir, sid + ".jsonl");
+    writeFileSync(file, jsonl([{ type: "user", timestamp: "2026-09-01T10:00:00Z", cwd: "/repo", gitBranch: "feat/42-export", message: { role: "user", content: "#42 сделай экспорт" } }]));
+    mkdirSync(path.join(dir, sid, "subagents"), { recursive: true });
+    writeFileSync(
+      path.join(dir, sid, "subagents", "agent-1.jsonl"),
+      jsonl([
+        { type: "user", timestamp: "2026-09-01T10:07:00Z", gitBranch: "claude/agent-1a2b3c", message: { content: task } },
+        { type: "assistant", timestamp: "2026-09-01T10:08:00Z", gitBranch: "claude/agent-1a2b3c", message: { id: "msg_sub_0001", model: "claude-haiku-4-5-20251001", usage: { input_tokens: 10, output_tokens: 5 }, content: [{ type: "text", text: "ok" }] } },
+      ]),
+    );
+    return parseSessionFile(file).ev.filter((e) => e[5] > 0).map((e) => e[3]);
+  };
+
+  it("задание субагенту «Задача #42 (эпик #40). …» даёт подсказку 42: номер после «эпик» — не задача", () => {
+    expect(subHints("Задача #42 (эпик #40). Перенеси спеку в тесты")).toEqual(["42", "42"]);
+  });
+
+  it("задание, начинающееся с «#42 (эпик #40)», даёт подсказку 42", () => {
+    expect(subHints("#42 (эпик #40): перенеси спеку в тесты")).toEqual(["42", "42"]);
+  });
+
+  it("ссылка на issue и «(эпик #40)» в задании — подсказка по ссылке, с репозиторием", () => {
+    expect(subHints("Задача https://github.com/o/r/issues/42 (эпик #40): перенеси спеку")).toEqual(["o/r#42", "o/r#42"]);
+  });
+
+  it("два номера без слов «Задача» и «эпик» и не в начале — подсказки нет, записи субагента идут по ветке и окнам", () => {
+    expect(subHints("посмотри #42 и #39, потом ответь")).toEqual(["", ""]);
+  });
+
   it("вставки <system-reminder> перед текстом промпта вырезаются: промпт человеческий, номер задачи — из текста, а не из вставки; одна вставка — не промпт", () => {
     // так пишет Claude Code desktop (Code tab): картинка, затем текст, начинающийся со вставки приложения
     const reminder = (s: string) => `<system-reminder>\n${s}\n</system-reminder>`;
@@ -613,6 +661,14 @@ describe("Облачная сессия считается по событиям
       [ts("10:09"), "fix/42-export"], [ts("10:10"), "feat/43-report"],
     ]);
     expect(s.ev.filter((e) => e[3]).map((e) => e[3])).toEqual(["42", "42"]); // задание субагента называет задачу
+  });
+
+  it("задание субагенту с номером задачи и номером эпика привязывает его записи к задаче", () => {
+    const evs = events();
+    // порядок событий — по sequence_num: задание субагента подменяется на месте, не новым событием
+    evs[8] = { ...evs[8]!, payload: { ...evs[8]!.payload, message: { role: "user", content: "Задача #42 (эпик #40): проверь экспорт" } } };
+    const s = parseCloudFile(exportFile(evs));
+    expect(s.ev.filter((e) => e[3]).map((e) => e[3])).toEqual(["42", "42"]);
   });
 
   it("облачная сессия считается в факт наравне с локальной — покрытие full, агент назван", () => {
