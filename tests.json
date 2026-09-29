@@ -2312,6 +2312,13 @@
   "describes": [
    "Отчёты Vitest, Playwright и bun test — в любом сочетании"
   ],
+  "name": "Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, --strict ловит не-утверждение"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании"
+  ],
   "name": "Playwright: проекты сворачиваются в одну строку, причина skip — из аннотации, худший статус побеждает"
  },
  {
@@ -2404,6 +2411,13 @@
    "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
   ],
   "name": "описание `<папка>.md` — абзацы под заголовком, первый — описание в оглавлении"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Страница capability, правила архитектуры или стандарта — рассказ: зачем, что умеет, чем проверено"
+  ],
+  "name": "при `<name>.e2e.ts` и `<name>.test.ts` страницу решения открывают утверждения юнит-теста"
  },
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
