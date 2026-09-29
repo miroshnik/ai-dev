@@ -114,7 +114,7 @@ jobs:
         with: { node-version: 24, package-manager-cache: false }
       - uses: actions/download-artifact@v8
         with: { name: spec-reports }
-      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json >> "$GITHUB_STEP_SUMMARY"
+      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
 Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
