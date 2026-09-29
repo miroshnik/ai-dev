@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { architecture, cspConnectSrc, deployUnits, importsIn, networkGuard } from "../../../skills/spec/scripts/architecture.ts";
+import { architecture, boundariesConfig, cspConnectSrc, deployUnits, hostsIn, importsIn, networkGuard } from "../../../skills/spec/scripts/architecture.ts";
 import type { Model } from "../../../skills/spec/scripts/architecture.ts";
 import { eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
@@ -153,14 +153,27 @@ const adapter = {
  * говорит только с объявленными внешними системами, проверено, а не нарисовано.
  */
 describe("Внешние системы модели (C1) проверяются кодом", () => {
+  // SVG и createElementNS несут URI пространства имён, документация — ссылки в комментариях, примеры — домены RFC 2606
+  it("хост и переменная в комментарии, пространство имён SVG и зарезервированный домен — не находки", () => {
+    const src = [
+      "// документация: https://docs.stripe.com/api",
+      '/* "https://old.api.io/v1" */',
+      'const svg = \'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>\';',
+      'const el = document.createElementNS("http://www.w3.org/2000/svg", "path");',
+      'const demo = ["https://example.com/a", "https://api.example.org", "https://x.invalid/", "https://shop.example/"];',
+      'const api = "https://api.stripe.com/v1";',
+    ].join("\n");
+    expect(hostsIn(src)).toEqual(["api.stripe.com"]);
+  });
+
   it("хост внешней системы в коде — только в её адаптере; необъявленный хост — упавший тест", async () => {
     writeTree(dir, {
       ...adapter,
-      "src/billing/pay.ts": 'export const a = fetch("https://api.stripe.com/v1/charges");\nexport const b = fetch("https://evil.example.com/x");\n',
+      "src/billing/pay.ts": 'export const a = fetch("https://api.stripe.com/v1/charges");\nexport const b = fetch("https://evil.io/x");\n',
     });
     const r = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
     expect(r["хост api.stripe.com — только в адаптере stripe"]).toStartWith("✗ хост api.stripe.com внешней системы payments — вне её адаптера stripe: src/billing/pay.ts");
-    expect(r["хост evil.example.com — только в адаптере ?"]).toStartWith("✗ хост evil.example.com не объявлен ни одной внешней системой модели: src/billing/pay.ts");
+    expect(r["хост evil.io — только в адаптере ?"]).toStartWith("✗ хост evil.io не объявлен ни одной внешней системой модели: src/billing/pay.ts");
   });
 
   it("пакет внешней системы разрешён только её адаптеру — иначе модель противоречит себе", async () => {

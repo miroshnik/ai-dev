@@ -16,6 +16,7 @@ import { builtinModules } from "node:module";
 import path from "node:path";
 
 import { envNamesIn, invariant } from "./harness.ts";
+import { codeOnly } from "./harness.ts";
 import type { Exception, It } from "./harness.ts";
 
 export interface Module {
@@ -179,12 +180,24 @@ interface Source {
 
 // литерал URL в коде: "https://api.example.com/…" — хост; локальные адреса и IP — не внешние системы
 const URL_HOST = /["'`]https?:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?::\d+)?(?=[\/"'`?#])/gi;
+// локальные адреса и IP — не внешние системы: сеть до них в тестах разрешена (networkGuard)
 const isLocal = (h: string) => h === "localhost" || h.endsWith(".localhost") || h.endsWith(".test") || /^\d+(\.\d+){3}$/.test(h) || h === "::1";
+// домены для примеров и документации (RFC 2606, RFC 6761) — в коде это не внешняя система; но запрос к ним в тестах —
+// настоящая сеть, поэтому networkGuard их не пропускает (там — isLocal)
+const isReserved = (h: string) => /(^|\.)(example|invalid)$|(^|\.)example\.(com|net|org)$/.test(h);
+// URI пространства имён XML — не адрес сервиса: атрибут xmlns и пространства W3C (createElementNS)
+const XMLNS = /xmlns(?::[\w-]+)?\s*=\s*$/;
+const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
 
-/** Хосты внешних систем в литералах URL исходника. */
-export function hostsIn(text: string): string[] {
+/** Хосты внешних систем в литералах URL исходника; комментарии, пространства имён и зарезервированные домены — нет. */
+export function hostsIn(source: string): string[] {
+  const text = codeOnly(source);
   const out = new Set<string>();
-  for (const m of text.matchAll(URL_HOST)) if (!isLocal(m[1]!.toLowerCase())) out.add(m[1]!.toLowerCase());
+  for (const m of text.matchAll(URL_HOST)) {
+    const h = m[1]!.toLowerCase();
+    if (isLocal(h) || isReserved(h) || NAMESPACE_HOSTS.has(h) || XMLNS.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
+    out.add(h);
+  }
   return [...out];
 }
 
