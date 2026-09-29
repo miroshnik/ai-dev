@@ -1,9 +1,10 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { runScript, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { runScript, SCRIPTS, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -287,6 +288,20 @@ describe("Пропущенный и падающий тест видны — н�
 });
 
 describe("Отчёты Vitest, Playwright и bun test — в любом сочетании", () => {
+  // сверку spec-claims локально часто не запускают, и её отчёта нет; в CI он обязан быть — иначе тесты молча выпадут
+  it("отчёта нет — локально предупреждение, в CI ошибка", () => {
+    writeFileSync(path.join(dir, "r.json"), billing());
+    const run = (ci: string) =>
+      spawnSync("bun", [path.join(SCRIPTS, "spec-doc.ts"), "r.json", ".spec-claims.xml", "--root", dir, "--stdout"], { cwd: dir, encoding: "utf8", env: { ...process.env, CI: ci } });
+    const local = run("");
+    expect(local.status).toBe(0);
+    expect(local.stderr).toContain("отчёта .spec-claims.xml нет");
+    expect(local.stdout).toContain("выставляется за месяц");
+    const ci = run("true");
+    expect(ci.status).toBe(2);
+    expect(ci.stderr).toContain("отчёта .spec-claims.xml нет");
+  });
+
   it("Vitest: абсолютный путь с другой машины приводится по сегменту /tests/", () => {
     const r = doc("r.json", vitestReport("/home/runner/work/repo/repo", { "tests/standards/audit/audit.test.ts": [[["Аудит"], "каждая мутация пишет запись"]] }), "--stdout");
     expect(r.stdout).toContain("## Каким правилам подчиняется код\n\n### audit\n\n#### Аудит\n\n");

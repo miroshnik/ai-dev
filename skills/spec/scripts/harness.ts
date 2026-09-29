@@ -417,13 +417,22 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
 
 // файл теста в стеке вызова: *.test.* / *.spec.* / *.e2e.* (V8 и JavaScriptCore; file:// — у ESM)
 // у кадра верхнего уровня модуля Bun пишет только строку, без колонки: «at /…/x.test.ts:4»
-const STACK_FILE = /(?:\(|\bat\s+)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+)/g;
+// V8 пишет анонимную async-функцию после await кадром «at async <путь>» — без имени и скобок
+const STACK_FILE = /(?:\(|\bat\s+(?:async\s+)?)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+)/g;
 const seen = new Set<string>();
 let journalFile: string | null = null;
 
 /** Файл теста, из которого идёт вызов, от корня проекта — по стеку; не из теста — null. */
 function callerTest(root: string): string | null {
-  for (const m of (new Error().stack ?? "").matchAll(STACK_FILE)) {
+  return testFileIn(new Error().stack ?? "", root);
+}
+
+/**
+ * Файл теста в стеке вызова, от корня проекта: первый кадр `*.test.*` / `*.spec.*` / `*.e2e.*` (V8 и
+ * JavaScriptCore, `file://` у ESM, `at async` после await); не из теста — null.
+ */
+export function testFileIn(stack: string, root: string): string | null {
+  for (const m of stack.matchAll(STACK_FILE)) {
     const abs = m[1]!;
     const rel = path.relative(root, abs).split(path.sep).join("/");
     if (!rel.startsWith("..")) return rel;
