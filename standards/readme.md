@@ -12,7 +12,7 @@ README читают первым, а правят последним: новый
 
 ## README называет всё, что ставит флоу, и не ссылается на то, чего нет
 
-<details><summary>✅ 24 теста</summary>
+<details><summary>✅ 25 тестов</summary>
 
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, ai-dev install, ai-dev release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
@@ -37,6 +37,7 @@ README читают первым, а правят последним: новый
 - ✅ README: справочник docs/cloud-sessions.md — со ссылкой
 - ✅ README: справочник docs/parallel-checkouts.md — со ссылкой
 - ✅ README: справочник docs/pr-checks.md — со ссылкой
+- ✅ README: справочник docs/testing.md — со ссылкой
 - ✅ относительные ссылки и якоря README ведут на существующие файлы и разделы
 
 </details>
