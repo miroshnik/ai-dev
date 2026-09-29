@@ -40,7 +40,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 
 | Момент | Действие |
 |---|---|
-| Перед PR | 1. прогон тестов с JSON-отчётом; 2. `spec-doc --strict` — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff --scenarios <тело задачи>` → раздел «Спека (тесты)» со сверкой сценариев в тело PR |
+| Перед PR | 1. прогон тестов с JSON-отчётом (e2e не прогонять: для названий хватит `playwright test --list --reporter=json > .spec-playwright.json`); 2. `spec-doc --strict` с обоими отчётами — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff --scenarios <тело задачи>` → раздел «Спека (тесты)» со сверкой сценариев в тело PR |
 | В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, нет главного файла или `<папка>.md`, шапка у файла теста, `rule.test.ts`, название не по-русски — код 1); `spec-diff` в summary |
 | В CI после мержа | прогон на `main` → `spec-doc` → `spec-publish`; без CI на `main` — `docs/spec` из артефакта прогона PR и `spec-publish --source <SHA мержа>` (`ci.md`). Ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
 | Прочитать спеку проекта | `git fetch origin spec && git show origin/spec:README.md` (страницы — `capabilities/<name>.md`…) или сами тесты |
@@ -61,6 +61,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | Vitest (и Jest — формат тот же) | `vitest run --reporter=default --reporter=json --outputFile.json=.spec-report.json` |
 | `bun test` | `bun test --reporter=junit --reporter-outfile=.spec-report.xml` — JUnit с вложенными `testsuite` по describe |
 | Playwright | `PLAYWRIGHT_JSON_OUTPUT_NAME=.spec-playwright.json playwright test --reporter=json` |
+| Playwright без прогона (перед PR) | `playwright test --list --reporter=json > .spec-playwright.json` — дерево и названия без браузеров, тесты — «пропущен»: для `spec-doc --strict` и `spec-diff`, не для публикации |
 
 Отчёты — временные файлы, в `.gitignore`. Отчёт из CI с чужими абсолютными
 путями годится: путь приводится по сегменту `/tests/`. Шарды склеивает сам
@@ -119,7 +120,9 @@ bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё 
 
 **Главный файл папки** — `tests/<вид>/<name>/<name>.*` (`<name>.test.ts`,
 `<name>.e2e.ts`…) у capability, правила архитектуры и стандарта: его
-`describe` идут первыми; нет его — stderr, `--strict` — код 1. **Названия**
+`describe` идут первыми; нет его — stderr, `--strict` — код 1. Рядом
+`<name>.test.*` и `<name>.e2e.ts` — главный `.test.*`: страницу открывают
+утверждения юнитов, e2e идёт следом, до остальных файлов папки. **Названия**
 `describe` и `it` — утверждения по-русски: без русских слов (идентификатор,
 имя функции или файла, английская фраза) — stderr с названием и файлом,
 `--strict` — код 1; код в обратных кавычках внутри утверждения — можно.

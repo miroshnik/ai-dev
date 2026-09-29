@@ -117,6 +117,25 @@ describe("Счета", () => {
     expect(r.stdout.match(/#### Оплата/g)).toHaveLength(1);
   });
 
+  // `<name>.e2e.ts` по алфавиту раньше `<name>.test.ts`: без тай-брейка e2e открывал бы страницу раньше юнитов (#191)
+  it("при `<name>.e2e.ts` и `<name>.test.ts` страницу решения открывают утверждения юнит-теста", () => {
+    const r = doc(
+      "r.json",
+      vitestReport(dir, {
+        "tests/capabilities/billing/a.test.ts": [[["Возврат"], "деньги возвращаются"]],
+        "tests/capabilities/billing/billing.e2e.ts": [[["Оплата"], "картой в браузере"]],
+        [MAIN]: [[["Счета"], "выставляется"], [["Оплата"], "полная"]],
+      }),
+      "--stdout",
+    );
+    const at = (s: string) => r.stdout.indexOf(s);
+    expect(at("#### Счета")).toBeLessThan(at("#### Оплата"));
+    expect(at("#### Оплата")).toBeLessThan(at("#### Возврат"));
+    // e2e главного имени — следом за юнитами, раньше остальных файлов папки
+    expect(at("полная")).toBeLessThan(at("картой в браузере"));
+    expect(at("картой в браузере")).toBeLessThan(at("деньги возвращаются"));
+  });
+
   it("один describe из нескольких файлов — один раздел, файлы по порядку путей", () => {
     const r = doc(
       "r.json",
@@ -306,6 +325,25 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
     const r = doc("r.json", vitestReport("/home/runner/work/repo/repo", { "tests/standards/audit/audit.test.ts": [[["Аудит"], "каждая мутация пишет запись"]] }), "--stdout");
     expect(r.stdout).toContain("## Каким правилам подчиняется код\n\n### audit\n\n#### Аудит\n\n");
     expect(r.stdout).not.toContain("Вне дерева");
+  });
+
+  // перед PR e2e ради сверки названий не прогоняют (#191); форма отчёта — вывод `playwright test --list --reporter=json`:
+  // пути от rootDir конфига, у тестов нет результатов, статус skipped
+  it("Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, --strict ловит не-утверждение", () => {
+    writeFileSync(path.join(dir, "r.json"), billing());
+    const list = (title: string, projectName: string) => ({ title, tests: [{ projectName, results: [], status: "skipped", annotations: [] }] });
+    const e2e = {
+      title: "Вход",
+      file: "capabilities/billing/billing.e2e.ts",
+      specs: ["chromium", "firefox"].flatMap((p) => [list("через форму", p), list("loginForm", p)]),
+    };
+    const report = { config: { rootDir: path.join(dir, "tests") }, suites: [{ title: e2e.file, file: e2e.file, specs: [], suites: [e2e] }] };
+    const r = doc(".spec-playwright.json", JSON.stringify(report), "r.json", "--stdout", "--strict");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("название — не утверждение по-русски: «loginForm» (tests/capabilities/billing/billing.e2e.ts)");
+    expect(r.stdout).toContain("#### Вход");
+    expect(r.stdout).toContain("- ⏭️ через форму — пропущен (2 варианта)");
+    expect(r.stdout.indexOf("выставляется за месяц")).toBeLessThan(r.stdout.indexOf("через форму"));
   });
 
   it("Playwright: проекты сворачиваются в одну строку, причина skip — из аннотации, худший статус побеждает", () => {

@@ -4,8 +4,8 @@
  * от bun test): раздел на папку tests/capabilities/<name> («Что делает система»),
  * tests/architecture/<name> («Из чего состоит») и tests/standards/<name> («Каким правилам подчиняется
  * код»). Страница — рассказ: описание <папка>.md рядом с тестами под заголовком (первый абзац — в индексе,
- * заголовки md — под заголовком папки), главный файл <name>.test.ts у всех видов (rule.test.ts — подсказка
- * переименовать), describe →
+ * заголовки md — под заголовком папки), главный файл <name>.test.ts у всех видов (рядом <name>.e2e.ts — следом;
+ * rule.test.ts — подсказка переименовать), describe →
  * раздел с прозой из своего JSDoc, тесты раздела свёрнуты в <details> со счётчиком. Разделы идут в
  * порядке главного файла, остальные файлы — следом по пути. Шапка другого файла папки в документацию
  * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
@@ -88,10 +88,21 @@ const testKey = (t: Test): string => JSON.stringify([...t.describes, t.name]);
  * имя папки у всех видов: одно правило вместо особого `rule.test.ts` у стандарта.
  */
 function isMain(file: string): boolean {
+  return mainRank(file) < 2;
+}
+
+/**
+ * Место файла в рассказе папки: 0 — `<name>.test.*` (утверждения юнитов), 1 — другой `<name>.*` (`.e2e.ts`),
+ * 2 — остальные. Рядом `<name>.e2e.ts` и `<name>.test.ts` — страницу открывают юниты, e2e следом: по алфавиту
+ * e2e шёл бы первым.
+ */
+function mainRank(file: string): number {
   const [kind, name] = L.classify(file);
-  if (!KINDS.includes(kind) || name === null) return false;
+  if (!KINDS.includes(kind) || name === null) return 2;
   const parts = file.split("/");
-  return parts.length === 4 && parts[3]!.split(".")[0] === name;
+  const base = parts[3]?.split(".") ?? [];
+  if (parts.length !== 4 || base[0] !== name) return 2;
+  return base[1] === "test" ? 0 : 1;
 }
 
 /** Прежний главный файл стандарта `rule.*` прямо в папке: теперь не главный — его надо переименовать. */
@@ -108,7 +119,7 @@ export function build(tests: Test[]): { groups: Map<string, Group>; out: Map<str
   const libFiles = new Set<string>();
   // главный файл папки первым — порядок его describe и есть порядок рассказа; дальше файлы по пути;
   // внутри файла — порядок отчёта (порядок объявления)
-  const rank = (t: Test): string => (isMain(t.path) ? "0" : "1") + t.path;
+  const rank = (t: Test): string => mainRank(t.path) + t.path;
   const sorted = [...tests].sort((a, b) => (rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0));
   for (const t of sorted) {
     const [kind, name] = L.classify(t.path);
