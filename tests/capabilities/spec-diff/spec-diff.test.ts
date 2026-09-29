@@ -337,6 +337,21 @@ describe("Сценарии задачи сверяются с тестами PR"
     expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ✅ выставляется за месяц. — `tests/capabilities/billing` · Счета › Выставляется за месяц");
   });
 
+  // сценарии в задачах пишут цитатой со знаком после неё — «…»; — и тест того же названия не находился (#196)
+  it("сценарий в кавычках-ёлочках с точкой с запятой после них совпадает с тестом того же названия", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    const tests = ["выставляется за месяц", "черновик удаляется", "оплата картой", "в валюте", "метка `billing` ставится"].map((n) => `it(${JSON.stringify(n)}, () => {});`).join(" ");
+    const issue = "## Сценарии\n\n- «выставляется за месяц»;\n- «черновик удаляется».\n- \"оплата картой\",\n- `в валюте`\n- «метка `billing` ставится»\n";
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); ${tests}`), "issue.md": issue });
+    const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain("- ✅ «выставляется за месяц»; — `tests/capabilities/billing` · выставляется за месяц");
+    expect(out).toContain("- ✅ «черновик удаляется». — `tests/capabilities/billing` · черновик удаляется");
+    expect(out).toContain('- ✅ "оплата картой", — `tests/capabilities/billing` · оплата картой');
+    expect(out).toContain("- ✅ `в валюте` — `tests/capabilities/billing` · в валюте");
+    expect(out).toContain("- ✅ «метка `billing` ставится» — `tests/capabilities/billing` · метка `billing` ставится");
+    expect(out).not.toContain("Тесты сверх сценариев");
+  });
+
   it("в задаче нет раздела «## Сценарии» — сверка говорит об этом, а не молчит", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
     repo.commit({ [BILLING]: ts(`it("x", () => {}); it("новое", () => {});`), "issue.md": "## Контекст\n\nбез сценариев\n" });
