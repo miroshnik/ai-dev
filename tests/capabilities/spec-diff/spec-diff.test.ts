@@ -419,6 +419,12 @@ describe("Решения вне названий тестов — модель, 
     expect(diffFrom(base).stdout).toContain("**Исключения — снято (1):**\n\n- `src/a.ts` · no-console — #5 отладка\n");
   });
 
+  it("добавленная строка с «eslint-disable» в литерале — раздела «Исключения» нет", () => {
+    const base = repo.commit({ "src/a.ts": "export const a = 1;\n" });
+    repo.commit({ "src/a.ts": 'export const a = 1;\nexport const fixture = "// eslint-disable-next-line no-console -- #5 отладка";\n' });
+    expect(diffFrom(base).stdout).not.toContain("Исключения");
+  });
+
   it("реестр invariant и правило examples: добавленные и снятые", () => {
     const STD = "tests/standards/audit/audit.test.ts";
     const src = (registry: string, rule: string) =>

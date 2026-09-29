@@ -112,6 +112,21 @@ describe("Отключение линт-правила в коде — искл�
     expect(Object.keys(r).some((n) => n.includes("clean.ts"))).toBe(false);
   });
 
+  // ESLint читает директивы только в комментариях: текст в строке — фикстура теста или сообщение, а не отключение
+  it("отключение линта в строковом литерале — не исключение", async () => {
+    writeTree(dir, {
+      "src/fixture.ts": [
+        'export const a = "// eslint-disable-next-line no-console -- временно";',
+        "export const b = `/* eslint-disable */ ${a}`;",
+        'export const c = /"/.test(a) ? "// eslint-disable-next-line no-alert" : "";',
+      ].join("\n") + "\n",
+      "src/mixed.ts": 'const url = "http://x"; // eslint-disable-line no-console -- #3 адрес\nconst s = "// eslint-disable no-alert";\n',
+    });
+    const r = await outcomes((it) => lintExceptions(it, { root: dir, dirs: ["src"] }));
+    expect(Object.keys(r).some((n) => n.includes("fixture.ts"))).toBe(false);
+    expect(r["исключения в src/mixed.ts: no-console (#3)"]).toBe("✓");
+  });
+
   it("тест отключений линта в файле называет задачи отключений", async () => {
     writeTree(dir, { "src/a.ts": "// eslint-disable-next-line no-console -- #12 логгер\nconsole.log(1);\n// eslint-disable-next-line no-alert -- #7 диалог\nalert(1);\n" });
     const r = await outcomes((it) => lintExceptions(it, { root: dir, dirs: ["src"] }));
