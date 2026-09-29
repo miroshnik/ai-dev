@@ -55,8 +55,9 @@
 
 ## Отчёты Vitest, Playwright и bun test — в любом сочетании
 
-<details><summary>✅ 6 тестов</summary>
+<details><summary>✅ 7 тестов</summary>
 
+- ✅ отчёта нет — локально предупреждение, в CI ошибка
 - ✅ Vitest: абсолютный путь с другой машины приводится по сегменту /tests/
 - ✅ Playwright: проекты сворачиваются в одну строку, причина skip — из аннотации, худший статус побеждает
 - ✅ bun test: describe — вложенные testsuite JUnit, todo и skip различаются
