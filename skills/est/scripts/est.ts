@@ -453,7 +453,15 @@ export interface CloudPart {
   agents?: number; // субагенты облачной сессии, чья работа привязана к задаче
   tok: { in: number; out: number; cw: number; cr: number; total: number } | null;
   models: Record<string, { mtok: number; usd: number | null }>;
+  steps?: number; // ходы части (ответы модели), включая субагентов
+  steps_agents?: number;
+  tail?: number; // ходов с контекстом больше TAIL_CTX
+  preamble?: number; // контекст первого хода верхнего уровня
+  ctx_end?: number; // контекст последнего хода верхнего уровня
 }
+
+/** Контекст хода, с которого ход — «хвост»: ходы с таким контекстом были 20 % ходов и 45 % токенов. */
+export const TAIL_CTX = 400_000;
 
 /** Части облака из всех комментариев с маркером «Факт»: по сессии — последняя, порядок — первого появления. */
 export function cloudPartsIn(bodies: string[]): CloudPart[] {
@@ -1863,6 +1871,11 @@ export interface Fact {
   sessions: number;
   prompts: number;
   agents?: number; // субагенты, чья работа привязана к задаче (фан-аут); нет — факт посчитан до признака
+  steps?: number; // ходы задачи — ответы модели, по одному на message.id, включая субагентов; нет — факт до признака
+  steps_agents?: number; // из них у субагентов
+  tail?: number; // ходов с контекстом больше TAIL_CTX — самые дорогие
+  preamble?: number; // контекст первого хода верхнего уровня самой ранней сессии — цена правил и инструментов
+  ctx_end?: number; // контекст последнего хода верхнего уровня самой поздней сессии
   prs: number[];
   commits: number;
   diff: number;
@@ -2010,6 +2023,14 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   let nSessions = 0;
   let nPrompts = 0;
   let nAgents = 0; // субагенты, чья работа привязана к задаче: признак фан-аута
+  // ходы — ответы модели по одному на message.id; цена задачи растёт квадратично от их числа
+  let steps = 0;
+  let stepsAgents = 0;
+  let tail = 0;
+  let preamble: number | null = null;
+  let preAt: number | null = null;
+  let ctxEnd: number | null = null;
+  let endAt: number | null = null;
   let firstTs: number | null = null;
   let lastTs: number | null = null;
   const details: Detail[] = [];
@@ -2207,7 +2228,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const brs: Record<string, number> = {};
     const sessIv: [number, number][] = [];
     const sessAgents = new Set<number>();
-    const sessUsage: [Any[], number][] = []; // (usage-запись, доля) для привязанных ответов модели
+    const sessUsage: [Any[], number, boolean][] = []; // (usage-запись, доля, субагент ли) для привязанных ответов модели
     const sUsage = s.usage ?? [];
     const sModels = s.models ?? [];
     for (let i = 0; i < ev.length; i++) {
@@ -2216,7 +2237,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       const w = attributed[i]!;
       if (human && !w && i + 1 < ev.length && attributed[i + 1]! && ev[i + 1]![0] - ts <= gap) prompts++;
       if (!w) continue;
-      if (e.length > 4 && e[4] >= 0 && e[4] < sUsage.length) sessUsage.push([sUsage[e[4]]!, w]);
+      if (e.length > 4 && e[4] >= 0 && e[4] < sUsage.length) sessUsage.push([sUsage[e[4]]!, w, e[5] > 0]);
       if (e[5] > 0) sessAgents.add(e[5]);
       prompts += human;
       sFirst = sFirst === null ? ts : sFirst;
@@ -2238,11 +2259,22 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     nAgents += sessAgents.size;
     rawTotal += sessRaw;
     weightedTotal += sessW;
-    for (const [u, w] of sessUsage) {
+    let sFirstTop: number | null = null; // контекст первого и последнего хода верхнего уровня сессии
+    let sLastTop: number | null = null;
+    for (const [u, w, sub] of sessUsage) {
       if (seenMids.has(u[0])) continue; // возобновлённая сессия копирует историю — не считаем дважды
       seenMids.add(u[0]);
       const model: string = u[1] < sModels.length ? sModels[u[1]]! : "?";
       const vals: [number, number, number, number, number] = [u[2], u[3], u[4], u[5], u[6]];
+      // ход — целый у каждой задачи, долей общего PR делятся только токены
+      const ctx = vals[0] + vals[2] + vals[3] + vals[4];
+      steps++;
+      if (sub) stepsAgents++;
+      else {
+        if (sFirstTop === null) sFirstTop = ctx;
+        sLastTop = ctx;
+      }
+      if (ctx > TAIL_CTX) tail++;
       tok.in += vals[0] * w;
       tok.out += vals[1] * w;
       tok.cw += (vals[2] + vals[3]) * w;
@@ -2256,6 +2288,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     }
     firstTs = firstTs === null ? sFirst : Math.min(firstTs, sFirst!);
     lastTs = lastTs === null ? sLast : Math.max(lastTs, sLast!);
+    if (sFirstTop !== null && (preAt === null || sFirst! < preAt)) (preAt = sFirst!), (preamble = sFirstTop);
+    if (sLastTop !== null && (endAt === null || sLast! > endAt)) (endAt = sLast!), (ctxEnd = sLastTop);
     const branches: Record<string, number> = {};
     for (const [k, v] of Object.entries(brs).sort((a, b) => b[1] - a[1])) branches[k] = round2(v);
     details.push({ sid: s.sid, src: s.source ?? "claude", start: sFirst!, hours: round2(sessW / 3600), prompts, rules, branches });
@@ -2291,6 +2325,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const pLast = piv.length ? Math.max(...piv.map((x) => x[1])) : null;
     if (pFirst !== null) firstTs = firstTs === null ? pFirst : Math.min(firstTs, pFirst);
     if (pLast !== null) lastTs = lastTs === null ? pLast : Math.max(lastTs, pLast);
+    // ходы и хвост складываются, преамбула — у самой ранней части или сессии, контекст в конце — у самой поздней
+    steps += p.steps || 0;
+    stepsAgents += p.steps_agents || 0;
+    tail += p.tail || 0;
+    if (p.preamble !== undefined && pFirst !== null && (preAt === null || pFirst < preAt)) (preAt = pFirst), (preamble = p.preamble);
+    if (p.ctx_end !== undefined && pLast !== null && (endAt === null || pLast > endAt)) (endAt = pLast), (ctxEnd = p.ctx_end);
     details.push({ sid: p.session, src: "cloud", start: pFirst ?? 0, hours: p.h, prompts: p.prompts || 0, rules: { "часть облака": 1 }, branches: {} });
   }
   const partSids = new Set(partsUsed.map((p) => p.session));
@@ -2328,6 +2368,11 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     sessions: nSessions,
     prompts: nPrompts,
     agents: nAgents,
+    steps,
+    steps_agents: stepsAgents,
+    tail,
+    ...(preamble !== null ? { preamble } : {}),
+    ...(ctxEnd !== null ? { ctx_end: ctxEnd } : {}),
     prs: prObjs.map((p) => p.number),
     commits: prObjs.reduce((s, p) => s + (p.commits_total || p.commits.length), 0) + closers.length,
     diff,
@@ -2370,6 +2415,14 @@ function tokensResult(tok: { in: number; out: number; cw: number; cr: number }, 
 const fmtMtok = (n: number | null | undefined) => fmtH((n || 0) / 1e6, 2);
 
 /** «Токены: 12.3 млн (вход … · выход … · запись кэша … · чтение кэша …); стоимость по API-тарифам ≈ $…». */
+/** «Ходы: 250 (субагентов 2, их ходов 120), преамбула 104 тыс., контекст в конце 581 тыс., ходов с контекстом > 400 тыс. — 31 %.» */
+function stepsTxt(res: Fact): string {
+  const k = (v: number | null | undefined) => (v === null || v === undefined ? "—" : String(Math.round(v / 1000)));
+  const n = res.steps ?? 0;
+  const share = n ? Math.round(((res.tail ?? 0) / n) * 100) : 0;
+  return `Ходы: ${n} (субагентов ${res.agents ?? 0}, их ходов ${res.steps_agents ?? 0}), преамбула ${k(res.preamble)} тыс., контекст в конце ${k(res.ctx_end)} тыс., ходов с контекстом > ${TAIL_CTX / 1000} тыс. — ${share} %.`;
+}
+
 function tokensTxt(res: Fact): string {
   const t = res.tok;
   if (!t) return "";
@@ -2445,12 +2498,14 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   for (const x of res.overlap ?? []) text += ` Пересечение с фактом #${x.issue}: ${fmtH(x.h)} ч — пересчитать #${x.issue}.`;
   for (const sid of res.cloud_missing ?? []) text += ` Облачная сессия https://claude.ai/code/${sid} не импортирована — est cloud-import.`;
   if (res.tok) text += "\n" + tokensTxt(res);
+  if (res.steps) text += "\n" + stepsTxt(res);
   const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, agents: res.agents ?? 0, prs: res.prs, commits: res.commits, diff: res.diff, cause };
   if (res.tok) {
     marker.tok = res.tok;
     marker.usd = res.usd ?? null;
     if (res.models) marker.models = res.models;
   }
+  if (res.steps) Object.assign(marker, { steps: res.steps, steps_agents: res.steps_agents ?? 0, tail: res.tail ?? 0, preamble: res.preamble ?? null, ctx_end: res.ctx_end ?? null });
   if (res.type) marker.type = res.type; // тип из ветки по конвенции <type>/N-slug
   if (res.shared?.length) {
     const sh: Record<string, number[]> = {};
@@ -2502,6 +2557,11 @@ function cloudOwnPart(number: number, session: string, gap: number): CloudPart |
     agents: res.agents ?? 0,
     tok: t ? { in: t.in, out: t.out, cw: t.cw, cr: t.cr, total: t.total } : null,
     models: res.models ?? {},
+    steps: res.steps ?? 0,
+    steps_agents: res.steps_agents ?? 0,
+    tail: res.tail ?? 0,
+    ...(res.preamble !== undefined ? { preamble: res.preamble } : {}),
+    ...(res.ctx_end !== undefined ? { ctx_end: res.ctx_end } : {}),
   };
 }
 
@@ -2618,15 +2678,16 @@ const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type ||
 export function historyTable(rows: Row[]): string[] {
   const labelsOf = (r: Row) => r.labels.filter((l) => l !== "epic").join(",");
   const w = Math.max("метки".length, ...rows.map((r) => labelsOf(r).length));
-  const out = [`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("аг.", 3, true)} | ${pad("тип", 8)} | ${pad("метки", w)} | заголовок`];
+  const out = [`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("аг.", 3, true)} | ${pad("ходы", 4, true)} | ${pad("тип", 8)} | ${pad("метки", w)} | заголовок`];
   for (const r of rows) {
     const fm = r.fact_marker ?? {};
     const cov = fm.cov || "—";
     const mt = fm.tok ? fmtMtok(fm.tok.total) : "—";
     const usd = fm.usd !== undefined && fm.usd !== null ? Number(fm.usd).toFixed(2) : "—";
-    // субагенты задачи — признак фан-аута; факт, посчитанный до признака, — прочерк
+    // субагенты и ходы задачи — признаки фан-аута и размера; факт, посчитанный до признака, — прочерк
     const ag = typeof fm.agents === "number" ? String(fm.agents) : "—";
-    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 3, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
+    const st = typeof fm.steps === "number" ? String(fm.steps) : "—";
+    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 3, true)} | ${pad(st, 4, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
   }
   return out;
 }
