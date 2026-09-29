@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -49,15 +49,52 @@ describe("Названия-утверждения вводятся постеп�
     expect(r.stderr).toContain(`исключение названия «gone» (${MAIN}) не нужно — теста нет, убери из ${EXCEPTIONS}`);
   });
 
-  it("--names-baseline пишет исключения для всех текущих нарушений одной задачей", () => {
-    const r = doc([[["createInvoice"], "returns 201"], [["Счета"], "выставляются за месяц"]], "--stdout", "--names-baseline", "12");
+  // параллельные PR переписывают названия в разных папках: общий файл исключений конфликтовал бы в каждом ребейзе
+  it("--names-baseline раскладывает исключения по папкам их тестов", () => {
+    const AUDIT = "tests/standards/audit/audit.test.ts";
+    const two = () => {
+      writeTree(dir, { "tests/capabilities/billing/billing.md": "Биллинг.\n", "tests/standards/audit/audit.md": "Аудит.\n" });
+      writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [MAIN]: [[["createInvoice"], "returns 201"]], [AUDIT]: [[["Аудит"], "writes row"]] }));
+    };
+    two();
+    const r = runScript("spec-doc", ["r.json", "--root", dir, "--stdout", "--names-baseline", "12"], dir);
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain(`${EXCEPTIONS}: исключений названий — 2 (#12)`);
-    const text = read(EXCEPTIONS);
-    expect(text).toContain("export default exceptions;");
-    expect(text).toContain(`{ file: "${MAIN}", name: "createInvoice", issue: 12, reason: "название — не утверждение; переписать в #12" }`);
-    expect(text).toContain(`{ file: "${MAIN}", name: "returns 201", issue: 12, reason: "название — не утверждение; переписать в #12" }`);
-    expect(doc([[["createInvoice"], "returns 201"], [["Счета"], "выставляются за месяц"]], "--stdout", "--strict").code).toBe(0);
+    const billing = read("tests/capabilities/billing/names.exceptions.ts");
+    expect(billing).toContain("export default exceptions;");
+    expect(billing).toContain(`{ file: "${MAIN}", name: "createInvoice", issue: 12, reason: "название — не утверждение; переписать в #12" }`);
+    expect(billing).toContain(`{ file: "${MAIN}", name: "returns 201", issue: 12, reason: "название — не утверждение; переписать в #12" }`);
+    expect(read("tests/standards/audit/names.exceptions.ts")).toContain(`{ file: "${AUDIT}", name: "writes row", issue: 12,`);
+    expect(existsSync(path.join(dir, EXCEPTIONS))).toBe(false);
+    two();
+    expect(runScript("spec-doc", ["r.json", "--root", dir, "--stdout", "--strict"], dir).code).toBe(0);
+  });
+
+  it("исключение названия в папке решения — --strict его пропускает", () => {
+    writeTree(dir, { "tests/capabilities/billing/names.exceptions.ts": `export default [{ file: "${MAIN}", name: "returns 201", issue: 12, reason: "переписать" }];\n` });
+    const r = doc([[["Счета"], "returns 201"]], "--strict");
+    expect(r.code).toBe(0);
+    expect(read("docs/spec/README.md")).toContain(`- «returns 201» — \`${MAIN}\` — #12 переписать\n`);
+  });
+
+  // проект, который уже на baseline общим файлом, не ломается: переносит исключения в папки по мере переписывания
+  it("исключение из общего файла по-прежнему действует рядом с исключениями папок", () => {
+    exceptions([{ name: "returns 201", issue: 12 }]);
+    writeTree(dir, { "tests/capabilities/billing/names.exceptions.ts": `export default [{ file: "${MAIN}", name: "returns 404", issue: 13, reason: "переписать" }];\n` });
+    expect(doc([[["Счета"], "returns 201"], [["Счета"], "returns 404"]], "--stdout", "--strict").code).toBe(0);
+  });
+
+  it("исключение названия не в папке своего теста — ошибка --strict", () => {
+    writeTree(dir, { "tests/capabilities/other/names.exceptions.ts": `export default [{ file: "${MAIN}", name: "returns 201", issue: 12, reason: "переписать" }];\n` });
+    const r = doc([[["Счета"], "returns 201"]], "--stdout", "--strict");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain(`исключение названия «returns 201» (${MAIN}) — не в папке своего теста: перенеси из tests/capabilities/other/names.exceptions.ts в tests/capabilities/billing/names.exceptions.ts`);
+  });
+
+  it("--names-exceptions с файлом — baseline пишет в этот файл, как раньше", () => {
+    const r = doc([[["Счета"], "returns 201"]], "--stdout", "--names-exceptions", EXCEPTIONS, "--names-baseline", "12");
+    expect(r.code).toBe(0);
+    expect(read(EXCEPTIONS)).toContain(`{ file: "${MAIN}", name: "returns 201", issue: 12,`);
+    expect(existsSync(path.join(dir, "tests/capabilities/billing/names.exceptions.ts"))).toBe(false);
   });
 
   it("исключения названий видны в оглавлении спеки — это долг", () => {

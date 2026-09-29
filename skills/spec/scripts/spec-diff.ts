@@ -399,7 +399,8 @@ export function checkFacts(files: Map<string, string>): string[] {
   return [...out].sort();
 }
 
-const EXCEPTIONS = /(^|\/)exceptions\.(ts|mts|js|mjs|json)$/;
+// exceptions.* харнесса и names.exceptions.* — исключения названий в папке решения (spec-doc)
+const EXCEPTIONS = /(^|\/)(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
 
 /** Пункт exceptions.*: элемент реестра харнесса (`rule` — соглашение) или название теста (spec-names: `file`, `name`). */
 type ExceptionEntry = { item?: string; rule?: string; file?: string; name?: string; issue: number; reason: string };

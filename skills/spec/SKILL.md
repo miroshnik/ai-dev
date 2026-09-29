@@ -69,7 +69,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 ## spec-doc
 
 ```bash
-bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё отчёты] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
+bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё отчёты] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N] [--names-exceptions FILE]
 ```
 
 Что получается в `docs/spec/`:
@@ -121,12 +121,17 @@ bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё 
 `describe` и `it` — утверждения по-русски: без русских слов (идентификатор,
 имя функции или файла, английская фраза) — stderr с названием и файлом,
 `--strict` — код 1; код в обратных кавычках внутри утверждения — можно.
-Старые названия на существующей спеке — исключениями в
-`tests/standards/spec-names/exceptions.ts` (`{ file, name, issue, reason }`,
-другой файл — `--names-exceptions`): `--strict` их пропускает, ненужное
-исключение (уже утверждение или теста нет) — код 1, долг — раздел оглавления
-«Названия — не утверждения (исключения)». Все текущие нарушения одной задачей
-на переписывание — `spec-doc … --names-baseline <N>`.
+Старые названия на существующей спеке — исключениями
+`{ file, name, issue, reason }` в `names.exceptions.ts` папки решения их теста:
+параллельные PR переписывают названия в разных папках и не правят один файл.
+Прежний общий файл `tests/standards/spec-names/exceptions.ts` (или
+`--names-exceptions`) по-прежнему читается. `--strict` исключения пропускает;
+ненужное (уже утверждение или теста нет) и лежащее не в папке своего теста —
+код 1; долг — раздел оглавления «Названия — не утверждения (исключения)». Все
+текущие нарушения одной задачей на переписывание — `spec-doc …
+--names-baseline <N>`: раскладывает исключения по папкам (с
+`--names-exceptions` — в этот файл), ненужные убирает, опустевший файл
+удаляет.
 **Описание** — `tests/<вид>/<name>/<name>.md`: нет —
 `spec-doc` называет файл в stderr, `--strict` — код 1. JSDoc-шапка у файла
 теста в документацию не идёт — в stderr с подсказкой перенести в md,
