@@ -874,6 +874,97 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "PR задачи влит: задача закрыта, факт записан est, Status «Готово» — в выводе всё сделанное и следующий шаг"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "PR открыт или закрыт без мержа — ошибка до изменений, ничего не тронуто"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "est не установлен рядом — «факт недоступен: est не установлен», остальное сделано"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "est упал — его ошибка строкой «!», остальное сделано"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "в milestone остались открытые задачи — не закрыт"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "есть открытые подзадачи — эпик не трогается"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "задача закрыта без PR — факт и «Готово», задачу повторно не закрывает"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "облачная сессия — объяснение со ссылкой на docs/cloud-sessions.md, код 2, без мутаций"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "последняя открытая задача milestone — milestone закрыт"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "последняя подзадача — эпик закрыт и в «Готово»"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
+  "name": "ветка не влита — не тронута, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
+  "name": "текущий каталог — не чекаут репозитория задачи: ветки не трогаются"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
+  "name": "чекаут на ветке задачи, PR влит: после close — detach на origin/main, локальной и удалённой ветки нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task drop закрывает без выполнения и убирает из проекта"
   ],
   "name": "--duplicate-of — закрывает как дубль со ссылкой на оригинал"
@@ -3388,6 +3479,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/est/est.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/github-task/github-task.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
