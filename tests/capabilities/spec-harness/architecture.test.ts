@@ -27,6 +27,22 @@ async function outcomes(register: (it: It) => void): Promise<Record<string, stri
   return out;
 }
 
+// все исходы по порядку: одноимённые тесты разных реестров в словаре затирали бы друг друга
+async function allOutcomes(register: (it: It) => void): Promise<[string, string][]> {
+  const tests: [string, () => void | Promise<unknown>][] = [];
+  register((name, fn) => tests.push([name, fn]));
+  const out: [string, string][] = [];
+  for (const [name, fn] of tests) {
+    try {
+      await fn();
+      out.push([name, "✓"]);
+    } catch (e) {
+      out.push([name, "✗ " + (e as Error).message]);
+    }
+  }
+  return out;
+}
+
 let dir: string;
 let cleanup: () => void;
 beforeEach(() => ({ dir, cleanup } = tmpDir()));
@@ -90,13 +106,29 @@ describe("Модель архитектуры проверяется кодом:
     });
   });
 
-  it("каталог кода в модуле — зелёный тест «<каталог> → <модуль>», вне модулей — упавший", async () => {
+  // название — утверждение по-русски: «src/app → app» без слов spec-doc --strict не принимает
+  it("каталог кода — в модуле: название — утверждение; вне модулей — упавший тест", async () => {
     writeTree(dir, { ...code, "src/stray.js": "export const s = 1;\n", "src/scripts/seed.js": "export const s = 1;\n" });
     const r = await outcomes((it) => architecture(it, { root: dir, model }));
-    expect(r["src/domain → domain"]).toBe("✓");
-    expect(r["src/ui → ui"]).toBe("✓");
-    expect(r["src/scripts → ?"]).toStartWith("✗ src/scripts: код вне модулей модели");
-    expect(r["src → ?"]).toStartWith("✗ src: код вне модулей модели");
+    expect(r["каталог src/domain — в модуле domain"]).toBe("✓");
+    expect(r["каталог src/ui — в модуле ui"]).toBe("✓");
+    expect(r["каталог src/scripts — в модуле ?"]).toStartWith("✗ src/scripts: код вне модулей модели");
+    expect(r["каталог src — в модуле ?"]).toStartWith("✗ src: код вне модулей модели");
+  });
+
+  // корень приложения и его библиотека: файлы корня src (proxy.ts, instrumentation.ts) — свой модуль, src/lib — свой
+  it("вложенный путь модуля: каталог — в модуле с самым длинным путём, в правилах ESLint он первым", async () => {
+    const nested: Model = { roots: ["src"], modules: { app: { path: "src", purpose: "приложение" }, lib: { path: "src/lib", purpose: "библиотека" } } };
+    writeTree(dir, { "src/proxy.ts": "export const p = 1;\n", "src/lib/money.ts": "export const m = 1;\n", "src/lib/fmt/date.ts": "export const d = 1;\n" });
+    const r = await outcomes((it) => architecture(it, { root: dir, model: nested }));
+    expect(r["каталог src — в модуле app"]).toBe("✓");
+    expect(r["каталог src/lib — в модуле lib"]).toBe("✓");
+    expect(r["каталог src/lib/fmt — в модуле lib"]).toBe("✓");
+    const [config] = boundariesConfig(nested, {}) as { settings: Record<string, unknown> }[];
+    expect(config!.settings["boundaries/elements"]).toEqual([
+      { type: "lib", pattern: "src/lib" },
+      { type: "app", pattern: "src" },
+    ]);
   });
 
   it("внешний пакет в модуле, которому он не разрешён, — упавший тест; разрешённый — зелёный", async () => {
@@ -174,6 +206,13 @@ describe("Внешние системы модели (C1) проверяются
     const r = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
     expect(r["хост api.stripe.com — только в адаптере stripe"]).toStartWith("✗ хост api.stripe.com внешней системы payments — вне её адаптера stripe: src/billing/pay.ts");
     expect(r["хост evil.io — только в адаптере ?"]).toStartWith("✗ хост evil.io не объявлен ни одной внешней системой модели: src/billing/pay.ts");
+  });
+
+  it("исключение — только у реестра, в котором есть его элемент", async () => {
+    writeTree(dir, { ...adapter, "src/billing/legacy.ts": 'export const u = "https://legacy.io/api";\n' });
+    const exceptions = [{ item: "legacy.io", issue: 7, reason: "уйдёт с переездом в #7" }];
+    const all = await allOutcomes((it) => architecture(it, { root: dir, model: c1, exceptions }));
+    expect(all.filter(([n]) => n === "исключение: legacy.io (#7)")).toEqual([["исключение: legacy.io (#7)", "✓"]]);
   });
 
   it("пакет внешней системы разрешён только её адаптеру — иначе модель противоречит себе", async () => {
@@ -264,6 +303,15 @@ describe("Контейнеры модели (C2) сверяются с кодо�
     expect(r["развёртываемая единица compose:app — контейнер app"]).toBe("✓");
     expect(r["развёртываемая единица supabase-function:resize — контейнер ?"]).toStartWith("✗ supabase-function:resize есть в конфигах деплоя, но не в модели");
     expect(r["развёртываемая единица compose:worker — контейнер worker"]).toStartWith("✗ compose:worker контейнера worker нет в конфигах деплоя");
+  });
+
+  // нарушитель, на котором проверка проходит, не доказывает, что она умеет упасть: тест «нарушитель» — красный
+  it("нарушители ключа окружения и зависимости через контейнер падают", async () => {
+    writeTree(dir, deploy);
+    const both: Model = { ...c2, externals: { mail: { purpose: "почта", adapter: "mailer", env: ["SMTP_URL"] } } };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: both }));
+    expect(r["нарушитель не проходит: ключ вне адаптера"]).toBe("✓");
+    expect(r["нарушитель не проходит: зависимость через контейнер"]).toBe("✓");
   });
 
   it("клиент хранилища импортирует только контейнер со связью с ним", async () => {
