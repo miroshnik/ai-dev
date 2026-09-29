@@ -608,9 +608,22 @@ export function parseScenarios(md: string): string[] | null {
   return out;
 }
 
-const norm = (s: string): string => s.replace(/\s+/g, " ").trim().replace(/[.。]$/, "").toLowerCase();
+/** Кавычки, которыми сценарий цитируют целиком: `«…»;` в задаче — то же название, что у теста. */
+const QUOTES: [string, string][] = [["«", "»"], ['"', '"'], ["“", "”"], ["`", "`"]];
+const TAIL = /[.。;,]+$/;
 
-/** Сценарий ↔ новый тест: совпадает с названием it или с цепочкой «describe › it» (без регистра и точки в конце). */
+/** Название для сверки: пробелы схлопнуты, без регистра, без внешних кавычек и знака в конце — до и после кавычек. */
+const norm = (s: string): string => {
+  let t = s.replace(/\s+/g, " ").trim().replace(TAIL, "");
+  for (const [open, close] of QUOTES) {
+    const inner = t.slice(open.length, -close.length);
+    // «a» и «b» — не цитата целиком: внутри своя закрывающая кавычка
+    if (t.length > open.length + close.length && t.startsWith(open) && t.endsWith(close) && !inner.includes(close)) t = inner.trim().replace(TAIL, "");
+  }
+  return t.toLowerCase();
+};
+
+/** Сценарий ↔ новый тест: совпадает с названием it или с цепочкой «describe › it» (без регистра, внешних кавычек и знака в конце). */
 export function matchScenarios(scenarios: string[], fresh: Test[]): { found: [string, Test | null][]; extra: Test[] } {
   const used = new Set<Test>();
   const found = scenarios.map((sc): [string, Test | null] => {
