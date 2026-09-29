@@ -34,7 +34,7 @@ jobs:
         with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
       - name: Дифф спеки в summary
         if: github.event_name == 'pull_request'
-        run: bun run spec:diff --base "origin/${{ github.base_ref }}" --report .spec-report.xml >> "$GITHUB_STEP_SUMMARY"
+        run: bun run spec:diff --base "origin/${{ github.base_ref }}" --report .spec-report.xml --full >> "$GITHUB_STEP_SUMMARY"
 
   # Токен на запись — только здесь: job не ставит зависимости и не идёт на PR. Публикации — по очереди, не отменяются.
   spec-publish:

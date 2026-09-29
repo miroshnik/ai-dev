@@ -508,6 +508,65 @@ describe("Тесты харнесса — в диффе спеки: назван
     expect(r.stdout).toContain("в ветке spec нет tests.json для базы — дифф по исходникам, тестов харнесса в нём не видно");
     expect(r.stdout).toContain("**Удалены (1):**");
   });
+
+  it("в сводке по папкам видно, сколько тестов порождено харнессом", () => {
+    const base = repo.commit({ [STD]: registry });
+    publishSpec(base, [t("a пишет аудит")]);
+    repo.commit({ [STD]: registry + 'it("журнал хранится год", () => { expect(1).toBe(1); });\n' });
+    report(["a пишет аудит", "b пишет аудит", "журнал хранится год"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec", "--limit", "1");
+    expect(r.stdout).toContain("| Папка | Удалены | Изменены | Добавлены | Из них харнесса |");
+    expect(r.stdout).toContain("| `tests/standards/audit` | 0 | 0 | 2 | 1 |");
+  });
+});
+
+/**
+ * Перенос спеки даёт тысячи названий: в теле PR — сводка по папкам, полный список — в summary джоба CI (`--full`).
+ * Порог — по числу тестов в списках, `--limit`; разделы решений (модель, исключения, проверки) выше порога — число
+ * на папку или файл.
+ */
+describe("Большой PR — сводка по папкам, полный список — в summary джоба", () => {
+  const MATH = "tests/capabilities/math/sum.test.ts";
+
+  it("дифф выше порога — сводка по папкам, а не список названий", () => {
+    const base = repo.commit({ [MATH]: ts(`describe("Сумма", () => { it("складывает", () => {}); });`) });
+    repo.commit({
+      [MATH]: ts(`describe("Сумма", () => { it("складывает числа", () => {}); });`),
+      [BILLING]: ts(`it("выставляется", () => {}); it("отправляется", () => {}); it("оплачивается", () => {});`),
+    });
+    const out = diffFrom(base, "--limit", "3").stdout;
+    expect(out).toContain("**Сводка по папкам** — 4 теста, больше порога 3: полный список — `spec-diff --full` (в CI — summary джоба).");
+    expect(out).toContain(
+      ["| Папка | Удалены | Изменены | Добавлены |", "|---|--:|--:|--:|", "| `tests/capabilities/billing` | 0 | 0 | 3 |", "| `tests/capabilities/math` | 0 | 1 | 0 |", "| **Всего** | 0 | 1 | 3 |"].join("\n"),
+    );
+    expect(out).not.toContain("выставляется");
+    expect(out).not.toContain("складывает");
+  });
+
+  it("--full — полный список при любом размере", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); it("выставляется", () => {}); it("отправляется", () => {});`) });
+    const out = diffFrom(base, "--limit", "1", "--full").stdout;
+    expect(out).not.toContain("Сводка по папкам");
+    expect(out).toContain("**Добавлены (2):**\n\n- `tests/capabilities/billing` · выставляется\n- `tests/capabilities/billing` · отправляется");
+  });
+
+  it("решения выше порога — число на папку, а не список", () => {
+    const NAMES = "tests/standards/spec-names/exceptions.ts";
+    const list = ["a", "b", "c"].map((name) => ({ file: BILLING, name, issue: 7, reason: "переписать" }));
+    const base = repo.commit({ [NAMES]: `export default ${JSON.stringify(list)};\n` });
+    repo.commit({ [NAMES]: "export default [];\n" });
+    const out = diffFrom(base, "--limit", "2").stdout;
+    expect(out).toContain("**Исключения — снято (3), сводкой:**\n\n- `tests/standards/spec-names` — 3\n");
+    expect(out).not.toContain("«a»");
+  });
+
+  it("порог — целое число больше нуля, иначе ошибка запуска", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    const r = diffFrom(base, "--limit", "много");
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("--limit");
+  });
 });
 
 describe("--json — то же для машины", () => {
