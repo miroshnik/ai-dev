@@ -352,7 +352,7 @@ export const Q = {
     pullRequest(number: $number) {
       number headRefOid body
       closingIssuesReferences(first: 20) { nodes { number } }
-      files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path } }
+      files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path changeType additions deletions } }
     }
   }
 }`,
@@ -1526,29 +1526,59 @@ function addLabels(io: Io, issue: Pick<Issue, "id" | "labels">, names: string[],
   return missing.join(", ");
 }
 
+/** Изменённый файл PR (`PullRequestChangedFile`): вид правки и число строк. */
+export interface PrFile {
+  path: string;
+  changeType: string;
+  additions: number;
+  deletions: number;
+}
+
+/**
+ * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это `exceptions.ts`
+ * папки решения (храповик исключений). Метку решения она не даёт — иначе при массовых правках задача получает метки
+ * решений, которых не меняла.
+ */
+function mechanical(f: PrFile): boolean {
+  if (f.changeType === "DELETED") return true;
+  if (f.changeType === "RENAMED" && f.additions === 0 && f.deletions === 0) return true;
+  const parts = f.path.split("/");
+  return parts[0] === "tests" && parts.length === 4 && parts[3] === "exceptions.ts";
+}
+
 /**
  * Решения, которые трогает дифф: папка дерева спеки — само решение, файл кода — модуль модели с самым длинным
  * подходящим каталогом (вложенный модуль точнее объемлющего). `tests/lib` и файлы вне модулей — не решения.
- * Имя решения → его виды в диффе, имена по алфавиту.
+ * `changed` — имя решения → его виды в диффе, хотя бы один файл решения правлен по содержимому; `mechanical` — решения,
+ * тронутые только механической правкой. Имена по алфавиту.
  */
-export function decisionsOfFiles(files: string[], modules: Record<string, string[]>): Map<string, DecisionKind[]> {
-  const out = new Map<string, Set<DecisionKind>>();
-  const add = (name: string, kind: DecisionKind) => out.set(name, (out.get(name) ?? new Set()).add(kind));
+export function decisionsOfFiles(files: PrFile[], modules: Record<string, string[]>): { changed: Map<string, DecisionKind[]>; mechanical: string[] } {
+  const out = new Map<string, { kinds: Set<DecisionKind>; changed: boolean }>();
+  const add = (name: string, kind: DecisionKind, f: PrFile) => {
+    const d = out.get(name) ?? { kinds: new Set(), changed: false };
+    d.kinds.add(kind);
+    d.changed ||= !mechanical(f);
+    out.set(name, d);
+  };
   const byDir = Object.fromEntries(DECISION_KINDS.map((k) => [DECISIONS[k].dir, k])) as Record<string, DecisionKind>;
   for (const f of files) {
-    const parts = f.split("/");
+    const parts = f.path.split("/");
     if (parts[0] === "tests") {
       const kind = byDir[parts[1] ?? ""];
-      if (kind && parts.length > 3) add(parts[2]!, kind);
+      if (kind && parts.length > 3) add(parts[2]!, kind, f);
       continue;
     }
     let best: [string, number] | null = null;
     for (const [m, dirs] of Object.entries(modules)) {
-      for (const d of dirs) if ((f === d || f.startsWith(d + "/")) && (!best || d.length > best[1])) best = [m, d.length];
+      for (const d of dirs) if ((f.path === d || f.path.startsWith(d + "/")) && (!best || d.length > best[1])) best = [m, d.length];
     }
-    if (best) add(best[0], "architecture");
+    if (best) add(best[0], "architecture", f);
   }
-  return new Map([...out.keys()].sort().map((n) => [n, DECISION_KINDS.filter((k) => out.get(n)!.has(k))]));
+  const names = [...out.keys()].sort();
+  return {
+    changed: new Map(names.filter((n) => out.get(n)!.changed).map((n) => [n, DECISION_KINDS.filter((k) => out.get(n)!.kinds.has(k))])),
+    mechanical: names.filter((n) => !out.get(n)!.changed),
+  };
 }
 
 /**
@@ -1564,12 +1594,12 @@ function closingInBody(body: string): number[] {
 export function cmdPrLabels(io: Io, slug: string, number: number): number {
   const [owner, name] = slug.split("/") as [string, string];
   let head: Any = null;
-  const files = pages<{ path: string }>((after) => {
+  const files = pages<PrFile>((after) => {
     const pr = graphql(io, Q.PrChange, { owner, name, number, after })?.repository?.pullRequest;
     if (!pr) throw new GhError(`PR #${number} в ${slug} нет`);
     head ??= pr;
     return pr.files;
-  }).map((x) => x.path);
+  });
   let closes: number[] = (head.closingIssuesReferences?.nodes ?? []).map((x: Any) => x.number);
   // сразу после создания PR GitHub ещё не связал его с задачей — те же ключевые слова в теле
   if (!closes.length) closes = closingInBody(head.body ?? "");
@@ -1582,9 +1612,10 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     if (typeof m === "string") io.err(`предупреждение: модель ${MODEL_PATH} головы PR не загружается — модули не учтены: ${m}`);
     else modules = m;
   }
-  const decided = decisionsOfFiles(files, modules);
+  const { changed: decided, mechanical: skipped } = decisionsOfFiles(files, modules);
   const want = [...decided.keys()];
   io.out(`PR #${number} → ${closes.map((n) => `#${n}`).join(", ")}: ${want.join(", ") || "решений в диффе нет"}`);
+  for (const l of skipped) io.out(`○ ${l} — только механическая правка (удаление, переименование без правки, exceptions.ts): метка не ставится`);
   if (!want.length) return 0;
 
   const all = loadLabels(io, slug);
@@ -1711,7 +1742,8 @@ fix   — исправляет через API; шаги UI печатает со
 task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).
 task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
         эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
-pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает.
+pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
+            только механически (удаление, переименование без правки, exceptions.ts), — строка ○, без метки.
 pr queue  — голова ли PR (по умолчанию — PR текущей ветки) в очереди мержа основной ветки: код 0 — голова,
             push, CI и мерж — твои; 1 — не голова, впереди названы PR; ребейз — локально, push — после их мержа.`;
 
