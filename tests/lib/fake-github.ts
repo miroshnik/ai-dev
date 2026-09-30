@@ -36,8 +36,9 @@ export class FakeGitHub {
   /** Дерево спеки в основной ветке (SpecDecisions): папки решений и текст модели архитектуры. */
   tree: { capabilities: string[]; standards: string[]; architecture: string[]; model: string | null } = { capabilities: [], standards: [], architecture: [], model: null };
   /**
-   * PR по номеру (PrChange, closedByPullRequestsReferences в IssueRef): изменённые файлы (путь или файл с видом правки), задачи из «Closes #N»,
-   * голова, модель архитектуры в ней (ModelAt); `merged`, `state`, `base` — для `task close`.
+   * PR по номеру (PrChange, closedByPullRequestsReferences в IssueRef, RecentPrs): изменённые файлы (путь или файл с видом правки),
+   * задачи, с которыми GitHub связал PR (`closes`; тело может называть и другие), голова, модель архитектуры в ней (ModelAt);
+   * `merged`, `state`, `base` — для `task close`.
    */
   prs: Record<number, { files: (string | FakePrFile)[]; closes: number[]; body?: string; head: string; model: string | null; merged?: boolean; state?: string; base?: string }> = {};
   /** Задача → id milestone (IssueRef.milestone); открытые задачи milestone считаются по состоянию записей. */
@@ -111,6 +112,7 @@ export class FakeGitHub {
     }
     if (op === "SpecDecisions") return JSON.stringify({ data: { repository: this.specTree() } });
     if (op === "PrChange") return JSON.stringify(this.prChange(variables.number));
+    if (op === "RecentPrs") return JSON.stringify(this.recentPrs());
     if (op === "MergeRules") return JSON.stringify(this.mergeRules());
     if (op === "DefaultBranch") return JSON.stringify({ data: { repository: { defaultBranchRef: { name: "main" } } } });
     if (op === "MergeQueue") return JSON.stringify(this.mergeQueue(variables.base));
@@ -212,6 +214,14 @@ export class FakeGitHub {
         },
       },
     };
+  }
+  // последние открытые и влитые PR (states: [OPEN, MERGED]), новые первыми: голова, база, тело
+  private recentPrs(): Any {
+    const nodes = Object.entries(this.prs)
+      .map(([n, p]) => ({ number: Number(n), state: p.state ?? (p.merged ? "MERGED" : "OPEN"), merged: Boolean(p.merged), headRefName: p.head, baseRefName: p.base ?? "main", body: p.body ?? "" }))
+      .filter((p) => p.state !== "CLOSED")
+      .sort((a, b) => b.number - a.number);
+    return { data: { repository: { defaultBranchRef: { name: "main" }, pullRequests: { nodes } } } };
   }
   // папка без решений в GitHub — не пустое дерево, а null
   private specTree(): Any {
@@ -462,6 +472,7 @@ export class FakeGitHub {
       i.issueFieldValues = { nodes: [{ __typename: "IssueFieldSingleSelectValue", name: opt.name, field: { name: "Priority" } }] };
       return { setIssueFieldValue: { issue: { id: issueId } } };
     },
+    AddComment: ({ subjectId }: Any) => ({ addComment: { subject: { id: subjectId } } }),
     // Закрытую задачу «Item closed» (если включён) переводит в «Готово».
     CloseIssue: ({ issueId, stateReason }: Any) => {
       const i = this.allIssues().find((x) => x.id === issueId);
