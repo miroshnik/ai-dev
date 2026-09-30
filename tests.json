@@ -1015,9 +1015,44 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "связи PR с задачей нет, влитый PR задачи найден по ветке — задача закрыта с комментарием о PR"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "связи нет и влитого PR задачи нет — отказ с перечнем проверенного"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "связи нет, PR задачи по ветке открыт — отказ, ничего не тронуто"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "связи нет, влитый PR с «Closes #N» в теле — задача закрыта по нему"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task close убирает влитое"
   ],
   "name": "ветка не влита — не тронута, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
+  "name": "связи PR с задачей нет, влитый PR найден по ветке — ветка убрана"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
