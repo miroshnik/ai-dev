@@ -510,6 +510,59 @@ describe("task close закрывает задачу одной командой
     expect(calls).toEqual([]);
   });
 
+  // PR задачи, с которым GitHub её не связал: closedByPullRequestsReferences пуст, задача открыта
+  const unlinkedPr = (f: FakeGitHub, pr: Partial<FakeGitHub["prs"][number]> = {}) => (f.prs[77] = { files: [], closes: [], head: "fix/49-x", base: "main", model: null, merged: true, ...pr });
+
+  /**
+   * GitHub бывает часами не связывает влитый PR с задачей по «Closes #N»: задача сама не закрывается, связи нет. PR
+   * задачи тогда — среди последних PR основной ветки: по ветке `<type>/<N>-<slug>` или «Closes #N» в теле.
+   */
+  it("связи PR с задачей нет, влитый PR задачи найден по ветке — задача закрыта с комментарием о PR", () => {
+    const f = new FakeGitHub(REC);
+    unlinkedPr(f);
+    const calls: string[][] = [];
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
+    expect(r.code).toBe(0);
+    expect(byOp(f, "AddComment")).toEqual([{ subjectId: f.issue(49).id, body: "Закрыта по PR #77: GitHub не связал PR с задачей" }]);
+    expect(byOp(f, "CloseIssue")).toEqual([{ issueId: f.issue(49).id, stateReason: "COMPLETED" }]);
+    expect(calls).toHaveLength(1);
+    expect(statusSet(f)).toEqual([[49, "Готово"]]);
+    expect(r.out).toContain("+ #49 закрыта по PR #77 (ветка fix/49-x): GitHub не связал PR с задачей");
+  });
+
+  it("связи нет, влитый PR с «Closes #N» в теле — задача закрыта по нему", () => {
+    const f = new FakeGitHub(REC);
+    unlinkedPr(f, { head: "export-invoices", body: "Экспорт счетов.\n\nCloses #49" });
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
+    expect(r.code).toBe(0);
+    expect(byOp(f, "AddComment").map((c) => c.body)).toEqual(["Закрыта по PR #77: GitHub не связал PR с задачей"]);
+    expect(r.out).toContain("+ #49 закрыта по PR #77 («Closes #49» в теле): GitHub не связал PR с задачей");
+  });
+
+  it("связи нет и влитого PR задачи нет — отказ с перечнем проверенного", () => {
+    const f = new FakeGitHub(REC);
+    // чужие PR: ветка задачи с тем же хвостом номера, её «Closes», упоминание без ключевого слова, мерж не в основную ветку
+    f.prs[70] = { files: [], closes: [], head: "fix/149-x", body: "Closes #149", model: null, merged: true };
+    f.prs[71] = { files: [], closes: [], head: "docs/readme", body: "См. #49", model: null, merged: true };
+    f.prs[72] = { files: [], closes: [], head: "fix/49-x", base: "release", model: null, merged: true };
+    const calls: string[][] = [];
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("#49 закрывать рано: задача открыта, влитого PR нет");
+    expect(r.err).toContain("проверены связь PR с задачей, ветка <type>/49-<slug> и «Closes #49» в теле последних 50 PR в main");
+    expect(f.mutations).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("связи нет, PR задачи по ветке открыт — отказ, ничего не тронуто", () => {
+    const f = new FakeGitHub(REC);
+    unlinkedPr(f, { merged: false, state: "OPEN" });
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("#49 закрывать рано: PR #77 открыт");
+    expect(f.mutations).toEqual([]);
+  });
+
   it("задача закрыта без PR — факт и «Готово», задачу повторно не закрывает", () => {
     const f = new FakeGitHub(REC);
     f.closed(49);
@@ -633,6 +686,21 @@ describe("task close убирает влитое", () => {
       expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
       expect(r.out).toContain("+ чекаут — на origin/main (detached)");
       expect(r.out).toContain("+ локальная ветка fix/49-x удалена");
+      expect(r.out).toContain("+ удалённая ветка fix/49-x удалена");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("связи PR с задачей нет, влитый PR найден по ветке — ветка убрана", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x");
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [], head: "fix/49-x", base: "main", model: null, merged: true };
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
+      expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
       expect(r.out).toContain("+ удалённая ветка fix/49-x удалена");
     } finally {
       cleanup();

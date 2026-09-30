@@ -259,6 +259,8 @@ export class GhError extends Error {}
 const REF = "id number title url closed";
 /** Номера открытых задач метки в строке «новое решение»; остальные — числом. */
 const OPEN_SHOWN = 10;
+/** Сколько последних PR смотрит task close без связи PR с задачей: его зовут сразу после мержа, PR — среди них. */
+const RECENT_PRS = 50;
 export const Q = {
   RepoState: `query RepoState($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -400,6 +402,13 @@ fragment Head on PullRequest {
     }
   }
 }`,
+  // PR задачи, с которым GitHub её не связал (task close): последние открытые и влитые, новые первыми
+  RecentPrs: `query RecentPrs($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef { name }
+    pullRequests(states: [OPEN, MERGED], first: ${RECENT_PRS}, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number state merged headRefName baseRefName body } }
+  }
+}`,
   IssueSearch: `query IssueSearch($q: String!) {
   search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
 }`,
@@ -446,6 +455,7 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   AddBlockedBy: ["addBlockedBy", "AddBlockedByInput", "issue { id }"],
   SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
   CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
+  AddComment: ["addComment", "AddCommentInput", "subject { id }"],
   CreateRuleset: ["createRepositoryRuleset", "CreateRepositoryRulesetInput", "ruleset { id }"],
   UpdateRuleset: ["updateRepositoryRuleset", "UpdateRepositoryRulesetInput", "ruleset { id }"],
 };
@@ -1427,16 +1437,29 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
   const ctx = taskContext(io, slug);
   const issue = loadIssue(io, slug, number);
-  const merged = issue.prs.filter((p) => p.merged);
+  const linked = issue.prs.filter((p) => p.merged);
   const closedNoPr = !issue.prs.length && issue.state === "CLOSED" && issue.stateReason === "COMPLETED";
+  // GitHub бывает часами не связывает влитый PR с задачей: задача открыта, влитых в связи нет — ищем PR задачи сами
+  const found = !linked.length && issue.state === "OPEN" ? unlinkedPrs(io, slug, number) : null;
+  const fresh = (found?.prs ?? []).filter((p) => !issue.prs.some((x) => x.number === p.number));
+  const unlinked = fresh.filter((p) => p.merged);
+  const merged = linked.length ? linked : unlinked;
   if (!merged.length && !closedNoPr) {
-    const prs = issue.prs.map((p) => `#${p.number} ${p.state === "OPEN" ? "открыт" : "закрыт без мержа"}`).join(", ");
-    throw new GhError(`#${number} закрывать рано: ${prs ? `PR ${prs}` : "задача открыта, PR нет"} — close после мержа PR или закрытия задачи`);
+    const prs = [...issue.prs, ...fresh].map((p) => `#${p.number} ${p.state === "OPEN" ? "открыт" : "закрыт без мержа"}`).join(", ");
+    const what = prs ? `PR ${prs}` : `задача ${issue.state === "OPEN" ? "открыта" : "закрыта без выполнения"}, влитого PR нет`;
+    const checked = found ? `; проверены связь PR с задачей, ветка <type>/${number}-<slug> и «Closes #${number}» в теле последних ${RECENT_PRS} PR в ${found.base}` : "";
+    throw new GhError(`#${number} закрывать рано: ${what}${checked} — close после мержа PR или закрытия задачи`);
   }
   const wasOpen = issue.state === "OPEN";
   if (wasOpen) {
+    // без связи задача не видит своего PR — комментарий его называет
+    if (unlinked.length) mutate(io, { op: "AddComment", input: { subjectId: issue.id, body: `Закрыта по PR ${unlinked.map((p) => `#${p.number}`).join(", ")}: GitHub не связал PR с задачей` } });
     mutate(io, { op: "CloseIssue", input: { issueId: issue.id, stateReason: "COMPLETED" } });
-    io.out(`+ #${number} закрыта: PR ${merged.map((p) => `#${p.number}`).join(", ")} влит`);
+    io.out(
+      unlinked.length
+        ? `+ #${number} закрыта по PR ${unlinked.map((p) => `#${p.number} (${p.why})`).join(", ")}: GitHub не связал PR с задачей`
+        : `+ #${number} закрыта: PR ${merged.map((p) => `#${p.number}`).join(", ")} влит`,
+    );
   }
   runFact(io, slug, number);
   const item = ensureItem(io, ctx, issue);
@@ -1456,6 +1479,27 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
   io.out(`Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), пять проверок — reference.md скилла github, «Актуализация блока при закрытии задачи».`);
   return 0;
+}
+
+/** Ветка задачи по канону — `<type>/<N>-<slug>`, с префиксом области или без. */
+const isTaskBranch = (branch: string, number: number) => new RegExp(`(^|/)[a-z]+/${number}-`).test(branch);
+
+/**
+ * PR задачи, с которыми GitHub её не связал: среди последних открытых и влитых PR основной ветки — ветка задачи или
+ * «Closes #N» в теле (как `pr labels` до появления связи). `why` — по чему найден.
+ */
+function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs: (Issue["prs"][number] & { why: string })[] } {
+  const [owner, name] = slug.split("/");
+  const r = graphql(io, Q.RecentPrs, { owner, name })?.repository;
+  const base: string = r?.defaultBranchRef?.name ?? "main";
+  const prs: (Issue["prs"][number] & { why: string })[] = [];
+  for (const p of r?.pullRequests?.nodes ?? []) {
+    if (p.baseRefName !== base) continue;
+    const head: string = p.headRefName ?? "";
+    const why = isTaskBranch(head, number) ? `ветка ${head}` : closingInBody(p.body ?? "").includes(number) ? `«Closes #${number}» в теле` : null;
+    if (why) prs.push({ number: p.number, state: p.state ?? "", merged: Boolean(p.merged), head, base, why });
+  }
+  return { base, prs };
 }
 
 /** Факт — скрипт est рядом со скиллом (`../est/scripts/est.ts`: так лежат копия в проекте, `~/.agents/skills` и клон). */
@@ -1488,7 +1532,7 @@ function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string;
   if (remote.status !== 0 || !remote.stdout.includes(slug)) return io.out(`○ ветки не трогаю: текущий каталог — не чекаут ${slug}`);
   const base = pr?.base || "main";
   const current = git("branch", "--show-current").stdout.trim();
-  const isTask = (b: string) => b === pr?.head || new RegExp(`(^|/)[a-z]+/${number}-`).test(b);
+  const isTask = (b: string) => b === pr?.head || isTaskBranch(b, number);
   const branch = current && isTask(current) ? current : (pr?.head ?? "");
   if (!branch) return io.out("○ ветка задачи не найдена — ветки не трогаю");
   git("fetch", "--prune", "origin");
