@@ -3,7 +3,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, re
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, REPO, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
 import { writeTree } from "../../lib/spec.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -248,6 +248,47 @@ describe("Задача целиком без спроса — настройка
     expect(manifest(clone)).toEqual({ auto: false });
     expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
     expect(readdirSync(path.join(clone, ".agents"))).toEqual(["ai-dev.json"]);
+  });
+});
+
+/**
+ * `auto` — настройка проекта, а мерж без ревью человека в Claude Code решают настройки разрешений машины: правило
+ * `Bash(gh pr merge *)` действует на все её репозитории. Разрешение шире проекта владелец ставит своей рукой —
+ * `install` его называет, а не пишет: иначе владелец узнаёт о правиле из отказа в конце первой задачи.
+ */
+describe("Мерж своего PR в Claude Code — правило разрешений владельца: install с auto подсказывает, а не ставит", () => {
+  const RULE = "Bash(gh pr merge *)";
+
+  it("install с auto называет правило разрешений на мерж и того, кто его ставит", () => {
+    const r = install(["--auto"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Claude Code");
+    expect(r.stdout).toContain(`"${RULE}"`);
+    expect(r.stdout).toContain("permissions.allow");
+    expect(r.stdout).toContain("~/.claude/settings.json");
+    expect(r.stdout).toContain("ставит владелец");
+    // режим остался с прошлой установки — подсказка та же: о правиле узнают не из отказа
+    expect(install().stdout).toContain(RULE);
+  });
+
+  it("install без auto о правиле разрешений молчит", () => {
+    for (const args of [[], ["--no-auto"], ["-g"]]) {
+      const r = install(args);
+      expect(r.code).toBe(0);
+      expect(r.stdout + r.stderr).not.toContain("gh pr merge");
+    }
+    install(["--auto"]);
+    // update и check идут с режимом манифеста — подсказка только у install
+    for (const cmd of ["update", "check"]) expect(aiDev(sb, [cmd]).stdout).not.toContain("gh pr merge");
+  });
+
+  it("подсказка не меняет настройки машины", () => {
+    const settings = JSON.stringify({ permissions: { allow: ["Bash(git status)"] } });
+    writeTree(home, { ".claude/settings.json": settings });
+    const before = snapshot(home);
+    expect(install(["--auto"]).stdout).toContain(RULE);
+    expect(snapshot(home)).toEqual(before);
+    expect(read(path.join(home, ".claude/settings.json"))).toBe(settings);
   });
 });
 
