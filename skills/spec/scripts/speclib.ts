@@ -1,7 +1,8 @@
 /**
- * speclib — общее для spec-doc и spec-diff: дерево tests/, модель теста, разбор отчётов
- * раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от `bun test`) и статический разбор
- * исходников тестов (сканер describe/it/test для TS/JS: названия и проза из JSDoc).
+ * speclib — общее для spec-doc, spec-diff и spec-publish: дерево tests/, модель теста,
+ * `Source:` публикации, разбор отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
+ * от `bun test`) и статический разбор исходников тестов (сканер describe/it/test для TS/JS:
+ * названия и проза из JSDoc).
  *
  * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
  * зависимостей и без конфигурации под репозиторий: дерево tests/ из правила
@@ -14,6 +15,12 @@ import path from "node:path";
 const posix = path.posix;
 
 export const TESTS = "tests";
+
+/**
+ * SHA исходника из сообщения коммита публикации (`Source: <sha>`, пишет spec-publish): 40 знаков — SHA-1, 64 — SHA-256.
+ * Выражение одно на spec-publish и spec-diff: разойдутся — один скрипт перестанет узнавать публикации другого.
+ */
+export const sourceOf = (message: string): string | undefined => /^Source: ([0-9a-f]{40,64})$/m.exec(message)?.[1];
 export type Kind = "capability" | "architecture" | "standard" | "lib" | "out";
 export type Status = "passed" | "failed" | "skipped" | "todo";
 

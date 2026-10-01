@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -539,6 +539,21 @@ describe("Тесты харнесса — в диффе спеки: назван
     } finally {
       origin.cleanup();
     }
+  });
+
+  // `Source:` разбирают два скрипта — spec-publish (гард «уже новее») и spec-diff: выражение у них одно (speclib)
+  it("в репозитории с SHA-256 публикация находится по Source: из 64 знаков", () => {
+    rmSync(path.join(dir, ".git"), { recursive: true, force: true });
+    repo.git("init", "-q", "-b", "main", "--object-format=sha256");
+    const base = repo.commit({ [STD]: registry });
+    expect(base).toHaveLength(64);
+    publishSpec(base, [t("a пишет аудит")]);
+    repo.commit({ [STD]: registry + "// реестр сменился\n" });
+    report(["a пишет аудит", "c пишет аудит"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`\n\n_Тесты харнесса — по отчёту; база — ветка spec (исходник ${base.slice(0, 12)})._\n`);
+    expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/standards/audit` · c пишет аудит");
   });
 
   it("перевод примеров на реестр не выглядит в диффе спеки как одни удаления", () => {
