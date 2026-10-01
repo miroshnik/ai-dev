@@ -17,7 +17,11 @@
  * (`-g`) правил нет — только скиллы (`~/.agents/skills`, `~/.claude/skills`) и хук: правила грузятся из проекта,
  * вторая копия на машине стоила бы ~20k токенов на каждом ходу каждого агента. `.agents/ai-dev.json` — SHA ai-dev,
  * из которого поставлено, список поставленных скиллов (по нему переустановка убирает скиллы, которых в ai-dev
- * больше нет, и не трогает чужие) и у машины с `--link` — путь клона.
+ * больше нет, и не трогает чужие), у машины с `--link` — путь клона, у проекта — `auto`: ведёт ли агент задачу
+ * целиком сам — ответы на вопросы по рекомендации, commit, push, починка CI и мерж своего PR по зелёным чекам
+ * (AGENTS.md, «Что делаю без спроса, а что — по разрешению»). Его задаёт `install` в проекте — вопросом в терминале
+ * или флагом `--auto` / `--no-auto`; по умолчанию «нет», без терминала и флага — прежнее значение, `update` его
+ * сохраняет. В клон ai-dev флоу не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto`.
  *
  * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
  * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
@@ -28,9 +32,10 @@
  * стирает (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). Без зависимостей, только node:-API.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isatty } from "node:tty";
 import { fileURLToPath } from "node:url";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
@@ -65,14 +70,18 @@ const MAX_LINES = 20;
 const USAGE = `Использование: ai-dev <команда> [-g]
 
   install            правила, справочники и все скиллы последнего релиза ai-dev — в проект (корень git или текущий
-                     каталог)
+                     каталог); в терминале спрашивает, делать ли агенту задачи целиком самому — ответы по
+                     рекомендации, commit, push, починка CI, мерж по зелёным чекам (auto в .agents/ai-dev.json,
+                     по умолчанию — нет); без терминала — флаг --auto или --no-auto, без флага ответ прежний;
+                     в клоне ai-dev пишет только auto
   install -g         на машину только скиллы (~/.agents/skills, ~/.claude/skills) и хук SessionStart; правила —
                      из проекта, копию на машине прошлой установки убирает
   install -g --link  из клона ai-dev: симлинки на клон вместо копий, правки видны сразу
   check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт, 2 — проверка недоступна;
-                     копию сверяет последний релиз, клон --link — origin/main
+                     копию сверяет последний релиз, клон --link — origin/main; у проекта называет режим (auto)
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
   update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
+                     (режим проекта — auto — сохраняется)
   release [--dry-run]  из клона ai-dev: тег vГГГГ.ММ.ДД на origin/main и GitHub Release со списком изменений флоу
                      с прошлого релиза; --dry-run — только показать
 
@@ -318,7 +327,7 @@ function installRules(src, root, linkMode) {
   note(`${path.relative(root, canon)}/ ← AGENTS.md, claude/CLAUDE.md, docs/ (${docs.length})`);
 }
 
-/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[] }} */
+/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[], auto?: boolean }} */
 function readManifest(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, ".agents/ai-dev.json"), "utf8"));
@@ -332,9 +341,11 @@ function readManifest(root) {
  * Чужой каталог с тем же именем не трогается; скиллы из прошлой установки, которых в ai-dev больше нет, убираются.
  * В `.agents/ai-dev.json` — SHA источника, тег релиза и поставленные скиллы; холостой прогон SHA и тег не сравнивает:
  * установка актуальна, если совпадает то, что она ставит (релиз с правкой одного установщика проекты не трогает).
- * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude
+ * auto — настройка проекта «задача целиком без спроса», пишется всегда; у машины её нет (undefined).
+ * Холостой прогон её тоже не сравнивает: правка поля руками установку «отставшей» не делает.
+ * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude @param {boolean} [auto]
  */
-function installSkills(src, root, linkMode, claude) {
+function installSkills(src, root, linkMode, claude, auto) {
   const manifestPath = path.join(root, ".agents/ai-dev.json");
   const before = readManifest(root).skills ?? [];
   const names = sourceSkills(src);
@@ -369,7 +380,8 @@ function installSkills(src, root, linkMode, claude) {
     return;
   }
   const sha = sourceSha(src);
-  writeFileSync(manifestPath, JSON.stringify({ source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed }, null, 2) + "\n");
+  const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }) };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 }
 
 /** Claude Code: правила из `.claude/rules` грузятся сами, при любом CLAUDE.md. @param {string} root */
@@ -445,10 +457,30 @@ function isAiDevClone(root) {
   }
 }
 
-/** @param {string} src @param {string} root */
-function installProject(src, root) {
+/** Ведёт ли агент задачу целиком сам — `auto` манифеста проекта; нет поля — «нет». @param {string} root */
+const autoOf = (root) => readManifest(root).auto === true;
+
+/** Строка режима проекта в выводе `check`. @param {string} root */
+const modeLine = (root) => `  задачи: ${autoOf(root) ? "целиком сам" : "по разрешению"}`;
+
+const CLONE_NOTE = "клон ai-dev: флоу в него не ставится — канон в корне";
+
+/** Клон ai-dev: из установки в нём — только режим, манифест из одного поля. @param {string} root @param {boolean} auto */
+function installClone(root, auto) {
+  const file = path.join(root, ".agents/ai-dev.json");
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ auto }, null, 2) + "\n");
+  note(`.agents/ai-dev.json — auto: ${auto}; ${CLONE_NOTE}`);
+}
+
+/**
+ * auto — режим проекта; его задаёт только `install` (флаг или вопрос в терминале), `update` и `check` идут с прежним
+ * значением манифеста.
+ * @param {string} src @param {string} root @param {boolean} [auto]
+ */
+function installProject(src, root, auto = autoOf(root)) {
   installRules(src, root, false);
-  installSkills(src, root, false, true);
+  installSkills(src, root, false, true, auto);
   claudeRules(root);
   agentsBlock(root);
 }
@@ -562,8 +594,8 @@ function target(global) {
   const home = os.homedir();
   const root = global ? home : projectRoot();
   const canon = path.join(root, ".agents/ai-dev");
-  // домашний каталог — установка машины, а не проект
-  const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || !samePath(root, home));
+  // домашний каталог — установка машины, а не проект; клон ai-dev — сам канон: манифест в нём хранит только режим
+  const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || (!samePath(root, home) && !isAiDevClone(root)));
   return { home, root, canon, installed };
 }
 
@@ -575,12 +607,16 @@ function target(global) {
 function check(global) {
   const { home, root, installed } = target(global);
   const where = global ? "на машине" : "в проекте";
+  // клон ai-dev сверять не с чем, но режим сессии в нём нужен — как в проекте
+  if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`ai-dev ${where}: не установлен — клон ai-dev, канон в корне`, modeLine(root)].join("\n") };
   if (!installed) return { code: 0, text: `ai-dev ${where}: не установлен`, absent: true };
   const clone = global ? linkedClone(home) : null;
   if (clone) return checkLink(home, clone);
   const changes = dryRun(() => (global ? installGlobal(SRC, false) : installProject(SRC, root)));
   const fresh = release ?? short(sourceSha(SRC)) ?? "SHA неизвестен";
-  if (!changes.length) return { code: 0, text: `ai-dev ${where}: актуально (${fresh})` };
+  // режим — настройка проекта: последней строкой, её видит и начало сессии (хук)
+  const mode = global ? [] : [modeLine(root)];
+  if (!changes.length) return { code: 0, text: [`ai-dev ${where}: актуально (${fresh})`, ...mode].join("\n") };
   const m = readManifest(root);
   return {
     code: 1,
@@ -588,6 +624,7 @@ function check(global) {
       `ai-dev ${where}: отстаёт — стоит ${m.tag ?? short(m.sha) ?? "без SHA"}, свежий ${fresh}`,
       ...capped(changeLines(changes, root, global)),
       `Обновить: npx -y github:${SOURCE} update${global ? " -g" : ""}`,
+      ...mode,
     ].join("\n"),
   };
 }
@@ -660,9 +697,8 @@ function hook(failed) {
     }
   }
   const shown = results.filter((r) => !r.absent);
-  // правила грузятся только из проекта: git-репозиторий без флоу — как поставить (клон ai-dev — сам канон)
-  const root = gitRoot();
-  if (results[1]?.absent && root && !isAiDevClone(root)) shown.push({ code: 0, text: `ai-dev в проекте: не установлен — поставь: npx -y github:${SOURCE} install` });
+  // правила грузятся только из проекта: git-репозиторий без флоу — как поставить (клон ai-dev — сам канон, он не absent)
+  if (results[1]?.absent && gitRoot()) shown.push({ code: 0, text: `ai-dev в проекте: не установлен — поставь: npx -y github:${SOURCE} install` });
   if (!shown.length) return 0;
   const tail = [];
   if (shown.some((r) => r.code === 1)) tail.push("Отстаёт — update, копию в проекте закоммитить, перечитать обновлённое.");
@@ -683,7 +719,9 @@ function update(global) {
     installGlobal(SRC, false);
     return 0;
   }
-  installProject(SRC, projectRoot());
+  const root = projectRoot();
+  if (isAiDevClone(root)) return note(CLONE_NOTE), 0;
+  installProject(SRC, root);
   const version = release ?? short(sourceSha(SRC));
   note(
     [
@@ -767,8 +805,34 @@ function releaseCmd(preview) {
   return 0;
 }
 
+/** Вопрос `install` в проекте о настройке `auto`: «да» разрешает агенту всё перечисленное без «да» на каждое действие. */
+const AUTO_QUESTION = "Делать задачи целиком самому — ответы по рекомендации, commit, push, починка CI, мерж по зелёным чекам?";
+
+/**
+ * Вопрос «да/нет» в терминале: Enter — значение по умолчанию (оно заглавной буквой), непонятный ответ — вопрос снова.
+ * Синхронно и без зависимостей — `readSync(0)`: `main` синхронный. Ввод закрыт или не читается — значение по
+ * умолчанию.
+ * @param {string} question @param {boolean} def
+ */
+function ask(question, def) {
+  const buf = Buffer.alloc(1024);
+  for (;;) {
+    process.stdout.write(`${question} [${def ? "Y/n" : "y/N"}] `);
+    let n = 0;
+    try {
+      n = readSync(0, buf, 0, buf.length, null);
+    } catch {
+      return def;
+    }
+    const answer = buf.toString("utf8", 0, n).trim().toLowerCase();
+    if (!n || !answer) return def;
+    if (["y", "yes", "д", "да"].includes(answer)) return true;
+    if (["n", "no", "н", "нет"].includes(answer)) return false;
+  }
+}
+
 /** @type {Record<string, string[]>} */
-const FLAGS = { install: ["-g", "--global", "--link"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"] };
+const FLAGS = { install: ["-g", "--global", "--link", "--auto", "--no-auto"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"] };
 
 function main(/** @type {string[]} */ argv) {
   const [cmd = "", ...flags] = argv;
@@ -817,8 +881,18 @@ function main(/** @type {string[]} */ argv) {
     warn("--link — только с -g и только из клона ai-dev: в проект коммитится копия, а не ссылка на локальный клон");
     return 2;
   }
-  if (global) installGlobal(SRC, linkMode);
-  else installProject(SRC, projectRoot());
+  const [on, off] = [flags.includes("--auto"), flags.includes("--no-auto")];
+  if ((on || off) && (global || (on && off))) {
+    warn("--auto и --no-auto — настройка проекта «задача целиком без спроса»: без -g и только один из двух");
+    return 2;
+  }
+  if (global) return installGlobal(SRC, linkMode), 0;
+  const root = projectRoot();
+  const before = autoOf(root);
+  // вопрос — только здесь и только в терминале: `update` и `check` (хук в начале сессии) идут через installProject без него
+  const auto = on ? true : off ? false : isatty(0) && isatty(1) ? ask(AUTO_QUESTION, before) : before;
+  if (isAiDevClone(root)) installClone(root, auto);
+  else installProject(SRC, root, auto);
   return 0;
 }
 

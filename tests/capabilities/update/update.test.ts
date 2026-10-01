@@ -36,12 +36,16 @@ const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd,
 const short = (sha: string) => sha.slice(0, 7);
 const manifest = (root: string) => path.join(root, ".agents/ai-dev.json");
 
-// установка прошлой версией установщика: в .agents/ai-dev.json нет SHA
-function dropSha(root: string) {
-  const m = JSON.parse(read(manifest(root)));
-  delete m.sha;
-  writeFileSync(manifest(root), JSON.stringify(m, null, 2) + "\n");
+// правка .agents/ai-dev.json руками: поля из fields заменяются, undefined — поле убирается
+function editManifest(root: string, fields: Record<string, unknown>) {
+  writeFileSync(manifest(root), JSON.stringify({ ...JSON.parse(read(manifest(root))), ...fields }, null, 2) + "\n");
 }
+
+// установка прошлой версией установщика: в .agents/ai-dev.json нет SHA
+const dropSha = (root: string) => editManifest(root, { sha: undefined });
+
+const MODE_ASK = "  задачи: по разрешению\n";
+const MODE_AUTO = "  задачи: целиком сам\n";
 
 // машина с `install -g --link` из клона; origin клона — upstream, куда тест коммитит новое в main
 function linkedClone() {
@@ -102,6 +106,50 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("в проекте: не установлен");
     expect(existsSync(path.join(sb.proj, ".agents"))).toBe(false);
+  });
+
+  /** Настройку задаёт только `install` (capability `install`): `update` идёт без терминала и флагов — из сессии агента. */
+  it("update настройку сохраняет: auto true остаётся true, у установки прошлой версии без поля — false", () => {
+    aiDev(sb, ["install", "--auto"]);
+    expect(aiDev(sb, ["update"], { bin: newer.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ sha: newer.sha, auto: true });
+    editManifest(sb.proj, { auto: undefined });
+    expect(aiDev(sb, ["update"], { bin: newer.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj))).auto).toBe(false);
+  });
+
+  /** Режим — последней строкой: в начале сессии агент видит, вести ли задачу целиком самому. */
+  it("check называет режим проекта: auto true — «задачи: целиком сам», иначе — «задачи: по разрешению»; поле, правленное руками, и установка без поля отставанием не считаются", () => {
+    aiDev(sb, ["install"]);
+    const check = (bin?: string) => aiDev(sb, ["check"], { bin });
+    expect(check().stdout).toEndWith(MODE_ASK);
+    editManifest(sb.proj, { auto: true });
+    expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n$/) });
+    const behind = check(newer.bin);
+    expect(behind.code).toBe(1);
+    expect(behind.stdout).toEndWith("npx -y github:miroshnik/ai-dev update\n" + MODE_AUTO);
+    editManifest(sb.proj, { auto: undefined });
+    expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: по разрешению\n$/) });
+    expect(aiDev(sb, ["install", "-g"]).code).toBe(0);
+    expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("задачи:");
+  });
+
+  /** Клон ai-dev — сам канон: сверять и обновлять в нём нечего, а режим сессии в нём знать нужно. */
+  it("в клоне ai-dev check и хук называют режим, клон остаётся «не установлен»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит", () => {
+    const clone = copyPackage(base, path.join(sb.tmp, "clone")).dir;
+    // установщик — пакет npx, релизы недоступны: поиск релиза дал бы код 2
+    const bin = npxPackage(path.join(sb.tmp, "npx/main"), base.dir, base.sha);
+    const run = (...args: string[]) => aiDev(sb, args, { cwd: clone, bin, env: { AI_DEV_REPO: path.join(sb.tmp, "nowhere") } });
+    const ABSENT = "ai-dev в проекте: не установлен — клон ai-dev, канон в корне\n";
+    expect(run("check")).toMatchObject({ code: 0, stdout: ABSENT + MODE_ASK });
+    expect(aiDev(sb, ["install", "--auto"], { cwd: clone }).code).toBe(0);
+    expect(run("check")).toMatchObject({ code: 0, stdout: ABSENT + MODE_AUTO });
+    const hook = run("check", "--hook");
+    expect(hook.code).toBe(0);
+    expect(hook.stdout).toContain(ABSENT + MODE_AUTO);
+    expect(hook.stdout).not.toContain("поставь");
+    expect(aiDev(sb, ["update"], { cwd: clone }).code).toBe(0);
+    expect(snapshot(path.join(clone, ".agents"))).toEqual({ "ai-dev.json": JSON.stringify({ auto: true }, null, 2) + "\n" });
   });
 });
 
@@ -489,6 +537,16 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("ai-dev в проекте: не установлен — поставь: npx -y github:miroshnik/ai-dev install");
     expect(aiDev(sb, ["check", "--hook"], { cwd: sb.tmp }).stdout).not.toContain("в проекте");
+  });
+
+  it("вывод хука называет режим проекта; в проекте без флоу строки режима нет", () => {
+    aiDev(sb, ["install", "-g"]);
+    npxServes(base.bin);
+    expect(runHook().stdout).not.toContain("задачи:");
+    aiDev(sb, ["install", "--auto"]);
+    const r = runHook();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/ai-dev в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n/);
   });
 
   it("npx недоступен — код хука 0, в выводе — что проверка недоступна", () => {
