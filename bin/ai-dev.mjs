@@ -538,6 +538,8 @@ function installGlobal(src, linkMode) {
 
   if (has(".cursor")) note("Cursor: скиллы видит в ~/.agents/skills; правила — из AGENTS.md проекта");
 
+  // Место личной конфигурации по умолчанию. AI_DEV_CONFIG_DIR здесь намеренно не читается: переменная переопределяет
+  // каталог целиком, симлинк ей не нужен — скрипты скиллов смотрят туда, куда она указывает (tests/standards/config-dir).
   const priv = process.env.AI_DEV_PRIVATE;
   if (priv) {
     const dst = path.join(home, ".config/ai-dev");
