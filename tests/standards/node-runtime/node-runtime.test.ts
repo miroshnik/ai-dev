@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -75,6 +75,18 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     const tree = (branch: string) => repo.git("rev-parse", `origin/${branch}^{tree}`);
     repo.git("fetch", "-q", "origin", "spec-bun", "spec-node");
     expect(tree("spec-node")).toBe(tree("spec-bun"));
+  });
+
+  it("spec-run находит под Node тот же прогон, что под Bun", () => {
+    writeTree(dir, { "bin/gh": `#!/bin/sh\necho '[{"databaseId":41,"status":"completed","conclusion":"success","url":""}]'\n` });
+    chmodSync(path.join(dir, "bin/gh"), 0o755);
+    const env = { PATH: `${path.join(dir, "bin")}:${process.env.PATH}` };
+    const args = ["--commit", "4f1c0de2a9b8e7d6c5b4a3928170f6e5d4c3b2a1", "--timeout", "0"];
+    const bun = runScript("spec-run", args, dir, "bun", env);
+    const node = runScript("spec-run", args, dir, "node", env);
+    expect([bun.code, node.code]).toEqual([0, 0]);
+    expect(node.stdout).toBe("41\n");
+    expect(node.stdout).toBe(bun.stdout);
   });
 
   it("spec-claims пишет под Node тот же отчёт, что под Bun", () => {
