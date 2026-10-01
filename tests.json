@@ -1715,6 +1715,27 @@
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
+   "Мерж своего PR в Claude Code — правило разрешений владельца: install с auto подсказывает, а не ставит"
+  ],
+  "name": "install без auto о правиле разрешений молчит"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Мерж своего PR в Claude Code — правило разрешений владельца: install с auto подсказывает, а не ставит"
+  ],
+  "name": "install с auto называет правило разрешений на мерж и того, кто его ставит"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Мерж своего PR в Claude Code — правило разрешений владельца: install с auto подсказывает, а не ставит"
+  ],
+  "name": "подсказка не меняет настройки машины"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
   "name": "--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json"
