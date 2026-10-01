@@ -5,7 +5,8 @@
  * производная копия тестов, и параллельные PR конфликтовали бы в её страницах и оглавлении.
  *
  * Рабочая копия и HEAD не трогаются: дерево собирается во временном индексе, коммит — `git commit-tree` поверх
- * опубликованного, пуш — `<коммит>:refs/heads/<ветка>`. То же содержимое — без нового коммита; `Source:`
+ * опубликованного, пуш — `<коммит>:refs/heads/<ветка>`. Тот же исходник — без нового коммита; то же содержимое из
+ * нового исходника — коммит с тем же деревом и новым `Source:` (ветка называет последний проверенный main); `Source:`
  * опубликованного — потомок нового исходника — «уже новее», ветка не трогается. После пуша ветка читается с remote и
  * сверяется с каталогом — опубликовано ровно собранное. `--check` — только сверка.
  *
@@ -120,10 +121,6 @@ export function main(argv: string[]): number {
       return 0;
     }
 
-    if (published === tree) {
-      console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} уже совпадает с ${v.dir}`);
-      return 0;
-    }
     const source = v.source ?? git(root, ["rev-parse", "HEAD"]);
     // публикации приходят не по порядку мержей: поверх собранного из потомка старое не публикуется. Сравнить можно
     // только при истории: в мелком клоне (CI на main) опубликованный исходник неизвестен — публикуется, как всегда
@@ -133,6 +130,13 @@ export function main(argv: string[]): number {
       console.error(`spec-publish: пропуск — ${v.remote}/${v.branch} уже новее: опубликовано из ${was.slice(0, 12)}`);
       return 0;
     }
+    const same = published === tree;
+    if (same && (sha ?? source) === was) {
+      console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} уже совпадает с ${v.dir}`);
+      return 0;
+    }
+    // то же дерево из нового исходника — тоже коммит: `Source:` называет последний проверенный main, и spec-diff видит
+    // разрыв с базой диффа только после пропущенной публикации, а не после каждого мержа без изменений спеки
     const message = `spec: ${source.slice(0, 12)}\n\nSource: ${source}\n`;
     const commit = git(root, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", message], identity(root));
     try {
@@ -143,7 +147,8 @@ export function main(argv: string[]): number {
     // проверяю то, что дошло до читателя: ветку на remote, а не свой коммит
     const after = remoteHead(root, v.remote, v.branch);
     if (!after || git(root, ["rev-parse", `${after}^{tree}`]) !== tree) throw new Fail(`после пуша ${v.remote}/${v.branch} не совпадает с ${v.dir}`, 1);
-    console.error(`spec-publish: опубликовано ${v.dir} → ${v.remote}/${v.branch} ${commit.slice(0, 12)} (из ${source.slice(0, 12)})`);
+    if (same) console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} подтверждена для ${source.slice(0, 12)}`);
+    else console.error(`spec-publish: опубликовано ${v.dir} → ${v.remote}/${v.branch} ${commit.slice(0, 12)} (из ${source.slice(0, 12)})`);
     return 0;
   } catch (e) {
     if (e instanceof Fail) {
