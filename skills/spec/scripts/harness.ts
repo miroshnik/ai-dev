@@ -143,7 +143,10 @@ export interface LintMessage {
 /** Линтер проекта: код и путь файла (от корня проекта — по нему конфиг решает, действует ли правило). */
 export interface Linter {
   lint(code: string, filePath: string): Promise<LintMessage[]>;
-  /** Загрузить конфиг заранее: `await linter.ready()` на верхнем уровне файла — не под таймаутом первого примера. */
+  /**
+   * Загрузить конфиг заранее: `await linter.ready()` на верхнем уровне файла — не под таймаутом первого примера.
+   * Необязателен адаптеру без долгой загрузки; у `eslintLinter()` есть всегда.
+   */
   ready?(): Promise<void>;
 }
 
@@ -211,7 +214,7 @@ export function examples(it: It, spec: Examples): void {
  * файл по этому пути. ESLint берётся из зависимостей проекта (`module` — другой путь к пакету); грузится при первом
  * примере, поэтому регистрация тестов синхронна.
  */
-export function eslintLinter(opts: { cwd?: string; module?: string } = {}): Linter {
+export function eslintLinter(opts: { cwd?: string; module?: string } = {}): Required<Linter> {
   const cwd = path.resolve(opts.cwd ?? process.cwd());
   type Engine = {
     lintText(code: string, o: { filePath: string }): Promise<{ messages: LintMessage[] }[]>;
