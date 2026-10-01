@@ -3010,6 +3010,41 @@
  {
   "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
   "describes": [
+   "Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку"
+  ],
+  "name": "из нескольких прогонов на голове PR берётся успешный"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку"
+  ],
+  "name": "прогон CI головы PR ещё идёт — публикация ждёт его завершения"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку"
+  ],
+  "name": "прогон CI головы PR завершился неуспешно — ошибка с исходом прогона, без ожидания"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку"
+  ],
+  "name": "прогон CI головы PR находится, даже если список прогонов по статусу отстаёт"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку"
+  ],
+  "name": "прогона CI на голове PR нет — ошибка по потолку ожидания"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
    "Документация публикуется в ветку spec, а не коммитится в main"
   ],
   "name": "корень ветки spec — содержимое docs/spec, в сообщении — SHA main, из которого собрано; main не меняется"
@@ -3471,6 +3506,13 @@
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
   ],
+  "name": "spec-run находит под Node тот же прогон, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
   "name": "копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений"
  },
  {
@@ -3609,6 +3651,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: скрипт spec-publish скилла spec назван"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: скрипт spec-run скилла spec назван"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
