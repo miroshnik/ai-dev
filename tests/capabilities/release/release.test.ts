@@ -39,6 +39,8 @@ function owner() {
   return { up, clone, tag, rule, release: (args: string[] = ["--dry-run"]) => aiDev(sb, ["release", ...args], { bin }) };
 }
 
+// прошлый релиз — дата в прошлом: в день, совпавший с ней, релиз был бы патчем того же дня (.1), а не тегом дня
+const PREV = "v2025.01.15";
 const today = () => `v${new Date().toISOString().slice(0, 10).replaceAll("-", ".")}`;
 
 // тег релиза — день запуска по UTC: день берём до и после запуска, чтобы полночь между ними не роняла тест
@@ -51,7 +53,7 @@ function dated(run: () => Run) {
 describe("Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза", () => {
   it("в списке — изменения флоу и установщика с прошлого релиза, остальные коммиты — нет; --dry-run ничего не создаёт", () => {
     const o = owner();
-    o.tag("v2026.10.01");
+    o.tag(PREV);
     o.up.repo.commit(o.rule("Новое правило."), "docs(agents): новое правило");
     o.up.repo.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
     o.up.repo.commit({ "bin/ai-dev.mjs": read(path.join(o.up.dir, "bin/ai-dev.mjs")) + "// правка\n" }, "fix(install): правка установщика");
@@ -59,17 +61,17 @@ describe("Релиз — тег по дате на origin/main и список �
     const { r, tag, days } = dated(() => o.release());
     expect(r.code).toBe(0);
     expect(days).toContain(tag);
-    expect(r.stdout).toContain("Изменения флоу с v2026.10.01:");
+    expect(r.stdout).toContain(`Изменения флоу с ${PREV}:`);
     expect(r.stdout).toContain("- docs(agents): новое правило");
     expect(r.stdout).toContain("- fix(install): правка установщика");
     expect(r.stdout).toContain("- feat(est): новый шаг");
     expect(r.stdout).not.toContain("только тесты");
-    expect(o.up.repo.git("tag", "--list")).toBe("v2026.10.01");
+    expect(o.up.repo.git("tag", "--list")).toBe(PREV);
   });
 
   it("PR, влитый merge-коммитом, — строкой с заголовком PR и номером, без коммитов его ветки", () => {
     const o = owner();
-    o.tag("v2026.10.01");
+    o.tag(PREV);
     o.up.repo.git("switch", "-q", "-c", "feat/7-x");
     o.up.repo.commit(o.rule("Правило из PR."), "wip: черновик");
     o.up.repo.git("switch", "-q", "main");
@@ -97,14 +99,14 @@ describe("Релиз — тег по дате на origin/main и список �
 
   it("origin/main уже в релизе или с прошлого релиза флоу не менялся — отказ, код 1", () => {
     const o = owner();
-    o.tag("v2026.10.01");
+    o.tag(PREV);
     const same = o.release();
     expect(same.code).toBe(1);
-    expect(same.stderr).toContain("уже в релизе v2026.10.01");
+    expect(same.stderr).toContain(`уже в релизе ${PREV}`);
     o.up.repo.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
     const r = o.release();
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("с v2026.10.01 флоу не менялся");
+    expect(r.stderr).toContain(`с ${PREV} флоу не менялся`);
   });
 
   it("первый релиз — без списка изменений, с пометкой «Первый релиз»", () => {
@@ -117,7 +119,7 @@ describe("Релиз — тег по дате на origin/main и список �
 
   it("release — GitHub Release командой gh: тег, коммит origin/main, заголовок и список изменений", () => {
     const o = owner();
-    o.tag("v2026.10.01");
+    o.tag(PREV);
     const sha = o.up.repo.commit(o.rule("Новое правило."), "docs(agents): новое правило");
     // gh песочницы записывает свои аргументы
     const out = path.join(sb.tmp, "gh-args.json");

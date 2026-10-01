@@ -16,9 +16,18 @@ export interface Run {
   stderr: string;
 }
 
-/** Запустить spec-doc / spec-diff как пользователь: `bun <скрипт>.ts …` или `node <скрипт>.ts …` (CI проекта без Bun). */
-export function runScript(name: "spec-doc" | "spec-diff" | "spec-publish" | "spec-claims" | "spec-break", args: string[], cwd: string, runtime: "bun" | "node" = "bun"): Run {
-  const r = spawnSync(runtime, [path.join(SCRIPTS, name + ".ts"), ...args], { cwd, encoding: "utf8" });
+/**
+ * Запустить spec-doc / spec-diff как пользователь: `bun <скрипт>.ts …` или `node <скрипт>.ts …` (CI проекта без Bun);
+ * `env` — поверх окружения прогона (заглушка `gh` в PATH).
+ */
+export function runScript(
+  name: "spec-doc" | "spec-diff" | "spec-publish" | "spec-run" | "spec-claims" | "spec-break",
+  args: string[],
+  cwd: string,
+  runtime: "bun" | "node" = "bun",
+  env: Record<string, string> = {},
+): Run {
+  const r = spawnSync(runtime, [path.join(SCRIPTS, name + ".ts"), ...args], { cwd, encoding: "utf8", env: { ...process.env, ...env } });
   if (r.error) throw r.error;
   return { code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };
 }

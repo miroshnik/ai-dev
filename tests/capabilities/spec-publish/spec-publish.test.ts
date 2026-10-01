@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -95,5 +95,71 @@ describe("--check сверяет опубликованное с собранн�
     const r = publish();
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("spec-doc");
+  });
+});
+
+const HEAD = "4f1c0de2a9b8e7d6c5b4a3928170f6e5d4c3b2a1";
+
+// `gh` — внешний край, подменяется он: ответы `gh run list` — массивы JSON в runs.json, по одному на опрос, последний
+// повторяется; вызовы — в calls. Выдача с фильтром по статусу отстаёт, как у GitHub: прогонов в ней ещё нет.
+const FAKE_GH = `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_GH/calls"
+[ "$1 $2" = "run list" ] || { echo "fake gh: $*" >&2; exit 1; }
+case " $* " in *" --status "*) echo '[]'; exit 0 ;; esac
+n=$(cat "$FAKE_GH/n" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_GH/n"
+jq -c --argjson n "$n" '.[$n] // .[-1]' "$FAKE_GH/runs.json"
+`;
+
+interface GhRun { databaseId: number; status: string; conclusion: string | null; url: string }
+const ghRun = (databaseId: number, status: string, conclusion: string | null = null): GhRun => ({ databaseId, status, conclusion, url: `https://github.test/runs/${databaseId}` });
+
+/** Шаг workflow публикации на мерж PR: прогон CI головы PR по ответам `gh` на каждый опрос. */
+function findRun(polls: GhRun[][], ...args: string[]) {
+  const bin = path.join(dir, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(path.join(bin, "gh"), FAKE_GH);
+  chmodSync(path.join(bin, "gh"), 0o755);
+  writeFileSync(path.join(bin, "runs.json"), JSON.stringify(polls));
+  const r = runScript("spec-run", ["--workflow", "ci.yml", "--commit", HEAD, "--interval", "0", ...args], work, "bun", { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin });
+  const log = path.join(bin, "calls");
+  return { ...r, calls: existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [] };
+}
+
+/**
+ * Без CI на `main` `docs/spec` берётся из артефакта прогона CI головы PR (`ci.md`, «Без CI на main»). Выдача
+ * `gh run list --status success` отстаёт от завершения прогона на минуты: публикация сразу после мержа его не видела и
+ * падала, ветка `spec` отставала до следующего мержа. Поэтому прогон ищется без фильтра по статусу, по его исходу.
+ */
+describe("Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку", () => {
+  it("прогон CI головы PR находится, даже если список прогонов по статусу отстаёт", () => {
+    const r = findRun([[ghRun(41, "completed", "success")]], "--timeout", "0");
+    expect([r.code, r.stdout]).toEqual([0, "41\n"]);
+    expect(r.calls).toEqual([`run list --workflow ci.yml --commit ${HEAD} --json databaseId,status,conclusion,url`]);
+    expect(r.stderr).toContain("https://github.test/runs/41");
+  });
+
+  it("из нескольких прогонов на голове PR берётся успешный", () => {
+    const r = findRun([[ghRun(43, "completed", "cancelled"), ghRun(42, "completed", "success"), ghRun(41, "completed", "failure")]], "--timeout", "0");
+    expect([r.code, r.stdout]).toEqual([0, "42\n"]);
+  });
+
+  it("прогон CI головы PR ещё идёт — публикация ждёт его завершения", () => {
+    const r = findRun([[], [ghRun(41, "queued")], [ghRun(41, "in_progress")], [ghRun(41, "completed", "success")]], "--timeout", "60");
+    expect([r.code, r.stdout]).toEqual([0, "41\n"]);
+    expect(r.calls).toHaveLength(4);
+    expect(r.stderr).toContain("прогон ci.yml на 4f1c0de2a9b8: 41 in_progress — ждём");
+  });
+
+  it("прогон CI головы PR завершился неуспешно — ошибка с исходом прогона, без ожидания", () => {
+    const r = findRun([[ghRun(41, "completed", "failure")]], "--timeout", "5");
+    expect([r.code, r.stdout]).toEqual([1, ""]);
+    expect(r.calls).toHaveLength(1);
+    expect(r.stderr).toContain("завершился неуспешно — публиковать нечего: 41 failure https://github.test/runs/41");
+  });
+
+  it("прогона CI на голове PR нет — ошибка по потолку ожидания", () => {
+    const r = findRun([[]], "--timeout", "0");
+    expect([r.code, r.stdout]).toEqual([1, ""]);
+    expect(r.stderr).toContain("нет прогона ci.yml на 4f1c0de2a9b8 за 0 с — публиковать нечего");
   });
 });
