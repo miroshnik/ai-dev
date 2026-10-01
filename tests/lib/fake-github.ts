@@ -46,12 +46,7 @@ export class FakeGitHub {
   /** Номера milestone, закрытых REST-запросом `PATCH repos/…/milestones/<n>`. */
   closedMilestones: number[] = [];
   /**
-   * Открытые PR (MergeQueue): ветка, черновик, отставание от основной ветки (`null` — ветки нет), сводный статус CI
-   * головы (`null` — чеков ещё нет). Ставит `pull`.
-   */
-  pulls: { number: number; title: string; head: string; base: string; draft: boolean; behind: number | null; ci: string | null }[] = [];
-  /**
-   * Основная ветка `main` (MergeRules) — как у ai-dev после fix: ruleset «ai-dev» со strict и обязательным `tests`;
+   * Основная ветка `main` (MergeRules) — как у ai-dev после fix: ruleset «ai-dev» без strict, с обязательным `tests`;
    * у влитых PR `tests` зелёный, `spec-publish` пропущен. Чеки головы PR: имя → вывод чека или IN_PROGRESS.
    * `org` — ruleset организации: действует на ветку, но в rulesets репозитория его нет. `upgrade` — приватный
    * репозиторий на Free: GraphQL отдаёт пустые правила, REST — 403.
@@ -60,7 +55,7 @@ export class FakeGitHub {
     private: false,
     upgrade: false,
     protection: null as { strict: boolean; contexts: string[] } | null,
-    rulesets: [{ id: "RRS_ai-dev", name: "ai-dev", org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: true, contexts: ["tests"], admin: true }],
+    rulesets: [{ id: "RRS_ai-dev", name: "ai-dev", org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: false, contexts: ["tests"], admin: true }],
     merged: Array.from({ length: 12 }, (_, i) => ({ number: 120 + i, checks: { tests: "SUCCESS", "spec-publish": "SKIPPED" } as Record<string, string> })),
     open: [] as { number: number; checks: Record<string, string> }[],
   };
@@ -114,8 +109,6 @@ export class FakeGitHub {
     if (op === "PrChange") return JSON.stringify(this.prChange(variables.number));
     if (op === "RecentPrs") return JSON.stringify(this.recentPrs());
     if (op === "MergeRules") return JSON.stringify(this.mergeRules());
-    if (op === "DefaultBranch") return JSON.stringify({ data: { repository: { defaultBranchRef: { name: "main" } } } });
-    if (op === "MergeQueue") return JSON.stringify(this.mergeQueue(variables.base));
     if (op === "ModelAt") {
       const pr = Object.values(this.prs).find((x) => x.head === variables.expression.split(":")[0]);
       return JSON.stringify({ data: { repository: { object: pr?.model == null ? null : { text: pr.model } } } });
@@ -272,27 +265,9 @@ export class FakeGitHub {
       },
     };
   }
-  /** Открытый PR (как будто его открыли раньше): по умолчанию в main, не отстаёт, CI идёт. */
-  pull(p: Partial<FakeGitHub["pulls"][number]> & { number: number }): void {
-    this.pulls.push({ title: `PR ${p.number}`, head: `feat/${p.number}-x`, base: "main", draft: false, behind: 0, ci: "PENDING", ...p });
-  }
-  // отставание — Ref.compare от головы PR к основной ветке: aheadBy — коммиты основной ветки, которых нет в PR
-  private mergeQueue(base: string): Any {
-    const nodes = this.pulls
-      .filter((p) => p.base === base)
-      .map((p) => ({
-        number: p.number,
-        title: p.title,
-        isDraft: p.draft,
-        headRefName: p.head,
-        headRef: p.behind === null ? null : { compare: { aheadBy: p.behind } },
-        commits: { nodes: [{ commit: { statusCheckRollup: p.ci === null ? null : { state: p.ci } } }] },
-      }));
-    return { data: { repository: { pullRequests: { nodes } } } };
-  }
-  /** Ruleset основной ветки (как будто его завели раньше): strict и обязательные чеки. */
+  /** Ruleset основной ветки (как будто его завели раньше): по умолчанию без strict и без обязательных чеков. */
   ruleset(r: Partial<FakeGitHub["merge"]["rulesets"][number]> & { name: string }): FakeGitHub["merge"]["rulesets"][number] {
-    const out = { id: this.id("RRS"), org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: true, contexts: [], admin: false, ...r };
+    const out = { id: this.id("RRS"), org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: false, contexts: [], admin: false, ...r };
     this.merge.rulesets.push(out);
     return out;
   }
