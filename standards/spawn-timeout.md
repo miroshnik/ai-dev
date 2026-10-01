@@ -17,11 +17,12 @@ preload действует только на первый файл прогон�
 
 ## Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT
 
-<details><summary>✅ 25 тестов</summary>
+<details><summary>✅ 26 тестов</summary>
 
 - ✅ реестр «тесты ai-dev, которые запускают процессы» не пуст
 - ✅ нарушитель не проходит: файл с node:child_process без таймаута
 - ✅ tests/capabilities/ci-wait/ci-wait.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/capabilities/dashboard/dashboard.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/capabilities/est/est.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/capabilities/github-task/github-task.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/capabilities/install/install.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)

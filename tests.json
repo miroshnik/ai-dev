@@ -56,6 +56,174 @@
   "name": "чеков на коммите ещё нет — ожидание, а не PASS"
  },
  {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Данные графика — закрытые задачи с фактом по времени закрытия"
+  ],
+  "name": "закрытая задача с фактом — точка: дата закрытия, оценка и прогноз из маркера «Оценка», часы, токены в млн и стоимость из факта"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Данные графика — закрытые задачи с фактом по времени закрытия"
+  ],
+  "name": "оценка без маркера est — в других единицах: у точки оценки нет"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Данные графика — закрытые задачи с фактом по времени закрытия"
+  ],
+  "name": "период --since оставляет задачи, закрытые не раньше его начала"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Данные графика — закрытые задачи с фактом по времени закрытия"
+  ],
+  "name": "тренд — скользящая медиана последних 10 задач; до трёх задач тренда нет"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Данные графика — закрытые задачи с фактом по времени закрытия"
+  ],
+  "name": "эпик, открытая задача и задача без факта в график не входят"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "--all-repos — задачи всех репозиториев реестра, у задачи назван репозиторий"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "--no-open и BROWSER=none браузер не открывают"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "в облачной сессии — ошибка с объяснением, а не сбой gh"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "занятый порт — ошибка с подсказкой, а не трасса"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "запрос с чужим Host — отказ: сайт, навёдший своё имя на 127.0.0.1, страницу не прочтёт"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "неизвестный параметр — код 2, --help — справка"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "ошибка GitHub — на странице, сервер живёт дальше"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "поднимает сервер на localhost, печатает адрес и открывает его в браузере"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Обновить» — перечитывает"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Сводка — точность оценок и цена задачи"
+  ],
+  "name": "точность — k и доля задач в допуске ×0,5…×2, как в est history"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Сводка — точность оценок и цена задачи"
+  ],
+  "name": "часы, токены и стоимость задачи — медиана последних 10 задач и её изменение к предыдущим 10"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "задач с фактом нет — страница говорит об этом, а не рисует пустой график"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "задача — точка факта в каждой панели, оценка — вторая точка, связанная с фактом отрезком"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "линия тренда — в каждой панели, где задач хватает"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "название задачи — текст: разметка в нём экранируется"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "панель «факт к оценке» — отношение по задачам с оценкой, линия ×1 и полоса допуска ×0,5…×2"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "таблица под графиком повторяет значения каждой точки"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "четыре панели с общей осью времени, у каждой своя шкала значений"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Страница — один график: часы, токены и стоимость на общей оси времени"
+  ],
+  "name": "шкала на несколько порядков — только декады: подписи ступеней не налезают друг на друга"
+ },
+ {
   "path": "tests/capabilities/est/est.test.ts",
   "describes": [
    "PR достаётся задаче, которую он делает, а не той, что упомянута"
@@ -3727,6 +3895,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: скилл dashboard — со ссылкой на skills/dashboard/SKILL.md"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: скилл est — со ссылкой на skills/est/SKILL.md"
  },
  {
@@ -3742,6 +3917,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: скилл spec — со ссылкой на skills/spec/SKILL.md"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: скрипт dashboard скилла dashboard назван"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -3914,6 +4096,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/ci-wait/ci-wait.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/dashboard/dashboard.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
