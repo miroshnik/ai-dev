@@ -1414,6 +1414,34 @@
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
+   "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
+  ],
+  "name": "--auto пишет auto: true, повторный install без флага его сохраняет, --no-auto возвращает false"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
+  ],
+  "name": "install -g настройку не спрашивает и не хранит — в ~/.agents/ai-dev.json поля auto нет"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
+  ],
+  "name": "без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json auto: false"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
+  ],
+  "name": "в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto: с --auto — true, без флага и терминала — прежнее значение"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
   "name": "--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json"
@@ -1466,6 +1494,13 @@
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
   "name": "старый симлинк install.sh ~/.claude/CLAUDE.md → claude/CLAUDE.md убирается — правила не грузятся дважды"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Неверный вызов — код 2 с объяснением"
+  ],
+  "name": "--auto с -g или вместе с --no-auto — код 2: настройка одна и она у проекта"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3117,6 +3152,13 @@
   "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
+  "name": "вывод хука называет режим проекта; в проекте без флоу строки режима нет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
   "name": "команда хука — check --hook: машина и проект одним выводом, код 0, даже когда отстаёт"
  },
  {
@@ -3215,7 +3257,28 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
+  "name": "check называет режим проекта: auto true — «задачи: целиком сам», иначе — «задачи: по разрешению»; поле, правленное руками, и установка без поля отставанием не считаются"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "update настройку сохраняет: auto true остаётся true, у установки прошлой версии без поля — false"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
   "name": "update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents); после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "в клоне ai-dev check и хук называют режим, клон остаётся «не установлен»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -3334,7 +3397,7 @@
   "describes": [
    "Ядро канона умещается в бюджет контекста"
   ],
-  "name": "AGENTS.md не больше 30 КиБ"
+  "name": "AGENTS.md не больше 32 КиБ"
  },
  {
   "path": "tests/standards/canon-size/canon-size.test.ts",
