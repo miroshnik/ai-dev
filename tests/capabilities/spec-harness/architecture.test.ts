@@ -178,10 +178,23 @@ const adapter = {
   "src/stripe/client.ts": 'import Stripe from "stripe";\nconst url = "https://api.stripe.com/v1";\nconst key = process.env.STRIPE_KEY;\nexport const s = { Stripe, url, key };\n',
   "src/billing/invoice.ts": "export const total = 1;\n",
 };
+// сторож над «сетью», которая записывает дошедшие до неё запросы
+const guarded = (opts: { allow?: string[] } = {}) => {
+  const calls: string[] = [];
+  const guard = networkGuard(
+    c1,
+    async (input: string | URL | Request) => {
+      calls.push(input instanceof Request ? input.url : String(input));
+      return new Response("ok");
+    },
+    opts,
+  );
+  return { guard, calls };
+};
 
 /**
  * C1 — система и внешние системы. Модель называет каждую внешнюю систему и её адаптер: хосты, пакеты и ключи
- * окружения внешней системы живут только в адаптере, а запрос к хосту вне модели в тестах падает — что система
+ * окружения внешней системы живут только в адаптере, а в тестах падает запрос к хосту вне модели и к объявленному без мока — что система
  * говорит только с объявленными внешними системами, проверено, а не нарисовано.
  */
 describe("Внешние системы модели (C1) проверяются кодом", () => {
@@ -192,10 +205,19 @@ describe("Внешние системы модели (C1) проверяются
       '/* "https://old.api.io/v1" */',
       'const svg = \'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>\';',
       'const el = document.createElementNS("http://www.w3.org/2000/svg", "path");',
-      'const demo = ["https://example.com/a", "https://api.example.org", "https://x.invalid/", "https://shop.example/"];',
+      'const demo = ["https://example.com/a", "https://api.example.org", "https://x.invalid/", "https://shop.example/", "https://api.test/"];',
       'const api = "https://api.stripe.com/v1";',
     ].join("\n");
     expect(hostsIn(src)).toEqual(["api.stripe.com"]);
+  });
+
+  // IP — такой же адрес внешней системы, как домен; локален только loopback: из машины он не уходит
+  it("IP в литерале URL — хост внешней системы, loopback — нет", () => {
+    const src = [
+      'const local = ["http://localhost:3000/", "http://app.localhost/", "http://127.0.0.1:54321/rest", "http://127.1.2.3/", "http://0.0.0.0:8080/"];',
+      'const dns = "https://8.8.8.8/resolve";',
+    ].join("\n");
+    expect(hostsIn(src)).toEqual(["8.8.8.8"]);
   });
 
   it("хост внешней системы в коде — только в её адаптере; необъявленный хост — упавший тест", async () => {
@@ -232,16 +254,39 @@ describe("Внешние системы модели (C1) проверяются
     );
   });
 
-  it("в тестах запрос к хосту вне модели падает, к объявленному — идёт дальше", async () => {
-    const calls: string[] = [];
-    const fetchGuarded = networkGuard(c1, async (input: string | URL | Request) => {
-      calls.push(String(input));
-      return new Response("ok");
-    });
-    await expect(fetchGuarded("https://evil.example.com/x")).rejects.toThrow("запрос к хосту evil.example.com вне модели");
-    expect(await (await fetchGuarded("https://api.stripe.com/v1/charges")).text()).toBe("ok");
-    expect(await (await fetchGuarded("http://localhost:3000/api")).text()).toBe("ok");
-    expect(calls).toEqual(["https://api.stripe.com/v1/charges", "http://localhost:3000/api"]);
+  // сторож — сеть под моками: что до него дошло, не замокано; дальше пускает только то, что из машины не уходит, и allow
+  it("в тестах до сети доходят только loopback и хосты allow", async () => {
+    const { guard, calls } = guarded({ allow: ["db"] });
+    const through = ["http://localhost:3000/api", "http://app.localhost/", "http://127.0.0.1:54321/", "http://127.9.9.9/", "http://[::1]:8080/", "http://0.0.0.0:3000/", "http://db:5432/", new URL("http://localhost/u"), new Request("http://localhost/r")];
+    for (const u of through) expect(await (await guard(u)).text()).toBe("ok");
+    expect(calls).toEqual(through.map((u) => (u instanceof Request ? u.url : String(u))));
+    expect(guard.rejected).toEqual([]);
+  });
+
+  it("запрос к объявленному хосту без мока падает с именем хоста и внешней системы — в сеть не идёт", async () => {
+    const { guard, calls } = guarded();
+    await expect(guard("https://api.stripe.com/v1/charges")).rejects.toThrow("запрос к хосту api.stripe.com внешней системы payments без мока");
+    expect(calls).toEqual([]);
+  });
+
+  it("запрос к хосту вне модели падает; публичный IP и домен .test — не локальные", async () => {
+    const { guard, calls } = guarded();
+    await expect(guard("https://evil.example.com/x")).rejects.toThrow("запрос к хосту evil.example.com вне модели");
+    await expect(guard("http://8.8.8.8/")).rejects.toThrow("запрос к хосту 8.8.8.8 вне модели");
+    await expect(guard("https://api.test/")).rejects.toThrow("запрос к хосту api.test вне модели");
+    expect(calls).toEqual([]);
+  });
+
+  // код под тестом ловит исключение fetch (адаптер с try/catch): без проверки после теста тест прошёл бы молча
+  it("отвергнутый запрос, который поймал код под тестом, роняет check() после теста", async () => {
+    const { guard } = guarded();
+    const swallow = (u: string) => guard(u).catch(() => null);
+    expect(await swallow("https://api.stripe.com/v1/charges")).toBeNull();
+    expect(await swallow("https://evil.io/x")).toBeNull();
+    expect(guard.rejected).toEqual(["api.stripe.com", "evil.io"]);
+    expect(() => guard.check()).toThrow(/^запросы к сети, отвергнутые сторожем: api\.stripe\.com, evil\.io/);
+    expect(guard.rejected).toEqual([]);
+    expect(() => guard.check()).not.toThrow();
   });
 
   it("CSP connect-src браузера собирается из хостов модели", () => {
