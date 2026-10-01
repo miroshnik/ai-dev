@@ -8,7 +8,8 @@
  *   github project fix   — довести до канона: API, шаги UI со ссылками, удаление и переименование — с --confirm
  *   github task new      — задача одной командой: тип или метка, проект и Бэклог, Priority, эпик, blocked by, milestone,
  *                          метки решений (имя решения, вид — цветом)
- *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
+ *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача); «В работе» закрепляет
+ *                          задачу за сессией — другой задаче в той же сессии отказ
  *   github task drop     — закрыть без выполнения и убрать из проекта
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
  *
@@ -20,7 +21,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -1225,6 +1226,58 @@ function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "item
   throw new GhError(`#${i.number} уже в проекте, но элемент не виден — повторить: github task status ${i.number} <статус>`);
 }
 
+/**
+ * Каталог личной конфигурации — тот же, что у est: `AI_DEV_CONFIG_DIR`, иначе `~/.config/ai-dev`. est переносит в него
+ * старый `~/.claude/est`, только пока каталога нет (est.ts, `ensureConfigDir`): создать его здесь первым — оставить est
+ * без реестра и цен. До переноса конфигурация — старый каталог: закрепление переедет вместе с ним.
+ */
+function configDir(env: Io["env"]): string {
+  const home = env.HOME || os.homedir();
+  const dir = env.AI_DEV_CONFIG_DIR || path.join(home, ".config", "ai-dev");
+  if (existsSync(dir)) return dir;
+  const legacy = path.join(home, ".claude", "est");
+  // lstat: симлинк на месте старого каталога — перенос уже был
+  return lstatSync(legacy, { throwIfNoEntry: false })?.isDirectory() ? legacy : dir;
+}
+
+/** Файл закрепления сессии — `<каталог конфигурации>/sessions/<id сессии>`; сессия не опознана — null. */
+function pinFile(io: Io): string | null {
+  const id = io.env.CLAUDE_CODE_SESSION_ID;
+  return id ? path.join(configDir(io.env), "sessions", id) : null;
+}
+
+/** Задача, закреплённая за сессией (`owner/repo#N`); нет закрепления или сессия не опознана — null. */
+function pinnedTask(io: Io): string | null {
+  const file = pinFile(io);
+  return file && existsSync(file) ? readFileSync(file, "utf8").trim() : null;
+}
+
+/**
+ * Сессия ведёт одну задачу: первая взятая «В работе» закрепляется за сессией, другой — отказ до изменений. Ключ — id
+ * сессии (у субагента тот же, на /clear меняется), а не чекаут: worktree сессии переиспользуют. Закрепление не снимает
+ * ни одна команда — ошибочное убирает человек, удалив файл.
+ */
+function pinTask(io: Io, slug: string, number: number): void {
+  const file = pinFile(io);
+  if (!file) return io.out("○ сессия не опознана (нет CLAUDE_CODE_SESSION_ID) — задача не закреплена");
+  const task = `${slug}#${number}`;
+  const created = (f: string, text: string) => {
+    try {
+      writeFileSync(f, text, { flag: "wx" });
+      return true;
+    } catch (e) {
+      if ((e as Any)?.code !== "EEXIST") throw e;
+      return false;
+    }
+  };
+  mkdirSync(path.dirname(file), { recursive: true });
+  // каталог конфигурации бывает личным чекаутом git (AI_DEV_PRIVATE) — закрепления в него не коммитятся
+  created(path.join(path.dirname(file), ".gitignore"), "*\n");
+  if (created(file, `${task}\n`)) return;
+  const held = readFileSync(file, "utf8").trim();
+  if (held !== task) throw new GhError(`сессия ведёт ${held}; #${number} — в новой сессии, первый промпт: #${number} (закрепление: ${file} — ошибочное снимает человек)`);
+}
+
 /** Префикс эпика — часть заголовка до « · »: с него начинаются заголовки эпика и всех подзадач. */
 export function epicPrefix(title: string): string | null {
   const i = title.indexOf(" · ");
@@ -1365,6 +1418,9 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   for (const d of done) io.out(`+ ${d}`);
   if (o.type === "Эпик") io.out("Дальше: эпик не оценивается — его «Оценка, ч» = сумма оценок подзадач.");
   else io.out(`Дальше: оценка — скилл est (est estimate ${created.number} --type <тип ветки> --analogs …)${epic ? `; «Оценка, ч» эпика #${epic.number} — пересчитать суммой подзадач` : ""}.`);
+  // сессия с закреплённой задачей новую в работу не возьмёт (pinTask)
+  const held = pinnedTask(io);
+  if (held) io.out(`Дальше: сессия ведёт ${held} — #${created.number} в новой сессии, первый промпт: #${created.number}.`);
   return 0;
 }
 
@@ -1372,6 +1428,8 @@ export function cmdTaskStatus(io: Io, slug: string, number: number, status: stri
   if (!(STATUS_OPTIONS as readonly string[]).includes(status)) throw new GhError(`статус: ${STATUS_OPTIONS.join(", ")}`);
   const ctx = taskContext(io, slug);
   const issue = loadIssue(io, slug, number);
+  // эпик не закрепляется: его сессия планирует и раздаёт, а «В работе» эпику ставит и первая подзадача
+  if (status === IN_PROGRESS && !isEpic(issue, ctx.repo.owner.org)) pinTask(io, slug, number);
   const item = ensureItem(io, ctx, issue);
   setStatus(io, ctx, item.id, status);
   io.out(`+ #${issue.number}: ${STATUS} ${q(status)}${item.added ? " (добавлена в проект)" : ""}`);
@@ -1699,6 +1757,8 @@ fix   — исправляет через API; шаги UI печатает со
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
 task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).
+task status — «В работе» закрепляет задачу за сессией (файл sessions/<CLAUDE_CODE_SESSION_ID> в ~/.config/ai-dev):
+        другой задаче в той же сессии — отказ (код 2), ей нужна новая сессия; закрепление снимает человек.
 task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
         эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
