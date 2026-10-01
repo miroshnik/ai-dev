@@ -131,12 +131,14 @@ workflow на мерж скачивает его и зовёт `spec-publish`. �
 этот, возвращать CI на `main` ради документации не нужно.
 
 В workflow выше: `on` — только `pull_request`, job `spec-publish` нет, а в
-job `spec` артефакт `docs-spec` — на каждом прогоне и живёт дольше, чем PR
-ждёт мержа:
+job `spec` артефакт — на каждом прогоне, назван по дереву, которое прогон
+проверил, и живёт дольше, чем PR ждёт мержа:
 
 ```yaml
+      - id: tree # дерево, которое проверил прогон: merge-ref PR
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
-        with: { name: docs-spec, path: docs/spec/, retention-days: 30 }
+        with: { name: 'docs-spec-${{ steps.tree.outputs.tree }}', path: docs/spec/, retention-days: 30 }
 ```
 
 Публикация — свой workflow, `.github/workflows/spec-publish.yml`:
@@ -155,35 +157,40 @@ jobs:
     concurrency: { group: spec-publish, cancel-in-progress: false }
     env:
       GH_TOKEN: ${{ github.token }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
     steps:
       - uses: actions/checkout@v7
-        with: { ref: '${{ github.event.pull_request.merge_commit_sha }}' }
+        with: { ref: '${{ github.event.pull_request.merge_commit_sha }}', fetch-depth: 0 } # история — для «уже новее»
       - uses: actions/setup-node@v7
         with: { node-version: 24, package-manager-cache: false }
-      - name: docs/spec из прогона CI головы PR
+      - name: docs/spec из прогона, проверившего дерево мержа
         run: |
-          run=$(node .agents/skills/spec/scripts/spec-run.ts --workflow ci.yml --commit "$HEAD_SHA")
-          gh run download "$run" --name docs-spec --dir docs/spec
-      - run: node .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
+          tree=$(git rev-parse 'HEAD^{tree}')
+          run=$(node .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
+          [ -n "$run" ] || exit 0 # пропуск: причина — строкой spec-run выше
+          gh run download "$run" --name "docs-spec-$tree" --dir docs/spec
+          node .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
 ```
 
-- `spec-run` ищет прогон по исходу, без `gh run list --status success`: эта
-  выдача отстаёт от завершения прогона на минуты, и прогон головы PR,
-  успешный за полторы минуты до мержа, в ней ещё не виден. Из прогонов на
-  голове берёт успешный; идущий ждёт (потолок `--timeout`, 30 мин);
-  завершился неуспешно — ошибка с исходом сразу.
+- Публикуется только дерево, проверенное целиком: артефакт назван по дереву
+  merge-ref, которое гонял прогон PR, публикация ищет его по дереву коммита
+  мержа. В `main` между стартом прогона и мержем ничего не влили — деревья
+  равны при merge, squash и rebase. Влит отставший PR — такого артефакта
+  нет: `spec-run` пишет «дерево main не проверено целиком — публикация
+  пропущена», job зелёный, ветка `spec` отстаёт до следующего мержа с
+  совпавшим деревом, но не откатывается. Актуальности ветки от PR это не
+  требует.
+- Артефакт — ещё не зелёный прогон: `spec-run` берёт прогон только этого
+  репозитория (не форка) с исходом `success`; идущий ждёт (потолок
+  `--timeout`, 30 мин), к потолку не завершился — job падает с причиной.
 - `--source` — SHA мержа, а не головы PR: после squash и rebase голова в
   историю `main` не попадает, а `spec-diff` берёт базу тестов харнесса из
   публикации, чей `Source:` — предок merge-base.
-- `spec` точна, когда голова PR совпадает с `main` после мержа: отставшую
-  ветку GitHub не вольёт — ruleset основной ветки со strict ставит
-  `github project fix` (канон, «Git, PR и мерж»). Без него (приватный
-  репозиторий на Free) смёржен отставший PR — ветка `spec` откатывается: до
-  следующего мержа в ней нет страниц PR, влитого раньше.
-- Прогона нет к потолку, он упал или артефакт истёк — job падает с
-  причиной, `spec` догонит следующий мерж.
+- `spec-publish` не публикует поверх более нового: `Source:` опубликованного
+  — потомок нового исходника → «уже новее», код 0; для этого checkout — с
+  историей.
+- После пропуска публикация старше merge-base следующих PR — `spec-diff`
+  говорит это строкой под «База».
 
 ## Хостинг собирает каждую ветку
 

@@ -78,10 +78,13 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
   });
 
   it("spec-run находит под Node тот же прогон, что под Bun", () => {
-    writeTree(dir, { "bin/gh": `#!/bin/sh\necho '[{"databaseId":41,"status":"completed","conclusion":"success","url":""}]'\n` });
+    const tree = "7b3e9a1c5d2f4068b1a2c3d4e5f60718293a4b5c";
+    const artifacts = { artifacts: [{ name: `docs-spec-${tree}`, expired: false, workflow_run: { id: 41, repository_id: 1, head_repository_id: 1 } }] };
+    const run = { id: 41, status: "completed", conclusion: "success", html_url: "" };
+    writeTree(dir, { "bin/gh": `#!/bin/sh\ncase "$2" in\n  *artifacts*) echo '${JSON.stringify(artifacts)}' ;;\n  *) echo '${JSON.stringify(run)}' ;;\nesac\n` });
     chmodSync(path.join(dir, "bin/gh"), 0o755);
     const env = { PATH: `${path.join(dir, "bin")}:${process.env.PATH}` };
-    const args = ["--commit", "4f1c0de2a9b8e7d6c5b4a3928170f6e5d4c3b2a1", "--timeout", "0"];
+    const args = ["--tree", tree, "--timeout", "0"];
     const bun = runScript("spec-run", args, dir, "bun", env);
     const node = runScript("spec-run", args, dir, "node", env);
     expect([bun.code, node.code]).toEqual([0, 0]);
