@@ -119,7 +119,7 @@ flowchart LR
 
 ## Установка
 
-Нужны `git` и Node (для `npx`); скриптам скиллов — [Bun](https://bun.sh) ≥ 1.2 (скрипты `spec` идут и под Node ≥ 22.18); скиллам `github` и `est` — [`gh`](https://cli.github.com) со scope `project` (`gh auth refresh -s project`).
+Нужны `git` и Node (для `npx`); скриптам скиллов — [Bun](https://bun.sh) ≥ 1.2 (скрипты `spec` идут и под Node ≥ 22.18); скиллам `github`, `est` и `dashboard` — [`gh`](https://cli.github.com) со scope `project` (`gh auth refresh -s project`).
 
 ```bash
 # в проект — из корня git-репозитория; копия коммитится вместе с проектом
@@ -184,15 +184,15 @@ node bin/ai-dev.mjs release --dry-run   # что войдёт в релиз; б�
 
 ### [`github`](skills/github/SKILL.md) — проект и задачи по канону
 
-Сверяет и чинит проект GitHub и правило основной ветки, заводит задачу со всеми полями одной командой, ставит метки решений по диффу PR.
+Сверяет и чинит проект GitHub и правило основной ветки, заводит задачу со всеми полями одной командой, после мержа PR закрывает её одним вызовом — факт `est`, «Готово», эпик и milestone, влитая ветка долой, — ставит метки решений по диффу PR.
 
-`github project check` · `github project fix` · `github task new | status | drop` · `github pr labels`
+`github project check` · `github project fix` · `github task new | status | drop | close` · `github pr labels`
 
 ### [`est`](skills/est/SKILL.md) — оценка по фактам
 
 Оценка — по аналогам с измеренным фактом; факт — активные часы, токены и API-эквивалент в $ из транскриптов Claude Code, Codex и облачных сессий.
 
-`est estimate` · `est fact` · `est history`
+`est estimate` · `est fact` · `est history` · `est cloud-import`
 
 ### [`dashboard`](skills/dashboard/SKILL.md) — оценка, факт и цена по времени
 
@@ -256,4 +256,4 @@ bun run typecheck
 bun run spec:doc      # docs/spec из названий тестов, --strict
 ```
 
-README — тоже часть флоу: новый скилл, команда или справочник без строки здесь валит `bun test`, ссылка на переименованный раздел канона — тоже ([`tests/standards/readme`](tests/standards/readme/readme.md)).
+README — тоже часть флоу: новый скилл, команда, подкоманда скрипта или справочник без строки здесь валит `bun test`, ссылка на переименованный раздел канона — тоже ([`tests/standards/readme`](tests/standards/readme/readme.md)).
