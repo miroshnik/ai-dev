@@ -131,7 +131,7 @@ const BASE_BRANCHES = new Set(["main", "master", "develop", "dev", "staging", "p
 //                         "project": {"owner": "<owner>", "number": <N>}}}
 // Без записи репо определяется из git remote origin текущего каталога, проект — по
 // привязке к репозиторию; paths нужны, чтобы найти транскрипты (~/.claude/projects).
-type Registry = Record<string, { paths?: string[]; project?: { owner: string; number: number | string } }>;
+export type Registry = Record<string, { paths?: string[]; project?: { owner: string; number: number | string } }>;
 
 // Файлы, которые не считаем в диффе: lock-файлы, снапшоты, минифицированное, сборка.
 const DIFF_EXCLUDE = new RegExp(
@@ -327,7 +327,7 @@ function ghRest(p: string, method = "GET", body?: unknown): Any {
 // Реестр репозиториев и проекты
 // ----------------------------------------------------------------------------
 
-function loadRegistry(): Registry {
+export function loadRegistry(): Registry {
   ensureConfigDir();
   if (!existsSync(REGISTRY_PATH)) {
     saveJson(REGISTRY_PATH, {});
@@ -348,7 +348,7 @@ function detectRepo(): string {
   return `${m[1]}/${m[2]}`;
 }
 
-function resolveRepo(arg?: string): string {
+export function resolveRepo(arg?: string): string {
   const repo = arg || detectRepo();
   if (!/^[\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+$/u.test(repo)) throw new EstError(`неверный формат --repo «${repo}», ожидается owner/repo`);
   return repo;
@@ -390,6 +390,8 @@ export interface Row {
   closedAt: number | null;
   createdAt: number | null;
   labels: string[];
+  /** Тип issue организации («Эпик»); в личном аккаунте типов нет — эпик помечен меткой `epic`. */
+  issueType?: string | null;
   est: number | null;
   fact: number | null;
   status: string | null;
@@ -637,7 +639,7 @@ export class Repo implements FactRepo {
     const q = `
         query($id:ID!,$c:String){ node(id:$id){ ... on ProjectV2{
           items(first:100,after:$c){ pageInfo{hasNextPage endCursor} nodes{ id type
-            content{ __typename ... on Issue{ id number title state stateReason closedAt createdAt
+            content{ __typename ... on Issue{ id number title state stateReason closedAt createdAt issueType{name}
               labels(first:15){nodes{name}} comments(last:25){nodes{databaseId body}} } }
             fieldValues(first:20){ nodes{ __typename
               ... on ProjectV2ItemFieldNumberValue{ number field{ ... on ProjectV2Field{name} } }
@@ -660,6 +662,7 @@ export class Repo implements FactRepo {
           closedAt: parseTs(c.closedAt),
           createdAt: parseTs(c.createdAt),
           labels: c.labels.nodes.map((l: Any) => l.name),
+          issueType: c.issueType?.name ?? null,
           est: null,
           fact: null,
           status: null,
