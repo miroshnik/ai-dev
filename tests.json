@@ -2851,7 +2851,28 @@
   "describes": [
    "Внешние системы модели (C1) проверяются кодом"
   ],
-  "name": "в тестах запрос к хосту вне модели падает, к объявленному — идёт дальше"
+  "name": "IP в литерале URL — хост внешней системы, loopback — нет"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "в тестах до сети доходят только loopback и хосты allow"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "запрос к объявленному хосту без мока падает с именем хоста и внешней системы — в сеть не идёт"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "запрос к хосту вне модели падает; публичный IP и домен .test — не локальные"
  },
  {
   "path": "tests/capabilities/spec-harness/architecture.test.ts",
@@ -2866,6 +2887,13 @@
    "Внешние системы модели (C1) проверяются кодом"
   ],
   "name": "ключ окружения внешней системы читает только её адаптер"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "отвергнутый запрос, который поймал код под тестом, роняет check() после теста"
  },
  {
   "path": "tests/capabilities/spec-harness/architecture.test.ts",
