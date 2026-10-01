@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -202,11 +202,71 @@ describe("На машину (-g) — только скиллы и хук, пра
   });
 });
 
+/**
+ * Commit, push и мерж необратимы, поэтому по умолчанию они — по «да» владельца. Проект может разрешить агенту вести
+ * задачу целиком самому: ответ хранится в манифесте проекта, а не на машине — его видят облачная сессия и любой
+ * агент. Сам вопрос в терминале тестом не покрыт: псевдотерминала без зависимостей у Node нет.
+ */
+describe("Задача целиком без спроса — настройка проекта, по умолчанию «нет»", () => {
+  const manifest = (root: string) => JSON.parse(read(path.join(root, ".agents/ai-dev.json")));
+
+  it("без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json auto: false", () => {
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("Делать задачи");
+    expect(manifest(proj).auto).toBe(false);
+  });
+
+  it("--auto пишет auto: true, повторный install без флага его сохраняет, --no-auto возвращает false", () => {
+    expect(install(["--auto"]).code).toBe(0);
+    expect(manifest(proj).auto).toBe(true);
+    expect(install().code).toBe(0);
+    expect(manifest(proj).auto).toBe(true);
+    expect(install(["--no-auto"]).code).toBe(0);
+    expect(manifest(proj).auto).toBe(false);
+  });
+
+  it("install -g настройку не спрашивает и не хранит — в ~/.agents/ai-dev.json поля auto нет", () => {
+    const r = install(["-g"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("Делать задачи");
+    expect(manifest(home).skills).toEqual(SKILLS);
+    expect(manifest(home)).not.toHaveProperty("auto");
+    expect(existsSync(path.join(proj, ".agents"))).toBe(false);
+  });
+
+  /** Клон ai-dev — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
+  it("в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto: с --auto — true, без флага и терминала — прежнее значение", () => {
+    const clone = path.join(tmp, "clone");
+    writeTree(clone, { "package.json": JSON.stringify({ name: "ai-dev" }) });
+    execFileSync("git", ["init", "-q"], { cwd: clone });
+    expect(install(["--auto"], clone).code).toBe(0);
+    expect(manifest(clone)).toEqual({ auto: true });
+    expect(install([], clone).code).toBe(0);
+    expect(manifest(clone)).toEqual({ auto: true });
+    expect(install(["--no-auto"], clone).code).toBe(0);
+    expect(manifest(clone)).toEqual({ auto: false });
+    expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
+    expect(readdirSync(path.join(clone, ".agents"))).toEqual(["ai-dev.json"]);
+  });
+});
+
 describe("Неверный вызов — код 2 с объяснением", () => {
   it("--link без -g — код 2: в проект коммитится копия, не ссылка на локальный клон", () => {
     const r = install(["--link"]);
     expect(r.code).toBe(2);
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
+  });
+
+  it("--auto с -g или вместе с --no-auto — код 2: настройка одна и она у проекта", () => {
+    for (const args of [["-g", "--auto"], ["-g", "--no-auto"], ["--auto", "--no-auto"]]) {
+      const r = install(args);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("настройка проекта");
+      expect(r.stderr).not.toContain("неизвестный флаг");
+    }
+    expect(existsSync(path.join(proj, ".agents"))).toBe(false);
+    expect(existsSync(path.join(home, ".agents"))).toBe(false);
   });
 
   it("неизвестная команда — код 2 и справка", () => {
