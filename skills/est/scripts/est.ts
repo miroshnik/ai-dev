@@ -24,7 +24,8 @@ type Any = any;
 
 const HOME = os.homedir();
 // Личное состояние скилла (реестр репозиториев, цены, кэш) — нейтральный к агенту каталог:
-// $AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev. Старый ~/.claude/est переезжает автоматически
+// $AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev — выражение одно на все скрипты (стандарт config-dir ai-dev): github
+// закрепляет задачу за сессией в том же каталоге. Старый ~/.claude/est переезжает автоматически
 // (см. ensureConfigDir), на его месте остаётся симлинк.
 export const EST_DIR = process.env.AI_DEV_CONFIG_DIR || path.join(HOME, ".config", "ai-dev");
 const LEGACY_EST_DIR = path.join(HOME, ".claude", "est");
@@ -36,6 +37,8 @@ const PROJECTS_DIR = path.join(HOME, ".claude", "projects");
 const CODEX_DIRS = [path.join(HOME, ".codex", "sessions"), path.join(HOME, ".codex", "archived_sessions")];
 export const CLOUD_DIR = path.join(EST_DIR, "cloud");
 
+// Перенос — только пока каталога нет: github до переноса кладёт закрепления в старый каталог и новый не создаёт
+// (github.ts, configDir) — иначе реестр и цены остались бы в старом.
 function ensureConfigDir(): void {
   let legacyDir = false;
   try {
