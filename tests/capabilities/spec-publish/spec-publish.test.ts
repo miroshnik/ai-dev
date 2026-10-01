@@ -74,6 +74,41 @@ describe("Документация публикуется в ветку spec, а
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "ls-tree", "-r", "--name-only", "origin/spec")).toBe("README.md");
   });
+
+  // публикации на мерж PR приходят не по порядку мержей: job раннего PR может дождаться своего прогона позже
+  it("в ветке spec публикация из более нового коммита — старая поверх не публикуется: код 0, «уже новее», ветка не меняется", () => {
+    const old = git(work, "rev-parse", "HEAD");
+    const fresh = repo.commit({ "src.ts": "x\n" }, "next");
+    docs({ "README.md": "# v2\n" });
+    expect(publish("--source", fresh).code).toBe(0);
+    git(work, "fetch", "-q", "origin", "spec");
+    const published = git(work, "rev-parse", "origin/spec");
+    docs({ "README.md": "# v1\n" });
+    const r = publish("--source", old);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe(`spec-publish: пропуск — origin/spec уже новее: опубликовано из ${fresh.slice(0, 12)}\n`);
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "rev-parse", "origin/spec")).toBe(published);
+    expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
+  });
+
+  // вариант с CI на main: checkout без истории — прежнего коммита main, из которого опубликовано, в клоне нет
+  it("исходник опубликованного локально неизвестен (мелкий клон) — публикуется, как раньше", () => {
+    docs({ "README.md": "# v1\n" });
+    expect(publish().code).toBe(0);
+    const next = repo.commit({ "src.ts": "x\n" }, "next");
+    git(work, "push", "-q", "origin", "main");
+    const shallow = path.join(dir, "shallow");
+    git(dir, "clone", "-q", "--depth", "1", `file://${path.join(dir, "remote.git")}`, shallow);
+    expect(git(shallow, "rev-list", "--count", "HEAD")).toBe("1");
+    writeTree(shallow, { "docs/spec/README.md": "# v2\n" });
+    const r = runScript("spec-publish", [], shallow);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("опубликовано");
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
+    expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${next}`);
+  });
 });
 
 /** Проверяю то, что дошло до читателя: ветка на «GitHub», а не свой вывод. */
@@ -98,68 +133,113 @@ describe("--check сверяет опубликованное с собранн�
   });
 });
 
-const HEAD = "4f1c0de2a9b8e7d6c5b4a3928170f6e5d4c3b2a1";
+const TREE = "7b3e9a1c5d2f4068b1a2c3d4e5f60718293a4b5c";
+const OTHER_TREE = "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567";
+// id репозитория проекта; у прогона PR из форка head_repository_id — id форка
+const REPO = 1001;
+const FORK = 2002;
 
-// `gh` — внешний край, подменяется он: ответы `gh run list` — массивы JSON в runs.json, по одному на опрос, последний
-// повторяется; вызовы — в calls. Выдача с фильтром по статусу отстаёт, как у GitHub: прогонов в ней ещё нет.
+// `gh` — внешний край, подменяется он. Два вызова `gh api` (REST GitHub Actions): артефакты репозитория с фильтром по
+// имени — из artifacts.json; прогон по id — из runs.json, `{ id: [ответ на каждый опрос…] }`, последний повторяется.
+// Вызовы — в calls.
 const FAKE_GH = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_GH/calls"
-[ "$1 $2" = "run list" ] || { echo "fake gh: $*" >&2; exit 1; }
-case " $* " in *" --status "*) echo '[]'; exit 0 ;; esac
-n=$(cat "$FAKE_GH/n" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_GH/n"
-jq -c --argjson n "$n" '.[$n] // .[-1]' "$FAKE_GH/runs.json"
+[ "$1" = api ] || { echo "fake gh: $*" >&2; exit 1; }
+case "$2" in
+  "repos/{owner}/{repo}/actions/artifacts?name="*)
+    jq -c --arg name "\${2#*name=}" '[.[] | select(.name == $name)] | { total_count: length, artifacts: . }' "$FAKE_GH/artifacts.json" ;;
+  "repos/{owner}/{repo}/actions/runs/"*)
+    id="\${2##*/}"; n=$(cat "$FAKE_GH/n-$id" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_GH/n-$id"
+    jq -ce --arg id "$id" --argjson n "$n" '.[$id] | (.[$n] // .[-1])' "$FAKE_GH/runs.json" ;;
+  *) echo "fake gh: $*" >&2; exit 1 ;;
+esac
 `;
 
-interface GhRun { databaseId: number; status: string; conclusion: string | null; url: string }
-const ghRun = (databaseId: number, status: string, conclusion: string | null = null): GhRun => ({ databaseId, status, conclusion, url: `https://github.test/runs/${databaseId}` });
+interface Artifact { id: number; name: string; expired: boolean; workflow_run: { id: number; repository_id: number; head_repository_id: number } }
+const artifact = (run: number, over: { tree?: string; expired?: boolean; from?: number } = {}): Artifact => ({
+  id: 9000 + run,
+  name: `docs-spec-${over.tree ?? TREE}`,
+  expired: over.expired ?? false,
+  workflow_run: { id: run, repository_id: REPO, head_repository_id: over.from ?? REPO },
+});
 
-/** Шаг workflow публикации на мерж PR: прогон CI головы PR по ответам `gh` на каждый опрос. */
-function findRun(polls: GhRun[][], ...args: string[]) {
+interface WorkflowRun { id: number; status: string; conclusion: string | null; html_url: string }
+const workflowRun = (id: number, status: string, conclusion: string | null = null): WorkflowRun => ({ id, status, conclusion, html_url: `https://github.test/runs/${id}` });
+const done = (id: number, conclusion = "success") => workflowRun(id, "completed", conclusion);
+
+/** Шаг workflow публикации на мерж PR: прогон, проверивший дерево мержа, по ответам `gh api`. */
+function findRun(github: { artifacts: Artifact[]; runs?: Record<number, WorkflowRun[]> }, ...args: string[]) {
   const bin = path.join(dir, "bin");
-  mkdirSync(bin, { recursive: true });
+  rmSync(bin, { recursive: true, force: true });
+  mkdirSync(bin);
   writeFileSync(path.join(bin, "gh"), FAKE_GH);
   chmodSync(path.join(bin, "gh"), 0o755);
-  writeFileSync(path.join(bin, "runs.json"), JSON.stringify(polls));
-  const r = runScript("spec-run", ["--workflow", "ci.yml", "--commit", HEAD, "--interval", "0", ...args], work, "bun", { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin });
+  writeFileSync(path.join(bin, "artifacts.json"), JSON.stringify(github.artifacts));
+  writeFileSync(path.join(bin, "runs.json"), JSON.stringify(github.runs ?? {}));
+  const r = runScript("spec-run", ["--tree", TREE, "--interval", "0", ...args], work, "bun", { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin });
   const log = path.join(bin, "calls");
   return { ...r, calls: existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [] };
 }
 
 /**
- * Без CI на `main` `docs/spec` берётся из артефакта прогона CI головы PR (`ci.md`, «Без CI на main»). Выдача
- * `gh run list --status success` отстаёт от завершения прогона на минуты: публикация сразу после мержа его не видела и
- * падала, ветка `spec` отставала до следующего мержа. Поэтому прогон ищется без фильтра по статусу, по его исходу.
+ * Без CI на `main` `docs/spec` берётся из артефакта прогона PR (`ci.md`, «Без CI на main»). Прогон PR проверяет
+ * merge-ref — дерево, каким `main` станет после мержа, — и называет артефакт по этому дереву. У коммита мержа дерево
+ * то же, только если между стартом прогона и мержем в `main` ничего не влили: тогда `main` проверен целиком, и
+ * публикуется ровно собранное из него. У отставшего PR такого артефакта нет: публикация из его прогона откатила бы
+ * ветку `spec` — в ней не стало бы страниц PR, влитого раньше, — поэтому она пропускается, а не падает.
  */
-describe("Без CI на main прогон CI головы PR находится по исходу, а не по отстающему списку", () => {
-  it("прогон CI головы PR находится, даже если список прогонов по статусу отстаёт", () => {
-    const r = findRun([[ghRun(41, "completed", "success")]], "--timeout", "0");
+describe("Без CI на main публикуется только дерево, которое целиком проверил зелёный прогон", () => {
+  const ARTIFACTS = `api repos/{owner}/{repo}/actions/artifacts?name=docs-spec-${TREE}`;
+  const SKIPPED = `spec-run: дерево main ${TREE.slice(0, 12)} не проверено целиком — публикация пропущена: `;
+
+  it("артефакт дерева мержа выложил зелёный прогон этого репозитория — id прогона в stdout", () => {
+    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [done(41)] } }, "--timeout", "0");
     expect([r.code, r.stdout]).toEqual([0, "41\n"]);
-    expect(r.calls).toEqual([`run list --workflow ci.yml --commit ${HEAD} --json databaseId,status,conclusion,url`]);
+    expect(r.calls).toEqual([ARTIFACTS, "api repos/{owner}/{repo}/actions/runs/41"]);
     expect(r.stderr).toContain("https://github.test/runs/41");
   });
 
-  it("из нескольких прогонов на голове PR берётся успешный", () => {
-    const r = findRun([[ghRun(43, "completed", "cancelled"), ghRun(42, "completed", "success"), ghRun(41, "completed", "failure")]], "--timeout", "0");
+  it("артефакта с деревом мержа нет или он истёк — код 0, stdout пуст, «дерево main не проверено целиком — публикация пропущена»", () => {
+    for (const artifacts of [[], [artifact(40, { tree: OTHER_TREE })], [artifact(41, { expired: true })]]) {
+      const r = findRun({ artifacts, runs: { 40: [done(40)], 41: [done(41)] } }, "--timeout", "60");
+      expect([r.code, r.stdout]).toEqual([0, ""]);
+      expect(r.stderr).toBe(`${SKIPPED}артефакта docs-spec-${TREE} нет\n`);
+      expect(r.calls).toEqual([ARTIFACTS]);
+    }
+  });
+
+  // артефакт с любым именем может выложить и прогон PR из форка: его содержимое — не проверенное дерево main
+  it("артефакт выложил прогон форка — не считается, публикация пропущена", () => {
+    const r = findRun({ artifacts: [artifact(41, { from: FORK })], runs: { 41: [done(41)] } }, "--timeout", "60");
+    expect([r.code, r.stdout]).toEqual([0, ""]);
+    expect(r.stderr).toBe(`${SKIPPED}артефакта docs-spec-${TREE} нет\n`);
+    expect(r.calls).toEqual([ARTIFACTS]);
+  });
+
+  // артефакт выкладывается посреди прогона: его наличие зелёный прогон не доказывает
+  it("прогон с артефактом завершился неуспешно — публикация пропущена, в сообщении исход прогона", () => {
+    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [done(41, "failure")] } }, "--timeout", "60");
+    expect([r.code, r.stdout]).toEqual([0, ""]);
+    expect(r.stderr).toBe(`${SKIPPED}41 failure https://github.test/runs/41\n`);
+    expect(r.calls).toHaveLength(2);
+  });
+
+  it("из нескольких прогонов одного дерева берётся зелёный", () => {
+    const runs = { 43: [done(43, "cancelled")], 42: [done(42)], 41: [done(41, "failure")] };
+    const r = findRun({ artifacts: [artifact(43), artifact(42), artifact(41)], runs }, "--timeout", "0");
     expect([r.code, r.stdout]).toEqual([0, "42\n"]);
   });
 
-  it("прогон CI головы PR ещё идёт — публикация ждёт его завершения", () => {
-    const r = findRun([[], [ghRun(41, "queued")], [ghRun(41, "in_progress")], [ghRun(41, "completed", "success")]], "--timeout", "60");
+  it("прогон с артефактом ещё идёт — публикация ждёт его завершения", () => {
+    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [workflowRun(41, "queued"), workflowRun(41, "in_progress"), done(41)] } }, "--timeout", "60");
     expect([r.code, r.stdout]).toEqual([0, "41\n"]);
-    expect(r.calls).toHaveLength(4);
-    expect(r.stderr).toContain("прогон ci.yml на 4f1c0de2a9b8: 41 in_progress — ждём");
+    expect(r.calls.filter((c) => c.endsWith("/runs/41"))).toHaveLength(3);
+    expect(r.stderr).toContain(`дерево main ${TREE.slice(0, 12)}: прогон 41 in_progress — ждём`);
   });
 
-  it("прогон CI головы PR завершился неуспешно — ошибка с исходом прогона, без ожидания", () => {
-    const r = findRun([[ghRun(41, "completed", "failure")]], "--timeout", "5");
+  it("прогон с артефактом не завершился к потолку ожидания — ошибка, код 1", () => {
+    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [workflowRun(41, "in_progress")] } }, "--timeout", "0");
     expect([r.code, r.stdout]).toEqual([1, ""]);
-    expect(r.calls).toHaveLength(1);
-    expect(r.stderr).toContain("завершился неуспешно — публиковать нечего: 41 failure https://github.test/runs/41");
-  });
-
-  it("прогона CI на голове PR нет — ошибка по потолку ожидания", () => {
-    const r = findRun([[]], "--timeout", "0");
-    expect([r.code, r.stdout]).toEqual([1, ""]);
-    expect(r.stderr).toContain("нет прогона ci.yml на 4f1c0de2a9b8 за 0 с — публиковать нечего");
+    expect(r.stderr).toContain(`дерево main ${TREE.slice(0, 12)}: прогон 41 не завершился за 0 с`);
   });
 });
