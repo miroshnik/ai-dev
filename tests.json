@@ -3907,6 +3907,22 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет",
    "примеры"
   ],
+  "name": "подкоманда названа отдельно или в перечне через «|»; перечень без неё и слово вне кода — нарушение"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет",
+   "примеры"
+  ],
+  "name": "подкоманды — слова справки после имени скрипта до первого аргумента, без повторов"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет",
+   "примеры"
+  ],
   "name": "ссылка на удалённый скилл — нарушение"
  },
  {
@@ -3952,6 +3968,83 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: команда установщика update названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда est cloud-import названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда est estimate названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда est fact названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда est history названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github pr labels названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github project check названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github project fix названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task close названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task drop названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task new названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task status названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -4098,6 +4191,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "нарушитель не проходит: подкоманда, которой README не называет"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "нарушитель не проходит: скилл, которого README не называет"
  },
  {
@@ -4106,6 +4206,20 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "относительные ссылки и якоря README ведут на существующие файлы и разделы"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "реестр «подкоманды скриптов скиллов» находит github task close, est cloud-import"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "реестр «подкоманды скриптов скиллов» не пуст"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
