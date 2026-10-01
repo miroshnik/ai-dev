@@ -14,7 +14,7 @@ interface Core {
   limit: number;
 }
 const CORE: Core[] = [
-  { file: "AGENTS.md", limit: 30 * 1024 },
+  { file: "AGENTS.md", limit: 32 * 1024 },
   { file: "claude/CLAUDE.md", limit: 5 * 1024 },
 ];
 
