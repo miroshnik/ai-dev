@@ -3873,6 +3873,87 @@
   "name": "скрипты скиллов ai-dev, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md"
  },
  {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "примеры"
+  ],
+  "name": "комментарий и текст справки (~/.config/ai-dev, $AI_DEV_CONFIG_DIR) — не обращение к каталогу"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "примеры"
+  ],
+  "name": "правило есть, а рядом второй путь к каталогу — нарушение со строкой"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "примеры"
+  ],
+  "name": "правило с окружением и домашним каталогом под любым именем — чисто"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "примеры"
+  ],
+  "name": "пустая переменная — тоже каталог по умолчанию: `??` вместо `||` — нарушение"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "skills/est/scripts/est.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "skills/github/scripts/github.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "вне охвата: bin/ai-dev.mjs"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "нарушитель не проходит: скрипт со своим путём каталога личной конфигурации"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "нарушитель не проходит: скрипт читает AI_DEV_CONFIG_DIR, а каталог по умолчанию у него свой"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/ai-dev.mjs"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» не пуст"
+ },
+ {
   "path": "tests/standards/node-runtime/node-runtime.test.ts",
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
