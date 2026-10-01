@@ -518,6 +518,29 @@ describe("Тесты харнесса — в диффе спеки: назван
     expect(diffFrom("base", "--no-merge-base", "--report", "r.json", "--spec-branch", "spec").stdout).toContain(note);
   });
 
+  // ветку spec пишет сам spec-publish: мерж без изменений спеки он подтверждает новым `Source:` — иначе строка о
+  // разрыве шла бы после каждого такого мержа и настоящий пропуск публикации в ней бы не читался
+  it("мерж не менял спеку, публикация подтверждена — под «База» разрыва нет", () => {
+    const origin = tmpDir();
+    try {
+      repo.git("init", "-q", "--bare", origin.dir);
+      repo.git("remote", "add", "origin", origin.dir);
+      repo.commit({ [STD]: registry, ".gitignore": "docs/spec/\n" });
+      writeTree(dir, { "docs/spec/tests.json": JSON.stringify([t("a пишет аудит")]) });
+      expect(runScript("spec-publish", [], dir).code).toBe(0);
+      const base = repo.commit({ "src/app.ts": "export const a = 1;\n" }, "мерж без изменений спеки");
+      expect(runScript("spec-publish", [], dir).code).toBe(0);
+      repo.commit({ [STD]: registry + "// реестр сменился\n" });
+      report(["a пишет аудит", "c пишет аудит"]);
+      const r = diffFrom(base, "--report", "r.json", "--spec-branch", "origin/spec");
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(`_База: \`${base} (merge-base)\`._\n\n_Тесты харнесса — по отчёту; база — ветка origin/spec (исходник ${base.slice(0, 12)})._\n`);
+      expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/standards/audit` · c пишет аудит");
+    } finally {
+      origin.cleanup();
+    }
+  });
+
   it("перевод примеров на реестр не выглядит в диффе спеки как одни удаления", () => {
     const base = repo.commit({ [STD]: ts(`it("a пишет аудит", () => {});\nit("b пишет аудит", () => {});`) });
     publishSpec(base, [t("a пишет аудит"), t("b пишет аудит")]);

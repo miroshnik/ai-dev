@@ -50,20 +50,41 @@ describe("Документация публикуется в ветку spec, а
     expect(r.stderr).toContain("опубликовано");
   });
 
-  it("повтор без изменений — без нового коммита; изменение — новый коммит поверх, история публикаций сохраняется", () => {
+  it("повтор из того же коммита — без нового коммита", () => {
     docs({ "README.md": "# v1\n" });
     expect(publish().code).toBe(0);
     const again = publish();
     expect(again.code).toBe(0);
-    expect(again.stderr).toContain("без изменений");
+    expect(again.stderr).toBe("spec-publish: без изменений — origin/spec уже совпадает с docs/spec\n");
     git(work, "fetch", "-q", "origin", "spec");
     expect(remoteLog().split("\n")).toHaveLength(1);
+  });
+
+  it("изменение — новый коммит поверх, история публикаций сохраняется", () => {
+    docs({ "README.md": "# v1\n" });
+    expect(publish().code).toBe(0);
     repo.commit({ "src.ts": "x\n" }, "next");
     docs({ "README.md": "# v2\n" });
     expect(publish().code).toBe(0);
     git(work, "fetch", "-q", "origin", "spec");
     expect(remoteLog().split("\n")).toHaveLength(2);
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
+  });
+
+  // мерж, не менявший спеку: без подтверждения `Source:` отставал бы от main, и spec-diff называл бы это пропуском публикации
+  it("то же содержимое из нового коммита — коммит с тем же деревом и новым Source: ветка называет последний проверенный main", () => {
+    docs({ "README.md": "# v1\n" });
+    expect(publish().code).toBe(0);
+    git(work, "fetch", "-q", "origin", "spec");
+    const first = git(work, "rev-parse", "origin/spec");
+    const next = repo.commit({ "src.ts": "x\n" }, "next");
+    const r = publish();
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe(`spec-publish: без изменений — origin/spec подтверждена для ${next.slice(0, 12)}\n`);
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "rev-parse", "origin/spec^")).toBe(first);
+    expect(git(work, "rev-parse", "origin/spec^{tree}")).toBe(git(work, "rev-parse", `${first}^{tree}`));
+    expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${next}`);
   });
 
   it("удалённая страница исчезает из ветки", () => {
@@ -92,6 +113,21 @@ describe("Документация публикуется в ветку spec, а
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
   });
 
+  // сторож от перекоррекции: подтверждение того же содержимого не уводит `Source:` назад
+  it("то же содержимое из коммита старше опубликованного — «уже новее», Source: назад не уходит", () => {
+    const old = git(work, "rev-parse", "HEAD");
+    const fresh = repo.commit({ "src.ts": "x\n" }, "next");
+    docs({ "README.md": "# v1\n" });
+    expect(publish("--source", fresh).code).toBe(0);
+    git(work, "fetch", "-q", "origin", "spec");
+    const published = git(work, "rev-parse", "origin/spec");
+    const r = publish("--source", old);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe(`spec-publish: пропуск — origin/spec уже новее: опубликовано из ${fresh.slice(0, 12)}\n`);
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "rev-parse", "origin/spec")).toBe(published);
+  });
+
   // вариант с CI на main: checkout без истории — прежнего коммита main, из которого опубликовано, в клоне нет
   it("исходник опубликованного локально неизвестен (мелкий клон) — публикуется, как раньше", () => {
     docs({ "README.md": "# v1\n" });
@@ -107,6 +143,22 @@ describe("Документация публикуется в ветку spec, а
     expect(r.stderr).toContain("опубликовано");
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
+    expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${next}`);
+  });
+
+  it("то же содержимое из нового коммита в мелком клоне — Source: обновляется и там", () => {
+    docs({ "README.md": "# v1\n" });
+    expect(publish().code).toBe(0);
+    const next = repo.commit({ "src.ts": "x\n" }, "next");
+    git(work, "push", "-q", "origin", "main");
+    const shallow = path.join(dir, "shallow");
+    git(dir, "clone", "-q", "--depth", "1", `file://${path.join(dir, "remote.git")}`, shallow);
+    writeTree(shallow, { "docs/spec/README.md": "# v1\n" });
+    const r = runScript("spec-publish", [], shallow);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe(`spec-publish: без изменений — origin/spec подтверждена для ${next.slice(0, 12)}\n`);
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(remoteLog().split("\n")).toHaveLength(2);
     expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${next}`);
   });
 });
