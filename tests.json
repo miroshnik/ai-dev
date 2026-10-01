@@ -910,51 +910,51 @@
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
-  ],
-  "name": "strict выключен или без обязательных чеков — ❌ с причиной; чужое правило fix не правит, а ставит свой ruleset"
- },
- {
-  "path": "tests/capabilities/github-project/github-project.test.ts",
-  "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
   "name": "обязательный чек не пришёл на открытый PR с завершёнными чеками — ❌, PR ждал бы его вечно; fix убирает его и добавляет новый стабильный"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
-  "name": "правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, strict, обязательные — зелёные на всех последних влитых PR, обход — admin"
+  "name": "правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, без strict, обязательные — зелёные на всех последних влитых PR, обход — admin"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
   "name": "приватный репозиторий на Free — ➖ с причиной от GitHub, а не ❌; fix ничего не ставит"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
-  "name": "свой ruleset выключен, без strict или без обхода admin — ❌ по каждой причине; fix возвращает всё одной правкой"
+  "name": "свой ruleset выключен, со strict или без обхода admin — ❌ по каждой причине; fix правит всё одной правкой"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
-  "name": "у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего, strict без чеков не действует"
+  "name": "у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками"
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
-  "name": "чужое правило со strict и обязательными чеками — ✅, свой ruleset не дублирует"
+  "name": "чужое правило без обязательных чеков — ❌; fix его не правит, а ставит свой ruleset"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
+  ],
+  "name": "чужое правило с обязательными чеками — ✅, со strict или без; свой ruleset не дублирует"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -1697,62 +1697,6 @@
    "Неверный вызов — код 2 с объяснением"
   ],
   "name": "неизвестная команда — код 2 и справка"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "PR не открыт в основную ветку — ошибка"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "PR с красным CI, черновик и PR без ветки очередь не держат"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "других PR в фазе мержа нет — ветка голова, предупреждения нет"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "другой PR репозитория с идущим CI — ветка не голова, предупреждение называет PR впереди"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "зелёный PR ждёт мержа и PR, чьи чеки ещё не зарегистрированы, — держат очередь"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "оба PR актуальны и в CI — голова тот, у кого номер меньше; ему — кто за ним"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "отставший от основной ветки PR очередь не держит"
- },
- {
-  "path": "tests/capabilities/merge-queue/merge-queue.test.ts",
-  "describes": [
-   "Push, CI и мерж — только у головы очереди мержа"
-  ],
-  "name": "у ветки ещё нет PR — впереди все PR в фазе мержа; PR ветки находится по её имени"
  },
  {
   "path": "tests/capabilities/release/release.test.ts",
