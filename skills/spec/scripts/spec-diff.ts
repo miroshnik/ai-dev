@@ -670,7 +670,7 @@ function specTestsAt(branch: string, base: string, top: string): { tests: Test[]
   }
   for (const rec of log.split("\x1e")) {
     const [sha, body = ""] = rec.trim().split("\x1f");
-    const source = /^Source: ([0-9a-f]{40})$/m.exec(body)?.[1];
+    const source = L.sourceOf(body);
     if (!sha || !source) continue;
     if (source !== base && spawnSync("git", ["merge-base", "--is-ancestor", source, base], { cwd: top }).status !== 0) continue;
     try {

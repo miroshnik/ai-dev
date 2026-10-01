@@ -22,6 +22,8 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
+import { sourceOf } from "./speclib.ts";
+
 const USAGE = "spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--check] [--root DIR]";
 
 // коммит публикации без настроенного git user (CI) — от имени бота GitHub Actions
@@ -124,7 +126,7 @@ export function main(argv: string[]): number {
     const source = v.source ?? git(root, ["rev-parse", "HEAD"]);
     // публикации приходят не по порядку мержей: поверх собранного из потомка старое не публикуется. Сравнить можно
     // только при истории: в мелком клоне (CI на main) опубликованный исходник неизвестен — публикуется, как всегда
-    const was = head ? /^Source: ([0-9a-f]{40,64})$/m.exec(git(root, ["log", "-1", "--format=%B", head]))?.[1] : undefined;
+    const was = head ? sourceOf(git(root, ["log", "-1", "--format=%B", head])) : undefined;
     const sha = tryGit(root, ["rev-parse", "--verify", "-q", `${source}^{commit}`]);
     if (was && sha && sha !== was && tryGit(root, ["merge-base", "--is-ancestor", sha, was]) !== null) {
       console.error(`spec-publish: пропуск — ${v.remote}/${v.branch} уже новее: опубликовано из ${was.slice(0, 12)}`);
