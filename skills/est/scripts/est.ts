@@ -3082,6 +3082,23 @@ export function forecast(facts: number[], toks: number[], usds: number[], mult: 
   return { raw, h: roundScale(raw), tok: toks.length ? median(toks) * tokMult : null, usd: usds.length ? median(usds) * tokMult : null };
 }
 
+const isPublic = (full: string): boolean => ghRest(`repos/${full}`)?.visibility === "public";
+
+/**
+ * Аналоги из непубличных репо, которые оценка назвала бы в публичном: комментарий «Оценка» пишет их как owner/repo#N,
+ * а прошлую версию комментария GitHub хранит в истории правок — перезапись утечку не отменяет.
+ */
+function hiddenAnalogs(repo: Repo, analogs: (number | string)[]): string[] {
+  const other = analogs.filter((a): a is string => typeof a === "string");
+  if (!other.length || !isPublic(repo.full)) return [];
+  const pub = new Map<string, boolean>();
+  return other.filter((a) => {
+    const full = a.split("#")[0]!;
+    if (!pub.has(full)) pub.set(full, isPublic(full));
+    return !pub.get(full);
+  });
+}
+
 /**
  * Оценка = прогноз по фактам аналогов: часы, токены и стоимость — медианы фактов × поправка.
  * --hours — только экспертная оценка, когда аналогов с фактом нет (доверие C). k справочный.
@@ -3095,7 +3112,6 @@ function cmdEstimate(args: EstimateArgs): void {
   if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
   const tokMult = args.tokMult ?? args.mult;
   const repo = new Repo(resolveRepo(args.repo), registry);
-  const meta = repo.projectMeta();
   // аналоги: номер issue этого репо (254) или задача другого репо из реестра (owner/repo#254)
   const analogs: (number | string)[] = []; // number — этот репо; "owner/repo#N" — другой
   for (let a of args.analogs.split(",")) {
@@ -3113,6 +3129,13 @@ function cmdEstimate(args: EstimateArgs): void {
     if (n === args.number) throw new EstError(`аналог #${a} — это сама оцениваемая задача`);
     if (!analogs.includes(n)) analogs.push(n);
   }
+  const hidden = hiddenAnalogs(repo, analogs);
+  if (hidden.length) {
+    const msg = `${repo.full} — публичный репо, а ${plural(hidden.length, "аналог", "аналоги", "аналоги")} ${hidden.join(", ")} — из непубличного: имя и номер чужой задачи остались бы в комментарии «Оценка» и в истории его правок. Возьми аналоги из ${repo.full} или оцени экспертно (--hours)`;
+    if (args.write) throw new EstError(msg); // до любой записи
+    console.error(`предупреждение: ${msg}; с --write — отказ`);
+  }
+  const meta = repo.projectMeta();
   const [rows, c, level] = calibForEstimate(repo, registry);
   const byNum = new Map(rows.map((r) => [r.number, r]));
   const facts: number[] = [];
