@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { main, realRun } from "../../../skills/github/scripts/github.ts";
 import type { Io } from "../../../skills/github/scripts/github.ts";
@@ -28,6 +28,21 @@ function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) 
 const byOp = (f: FakeGitHub, op: string) => f.mutations.filter((m) => m.op === op).map((m) => m.input);
 const optionId = (f: FakeGitHub, name: string) => f.field("Status").options.find((o: { name: string }) => o.name === name).id;
 const statusSet = (f: FakeGitHub) => byOp(f, "SetItemStatus").map((m) => [f.items().find((it) => it.id === m.itemId)?.content.number, f.field("Status").options.find((o: { id: string }) => o.id === m.value.singleSelectOptionId).name]);
+
+// Сессия агента: её id и каталог конфигурации скрипт берёт из окружения; каталог в тестах — временный
+const SESSION = "0b1f6c1e-7a52-4f0e-9d3a-2c4e8a9b5d10";
+const temp: (() => void)[] = [];
+afterEach(() => {
+  for (const cleanup of temp.splice(0)) cleanup();
+});
+function scratch(): string {
+  const { dir, cleanup } = tmpDir();
+  temp.push(cleanup);
+  return dir;
+}
+const inSession = (config: string, id = SESSION): Partial<Io> => ({ env: { CLAUDE_CODE_SESSION_ID: id, AI_DEV_CONFIG_DIR: config } });
+const pinFile = (config: string, id = SESSION) => path.join(config, "sessions", id);
+const pinned = (config: string, id = SESSION) => readFileSync(pinFile(config, id), "utf8").trim();
 
 describe("task new заводит задачу со всем сразу", () => {
   it("подзадача эпика: заголовок с префиксом эпика, в проекте в Бэклог, sub-issue, blocked by, следующий шаг — оценка", () => {
@@ -96,6 +111,20 @@ describe("task new заводит задачу со всем сразу", () => 
     const r = task(f, ["new", "--title", "Экспорт", "--milestone", "GitHub · 1 · Проект"]);
     expect(byOp(f, "CreateIssue")[0].milestoneId).toBe(m.id);
     expect(r.out).toContain("+ milestone «GitHub · 1 · Проект»");
+  });
+
+  // заведённую задачу сессия с закреплённой задачей сама не возьмёт (`task status` откажет) — вывод сразу называет, куда её нести
+  it("в сессии с закреплённой задачей «Дальше:» называет новую сессию и первый промпт #M", () => {
+    const f = new FakeGitHub(REC);
+    const io = inSession(scratch());
+    expect(task(f, ["new", "--title", "Импорт"], REPO, io).out).not.toContain("сессия ведёт");
+    task(f, ["status", "49", "В работе"], REPO, io);
+    const r = task(f, ["new", "--title", "Экспорт"], REPO, io);
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n").slice(-2)).toEqual([
+      "Дальше: оценка — скилл est (est estimate 51 --type <тип ветки> --analogs …).",
+      "Дальше: сессия ведёт miroshnik/ai-dev#49 — #51 в новой сессии, первый промпт: #51.",
+    ]);
   });
 
   describe("ошибка до создания — задача не заводится наполовину", () => {
@@ -390,6 +419,143 @@ describe("task status двигает задачу по доске, эпик — 
     expect(r.code).toBe(2);
     expect(r.err).toContain("статус: Бэклог, В работе, Готово");
     expect(f.mutations).toEqual([]);
+  });
+});
+
+/**
+ * Сессия ведёт одну задачу: по сессии `est` считает факт, а вторая задача в той же сессии отдаёт своё время первой.
+ * Правило прозой не держалось, поэтому первая задача «В работе» закрепляется за сессией файлом
+ * `<каталог конфигурации>/sessions/<CLAUDE_CODE_SESSION_ID>`, другой задаче скрипт отказывает до изменений. Закрепление
+ * не снимает ни одна команда: ошибочное убирает человек, удалив файл.
+ */
+describe("task status берёт в работу одну задачу на сессию", () => {
+  it("первая задача «В работе» закрепляется за сессией — файл sessions/<id сессии> в каталоге конфигурации называет owner/repo#N", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    const r = task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"]]);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+  });
+
+  it("другая задача «В работе» в той же сессии — отказ (код 2) до изменений: закреплённая задача, первый промпт новой сессии и файл закрепления — одной строкой", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    const r = task(f, ["status", "42", "В работе"], REPO, inSession(config));
+    expect(r.code).toBe(2);
+    expect(r.err).toBe(`ошибка: сессия ведёт miroshnik/ai-dev#49; #42 — в новой сессии, первый промпт: #42 (закрепление: ${pinFile(config)} — ошибочное снимает человек)`);
+    expect(r.out).toBe("");
+    expect(statusSet(f)).toEqual([[49, "В работе"]]);
+    expect(f.mutations).toHaveLength(1);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+  });
+
+  it("та же задача «В работе» повторно — без отказа", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    const r = task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"], [49, "В работе"]]);
+  });
+
+  it("задача с тем же номером в другом репозитории — другая задача: отказ", () => {
+    const config = scratch();
+    task(new FakeGitHub(REC), ["status", "49", "В работе"], REPO, inSession(config));
+    const other = new FakeGitHub(asOrg(REC));
+    const r = task(other, ["status", "49", "В работе"], ORG, inSession(config));
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("сессия ведёт miroshnik/ai-dev#49; #49 — в новой сессии, первый промпт: #49");
+    expect(other.mutations).toEqual([]);
+  });
+
+  // сессия эпика планирует и раздаёт подзадачи, а статус эпику ставит и сама команда — с первой подзадачей
+  it("эпик не закрепляется — после него сессия берёт подзадачу", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    expect(task(f, ["status", "45", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(existsSync(pinFile(config))).toBe(false);
+    expect(task(f, ["status", "47", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#47");
+  });
+
+  it("«Бэклог» и «Готово» другой задаче — без отказа: закрепляет только «В работе»", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    expect(task(f, ["status", "42", "Бэклог"], REPO, inSession(config)).code).toBe(0);
+    expect(task(f, ["status", "42", "Готово"], REPO, inSession(config)).code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"], [42, "Бэклог"], [42, "Готово"]]);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+  });
+
+  it("закрепление не снимают ни «Готово», ни task close — другая задача после них всё равно отказ", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    const io = inSession(config);
+    task(f, ["status", "49", "В работе"], REPO, io);
+    expect(task(f, ["status", "49", "Готово"], REPO, io).code).toBe(0);
+    expect(task(f, ["status", "42", "В работе"], REPO, io).code).toBe(2);
+    f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+    expect(task(f, ["close", "49", "--no-git"], REPO, { ...io, run: () => ({ status: 0, stdout: "Факт: …\n", stderr: "" }) }).code).toBe(0);
+    expect(task(f, ["status", "42", "В работе"], REPO, io).code).toBe(2);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+  });
+
+  // ключ — id сессии, а не чекаут и не машина: параллельные сессии делят каталог конфигурации
+  it("другая сессия с тем же каталогом конфигурации берёт другую задачу без отказа", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    const neighbour = "7d9e2a44-1c3b-4e6f-8a70-5b2c9d1e3f08";
+    task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    expect(task(f, ["status", "42", "В работе"], REPO, inSession(config, neighbour)).code).toBe(0);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config, neighbour)).toBe("miroshnik/ai-dev#42");
+  });
+
+  // id сессии даёт Bash-инструмент Claude Code; у другого агента его нет — статус важнее гарда
+  it("CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «сессия не опознана», файла нет", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    const io = { env: { AI_DEV_CONFIG_DIR: config } };
+    const r = task(f, ["status", "49", "В работе"], REPO, io);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("○ сессия не опознана (нет CLAUDE_CODE_SESSION_ID) — задача не закреплена");
+    expect(task(f, ["status", "42", "В работе"], REPO, io).code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"], [42, "В работе"]]);
+    expect(existsSync(path.join(config, "sessions"))).toBe(false);
+  });
+
+  /**
+   * `est` переносит старый `~/.claude/est` в каталог конфигурации, только пока того нет: создай его гард первым — `est`
+   * молча останется без реестра и цен. Пока переноса не было, каталог конфигурации и есть старый — закрепление ложится
+   * в него и переедет вместе с ним.
+   */
+  it("каталога конфигурации ещё нет, а старый ~/.claude/est на месте — закрепление ложится в него: перенос est не сорван", () => {
+    const f = new FakeGitHub(REC);
+    const home = scratch();
+    const legacy = path.join(home, ".claude", "est");
+    mkdirSync(legacy, { recursive: true });
+    writeFileSync(path.join(legacy, "repos.json"), "{}\n");
+    const io = { env: { CLAUDE_CODE_SESSION_ID: SESSION, HOME: home } };
+    expect(task(f, ["status", "49", "В работе"], REPO, io).code).toBe(0);
+    expect(existsSync(path.join(home, ".config", "ai-dev"))).toBe(false);
+    expect(pinned(legacy)).toBe("miroshnik/ai-dev#49");
+    const r = task(f, ["status", "42", "В работе"], REPO, io);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain(`закрепление: ${pinFile(legacy)}`);
+  });
+
+  // каталог конфигурации бывает симлинком на личный чекаут (AI_DEV_PRIVATE при install -g)
+  it("каталог конфигурации — чекаут git: закрепления в него не коммитятся — sessions/ закрыт своим .gitignore", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    const repo = gitRepo(config);
+    repo.commit({ "repos.json": "{}\n" }, "init");
+    expect(task(f, ["status", "49", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(existsSync(pinFile(config))).toBe(true);
+    expect(repo.git("status", "--porcelain", "--untracked-files=all")).toBe("");
   });
 });
 
