@@ -164,12 +164,16 @@ jobs:
         with: { node-version: 24, package-manager-cache: false }
       - name: docs/spec из прогона CI головы PR
         run: |
-          run=$(gh run list --workflow ci.yml --commit "$HEAD_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-          [ -n "$run" ] || { echo "нет успешного прогона ci.yml на $HEAD_SHA — публиковать нечего" >&2; exit 1; }
+          run=$(node .agents/skills/spec/scripts/spec-run.ts --workflow ci.yml --commit "$HEAD_SHA")
           gh run download "$run" --name docs-spec --dir docs/spec
       - run: node .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
 ```
 
+- `spec-run` ищет прогон по исходу, без `gh run list --status success`: эта
+  выдача отстаёт от завершения прогона на минуты, и прогон головы PR,
+  успешный за полторы минуты до мержа, в ней ещё не виден. Из прогонов на
+  голове берёт успешный; идущий ждёт (потолок `--timeout`, 30 мин);
+  завершился неуспешно — ошибка с исходом сразу.
 - `--source` — SHA мержа, а не головы PR: после squash и rebase голова в
   историю `main` не попадает, а `spec-diff` берёт базу тестов харнесса из
   публикации, чей `Source:` — предок merge-base.
@@ -178,8 +182,8 @@ jobs:
   `github project fix` (канон, «Git, PR и мерж»). Без него (приватный
   репозиторий на Free) смёржен отставший PR — ветка `spec` откатывается: до
   следующего мержа в ней нет страниц PR, влитого раньше.
-- Прогона нет или артефакт истёк — job падает с причиной, `spec` догонит
-  следующий мерж.
+- Прогона нет к потолку, он упал или артефакт истёк — job падает с
+  причиной, `spec` догонит следующий мерж.
 
 ## Хостинг собирает каждую ветку
 
