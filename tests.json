@@ -1381,6 +1381,13 @@
   "describes": [
    "task new заводит задачу со всем сразу"
   ],
+  "name": "в сессии с закреплённой задачей «Дальше:» называет новую сессию и первый промпт #M"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу"
+  ],
   "name": "заголовок уже с префиксом эпика — префикс не удваивается"
  },
  {
@@ -1452,6 +1459,83 @@
    "task new ставит метки решений — по имени решения, новое решение — `вид:имя`"
   ],
   "name": "новое решение — `вид:имя`: метка с именем, строка называет решение новым"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «сессия не опознана», файла нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "«Бэклог» и «Готово» другой задаче — без отказа: закрепляет только «В работе»"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "другая задача «В работе» в той же сессии — отказ (код 2) до изменений: закреплённая задача, первый промпт новой сессии и файл закрепления — одной строкой"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "другая сессия с тем же каталогом конфигурации берёт другую задачу без отказа"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "задача с тем же номером в другом репозитории — другая задача: отказ"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "закрепление не снимают ни «Готово», ни task close — другая задача после них всё равно отказ"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "каталог конфигурации — чекаут git: закрепления в него не коммитятся — sessions/ закрыт своим .gitignore"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "каталога конфигурации ещё нет, а старый ~/.claude/est на месте — закрепление ложится в него: перенос est не сорван"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "первая задача «В работе» закрепляется за сессией — файл sessions/<id сессии> в каталоге конфигурации называет owner/repo#N"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "та же задача «В работе» повторно — без отказа"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "эпик не закрепляется — после него сессия берёт подзадачу"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
