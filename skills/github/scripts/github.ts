@@ -11,13 +11,12 @@
  *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача)
  *   github task drop     — закрыть без выполнения и убрать из проекта
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
- *   github pr queue      — голова ли PR в очереди мержа: push, CI и мерж — только у головы
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
  * Метки решений сверяются с деревом спеки основной ветки; модель архитектуры читает отдельный процесс того же
- * рантайма (`modelModules`). Мерж в основную ветку — ruleset `ai-dev`: strict и обязательные чеки, зелёные на
- * последних влитых PR.
+ * рантайма (`modelModules`). Мерж в основную ветку — ruleset `ai-dev`: обязательные чеки, зелёные на последних
+ * влитых PR.
  */
 
 import { spawnSync } from "node:child_process";
@@ -69,8 +68,8 @@ export const WORKFLOW_AUTO_ADD = "Auto-add to project";
 /** Эталон: новый проект — его копия (представления, поля, настроенные workflow, кроме auto-add). */
 export const DEFAULT_TEMPLATE = "miroshnik/6";
 /**
- * Ruleset основной ветки, который ставит fix: GitHub не даёт влить отставшую ветку (strict) и ветку с красным
- * обязательным чеком. strict без обязательных чеков не действует — поэтому в нём и чеки.
+ * Ruleset основной ветки, который ставит fix: GitHub не даёт влить ветку с красным обязательным чеком. Актуальной
+ * ветки он не требует (strict выключен): несовместимость двух зелёных PR покажет CI следующего PR.
  */
 export const RULESET = "ai-dev";
 /** Обязательный чек — зелёный на каждом из стольких последних влитых PR с чеками. */
@@ -205,7 +204,7 @@ export interface Merge {
   /** Правила ветки недоступны на тарифе (приватный репозиторий на Free) — причина от GitHub. */
   unavailable: string | null;
   /** Действующие правила с обязательными чеками: ruleset любого уровня и классическая защита ветки. */
-  rules: { source: string; strict: boolean; contexts: string[] }[];
+  rules: { source: string; contexts: string[] }[];
   /** Свой ruleset — `RULESET` этого репозитория, в любом состоянии. */
   own: Ruleset | null;
   /** Последние `STABLE_PRS` влитых PR с чеками, от старых к новым. */
@@ -367,7 +366,7 @@ export const Q = {
     isPrivate
     defaultBranchRef {
       name
-      branchProtectionRule { requiresStrictStatusChecks requiredStatusCheckContexts }
+      branchProtectionRule { requiredStatusCheckContexts }
       rules(first: 100) { nodes { type repositoryRuleset { name } parameters { ...StatusChecks } } }
     }
     rulesets(first: 100) {
@@ -386,21 +385,6 @@ fragment StatusChecks on RuleParameters { ... on RequiredStatusChecksParameters 
 fragment Head on PullRequest {
   number baseRefName
   commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
-}`,
-  DefaultBranch: `query DefaultBranch($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) { defaultBranchRef { name } }
-}`,
-  // headRef.compare(headRef: основная ветка): aheadBy — коммиты основной ветки, которых нет в ветке PR (отставание)
-  MergeQueue: `query MergeQueue($owner: String!, $name: String!, $base: String!) {
-  repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, baseRefName: $base, first: 100) {
-      nodes {
-        number title isDraft headRefName
-        headRef { compare(headRef: $base) { aheadBy } }
-        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
-      }
-    }
-  }
 }`,
   // PR задачи, с которым GitHub её не связал (task close): последние открытые и влитые, новые первыми
   RecentPrs: `query RecentPrs($owner: String!, $name: String!) {
@@ -587,9 +571,9 @@ function loadMerge(io: Io, slug: string): Merge | null {
   const bp = b.branchProtectionRule;
   const rules = (b.rules?.nodes ?? []).flatMap((x: Any) => {
     const sc = statusChecks(x);
-    return sc ? [{ source: `ruleset ${q(x.repositoryRuleset?.name ?? "?")}`, ...sc }] : [];
+    return sc ? [{ source: `ruleset ${q(x.repositoryRuleset?.name ?? "?")}`, contexts: sc.contexts }] : [];
   });
-  if (bp?.requiresStrictStatusChecks || bp?.requiredStatusCheckContexts?.length) rules.push({ source: "защита ветки", strict: !!bp.requiresStrictStatusChecks, contexts: bp.requiredStatusCheckContexts ?? [] });
+  if (bp?.requiredStatusCheckContexts?.length) rules.push({ source: "защита ветки", contexts: bp.requiredStatusCheckContexts });
   const o = (r.rulesets?.nodes ?? []).find((x: Any) => x?.name === RULESET);
   const osc = o ? ((o.rules?.nodes ?? []).map(statusChecks).find(Boolean) ?? { strict: false, contexts: [] }) : null;
   return {
@@ -751,7 +735,7 @@ export function analyze(s: State): Check[] {
 
   const link = add("link", `Проект привязан к репозиторию и называется ${q(s.repo.name)}`);
   // правило основной ветки от проекта не зависит
-  const merge = () => s.merge && analyzeMerge(s.merge, s.repo.id, add("merge", `Мерж в ${s.merge.branch} — только актуальной ветки с зелёными обязательными чеками`));
+  const merge = () => s.merge && analyzeMerge(s.merge, s.repo.id, add("merge", `Мерж в ${s.merge.branch} — только с зелёными обязательными чеками`));
   if (!p) {
     link("к репозиторию не привязан ни один открытый проект", { kind: "api", text: `найти, скопировать с эталона или создать проект ${q(s.repo.name)} и привязать к ${s.repo.nameWithOwner}` });
     merge();
@@ -985,23 +969,23 @@ export function analyze(s: State): Check[] {
   return checks;
 }
 
-/** Ruleset `RULESET`: основная ветка, strict, обязательные чеки, обход — admin (прямой push владельца). */
+/** Ruleset `RULESET`: основная ветка, обязательные чеки без strict (поле в API обязательное), обход — admin (прямой push владельца). */
 function rulesetInput(contexts: string[]): Record<string, unknown> {
   return {
     name: RULESET,
     target: "BRANCH",
     enforcement: "ACTIVE",
     conditions: { refName: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
-    rules: [{ type: "REQUIRED_STATUS_CHECKS", parameters: { requiredStatusChecks: { requiredStatusChecks: contexts.map((context) => ({ context })), strictRequiredStatusChecksPolicy: true } } }],
+    rules: [{ type: "REQUIRED_STATUS_CHECKS", parameters: { requiredStatusChecks: { requiredStatusChecks: contexts.map((context) => ({ context })), strictRequiredStatusChecksPolicy: false } } }],
     bypassActors: [{ repositoryRoleDatabaseId: ADMIN_ROLE, bypassMode: "ALWAYS" }],
   };
 }
 
 /**
- * Мерж: правило канона «подъехал чужой PR — rebase» и «мерж только при зелёных чеках» держит GitHub, а не память
- * агента. Обязательные — чеки, зелёные на каждом из последних влитых PR; чек, которого нет у свежей головы (последний
- * влитый PR, открытые с завершёнными чеками), держал бы PR вечно — он из списка уходит, а не попадает в него.
- * Чужое правило со strict и чеками не дублируется.
+ * Мерж: правило канона «мерж только при зелёных чеках» держит GitHub, а не память агента. Обязательные — чеки,
+ * зелёные на каждом из последних влитых PR; чек, которого нет у свежей головы (последний влитый PR, открытые с
+ * завершёнными чеками), держал бы PR вечно — он из списка уходит, а не попадает в него. Чужое правило с чеками не
+ * дублируется; свой ruleset со strict правится: отставшую ветку GitHub должен вливать.
  */
 function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...steps: Step[]) => void) & { skip: (why: string) => void }): void {
   if (m.unavailable) return merge.skip(`правила ветки недоступны: ${m.unavailable}`);
@@ -1010,24 +994,23 @@ function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...
   const stable = Object.keys(m.merged[0]?.checks ?? {})
     .filter((c) => m.merged.every((h) => h.checks[c] === "success") && !gone(c))
     .sort();
-  const enforced = m.rules.some((r) => r.strict && r.contexts.length);
+  const enforced = m.rules.some((r) => r.contexts.length);
   const list = (cs: string[]) => cs.map(q).join(", ");
-  const none = `у последних влитых PR нет общего зелёного чека — обязательным делать нечего, strict без чеков не действует`;
+  const none = `у последних влитых PR нет общего зелёного чека — обязательным делать нечего`;
   const own = m.own;
   if (!own) {
     if (enforced) return;
     if (!stable.length) return merge.skip(none);
-    const text = `создать ruleset ${q(RULESET)} на ${m.branch}: strict, обязательные ${list(stable)}, обход — admin`;
+    const text = `создать ruleset ${q(RULESET)} на ${m.branch}: обязательные ${list(stable)}, обход — admin`;
     const step: Step = { kind: "api", text, mutations: [{ op: "CreateRuleset", input: { sourceId: repositoryId, ...rulesetInput(stable) } }] };
-    const half = m.rules.find((r) => r.contexts.length && !r.strict) ?? m.rules.find((r) => r.strict);
-    return merge(half ? (half.strict ? `${half.source}: strict без обязательных чеков не действует` : `${half.source}: strict выключен — отставшую ветку можно влить`) : `нет правила: отставшую ветку и ветку с красным чеком можно влить`, step);
+    return merge(`нет правила с обязательными чеками: ветку с красным чеком можно влить`, step);
   }
   const want = [...new Set([...own.contexts.filter((c) => !gone(c)), ...stable])].sort();
-  const step: Step = { kind: "api", text: `ruleset ${q(RULESET)}: основная ветка, strict, обязательные ${list(want) || "—"}, обход — admin`, mutations: [{ op: "UpdateRuleset", input: { repositoryRulesetId: own.id, ...rulesetInput(want) } }] };
+  const step: Step = { kind: "api", text: `ruleset ${q(RULESET)}: основная ветка, обязательные ${list(want) || "—"}, обход — admin`, mutations: [{ op: "UpdateRuleset", input: { repositoryRulesetId: own.id, ...rulesetInput(want) } }] };
   const why: string[] = [];
   if (own.enforcement !== "ACTIVE") why.push(`ruleset ${q(RULESET)} — ${own.enforcement}, не действует`);
   if (!own.include.includes("~DEFAULT_BRANCH")) why.push(`ruleset ${q(RULESET)} не на основной ветке: ${own.include.join(", ") || "—"}`);
-  if (!own.strict) why.push(`ruleset ${q(RULESET)}: strict выключен — отставшую ветку можно влить`);
+  if (own.strict) why.push(`ruleset ${q(RULESET)}: strict включён — отставшую ветку GitHub не вольёт`);
   if (!own.bypassAdmin) why.push(`ruleset ${q(RULESET)}: admin не может обойти — прямой push в ${m.branch} невозможен`);
   for (const c of own.contexts.filter((x) => gone(x))) why.push(`обязательный ${q(c)} не пришёл на PR #${gone(c)!.number} — PR ждал бы его вечно`);
   const add = stable.filter((c) => !own.contexts.includes(c));
@@ -1695,79 +1678,6 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
 }
 
 // ----------------------------------------------------------------------------
-// Очередь мержа
-// ----------------------------------------------------------------------------
-
-interface QueuePr {
-  number: number;
-  title: string;
-  head: string;
-  draft: boolean;
-  /** Коммитов основной ветки, которых нет в ветке PR; `null` — ветки PR нет. */
-  behind: number | null;
-  /** Сводный статус CI головы PR; `null` — чеков ещё нет. */
-  ci: string | null;
-}
-
-/** Почему PR очередь не держит; держит — null. Чеков ещё нет — держит: CI вот-вот начнётся. */
-function outOfQueue(p: QueuePr, base: string): string | null {
-  if (p.draft) return "черновик";
-  if (p.behind === null) return "ветки нет";
-  if (p.behind > 0) return `отстаёт от ${base} на ${p.behind}`;
-  if (p.ci === "FAILURE" || p.ci === "ERROR") return "CI красный";
-  return null;
-}
-const ciText = (ci: string | null) => (ci === "SUCCESS" ? "CI зелёный, ждёт мержа" : ci === null ? "чеков ещё нет" : "CI идёт");
-
-/**
- * Голова очереди мержа — открытый PR в основную ветку, который от неё не отстаёт и у которого CI зелёный или идёт;
- * из нескольких — меньший номер. Своя ветка вне очереди (отстаёт, красная, PR ещё нет) — впереди все PR очереди.
- * Код 0 — голова, 1 — не голова.
- */
-export function cmdPrQueue(io: Io, slug: string, who: { number: number } | { head: string }): number {
-  const [owner, name] = slug.split("/") as [string, string];
-  const base: string | undefined = graphql(io, Q.DefaultBranch, { owner, name })?.repository?.defaultBranchRef?.name;
-  if (!base) throw new GhError(`у ${slug} нет основной ветки`);
-  const prs: QueuePr[] = (graphql(io, Q.MergeQueue, { owner, name, base })?.repository?.pullRequests?.nodes ?? [])
-    .filter(Boolean)
-    .map((p: Any) => ({
-      number: p.number,
-      title: p.title,
-      head: p.headRefName,
-      draft: !!p.isDraft,
-      // сравнение невозможно (ветка в форке) — считаем актуальной: лучше подождать, чем гонять CI впустую
-      behind: p.headRef ? (p.headRef.compare?.aheadBy ?? 0) : null,
-      ci: p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null,
-    }))
-    .sort((a: QueuePr, b: QueuePr) => a.number - b.number);
-  const own = "number" in who ? prs.find((p) => p.number === who.number) : prs.find((p) => p.head === who.head);
-  if ("number" in who && !own) throw new GhError(`PR #${who.number} — не открытый PR в ${base} репозитория ${slug}`);
-
-  io.out(`Очередь мержа ${slug} → ${base}`);
-  const holds = (p: QueuePr) => outOfQueue(p, base) === null;
-  const ownHolds = !!own && holds(own);
-  const others = prs.filter((p) => p !== own);
-  for (const p of others) {
-    const why = outOfQueue(p, base);
-    if (why) io.out(`○ #${p.number} — ${why}, очередь не держит`);
-  }
-  const branch = "head" in who ? who.head : "";
-  const me = own ? `#${own.number}` : `ветка ${branch}`;
-  if (!own) io.out(`у ветки ${branch} ещё нет PR`);
-  const ahead = others.filter((p) => holds(p) && (!ownHolds || p.number < own!.number));
-  if (ahead.length) {
-    io.out(`⚠ ${me} — не голова очереди: впереди ${ahead.map((p) => `#${p.number} ${q(p.title)} (${ciText(p.ci)})`).join(", ")}`);
-    io.out(`  ребейз — локально, push — после их мержа: голова напишет «влит, твоя очередь»`);
-    return 1;
-  }
-  const state = own && !ownHolds ? ` (сейчас: ${outOfQueue(own, base)})` : "";
-  io.out(`✅ ${me} — голова очереди: ребейз на ${base}, push, CI и мерж — твои${state}`);
-  const next = others.filter(holds);
-  if (next.length) io.out(`  за тобой: ${nums(next)} — после мержа напиши им «влит, твоя очередь»`);
-  return 0;
-}
-
-// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
@@ -1782,7 +1692,6 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github task close    <N> [--no-git] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
-  github pr queue      [<N> | --head <ветка>] [--repo owner/repo]
 
 check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки,
         метка нового решения на открытой задаче — строка ○, не ❌.
@@ -1793,9 +1702,7 @@ task  — задача по канону; new печатает созданно�
 task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
         эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
-            только механически (удаление, переименование без правки, exceptions.ts), — строка ○, без метки.
-pr queue  — голова ли PR (по умолчанию — PR текущей ветки) в очереди мержа основной ветки: код 0 — голова,
-            push, CI и мерж — твои; 1 — не голова, впереди названы PR; ребейз — локально, push — после их мержа.`;
+            только механически (удаление, переименование без правки, exceptions.ts), — строка ○, без метки.`;
 
 const issueNumber = (s: string | undefined, what: string): number => {
   const m = /^#?(\d+)$/.exec((s ?? "").trim());
@@ -1810,13 +1717,6 @@ function detectRepo(): string {
   return `${m[1]}/${m[2]}`;
 }
 
-function currentBranch(): string {
-  const r = spawnSync("git", ["branch", "--show-current"], { encoding: "utf8" });
-  const b = (r.stdout ?? "").trim();
-  if (r.status !== 0 || !b) throw new GhError("не удалось определить текущую ветку (detached HEAD?); укажите номер PR или --head <ветка>");
-  return b;
-}
-
 export function main(argv: string[], io: Io): number {
   try {
     const [group, cmd, ...rest] = argv;
@@ -1824,9 +1724,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "close"], pr: ["labels", "queue"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "close"], pr: ["labels"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|close или pr labels|queue`);
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|close или pr labels`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
@@ -1844,15 +1744,9 @@ export function main(argv: string[], io: Io): number {
       return slug;
     };
     if (group === "pr") {
-      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" }, head: { type: "string" } } });
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" } } });
       if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
       const m = /^#?(\d+)$/.exec((positionals[0] ?? "").trim());
-      if (cmd === "queue") {
-        if (positionals.length && !m) throw new GhError(`pr queue: ожидается номер PR, а не «${positionals[0]}»`);
-        if (m && values.head) throw new GhError("номер PR или --head, не оба");
-        return cmdPrQueue(io, repoOf(values.repo), m ? { number: Number(m[1]) } : { head: values.head ?? currentBranch() });
-      }
-      if (values.head) throw new GhError("--head — только у pr queue");
       if (!m) throw new GhError(`pr labels: ожидается номер PR, а не «${positionals[0] ?? ""}»`);
       return cmdPrLabels(io, repoOf(values.repo), Number(m[1]));
     }

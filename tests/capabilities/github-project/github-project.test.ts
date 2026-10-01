@@ -537,23 +537,24 @@ describe("Метки решений — имя решения без вида, �
 });
 
 /**
- * Правило канона «подъехал чужой PR — rebase» держит GitHub: отставшую ветку он не вливает (strict). strict без
- * обязательных чеков не действует, поэтому обязательны чеки, зелёные на каждом из последних влитых PR. Без правила
- * публикация спеки на мерж PR откатывает ветку spec: смёржена голова без чужого PR.
+ * Правило канона «мерж только при зелёных чеках» держит GitHub: ветку с красным обязательным чеком он не вливает.
+ * Обязательны чеки, зелёные на каждом из последних влитых PR. Актуальной ветки правило не требует: strict в своём
+ * ruleset выключен, а несовместимость двух зелёных PR покажет CI следующего PR.
  */
-describe("Мерж в основную ветку — только актуальной ветки с зелёными обязательными чеками", () => {
-  const MERGE = "Мерж в main — только актуальной ветки с зелёными обязательными чеками";
+describe("Мерж в основную ветку — только с зелёными обязательными чеками", () => {
+  const MERGE = "Мерж в main — только с зелёными обязательными чеками";
+  const NO_RULE = "· нет правила с обязательными чеками: ветку с красным чеком можно влить";
   function bare(f: FakeGitHub = fake()): FakeGitHub {
     f.merge.rulesets = [];
     return f;
   }
 
-  it("правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, strict, обязательные — зелёные на всех последних влитых PR, обход — admin", () => {
+  it("правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, без strict, обязательные — зелёные на всех последних влитых PR, обход — admin", () => {
     const f = bare();
     const r = check(f);
     expect(r.code).toBe(1);
     expect(marks(r.out).Мерж).toBe("❌");
-    expect(r.out).toContain("· нет правила: отставшую ветку и ветку с красным чеком можно влить");
+    expect(r.out).toContain(NO_RULE);
     const x = fix(f);
     expect(x.code).toBe(0);
     // spec-publish на PR пропускается — не зелёный, в обязательные не идёт
@@ -564,32 +565,77 @@ describe("Мерж в основную ветку — только актуал�
         target: "BRANCH",
         enforcement: "ACTIVE",
         conditions: { refName: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
-        rules: [{ type: "REQUIRED_STATUS_CHECKS", parameters: { requiredStatusChecks: { requiredStatusChecks: [{ context: "tests" }], strictRequiredStatusChecksPolicy: true } } }],
+        rules: [{ type: "REQUIRED_STATUS_CHECKS", parameters: { requiredStatusChecks: { requiredStatusChecks: [{ context: "tests" }], strictRequiredStatusChecksPolicy: false } } }],
         bypassActors: [{ repositoryRoleDatabaseId: 5, bypassMode: "ALWAYS" }],
       },
     ]);
-    expect(x.out).toContain("+ создать ruleset «ai-dev» на main: strict, обязательные «tests», обход — admin");
+    expect(x.out).toContain("+ создать ruleset «ai-dev» на main: обязательные «tests», обход — admin");
     expect(marks(x.out).Мерж).toBe("✅");
   });
 
-  it("strict выключен или без обязательных чеков — ❌ с причиной; чужое правило fix не правит, а ставит свой ruleset", () => {
+  it("чужое правило без обязательных чеков — ❌; fix его не правит, а ставит свой ruleset", () => {
     const f = bare();
-    f.merge.protection = { strict: false, contexts: ["tests"] };
-    expect(check(f).out).toContain("· защита ветки: strict выключен — отставшую ветку можно влить");
+    f.merge.protection = { strict: true, contexts: [] };
+    expect(check(f).out).toContain(NO_RULE);
     const g = bare();
-    g.ruleset({ name: "release", strict: true, contexts: [] });
-    expect(check(g).out).toContain("· ruleset «release»: strict без обязательных чеков не действует");
+    const release = g.ruleset({ name: "release", strict: true, contexts: [] });
+    expect(check(g).out).toContain(NO_RULE);
     fix(g);
     expect(ops(g)).toEqual(["CreateRuleset"]);
+    expect(release).toMatchObject({ enforcement: "ACTIVE", strict: true, contexts: [] });
     expect(marks(check(g).out).Мерж).toBe("✅");
   });
 
-  it("чужое правило со strict и обязательными чеками — ✅, свой ruleset не дублирует", () => {
-    const f = bare();
-    f.ruleset({ name: "main-policy", org: true, strict: true, contexts: ["build"] });
+  it("чужое правило с обязательными чеками — ✅, со strict или без; свой ruleset не дублирует", () => {
+    for (const strict of [true, false]) {
+      const f = bare();
+      f.ruleset({ name: "main-policy", org: true, strict, contexts: ["build"] });
+      expect(marks(check(f).out).Мерж).toBe("✅");
+      fix(f);
+      expect(ops(f)).toEqual([]);
+      // классическая защита ветки — такое же правило
+      const g = bare();
+      g.merge.protection = { strict, contexts: ["tests"] };
+      expect(marks(check(g).out).Мерж).toBe("✅");
+      fix(g);
+      expect(ops(g)).toEqual([]);
+    }
+  });
+
+  it("свой ruleset выключен, со strict или без обхода admin — ❌ по каждой причине; fix правит всё одной правкой", () => {
+    const f = fake();
+    Object.assign(f.merge.rulesets[0]!, { enforcement: "DISABLED", strict: true, admin: false });
+    const r = check(f);
+    expect(marks(r.out).Мерж).toBe("❌");
+    expect(r.out).toContain("· ruleset «ai-dev» — DISABLED, не действует");
+    expect(r.out).toContain("· ruleset «ai-dev»: strict включён — отставшую ветку GitHub не вольёт");
+    expect(r.out).toContain("· ruleset «ai-dev»: admin не может обойти — прямой push в main невозможен");
+    const x = fix(f);
+    expect(ops(f)).toEqual(["UpdateRuleset"]);
+    expect(x.out).toContain("+ ruleset «ai-dev»: основная ветка, обязательные «tests», обход — admin");
+    expect(f.merge.rulesets[0]).toMatchObject({ enforcement: "ACTIVE", strict: false, admin: true, contexts: ["tests"] });
     expect(marks(check(f).out).Мерж).toBe("✅");
-    fix(f);
-    expect(ops(f)).toEqual([]);
+    // ruleset, поставленный прежним fix: действует, с обходом, но со strict — единственная причина
+    const g = fake();
+    g.merge.rulesets[0]!.strict = true;
+    const only = check(g);
+    expect(only.code).toBe(1);
+    expect(only.out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · ruleset «ai-dev»: strict включён — отставшую ветку GitHub не вольёт"]);
+    fix(g);
+    expect(byOp(g, "UpdateRuleset").map((u) => u.rules[0].parameters.requiredStatusChecks.strictRequiredStatusChecksPolicy)).toEqual([false]);
+    expect(check(g).code).toBe(0);
+  });
+
+  it("у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего", () => {
+    const f = bare();
+    f.merge.merged = [
+      { number: 1, checks: { build: "SUCCESS" } },
+      { number: 2, checks: { test: "SUCCESS" } },
+    ];
+    const r = check(f);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(`➖ ${MERGE} — у последних влитых PR нет общего зелёного чека — обязательным делать нечего`);
+    expect(r.out).not.toContain("strict");
   });
 
   // job e2e убрали: на открытом PR с завершёнными чеками его нет, а ruleset его всё ещё требует
@@ -611,18 +657,6 @@ describe("Мерж в основную ветку — только актуал�
     expect(marks(check(f).out).Мерж).toBe("✅");
   });
 
-  it("свой ruleset выключен, без strict или без обхода admin — ❌ по каждой причине; fix возвращает всё одной правкой", () => {
-    const f = fake();
-    Object.assign(f.merge.rulesets[0]!, { enforcement: "DISABLED", strict: false, admin: false });
-    const r = check(f);
-    expect(r.out).toContain("· ruleset «ai-dev» — DISABLED, не действует");
-    expect(r.out).toContain("· ruleset «ai-dev»: strict выключен — отставшую ветку можно влить");
-    expect(r.out).toContain("· ruleset «ai-dev»: admin не может обойти — прямой push в main невозможен");
-    fix(f);
-    expect(ops(f)).toEqual(["UpdateRuleset"]);
-    expect(f.merge.rulesets[0]).toMatchObject({ enforcement: "ACTIVE", strict: true, admin: true, contexts: ["tests"] });
-  });
-
   it("приватный репозиторий на Free — ➖ с причиной от GitHub, а не ❌; fix ничего не ставит", () => {
     const f = bare();
     Object.assign(f.merge, { private: true, upgrade: true });
@@ -631,17 +665,6 @@ describe("Мерж в основную ветку — только актуал�
     expect(r.out).toContain(`➖ ${MERGE} — правила ветки недоступны: Upgrade to GitHub Pro or make this repository public to enable this feature.`);
     fix(f);
     expect(ops(f)).toEqual([]);
-  });
-
-  it("у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего, strict без чеков не действует", () => {
-    const f = bare();
-    f.merge.merged = [
-      { number: 1, checks: { build: "SUCCESS" } },
-      { number: 2, checks: { test: "SUCCESS" } },
-    ];
-    const r = check(f);
-    expect(r.code).toBe(0);
-    expect(r.out).toContain(`➖ ${MERGE} — у последних влитых PR нет общего зелёного чека`);
   });
 });
 
