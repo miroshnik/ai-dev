@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -897,6 +897,111 @@ describe("Оценка — ступень шкалы от 0,1 до 13 ч", () =>
     expect(roundScale(0.175)).toBe(0.1);
     expect(roundScale(0.4)).toBe(0.5);
     expect(roundScale(20)).toBe(13);
+  });
+});
+
+// `gh` — внешний край, подменяется он: ответы — из мира $FAKE_GH/world.json (репозиторий → видимость, номер проекта,
+// задачи с фактом), каждый вызов — строкой JSON в $FAKE_GH/calls.jsonl.
+const FAKE_GH = `import { appendFileSync, readFileSync } from "node:fs";
+const dir = process.env.FAKE_GH;
+const args = process.argv.slice(2);
+const stdin = args.includes("--input") ? readFileSync(0, "utf8") : "";
+appendFileSync(dir + "/calls.jsonl", JSON.stringify({ args, stdin }) + "\\n");
+const world = JSON.parse(readFileSync(dir + "/world.json", "utf8"));
+const print = (x) => console.log(JSON.stringify(x));
+const num = (name, number) => ({ __typename: "ProjectV2ItemFieldNumberValue", number, field: { name } });
+const factMarker = (i) => '<!-- fact {"v": 1, "h": ' + i.fact + ', "cov": "full", "tok": {"total": 2000000}, "usd": 1.5, "type": "fix"} -->';
+const issueOf = (i) => ({ __typename: "Issue", id: "I_" + i.number, number: i.number, title: i.title, state: i.state, stateReason: null, closedAt: null, createdAt: null,
+  labels: { nodes: [] }, comments: { nodes: i.fact ? [{ databaseId: i.number, body: factMarker(i) }] : [] } });
+if (args[1] === "graphql") {
+  const { query, variables: v } = JSON.parse(stdin);
+  const repo = world[v.o + "/" + v.r];
+  const byProject = (pred) => Object.values(world).find((r) => pred(r.project));
+  if (/^\\s*mutation/.test(query)) print({ data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: v.i } } } });
+  else if (query.includes("projectsV2(first:5)")) print({ data: { repository: { projectsV2: { nodes: [{ number: repo.project, title: "p", owner: { login: v.o } }] } } } });
+  else if (query.includes("projectV2(number:$n)")) {
+    const fields = { nodes: [{ id: "F_est", name: "Оценка, ч" }, { id: "F_fact", name: "Факт, ч" }, { id: "F_st", name: "Status", options: [] }] };
+    const owner = query.includes("organization(") ? "organization" : "user";
+    print({ data: { [owner]: { projectV2: { id: "P" + v.n, title: "p", number: v.n, fields } } } });
+  } else if (query.includes("node(id:$id)")) {
+    const r = byProject((p) => "P" + p === v.id);
+    const nodes = r.issues.map((i) => ({ id: "PI_" + i.number, type: "ISSUE", content: issueOf(i), fieldValues: { nodes: i.fact ? [num("Факт, ч", i.fact)] : [] } }));
+    print({ data: { node: { items: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
+  } else if (query.includes("issue(number:$n)")) {
+    const i = repo.issues.find((x) => x.number === v.n);
+    print({ data: { repository: { issue: { ...issueOf(i), url: "", timelineItems: { nodes: [] }, closedEvents: { nodes: [] },
+      projectItems: { nodes: [{ id: "PI_" + i.number, project: { id: "P" + repo.project }, fieldValues: { nodes: [] } }] }, comments: { nodes: [] } } } } });
+  } else { console.error("fake gh: " + query.slice(0, 80)); process.exit(1); }
+} else if (args[0] === "api" && args[1] === "-X") {
+  const [, owner, name] = /^repos\\/([^/]+)\\/([^/]+)/.exec(args[3]);
+  if (args[2] === "GET" && args[3] === "repos/" + owner + "/" + name) print({ visibility: world[owner + "/" + name].visibility });
+  else print({});
+} else { console.error("fake gh: " + args.join(" ")); process.exit(1); }
+`;
+
+/**
+ * Комментарий «Оценка» называет аналог из другого репо как `owner/repo#N`. В публичном репо это раскрыло бы имя и номер
+ * задачи непубличного, а перезапись не спасает: GitHub хранит прошлую версию комментария в истории правок, стереть её
+ * может только владелец. Поэтому такую оценку `--write` не пишет вовсе, а без `--write` о ней предупреждает.
+ */
+describe("Оценка в публичном репо не называет задачи непубличных репо", () => {
+  const repoWorld = (visibility: string, project: number) => ({
+    visibility, project,
+    issues: [{ number: 1, title: "Прошлая задача", state: "CLOSED", fact: 0.5 }, { number: 2, title: "Ещё прошлая", state: "CLOSED", fact: 1 }, { number: 10, title: "Новая задача", state: "OPEN" }],
+  });
+  const WORLD = { "o/pub": repoWorld("public", 1), "o/pub2": repoWorld("public", 2), "o/priv": repoWorld("private", 3), "o/priv2": repoWorld("private", 4) };
+
+  /** `est estimate 10 --repo <repo> --type fix --analogs <analogs>` с фейковым gh: исход, записи в GitHub, тело комментария. */
+  function estimate(repo: string, analogs: string, write = true) {
+    const bin = path.join(dir, "bin");
+    const cfg = path.join(dir, "ai-dev");
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(cfg, { recursive: true });
+    writeFileSync(path.join(bin, "fake-gh.mjs"), FAKE_GH);
+    writeFileSync(path.join(bin, "gh"), `#!/usr/bin/env bash\nexec bun "$FAKE_GH/fake-gh.mjs" "$@"\n`);
+    chmodSync(path.join(bin, "gh"), 0o755);
+    writeFileSync(path.join(bin, "world.json"), JSON.stringify(WORLD));
+    writeFileSync(path.join(cfg, "repos.json"), JSON.stringify(Object.fromEntries(Object.keys(WORLD).map((k) => [k, {}]))));
+    const log = path.join(bin, "calls.jsonl");
+    writeFileSync(log, "");
+    const args = [EST, "estimate", "10", "--repo", repo, "--type", "fix", "--analogs", analogs, ...(write ? ["--write"] : [])];
+    const r = spawnSync("bun", args, { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin } });
+    const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));
+    const comment = calls.filter((c) => c.args.includes("POST")).map((c) => JSON.parse(c.stdin).body as string)[0] ?? null;
+    return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, writes, comment };
+  }
+
+  it("в публичный репо не пишется аналог из непубличного репо — отказ до записи", () => {
+    const r = estimate("o/pub", "1,o/priv#1,o/priv#2");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("ошибка: o/pub — публичный репо, а аналоги o/priv#1, o/priv#2 — из непубличного");
+    expect(r.stderr).toContain("--hours");
+    expect(r.writes).toEqual([]);
+  });
+
+  it("без --write аналог из непубличного репо в публичный — предупреждение, оценка только печатается", () => {
+    const r = estimate("o/pub", "o/priv#1,o/priv#2", false);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("предупреждение: o/pub — публичный репо, а аналоги o/priv#1, o/priv#2 — из непубличного");
+    expect(r.stdout).toContain("Оценка: 0.5 ч");
+    expect(r.writes).toEqual([]);
+  });
+
+  it("аналоги из того же репо — оценка записывается как раньше", () => {
+    const r = estimate("o/pub", "1,2");
+    expect(r.code).toBe(0);
+    expect(r.comment).toStartWith("Оценка: 0.5 ч");
+    expect(r.writes).toHaveLength(2); // комментарий и поле «Оценка, ч»
+  });
+
+  it("аналог из другого репо пишется, если тот публичный или целевой репо непубличный", () => {
+    for (const [repo, analogs, from] of [["o/pub", "o/pub2#1,o/pub2#2", "o/pub2"], ["o/priv", "o/priv2#1,o/priv2#2", "o/priv2"]] as const) {
+      const r = estimate(repo, analogs);
+      expect(r.code).toBe(0);
+      expect(r.comment).toContain(`из проекта ${from}: #1 (факт 0.5 ч), #2 (факт 1 ч)`);
+      expect(r.writes).toHaveLength(2);
+    }
   });
 });
 
