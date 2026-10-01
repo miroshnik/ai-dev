@@ -1,10 +1,11 @@
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
 import type { It, LintMessage, Linter } from "../../../skills/spec/scripts/harness.ts";
-import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -109,6 +110,9 @@ afterEach(() => cleanup());
 
 // ESLint — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
 const ESLINT = createRequire(import.meta.url).resolve("eslint");
+// TypeScript и типы Node — оттуда же
+const TSC = path.join(path.dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin/tsc");
+const TYPES = path.join(path.dirname(createRequire(import.meta.url).resolve("@types/node/package.json")), "..");
 const FRAGMENT = "tests/standards/domain-no-console/eslint.ts";
 
 // ESLint кэширует модуль конфига в процессе: проект без фрагмента — в своём каталоге, а не тот же без файла
@@ -175,8 +179,22 @@ describe("Правило ESLint живёт в папке своего станд
     const g = globalThis as { __specConfigLoads?: number };
     const before = g.__specConfigLoads ?? 0;
     const linter = eslintLinter({ cwd: dir, module: ESLINT });
-    await linter.ready!();
+    await linter.ready();
     expect(g.__specConfigLoads).toBe(before + 1);
+  });
+
+  // checks.md велит `await linter.ready()` на верхнем уровне файла: необязательный ready под strict — TS2722
+  it("await linter.ready() из checks.md проходит typecheck под strict: у eslintLinter() ready обязателен", () => {
+    writeTree(dir, {
+      "example.test.mts": `import { eslintLinter } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};\n\nconst linter = eslintLinter();\nawait linter.ready();\n`,
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { strict: true, target: "es2022", module: "nodenext", noEmit: true, allowImportingTsExtensions: true, skipLibCheck: true, typeRoots: [TYPES], types: ["node"] },
+        files: ["example.test.mts"],
+      }),
+    });
+    const r = spawnSync("node", [TSC, "-p", dir], { encoding: "utf8" });
+    expect(r.stdout + r.stderr).toBe("");
+    expect(exitOf(r)).toBe(0);
   });
 
   it("collectEslint пропускает tests/lib — хелпер там не фрагмент", async () => {
