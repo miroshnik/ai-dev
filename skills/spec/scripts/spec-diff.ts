@@ -740,7 +740,10 @@ export async function main(argv: string[]): Promise<number> {
         const reported = L.mergeTests(v.report.flatMap((r) => L.loadReport(r, root))).filter(inTree);
         baseTests = union(baseTests, specBase.tests, harness);
         headTests = union(headTests, reported, harness);
-        harnessNote = `_Тесты харнесса — по отчёту; база — ветка ${branch} (исходник ${specBase.source.slice(0, 12)})._`;
+        // пропущенная публикация (spec-run: дерево main не проверено целиком) — tests.json старше базы диффа: о разрыве сказать
+        const baseSha = gitText(["rev-parse", `${base}^{commit}`], top).trim();
+        const gap = specBase.source === baseSha ? "" : ` старше базы диффа ${baseSha.slice(0, 12)}: в списках возможны тесты PR, влитых между ними`;
+        harnessNote = `_Тесты харнесса — по отчёту; база — ветка ${branch} (исходник ${specBase.source.slice(0, 12)}${gap})._`;
       } else {
         harnessNote = `_Тесты харнесса: в ветке ${branch} нет tests.json для базы — дифф по исходникам, тестов харнесса в нём не видно._`;
       }

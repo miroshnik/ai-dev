@@ -499,6 +499,23 @@ describe("Тесты харнесса — в диффе спеки: назван
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("**Удалены (1):**\n\n- `tests/standards/audit` · b пишет аудит");
     expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/standards/audit` · импорт платежей из банка");
+    expect(r.stdout).toContain(`\n\n_Тесты харнесса — по отчёту; база — ветка spec (исходник ${base.slice(0, 12)})._\n`);
+  });
+
+  // публикация на мерж отставшего PR пропускается: ближайшая публикация-предок — до чужих PR, влитых после неё
+  it("публикация в ветке spec старше базы диффа — под «База» названы оба коммита и сказано, что в списках возможны тесты уже влитых PR", () => {
+    const published = repo.commit({ [STD]: registry });
+    publishSpec(published, [t("a пишет аудит")]);
+    const base = repo.commit({ [STD]: registry + "// чужой PR добавил b, его публикация пропущена\n" });
+    repo.commit({ [STD]: registry + "// реестр сменился\n" });
+    report(["a пишет аудит", "b пишет аудит", "c пишет аудит"]);
+    const note = `_Тесты харнесса — по отчёту; база — ветка spec (исходник ${published.slice(0, 12)} старше базы диффа ${base.slice(0, 12)}: в списках возможны тесты PR, влитых между ними)._`;
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`_База: \`${base} (merge-base)\`._\n\n${note}\n`);
+    // база — имя ветки, а не SHA: сравнивается коммит, а не написание
+    repo.git("branch", "base", base);
+    expect(diffFrom("base", "--no-merge-base", "--report", "r.json", "--spec-branch", "spec").stdout).toContain(note);
   });
 
   it("перевод примеров на реестр не выглядит в диффе спеки как одни удаления", () => {
