@@ -3180,6 +3180,13 @@
   "describes": [
    "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
   ],
+  "name": "await linter.ready() из checks.md проходит typecheck под strict: у eslintLinter() ready обязателен"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/lint.test.ts",
+  "describes": [
+   "Правило ESLint живёт в папке своего стандарта, конфиг проекта собирает его из дерева"
+  ],
   "name": "collectEslint пропускает tests/lib — хелпер там не фрагмент"
  },
  {
