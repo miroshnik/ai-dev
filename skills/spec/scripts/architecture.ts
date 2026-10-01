@@ -182,11 +182,12 @@ interface Source {
 
 // литерал URL в коде: "https://api.example.com/…" — хост; локальные адреса и IP — не внешние системы
 const URL_HOST = /["'`]https?:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?::\d+)?(?=[\/"'`?#])/gi;
-// локальные адреса и IP — не внешние системы: сеть до них в тестах разрешена (networkGuard)
-const isLocal = (h: string) => h === "localhost" || h.endsWith(".localhost") || h.endsWith(".test") || /^\d+(\.\d+){3}$/.test(h) || h === "::1";
-// домены для примеров и документации (RFC 2606, RFC 6761) — в коде это не внешняя система; но запрос к ним в тестах —
-// настоящая сеть, поэтому networkGuard их не пропускает (там — isLocal)
-const isReserved = (h: string) => /(^|\.)(example|invalid)$|(^|\.)example\.(com|net|org)$/.test(h);
+// локальные адреса — loopback и «этот хост» 0.0.0.0, из машины они не уходят: не внешние системы, сеть до них в тестах
+// разрешена (networkGuard); IPv6 — в скобках, как его отдаёт URL.hostname. Любой другой IP — адрес внешней системы
+const isLocal = (h: string) => h === "localhost" || h.endsWith(".localhost") || /^127(\.\d+){3}$/.test(h) || h === "0.0.0.0" || h === "[::1]";
+// домены для примеров, документации и тестов (RFC 2606, RFC 6761) — в коде это не внешняя система; но запрос к ним в
+// тестах — забытый мок или настоящая сеть, поэтому networkGuard их не пропускает (там — isLocal)
+const isReserved = (h: string) => /(^|\.)(example|invalid|test)$|(^|\.)example\.(com|net|org)$/.test(h);
 // URI пространства имён XML — не адрес сервиса: атрибут xmlns и пространства W3C (createElementNS)
 const XMLNS = /xmlns(?::[\w-]+)?\s*=\s*$/;
 const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
@@ -477,23 +478,48 @@ function c1(add: Add, model: Model, src: Source[]): void {
   }
 }
 
+type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** `fetch` под сторожем сети: отвергнутые запросы копятся до проверки после теста. */
+export interface GuardedFetch extends Fetch {
+  /** Хосты отвергнутых запросов с прошлой проверки, по порядку. */
+  rejected: string[];
+  /** Проверка после теста (`afterEach`): были отвергнутые — бросает со списком хостов; список очищается. */
+  check(): void;
+}
+
 /**
- * `fetch` для тестов: запрос к хосту вне модели (внешние системы и `allow`) падает — система в тестах говорит только
- * с объявленными внешними системами (и там их мокают); локальные адреса — всегда можно. Установка — в настройке
- * тестов: `globalThis.fetch = networkGuard(model, globalThis.fetch)`.
+ * `fetch` для тестов — сеть под моками: что дошло до сторожа, никто не замокал. В `fetchImpl` пропускаются только
+ * локальные адреса (loopback) и хосты `allow` (интеграционный тест с песочницей); запрос к объявленной внешней системе
+ * падает с именем хоста и системы — забытый мок не уходит в сеть, к хосту вне модели — «объяви внешнюю систему».
+ * Код под тестом может поймать исключение `fetch` — поэтому отвергнутое копится в `rejected`, и `check()` после теста
+ * роняет его. Установка — в настройке тестов, раньше моков (`vi.spyOn`, MSW `server.listen()` — поверх):
+ * `const guard = networkGuard(model, globalThis.fetch); globalThis.fetch = guard; afterEach(() => guard.check())`.
  */
-export function networkGuard(
-  model: Model,
-  fetchImpl: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = globalThis.fetch,
-  opts: { allow?: string[] } = {},
-): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
-  const allowed = new Set([...Object.values(model.externals ?? {}).flatMap((e) => (e.hosts ?? []).map((h) => h.toLowerCase())), ...(opts.allow ?? [])]);
-  return async (input, init) => {
+export function networkGuard(model: Model, fetchImpl: Fetch = globalThis.fetch, opts: { allow?: string[] } = {}): GuardedFetch {
+  const owner = new Map<string, string>();
+  for (const [name, e] of Object.entries(model.externals ?? {})) for (const h of e.hosts ?? []) owner.set(h.toLowerCase(), name);
+  const allow = new Set((opts.allow ?? []).map((h) => h.toLowerCase()));
+  const rejected: string[] = [];
+  const guard: Fetch = async (input, init) => {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const host = new URL(href).hostname.toLowerCase();
-    if (!isLocal(host) && !allowed.has(host)) throw new Error(`запрос к хосту ${host} вне модели — объяви внешнюю систему в tests/architecture/model.ts или замокай запрос`);
-    return fetchImpl(input, init);
+    if (isLocal(host) || allow.has(host)) return fetchImpl(input, init);
+    rejected.push(host);
+    const system = owner.get(host);
+    throw new Error(
+      system
+        ? `запрос к хосту ${host} внешней системы ${system} без мока — замокай запрос: в сеть тесты ходят только к локальным адресам и allow`
+        : `запрос к хосту ${host} вне модели — объяви внешнюю систему в tests/architecture/model.ts и замокай запрос`,
+    );
   };
+  const check = () => {
+    if (!rejected.length) return;
+    const hosts = [...new Set(rejected)].join(", ");
+    rejected.length = 0;
+    throw new Error(`запросы к сети, отвергнутые сторожем: ${hosts} — замокай их (исключение fetch мог поймать код под тестом)`);
+  };
+  return Object.assign(guard, { rejected, check });
 }
 
 /** CSP `connect-src` браузера из хостов внешних систем модели: заголовок проекта сверяется с ним тестом. */
