@@ -1432,7 +1432,8 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 /**
  * Ритуал закрытия после мержа PR — факт, Status «Готово», эпик, milestone, уборка влитой ветки — одним вызовом:
  * сессия делала его по шагу на ход на самом большом контексте. Актуализация блока (пять проверок канона) —
- * не здесь: её делает субагент со свежим контекстом, команда лишь называет это следующим шагом.
+ * не здесь: её делает субагент со свежим контекстом, команда лишь называет это следующим шагом — и строку, которой
+ * сессия после него заканчивает ответ.
  */
 export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
   const ctx = taskContext(io, slug);
@@ -1477,7 +1478,10 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     } else if (epic.state === "OPEN") io.out(`○ эпик #${epic.number}: открытых подзадач ${open}`);
   }
   if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
-  io.out(`Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), пять проверок — reference.md скилла github, «Актуализация блока при закрытии задачи».`);
+  io.out(
+    `Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), пять проверок — reference.md скилла github, «Актуализация блока при закрытии задачи»; ` +
+      `после неё — последней строкой ответа «Всё сделано. Сессию можно закрывать.», а если что-то осталось — «Осталось: …».`,
+  );
   return 0;
 }
 
