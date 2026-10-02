@@ -19,6 +19,7 @@
   },
   "scripts": {
     "test": "bun test",
+    "test:spec": "bun test tests/standards",
     "typecheck": "tsc --noEmit",
     "spec:doc": "bun test --reporter=junit --reporter-outfile=.spec-report.xml && bun skills/spec/scripts/spec-doc.ts .spec-report.xml --strict",
     "spec:diff": "bun skills/spec/scripts/spec-diff.ts",
