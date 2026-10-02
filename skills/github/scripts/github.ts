@@ -12,6 +12,7 @@
  *                          задачу за сессией — другой задаче в той же сессии отказ
  *   github task drop     — закрыть без выполнения и убрать из проекта
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
+ *   github pr premerge   — перед мержем: основная ветка ушла после CI PR — test:spec на слиянии с ней
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
@@ -484,7 +485,8 @@ function mutate(io: Io, m: Mutation): Any {
 
 /** Запрос REST; ответ об ошибке (realGh отдаёт JSON и при коде ≠ 0) — исключение с его message. */
 function restCall(io: Io, args: string[]): Any {
-  const what = `${args[2]} ${args[3]}`;
+  // `-X PATCH repos/…` или GET `repos/…`
+  const what = args.slice(1).filter((a) => !a.startsWith("-")).slice(0, 2).join(" ");
   const out = io.gh(args);
   let res: Any;
   try {
@@ -1796,6 +1798,114 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
 }
 
 // ----------------------------------------------------------------------------
+// Проверка слияния перед мержем
+// ----------------------------------------------------------------------------
+
+/** Быстрые проверки проекта — этот скрипт `package.json`: стандарты и архитектура, минуты, а не весь `test`. */
+export const PREMERGE_SCRIPT = "test:spec";
+/** Merge-ref GitHub строит до события, по которому создаётся check suite: движение main в эту минуту — уход. */
+const MERGE_REF_SLACK_MS = 60_000;
+const LOCKFILES: [file: string, pm: string][] = [["bun.lock", "bun"], ["bun.lockb", "bun"], ["pnpm-lock.yaml", "pnpm"], ["yarn.lock", "yarn"], ["package-lock.json", "npm"]];
+const INSTALL: Record<string, string[]> = { bun: ["bun", "install", "--frozen-lockfile"], pnpm: ["pnpm", "install", "--frozen-lockfile"], yarn: ["yarn", "install", "--frozen-lockfile"], npm: ["npm", "ci"] };
+/** Строки раннеров об упавшем тесте: bun `(fail)`, Vitest `FAIL` и `×`, Jest `●`, Playwright `✘`. */
+const FAILED_LINE = /^\s*(\(fail\)|FAIL\s|×|✗|✘|●\s)/;
+
+/**
+ * Команды проекта в каталоге: менеджер пакетов — `packageManager` в package.json, иначе по lockfile; зависимости
+ * ставятся по lockfile без его правки, lockfile нет — без установки.
+ */
+export function projectCommands(dir: string): { install: string[] | null; run: string[] } {
+  const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+  const lock = LOCKFILES.find(([f]) => existsSync(path.join(dir, f)));
+  const pm = /^(bun|pnpm|yarn|npm)@/.exec(pkg.packageManager ?? "")?.[1] ?? lock?.[1] ?? "npm";
+  return { install: lock ? INSTALL[pm]! : null, run: [pm, "run", PREMERGE_SCRIPT] };
+}
+
+const tail = (r: RunResult, n = 20) => `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => l.trim()).slice(-n);
+
+/**
+ * Перед мержем зелёного PR: main ушёл после его CI — слияние головы PR со свежим main во временном worktree и
+ * `test:spec`; не ушёл — CI проверил ровно это слияние. Что проверил CI, GitHub не хранит (merge-ref пересобирается),
+ * поэтому по времени: самый ранний check suite головы против последнего события основной ветки (REST: квота GraphQL
+ * общая на все сессии). Неизвестное — проверяется. Код 0 — вливать, 1 — не вливать.
+ */
+export function cmdPrPremerge(io: Io, slug: string, number: number): number {
+  const pr = restCall(io, ["api", `repos/${slug}/pulls/${number}`]);
+  if (pr.state !== "open") throw new GhError(`PR #${number} не открыт — вливать нечего`);
+  const head: string = pr.head.sha;
+  const base: string = pr.base.ref;
+  const suites: string[] = (restCall(io, ["api", `repos/${slug}/commits/${head}/check-suites?per_page=100`]).check_suites ?? []).map((s: Any) => s.created_at).filter(Boolean);
+  const ci = suites.sort()[0];
+  let moved: string | null = null;
+  let unread: string | null = null;
+  try {
+    moved = restCall(io, ["api", `repos/${slug}/activity?ref=${encodeURIComponent(`refs/heads/${base}`)}&per_page=1`])[0]?.timestamp ?? null;
+  } catch (e) {
+    if (!(e instanceof GhError)) throw e;
+    unread = e.message;
+  }
+  const check = `проверяю слияние с origin/${base}`;
+  if (!ci) io.out(`чеков у головы PR #${number} нет — что проверил CI, неизвестно: ${check}`);
+  else if (unread) io.out(`○ движение ${base} не прочитано (${unread}) — ${check}`);
+  else if (!moved || Date.parse(moved) <= Date.parse(ci) - MERGE_REF_SLACK_MS) {
+    io.out(`✅ вливать: ${base} не двигался после CI PR #${number} (CI с ${ci}, последнее движение ${base} — ${moved ?? "нет"}) — CI проверил это слияние`);
+    return 0;
+  } else io.out(`${base} ушёл после CI PR #${number} (CI с ${ci}, ${base} — ${moved}) — ${check}`);
+
+  const run = io.run ?? realRun;
+  const git = (cwd: string | undefined, ...args: string[]) => run("git", args, cwd);
+  const remote = git(io.cwd, "remote", "get-url", "origin");
+  if (remote.status !== 0 || !remote.stdout.includes(slug)) throw new GhError(`проверка слияния — из чекаута ${slug}: текущий каталог — не он`);
+  for (const ref of [base, `refs/pull/${number}/head`]) {
+    const f = git(io.cwd, "fetch", "-q", "origin", ref);
+    if (f.status !== 0) throw new GhError(`git fetch origin ${ref}: ${f.stderr.trim()}`);
+  }
+  if (git(io.cwd, "cat-file", "-e", `${head}^{commit}`).status !== 0) throw new GhError(`голова PR ${head} не получена из origin — PR обновился? Снова ci-wait`);
+
+  const dir = mkdtempSync(path.join(os.tmpdir(), "ai-dev-premerge-"));
+  try {
+    const add = git(io.cwd, "worktree", "add", "-q", "--detach", dir, `origin/${base}`);
+    if (add.status !== 0) throw new GhError(`git worktree add: ${add.stderr.trim()}`);
+    const short = (ref: string) => git(dir, "rev-parse", "--short=7", ref).stdout.trim();
+    // как merge-ref GitHub; rebase-мерж без конфликтов даёт то же дерево. Хуки проекта временному слиянию не нужны
+    const merge = git(dir, "-c", "user.name=ai-dev", "-c", "user.email=ai-dev@localhost", "-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "--no-verify", "--no-edit", head);
+    if (merge.status !== 0) {
+      const files = git(dir, "diff", "--name-only", "--diff-filter=U").stdout.split("\n").filter(Boolean);
+      if (!files.length) throw new GhError(`git merge: ${merge.stderr.trim()}`);
+      io.out(`❌ не вливать: конфликт слияния с origin/${base} — ${files.join(", ")}; rebase на origin/${base}, push --force-with-lease, снова ci-wait`);
+      return 1;
+    }
+    io.out(`+ слияние ${head.slice(0, 7)} с origin/${base} ${short("HEAD^1")} — без конфликтов`);
+    const pkg = path.join(dir, "package.json");
+    if (!existsSync(pkg) || !JSON.parse(readFileSync(pkg, "utf8")).scripts?.[PREMERGE_SCRIPT]) {
+      io.out(`○ быстрых проверок нет: в package.json слияния нет скрипта ${PREMERGE_SCRIPT} — шаг пропущен`);
+      io.out(`✅ вливать: слияние с origin/${base} без конфликтов`);
+      return 0;
+    }
+    const cmds = projectCommands(dir);
+    if (cmds.install) {
+      const r = run(cmds.install[0]!, cmds.install.slice(1), dir);
+      if (r.status !== 0) throw new GhError(`установка зависимостей на слиянии упала (${cmds.install.join(" ")}): ${tail(r, 5).join(" / ")}`);
+      io.out(`+ зависимости: ${cmds.install.join(" ")}`);
+    }
+    const r = run(cmds.run[0]!, cmds.run.slice(1), dir);
+    if (r.status === 0) {
+      io.out(`✅ вливать: ${PREMERGE_SCRIPT} зелёный на слиянии с origin/${base}`);
+      return 0;
+    }
+    const lines = `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => FAILED_LINE.test(l));
+    io.out(`${cmds.run.join(" ")} упал:`);
+    for (const l of (lines.length ? [...new Set(lines)].slice(0, 20) : tail(r))) io.out(`  ${l.trim()}`);
+    io.out(`❌ не вливать: ${PREMERGE_SCRIPT} красный на слиянии с origin/${base} — чинить корень в PR: rebase на origin/${base}, правка, push --force-with-lease, снова ci-wait`);
+    return 1;
+  } finally {
+    git(io.cwd, "worktree", "remove", "--force", dir);
+    rmSync(dir, { recursive: true, force: true });
+    git(io.cwd, "worktree", "prune");
+  }
+}
+
+// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
@@ -1810,6 +1920,7 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github task close    <N> [--no-git] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
+  github pr premerge   <N> [--repo owner/repo]
 
 check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки,
         метка нового решения на открытой задаче — строка ○, не ❌.
@@ -1822,7 +1933,10 @@ task status — «В работе» закрепляет задачу за се�
 task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
         эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
-            только механически (удаление, переименование без правки, exceptions.ts), — строка ○, без метки.`;
+            только механически (удаление, переименование без правки, exceptions.ts), — строка ○, без метки.
+pr premerge — перед gh pr merge, после PASS ci-wait: основная ветка ушла после CI PR — слияние головы PR с ней
+            во временном worktree и ${PREMERGE_SCRIPT} из package.json; код 0 — вливать, 1 — не вливать (красное,
+            конфликт), 2 — проверить не удалось.`;
 
 const issueNumber = (s: string | undefined, what: string): number => {
   const m = /^#?(\d+)$/.exec((s ?? "").trim());
@@ -1844,9 +1958,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "close"], pr: ["labels"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "close"], pr: ["labels", "premerge"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|close или pr labels`);
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|close или pr labels|premerge`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
@@ -1867,8 +1981,8 @@ export function main(argv: string[], io: Io): number {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" } } });
       if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
       const m = /^#?(\d+)$/.exec((positionals[0] ?? "").trim());
-      if (!m) throw new GhError(`pr labels: ожидается номер PR, а не «${positionals[0] ?? ""}»`);
-      return cmdPrLabels(io, repoOf(values.repo), Number(m[1]));
+      if (!m) throw new GhError(`pr ${cmd}: ожидается номер PR, а не «${positionals[0] ?? ""}»`);
+      return (cmd === "premerge" ? cmdPrPremerge : cmdPrLabels)(io, repoOf(values.repo), Number(m[1]));
     }
     if (group === "task") {
       const { values, positionals } = parseArgs({
