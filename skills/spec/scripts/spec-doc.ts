@@ -187,19 +187,24 @@ function badNames(groups: Map<string, Group>): [string, string][] {
 }
 
 /** Описание решения — `<папка>.md` рядом с тестами папки, путь от корня. */
-export const descriptionPath = (g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.md`;
+// it / test с именем-литералом в тексте файла: сканер, не нашедший ни одного, их потерял; `it(name, …)` — не потеря
+const LITERAL_TEST = /(?<![\w$.])(?:it|test)(?:\.\w+)*\s*\(\s*["'`]/;
+
+export const descriptionPath =(g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.md`;
 
 /**
  * Проза группы: вступление — `<папка>.md` (зачем, причина, отвергнутое), describe и it — их JSDoc из исходников
  * (отчёты комментариев не несут). Describe без тестов в отчёте (имя из it.each с подстановкой) прозу теряет.
  * Возвращает файлы, которых нет на диске (они без прозы), папки без описания, файлы тестов с шапкой — рассказ
- * пишется в одном месте, шапка файла в документацию не идёт, — и прежние главные `rule.*`, которые надо переименовать.
+ * пишется в одном месте, шапка файла в документацию не идёт, — прежние главные `rule.*`, которые надо переименовать, и
+ * файлы, где сканер не нашёл ни одного теста, хотя в тексте есть вызов с именем-литералом: тесты он потерял.
  */
 export function attachDocs(
   groups: Map<string, Group>,
   root: string,
-): { missing: string[]; headers: string[]; legacy: string[]; undescribed: string[] } {
+): { missing: string[]; headers: string[]; legacy: string[]; undescribed: string[]; unscanned: string[] } {
   const missing: string[] = [];
+  const unscanned: string[] = [];
   const headers: string[] = [];
   const legacy: string[] = [];
   const undescribed: string[] = [];
@@ -220,7 +225,8 @@ export function attachDocs(
         missing.push(file);
         continue;
       }
-      const docs = L.parseDocs(file, source);
+      const { tests, docs } = L.scanJs(file, source);
+      if (!tests.length && LITERAL_TEST.test(source)) unscanned.push(file);
       if (docs.file) headers.push(file);
       for (const [key, text] of docs.describes) {
         let node: Node | undefined = g.tree;
@@ -233,7 +239,7 @@ export function attachDocs(
       }
     }
   }
-  return { missing, headers, legacy, undescribed };
+  return { missing, headers, legacy, undescribed, unscanned };
 }
 
 /** Метаданные прогона харнесса: файл теста + название → то, чего нет в названии (код примера, причина исключения). */
@@ -665,7 +671,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   META = loadMeta(path.resolve(root, values.meta ?? ".spec-meta"));
   const { groups, out, libFiles } = build(tests);
-  const { missing, headers, legacy, undescribed } = attachDocs(groups, root);
+  const { missing, headers, legacy, undescribed, unscanned } = attachDocs(groups, root);
   const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);
   // названия: старые — исключениями с задачей (файл на название в папке решения), новые нарушения и ненужные
   // исключения — ошибки
@@ -742,6 +748,7 @@ export async function main(argv: string[]): Promise<number> {
   );
   for (const file of [...out.keys()].sort()) console.error(`spec-doc: вне дерева: ${file} (${testsWord(out.get(file)!.length)})`);
   if (missing.length) console.error(`spec-doc: нет исходников (${missing.length}) — проза из JSDoc не взята: ${missing.join(", ")}`);
+  for (const file of unscanned) console.error(`spec-doc: сканер не нашёл тестов в ${file} — проза JSDoc не взята, spec-diff без --report его тестов не видит`);
   for (const file of undescribed) console.error(`spec-doc: нет описания ${file} — зачем, причина, отвергнутое`);
   for (const file of noMain) console.error(`spec-doc: нет главного файла ${file} — его describe открывают страницу`);
   for (const [name, file] of names) console.error(`spec-doc: название — не утверждение по-русски: «${name}» (${file})`);
