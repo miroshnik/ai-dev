@@ -1532,8 +1532,17 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   return 0;
 }
 
-/** Ветка задачи по канону — `<type>/<N>-<slug>`, с префиксом области или без. */
-const isTaskBranch = (branch: string, number: number) => new RegExp(`(^|/)[a-z]+/${number}-`).test(branch);
+// типы задач канона — копия EST_TYPES и BRANCH_CONV_RE из skills/est/scripts/est.ts: общего модуля нет (скилл ставится
+// один), одинаковость разбора держит стандарт tests/standards/task-branch
+const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
+const TASK_BRANCH_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + TASK_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
+
+/** Ветка задачи по канону — `[<область>/]<type>/<N>-<slug>`: тип (в нижнем регистре) и номер, иначе null. */
+export function taskBranch(branch: string): { type: string; issue: number } | null {
+  const m = TASK_BRANCH_RE.exec(branch);
+  return m ? { type: m[1]!.toLowerCase(), issue: parseInt(m[2]!, 10) } : null;
+}
+const isTaskBranch = (branch: string, number: number) => taskBranch(branch)?.issue === number;
 
 /**
  * PR задачи, с которыми GitHub её не связал: среди последних открытых и влитых PR основной ветки — ветка задачи или
