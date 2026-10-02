@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { codeOnly } from "../../../skills/spec/scripts/harness.ts";
 import { parseJs } from "../../../skills/spec/scripts/speclib.ts";
 
 const names = (src: string) => parseJs("tests/capabilities/x/a.test.ts", src).map((t) => [...t.describes, t.name].join(" › "));
@@ -92,6 +93,30 @@ describe("Названия берутся из исходников сканер
     expect(names(src)).toEqual(["б", "в"]);
     const body = parseJs("tests/capabilities/x/a.test.ts", src).find((t) => t.name === "б")!.body;
     expect(body).toBe(",()=>{h(/*c*//[`)]/);}");
+  });
+
+  // пробел сканер считал своим списком: NBSP и `\f` — значащий символ, регулярка после них — «деление» (#271)
+  it("регулярку после NBSP или `\\f` сканер пропускает", () => {
+    for (const space of [" ", "\f"]) expect(names(`const ok = x =${space}/[\`]/.test(y);\nit("а", () => {});`)).toEqual(["а"]);
+  });
+
+  // обход кода был скопирован в сканер и харнесс и расходился в пробелах и шебанге (#271)
+  it("на трудных исходниках (комментарий перед регуляркой, комментарий в `${…}`, NBSP, `\\f`, BOM, шебанг) сканер названий и харнесс одинаково видят, где код", () => {
+    // исходник и он же глазами харнесса: комментарии — пробелами; шаблон с `${…}` — строка целиком
+    const hard: [string, string][] = [
+      ["f(); /* c */ /[`]/.test(y);", "f();         /[`]/.test(y);"],
+      ["const t = `${/* c */ /[`]/.source}`;", "const t = `${/* c */ /[`]/.source}`;"],
+      ["const ok = x = /[`]/.test(y);", "const ok = x = /[`]/.test(y);"],
+      ["const ok = x =\f/[`]/.test(y);", "const ok = x =\f/[`]/.test(y);"],
+      ["﻿/[`]/.test(y);", "﻿/[`]/.test(y);"],
+      ["#!/usr/bin/env bun\n/[`]/.test(y);", "                  \n/[`]/.test(y);"],
+    ];
+    const tail = '\nit("код", () => {}); // it("комментарий", () => {});\n';
+    const tailCode = '\nit("код", () => {});                                \n';
+    for (const [head, code] of hard) {
+      expect([head, names(head + tail)]).toEqual([head, ["код"]]);
+      expect([head, codeOnly(head + tail)]).toEqual([head, code + tailCode]);
+    }
   });
 
   // сторож от перекоррекции: `/` после имени, `)`, `]` и числа — деление, иначе до второго `/` строки всё — «регулярка»
