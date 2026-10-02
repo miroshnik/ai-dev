@@ -45,8 +45,8 @@ describe("каждая мутация пишет аудит", () => {
 
 - *несколько соглашений над одним реестром в папке* — у каждого `rule`
   («audit», «cancel»): служебные тесты называют его («реестр «формы» не пуст
-  (audit)»), исключения в общем `exceptions.ts` — с тем же `rule` (без `rule`
-  — ко всем соглашениям папки);
+  (audit)»), исключение в общем `exceptions/` папки — с тем же `rule` (без
+  `rule` — ко всем соглашениям папки);
 - *вне охвата* — `outside: [{ item, reason }]` (по `key`): форма входа,
   намеренное отличие раздела — свой тест «вне охвата: <ключ>» с причиной на
   странице, а не фильтр в коде теста; элемент пропал из реестра — «убери из
@@ -121,15 +121,25 @@ export default restrict({ id: "no-alert", selectors: ["CallExpression[callee.nam
 
 **Исключения — явные, с задачей, и уходят, когда больше не нужны.**
 
-- *Реестр + инвариант:* `exceptions.ts` в папке решения —
-  `const exceptions: Exception[] = [{ item: "importLegacy", issue: 12, reason: "…" }]; export default exceptions;`
-  (именованная константа: анонимный `export default` ловит
-  `import/no-anonymous-default-export` популярных пресетов), в
-  `invariant` — `exceptions` и `key` (стабильный идентификатор элемента: имя,
-  путь). Исключённый элемент вместо обычного теста получает «исключение:
+- *Реестр + инвариант:* каталог `exceptions/` в папке решения, файл на
+  исключение — `exceptions/importLegacy.json`:
+  `{ "item": "importLegacy", "issue": 12, "reason": "…" }` (`rule` — по
+  желанию); в тесте `const exceptions = exceptionsIn();` харнесса (каталог
+  папки вызывающего теста, или `exceptionsIn("<папка>")`), в `invariant` —
+  `exceptions` и `key` (стабильный идентификатор элемента: имя, путь). Файл на
+  элемент, а не массив: подзадачи разбора долга параллельно удаляют каждая
+  свой файл и не конфликтуют. Имя файла — элемент латиницей (проверка его не
+  требует); тот же элемент в двух файлах, не JSON или без `item` — ошибка с
+  путём. Исключённый элемент вместо обычного теста получает «исключение:
   <ключ> (#N)»: зелёный, пока нарушает соглашение; начал соблюдать — красный
-  «убери исключение» (храповик: долг только уменьшается). Исключение без
-  задачи, без причины или на элемент вне реестра — красный.
+  «убери исключение: удали <файл>» (храповик: долг только уменьшается).
+  Исключение без задачи, без причины или на элемент вне реестра — красный.
+  Прежний `exceptions.ts` в папке решения — красный тест «исключения —
+  файлом на элемент в exceptions/, а не в exceptions.ts» с подсказкой
+  переноса: `node .agents/skills/spec/scripts/spec-exceptions.ts` раскладывает
+  каждый файл по каталогу, меняет импорт в тестах папки на `exceptionsIn()`,
+  путь в `package.json` и workflow CI — на каталог; что не переписал —
+  строкой `!`, код 1.
 - *Линт-правило:* исключение — отключение в коде, там же, где нарушение:
   `// eslint-disable-next-line no-console -- #12 причина`. `collectEslint`
   включает `reportUnusedDisableDirectives: "error"` — отключение, которое
@@ -180,7 +190,7 @@ export default {
   путём, в правилах ESLint он первым), «<модуль> импортирует <пакет>» (пакет не
   разрешён модулю — красный), «<модуль> использует разрешённый пакет <пакет>»
   (не импортируется — красный: модель разошлась с кодом). Исключения из
-  `exceptions.ts` — реестру, где есть их элемент (хост — реестру хостов, а не
+  `exceptions/` — реестру, где есть их элемент (хост — реестру хостов, а не
   каталогов); `rule` — имя реестра, когда элемент есть в нескольких.
   Импорты — статический разбор: относительные, псевдонимы, встроенные модули
   Node и `import type` — не пакеты. Пакеты проверяет разбор, а не плагин:
@@ -226,13 +236,15 @@ export default {
   каталог артефактами):
 
   ```bash
-  node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions.ts]
+  node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions]
   ```
 
   Тесты «<точка> вызывается тестом capability» — вызов из
   `tests/capabilities/` (из стандарта или хелпера не засчитан); «реестр
   «точки входа» не пуст»; «исключение: <точка> (#N)» — зелёное, пока теста
-  нет, появился — «убери исключение». Код 1 при незаявленных. Отчёт —
+  нет, появился — «убери исключение». `--exceptions` — каталог, файл на
+  исключение (нет каталога — исключений нет; файл вместо каталога — код 2 с
+  подсказкой переноса). Код 1 при незаявленных. Отчёт —
   `.spec-claims.xml` (JUnit) в папке стандарта `tests/standards/entry-points`
   (`--standard`): передай его в `spec-doc` вместе с отчётами раннеров — сверка
   попадёт в спеку с описанием `entry-points.md` стандарта.
@@ -262,9 +274,9 @@ export default {
 
 ```ts
 import { it } from "vitest";
-import { deadCode } from "../../../.agents/skills/spec/scripts/harness.ts";
-import exceptions from "./exceptions.ts";
+import { deadCode, exceptionsIn } from "../../../.agents/skills/spec/scripts/harness.ts";
 
+const exceptions = exceptionsIn(); // exceptions/<находка>.json папки: { "item": "export:src/math.ts#factorial", … }
 deadCode(it, { root: process.cwd(), exceptions }); // или report: ".knip.json" — готовый `knip --reporter json`
 // аргументы knip: deadCode(it, { root, args: ["--tsConfig", "tsconfig.test.json"] }) — тесты вне основного tsconfig
 ```
