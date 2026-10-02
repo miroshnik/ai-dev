@@ -445,7 +445,7 @@ export interface Session {
   routine: boolean;
   mtime?: number;
   v?: number;
-  guest?: boolean; // транскрипт из каталога другого репозитория реестра: привязка только признаками репозитория задачи
+  guest?: boolean; // транскрипт из каталога другого репозитория реестра или временной папки приложения: привязка только признаками репозитория задачи
 }
 
 /**
@@ -1536,35 +1536,46 @@ function transcriptFiles(repo: Repo): string[] {
 
 /** Транскрипты Claude Code по каталогам работы: ~/.claude/projects/<путь-через-дефисы>*\/*.jsonl. */
 function transcriptFilesIn(paths: string[], projectsDir = PROJECTS_DIR): string[] {
+  const encs = paths.map(encodePath);
+  return transcriptFilesWhere((d) => encs.some((e) => d.startsWith(e)), projectsDir);
+}
+
+/** Транскрипты Claude Code в каталогах ~/.claude/projects, чьё имя подходит под match. */
+function transcriptFilesWhere(match: (dir: string) => boolean, projectsDir = PROJECTS_DIR): string[] {
+  let dirs: string[];
+  try {
+    dirs = readdirSync(projectsDir).filter(match);
+  } catch {
+    return [];
+  }
   const files: string[] = [];
-  for (const p of paths) {
-    const enc = encodePath(p);
-    let dirs: string[];
+  for (const d of dirs) {
+    let names: string[];
     try {
-      dirs = readdirSync(projectsDir).filter((d) => d.startsWith(enc));
+      names = readdirSync(path.join(projectsDir, d));
     } catch {
       continue;
     }
-    for (const d of dirs) {
-      let names: string[];
-      try {
-        names = readdirSync(path.join(projectsDir, d));
-      } catch {
-        continue;
-      }
-      for (const fn of names) if (fn.endsWith(".jsonl")) files.push(path.join(projectsDir, d, fn));
-    }
+    for (const fn of names) if (fn.endsWith(".jsonl")) files.push(path.join(projectsDir, d, fn));
   }
   return uniqSortedStrs(files);
 }
+
+/**
+ * Каталог транскриптов временной папки приложения Claude (`…/Claude/scratch-workspaces/…`): там работает сессия без
+ * выбранной папки. Перейдя в репозиторий (change_directory), она пишет транскрипт туда же, пока приложение не перенесёт
+ * его в каталог репозитория — уже после закрытия задачи.
+ */
+const isScratchDir = (dir: string) => dir.includes("-scratch-workspaces-");
 
 /** Имя репозитория `owner/name` в тексте: в URL, pr-link, выводе `git push` (`…/owner/name.git`), но не часть другого имени. */
 const slugRe = (slug: string) => new RegExp(`(?<![\\w.-])${reEscape(slug)}(?![\\w-]|\\.(?!git\\b)[\\w-])`, "i");
 
 /**
- * Сессии-гости: транскрипты из каталогов других репозиториев реестра, в которых (или в субагентах) встречается имя
- * репозитория задачи — разговор в одном репозитории перерос в задачу другого. Без имени репозитория работы над его
- * задачей там нет: коммит, push, PR и URL issue его называют. Индекс — по mtime (indexFile), текст читается раз.
+ * Сессии-гости: транскрипты из каталогов других репозиториев реестра и временных папок приложения, в которых (или в
+ * субагентах) встречается имя репозитория задачи — разговор в одном репозитории перерос в задачу другого, сессия без
+ * папки перешла в репозиторий задачи. Без имени репозитория работы над его задачей там нет: коммит, push, PR и URL
+ * issue его называют. Индекс — по mtime (indexFile), текст читается раз.
  */
 export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: string[], projectsDir = PROJECTS_DIR, indexFile?: string): string[] {
   const own = new Set(transcriptFilesIn(ownPaths, projectsDir));
@@ -1572,7 +1583,7 @@ export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: s
   const idx = indexFile ? loadJson<Record<string, { mtime: number; hit: boolean }>>(indexFile, {}) : {};
   let changed = false;
   const out: string[] = [];
-  for (const f of transcriptFilesIn(otherPaths, projectsDir)) {
+  for (const f of uniqSortedStrs(transcriptFilesIn(otherPaths, projectsDir).concat(transcriptFilesWhere(isScratchDir, projectsDir)))) {
     if (own.has(f)) continue;
     let m: number;
     try {

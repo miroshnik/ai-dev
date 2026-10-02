@@ -447,6 +447,49 @@ describe("Сессия из каталога другого репозитори
 });
 
 /**
+ * Сессия приложения Claude без выбранной папки работает во временной папке приложения (`…/Claude/scratch-workspaces/…`),
+ * потом переходит в репозиторий задачи (`change_directory`), а транскрипт остаётся в каталоге временной папки, пока
+ * приложение не перенесёт его в каталог репозитория — уже после закрытия задачи. Такая сессия — гость любого
+ * репозитория реестра: кандидат по имени репозитория задачи в транскрипте, привязка — его признаками.
+ */
+describe("Сессия из временной папки приложения — гость любого репозитория реестра", () => {
+  const SID = "55555555-6666-7777-8888-999999999999";
+  const SCRATCH_CWD = "/Users/u/Library/Application Support/Claude/scratch-workspaces/0a1b/2c3d/scratch-2026-09-01-abc123";
+  const SCRATCH = SCRATCH_CWD.replace(/[^A-Za-z0-9]/g, "-");
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+  const prompt = (hhmm: string, text: string) => ({ type: "user", timestamp: at(hhmm), cwd: SCRATCH_CWD, gitBranch: "", origin: { kind: "human" }, message: { role: "user", content: text } });
+  const work = (hhmm: string) => ({ type: "user", timestamp: at(hhmm), cwd: SCRATCH_CWD, gitBranch: "", message: { content: [{ type: "tool_result", tool_use_id: "t", content: "…" }] } });
+  const projects = () => path.join(dir, "projects");
+  const put = (rel: string, text: string) => {
+    mkdirSync(path.dirname(path.join(projects(), rel)), { recursive: true });
+    writeFileSync(path.join(projects(), rel), text);
+  };
+  const candidates = () => guestTranscripts("o/a", ["/work/a"], ["/work/b"], projects());
+
+  it("сессия из временной папки приложения с именем репозитория задачи — кандидат-гость", () => {
+    put(`${SCRATCH}/s1.jsonl`, '{"text":"#57 — задача репозитория o/a (https://github.com/o/a/issues/57)"}\n');
+    put(`${SCRATCH}/s2.jsonl`, '{"text":"без упоминаний"}\n');
+    put(`${SCRATCH}/s2/subagents/agent-1.jsonl`, '{"prRepository":"o/a"}\n');
+    expect(candidates().map((f) => path.relative(projects(), f))).toEqual([`${SCRATCH}/s1.jsonl`, `${SCRATCH}/s2.jsonl`]);
+  });
+
+  it("сессия из временной папки без имени репозитория задачи — не кандидат", () => {
+    put(`${SCRATCH}/s1.jsonl`, '{"text":"работа в foo/abc и o/ab"}\n');
+    put(`${SCRATCH}/s2.jsonl`, '{"text":"без упоминаний"}\n');
+    expect(candidates()).toEqual([]);
+  });
+
+  it("задача без PR из такой сессии получает факт по названию и URL issue", () => {
+    const title = { type: "custom-title", customTitle: "#57 Замер · неделя без очереди", sessionId: SID };
+    put(`${SCRATCH}/${SID}.jsonl`, jsonl([title, prompt("10:00", "#57 — задача репозитория o/a (https://github.com/o/a/issues/57): замерь"), work("10:10"), work("10:20")]));
+    const sessions = candidates().map((f) => ({ ...parseSessionFile(f), guest: true }));
+    const res = computeFact({ ...stubRepo(sessions, []), full: "o/a" }, 57, [], []);
+    expect(res.h).toBe(0.33); // 10:00–10:20
+    expect(res.details[0]!.rules.название).toBe(3);
+  });
+});
+
+/**
  * PR задачи: сильные связи (закрыл, `Closes #N`, номер в ветке, связан вручную) и — только если сильных нет —
  * слабые, упоминания. Упоминание в PR, который закрывает другие задачи, — не работа над этой: иначе задача без
  * своего PR получает чужой PR, его время и тип.
