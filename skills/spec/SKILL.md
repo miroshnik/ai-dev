@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Спецификация из тестов — канон спеки (правило «Спецификация — решения», вынесенное из ядра AGENTS.md) в canon.md скилла, детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет), spec-run находит для неё зелёный прогон PR, проверивший дерево мержа; spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; spec-break поломкой доказывает, что проверка умеет упасть (сломать → прогнать → всегда откатить); harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и после мержа (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда надо доказать, что унаследованный или новый тест ловит поломку («покрыто» ли на деле); когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
-allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(node *skills/spec/scripts/spec-break.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
+description: Спецификация из тестов — канон спеки (правило «Спецификация — решения», вынесенное из ядра AGENTS.md) в canon.md скилла, детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет), spec-run находит для неё зелёный прогон PR, проверивший дерево мержа; spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; spec-break поломкой доказывает, что проверка умеет упасть (сломать → прогнать → всегда откатить); spec-exceptions переносит exceptions.ts проекта в каталог exceptions/ — файл на исключение; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и после мержа (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда надо доказать, что унаследованный или новый тест ловит поломку («покрыто» ли на деле); когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(node *skills/spec/scripts/spec-break.ts *) Bash(bun *skills/spec/scripts/spec-exceptions.ts *) Bash(node *skills/spec/scripts/spec-exceptions.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
 # spec — документация из названий тестов, дифф спеки в PR
@@ -26,6 +26,8 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
   capability (журнал `journal` харнесса), отчёт JUnit — в `spec-doc`;
 - `spec-break.ts` — проверка поломкой: правка кода, прогон теста, откат
   всегда (и после обрыва); ✅ упал / ❌ не упал по каждой поломке;
+- `spec-exceptions.ts` — перенос `exceptions.ts` папок решений в каталог
+  `exceptions/`, файл на исключение (раздел «spec-exceptions»);
 - `harness.ts` — библиотека для тестов проекта: механическая проверка
   регистрирует обычные тесты раннера и попадает в спеку (раздел «Проверки»).
 
@@ -52,6 +54,7 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 | Соглашение для всех элементов (мутации, маршруты, файлы) | `invariant` в `tests/standards/<name>/<name>.test.ts` — раздел «Проверки» |
 | Доказать, что проверка умеет упасть (перенос старой спеки, ревью «покрыто») | `spec-break` — поломка под проверку, по одной на прогон |
 | После прогона всех тестов и шардов | `spec-claims` — каждая точка входа вызвана тестом capability; его отчёт — в `spec-doc` вместе с отчётами раннеров |
+| Харнесс упал «исключения — файлом на элемент в exceptions/, а не в exceptions.ts» | `spec-exceptions` — раздел «spec-exceptions» |
 
 ## Отчёты для spec-doc
 
@@ -205,8 +208,9 @@ bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--h
 
 Решения вне названий тестов — отдельными разделами, только если менялись:
 «Модель архитектуры — снято / добавлено» (модули, зависимости, пакеты из
-`tests/architecture/model.ts`), «Исключения» (пункты `exceptions.ts` —
-элемент и `rule` харнесса или файл и название у `spec-names` — и
+`tests/architecture/model.ts`), «Исключения» (файлы `exceptions/` и пункты
+прежних `exceptions.ts` — элемент и `rule` харнесса или файл и название у
+`spec-names` — и
 отключения линта `eslint-disable … -- #N` в изменённых файлах; каждый пункт
 — своя строка, одинаковые не схлопываются), «Проверки
 харнесса» (реестры `invariant` и правила `examples` по литералам
@@ -378,6 +382,29 @@ SIGINT/SIGTERM/SIGHUP (команда теста убивается со все�
 `--restore` возвращает файл; файл правили после обрыва — журнал не
 применяется, код 2 — сверить руками.
 
+## spec-exceptions
+
+```bash
+bun <каталог скилла>/scripts/spec-exceptions.ts [--root DIR]
+```
+
+Исключения решения — каталог `exceptions/` папки, файл на исключение
+(`<элемент>.json`: `{ item, rule?, issue, reason }`), а не массив в
+`exceptions.ts`: подзадачи разбора долга параллельно удаляют каждая свой файл
+и не конфликтуют (в массиве каждая следующая получала конфликт соседних строк
+и повторный прогон CI). Команда переносит каждый `exceptions.ts` (`.mts`,
+`.js`, `.mjs`, `.json`) папки решения в `tests/`: файл на исключение (имя —
+элемент латиницей, `rule--` впереди), старый файл удаляется; импорт в
+файлах папки (`import exceptions from "./exceptions.ts"`) — на
+`const exceptions = exceptionsIn()` с импортом из харнесса; путь к старому
+файлу в `package.json` и `.github/workflows/*.yml` (`spec-claims
+--exceptions`) — на каталог. Вывод — строки `-` (перенесён файл), `+`
+(новый файл), `~` (переписан импорт или путь), `!` (поправить руками:
+ссылка из другой папки, нет импорта харнесса), `○` (исключения названий
+spec-doc — свой формат, не переносятся). Коды: 0 — перенесено или
+переносить нечего, 1 — есть `!`, 2 — файл исключений не загружается или не
+массив `{ item, … }`. Повторный запуск ничего не меняет.
+
 ## Проверки — `harness.ts`, `architecture.ts`, `spec-claims.ts`
 
 Механическая проверка — это тесты раннера (или отчёт в формате раннера): они
@@ -390,7 +417,7 @@ SIGINT/SIGTERM/SIGHUP (команда теста убивается со все�
 | Соглашение на каждом элементе реестра из кода («каждая мутация пишет аудит») | `invariant` | `standards/<name>/` |
 | Линт-правило: «нельзя», «можно», «вне охвата» | `examples`, `eslintLinter` | `standards/<name>/` + фрагмент `eslint.ts` |
 | Правило ESLint в папке стандарта | `collectEslint` в `eslint.config.*` | фрагменты `eslint.ts` дерева |
-| Исключения с храповиком | `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions.ts` папки решения |
+| Исключения с храповиком | `exceptionsIn()` → `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions/<элемент>.json` папки решения; перенос — `spec-exceptions` |
 | Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
 | Внешние системы (C1): хосты, пакеты и ключи — только в адаптере, сеть в тестах, CSP | `externals` в модели, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, настройка тестов |
 | Контейнеры (C2): модули, связи, конфиги деплоя, клиенты хранилищ | `containers` в модели, `architecture`, `deployUnits` | `architecture/model.ts` |
