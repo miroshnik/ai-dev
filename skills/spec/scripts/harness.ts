@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -47,7 +47,7 @@ export interface Invariant<T> {
    * служебные тесты называют его («реестр «формы» не пуст (audit)»).
    */
   rule?: string;
-  /** Исключения — из `exceptions.ts` папки решения: элемент, задача, которая его снимет, и причина. */
+  /** Исключения — каталог `exceptions/` папки решения (`exceptionsIn()`): элемент, задача, которая его снимет, и причина. */
   exceptions?: readonly Exception[];
   /** Вне охвата — элементы, к которым соглашение не относится намеренно, с причиной: она видна на странице. */
   outside?: readonly { item: string; reason: string }[];
@@ -62,13 +62,91 @@ export interface Exception {
   reason: string;
   /** Соглашение (`rule` инварианта), к которому исключение относится; без него — ко всем инвариантам папки. */
   rule?: string;
+  /** Файл исключения — его ставит `exceptionsIn`: храповик называет, какой файл удалить. */
+  file?: string;
 }
+
+const EXCEPTIONS_DIR = "exceptions";
+// прежний формат — массив в одном файле папки решения; исключения названий spec-doc (names.exceptions.*) — не он
+const LEGACY_EXCEPTIONS = ["exceptions.ts", "exceptions.mts", "exceptions.js", "exceptions.mjs", "exceptions.json"];
+const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
+
+/**
+ * Исключения папки решения — каталог `exceptions/`, файл на исключение (`<элемент>.json`: `{ item, issue, reason,
+ * rule? }`): параллельные PR добавляют и удаляют каждый свой файл, а в общем массиве соседние строки конфликтуют.
+ * Каталог — `<dir>/exceptions`, по умолчанию — папки вызывающего теста (по стеку, как `meta`); нет каталога —
+ * исключений нет. Файл не JSON-исключение или один элемент (с тем же `rule`) в двух файлах — ошибка с путями.
+ */
+export function exceptionsIn(dir?: string): Exception[] {
+  const folder = dir ?? callerFolder();
+  if (folder === null) throw new Error("exceptionsIn: вызов не из файла теста — передай каталог папки решения");
+  return exceptionFiles(path.join(folder, EXCEPTIONS_DIR));
+}
+
+/**
+ * Исключения из каталога файлов (`<папка решения>/exceptions`): файл на исключение, по имени файла. Каталога нет —
+ * исключений нет: git не хранит пустой каталог, последнее снятое исключение уносит его с собой.
+ */
+export function exceptionFiles(at: string): Exception[] {
+  let names: string[];
+  try {
+    names = readdirSync(at).filter((n) => !n.startsWith(".")).sort();
+  } catch {
+    return [];
+  }
+  const out: Exception[] = [];
+  const seen = new Map<string, string>();
+  for (const name of names) {
+    const file = path.join(at, name).split(path.sep).join("/");
+    if (!name.endsWith(".json")) throw new Error(`${file}: исключение — файл <элемент>.json с { item, issue, reason }`);
+    let data: Partial<Exception>;
+    try {
+      data = JSON.parse(readFileSync(file, "utf8")) as Partial<Exception>;
+    } catch (e) {
+      throw new Error(`${file}: не JSON — ${(e as Error).message}`);
+    }
+    if (!data || typeof data !== "object" || typeof data.item !== "string") throw new Error(`${file}: исключение — { item, issue, reason }, rule — по желанию`);
+    const key = `${data.rule ?? ""}\0${data.item}`;
+    const twin = seen.get(key);
+    if (twin) throw new Error(`исключение ${data.item}${data.rule ? ` (${data.rule})` : ""} — в двух файлах: ${twin}, ${file} — оставь один`);
+    seen.set(key, file);
+    out.push({ item: data.item, issue: data.issue as number, reason: String(data.reason ?? ""), ...(data.rule ? { rule: data.rule } : {}), file });
+  }
+  return out;
+}
+
+/** Папка решения вызывающего теста от корня проекта (cwd): `tests/<вид>/<имя>`, вне `tests/` — каталог файла. */
+function callerFolder(): string | null {
+  const file = callerTest(process.cwd());
+  if (!file) return null;
+  const parts = file.split("/");
+  return parts[0] === "tests" && parts.length > 3 ? parts.slice(0, 3).join("/") : path.posix.dirname(file);
+}
+
+/**
+ * Прежний формат исключений — `exceptions.ts` в папке вызывающего теста: упавший тест с подсказкой переноса, один на
+ * папку за прогон. Проверка регистрирует его сама — проект, который ещё импортирует `exceptions.ts`, `exceptionsIn` не зовёт.
+ */
+function legacyExceptions(it: It): void {
+  const folder = callerFolder();
+  if (folder === null) return;
+  const legacy = LEGACY_EXCEPTIONS.map((n) => `${folder}/${n}`).find((f) => existsSync(path.resolve(process.cwd(), f)));
+  if (!legacy || seen.has(`legacy\0${folder}`)) return;
+  seen.add(`legacy\0${folder}`);
+  it("исключения — файлом на элемент в exceptions/, а не в exceptions.ts", () => {
+    throw new Error(`${legacy}: исключения — файл на элемент в ${folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
+  });
+}
+
+/** Что сделать с ненужным исключением: удалить его файл, а исключение без файла — убрать из списка. */
+const dropHint = (e: Exception): string => (e.file ? `убери исключение: удали ${e.file}` : "убери исключение");
 
 /**
  * Тесты соглашения: «реестр не пуст» (опечатка в пути не проходит молча), «нарушитель не проходит» (проверка умеет
  * падать) и по тесту на элемент. В названиях нет счётчиков: реестр растёт — в диффе спеки только новые элементы.
  */
 export function invariant<T>(it: It, spec: Invariant<T>): void {
+  legacyExceptions(it);
   // несколько соглашений над одним реестром в одном describe: служебные тесты различает правило
   const tag = spec.rule ? ` (${spec.rule})` : "";
   it(`реестр «${spec.registry}» не пуст${tag}`, () => {
@@ -120,13 +198,13 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
     it(`исключение${tag}: ${e.item} (#${e.issue})`, async () => {
       if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи — issue: номер задачи, которая снимет долг`);
       if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
-      if (!byKey.has(e.item)) throw new Error(`элемента ${e.item} в реестре «${spec.registry}» нет — убери исключение из exceptions.ts`);
+      if (!byKey.has(e.item)) throw new Error(`элемента ${e.item} в реестре «${spec.registry}» нет — ${dropHint(e)}`);
       try {
         await spec.check(byKey.get(e.item)!);
       } catch {
         return;
       }
-      throw new Error(`${e.item} уже соблюдает соглашение — убери исключение из exceptions.ts (#${e.issue})`);
+      throw new Error(`${e.item} уже соблюдает соглашение — ${dropHint(e)} (#${e.issue})`);
     });
   }
 }
@@ -629,6 +707,7 @@ export function deadCode(it: It, opts: { root: string; report?: string; args?: r
     }
     return findings;
   };
+  legacyExceptions(it);
   const excepted = new Map((opts.exceptions ?? []).map((e) => [e.item, e]));
   for (const [name, kind] of KNIP) {
     it(name, () => {
@@ -642,7 +721,7 @@ export function deadCode(it: It, opts: { root: string; report?: string; args?: r
       if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи`);
       if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
       const kind = e.item.split(":")[0]!;
-      if (!load().get(kind)?.has(e.item)) throw new Error(`knip больше не находит ${e.item} — убери исключение (#${e.issue})`);
+      if (!load().get(kind)?.has(e.item)) throw new Error(`knip больше не находит ${e.item} — ${dropHint(e)} (#${e.issue})`);
     });
   }
 }

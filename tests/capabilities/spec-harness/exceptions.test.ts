@@ -1,8 +1,10 @@
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { eslintLinter, invariant, lintExceptions } from "../../../skills/spec/scripts/harness.ts";
+import { eslintLinter, exceptionsIn, invariant, lintExceptions } from "../../../skills/spec/scripts/harness.ts";
 import type { Exception, It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -49,7 +51,7 @@ const run = (exceptions: Exception[]) =>
   );
 
 /**
- * Исключение — долг с задачей, которая его снимет: оно записано явно (`exceptions.ts` в папке решения), и как только
+ * Исключение — долг с задачей, которая его снимет: оно записано явно (файл в `exceptions/` папки решения), и как только
  * элемент начал соблюдать соглашение, проверка требует убрать исключение — долг только уменьшается.
  */
 describe("Исключение из соглашения — явное, с задачей, и уходит, когда больше не нужно", () => {
@@ -65,7 +67,7 @@ describe("Исключение из соглашения — явное, с за
       { item: "importLegacy", issue: 12, reason: "аудит в #12" },
       { item: "createInvoice", issue: 13, reason: "было давно" },
     ]);
-    expect(r["исключение: createInvoice (#13)"]).toStartWith("✗ createInvoice уже соблюдает соглашение — убери исключение из exceptions.ts");
+    expect(r["исключение: createInvoice (#13)"]).toBe("✗ createInvoice уже соблюдает соглашение — убери исключение (#13)");
   });
 
   it("исключение без задачи или без причины — упавший тест", async () => {
@@ -90,6 +92,98 @@ let dir: string;
 let cleanup: () => void;
 beforeEach(() => ({ dir, cleanup } = tmpDir()));
 afterEach(() => cleanup());
+
+const exception = (item: string, issue: number, reason: string, rule?: string) => JSON.stringify({ item, ...(rule ? { rule } : {}), issue, reason }, null, 2) + "\n";
+const AUDIT = "tests/standards/audit";
+
+/** Проект с тестом стандарта: харнесс — из скилла, исключения — тем, что даёт `head` (импорт или exceptionsIn). */
+const auditTest = (head: string, exceptions: string) => `import { it } from "bun:test";
+import { exceptionsIn, invariant } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};
+${head}
+invariant(it, {
+  registry: "мутации",
+  items: ["createInvoice", "importLegacy"],
+  name: (m) => m + " пишет аудит",
+  key: (m) => m,
+  check: (m) => { if (m === "importLegacy") throw new Error("нет аудита"); },
+  violator: { name: "без аудита", item: "importLegacy" },
+  exceptions: ${exceptions},
+});
+`;
+
+/** bun test в проекте: имя теста → «✓» или «✗ сообщение» из JUnit-отчёта. */
+function bunTest(): Record<string, string> {
+  spawnSync("bun", ["test", "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
+  const xml = readFileSync(path.join(dir, "r.xml"), "utf8");
+  const out: Record<string, string> = {};
+  const unescape = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/&amp;/g, "&");
+  for (const m of xml.matchAll(/<testcase name="([^"]*)"[^>]*?(\/>|>([\s\S]*?)<\/testcase>)/g)) {
+    const failure = /<failure[^>]*message="([^"]*)"/.exec(m[3] ?? "")?.[1];
+    out[unescape(m[1]!)] = failure === undefined ? "✓" : "✗ " + unescape(failure);
+  }
+  return out;
+}
+
+/**
+ * Исключения папки решения — каталог `exceptions/`, файл на исключение: подзадачи разбора долга параллельно убирают
+ * каждая своё исключение, и удаление своего файла ни с чем не конфликтует — в одном массиве каждая следующая получала
+ * конфликт соседних строк и повторный прогон CI.
+ */
+describe("Исключения папки решения — файл на элемент: параллельные PR не правят один файл", () => {
+  it("исключение — файл в каталоге exceptions/ папки решения: exceptionsIn собирает каталог", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: auditTest("", "exceptionsIn()"),
+      [`${AUDIT}/exceptions/importLegacy.json`]: exception("importLegacy", 12, "импорт старых данных — аудит в #12"),
+    });
+    const r = bunTest();
+    expect(r["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(r["createInvoice пишет аудит"]).toBe("✓");
+    expect(r["importLegacy пишет аудит"]).toBeUndefined();
+  });
+
+  it("исключение, которое больше не нарушает, — упавший тест «убери исключение» с путём файла", async () => {
+    writeTree(dir, {
+      [`${AUDIT}/exceptions/importLegacy.json`]: exception("importLegacy", 12, "аудит в #12"),
+      [`${AUDIT}/exceptions/createInvoice.json`]: exception("createInvoice", 13, "было давно"),
+    });
+    const list = exceptionsIn(path.join(dir, AUDIT));
+    expect(list.map((e) => [e.item, e.issue, path.relative(dir, e.file!)])).toEqual([
+      ["createInvoice", 13, `${AUDIT}/exceptions/createInvoice.json`],
+      ["importLegacy", 12, `${AUDIT}/exceptions/importLegacy.json`],
+    ]);
+    const r = await run(list);
+    expect(r["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(r["исключение: createInvoice (#13)"]).toBe(`✗ createInvoice уже соблюдает соглашение — убери исключение: удали ${path.join(dir, AUDIT, "exceptions/createInvoice.json")} (#13)`);
+  });
+
+  it("два файла на один элемент — ошибка с путями обоих", () => {
+    writeTree(dir, {
+      [`${AUDIT}/exceptions/a.json`]: exception("importLegacy", 12, "аудит в #12"),
+      [`${AUDIT}/exceptions/b.json`]: exception("importLegacy", 14, "ещё раз"),
+      [`${AUDIT}/exceptions/c.json`]: exception("importLegacy", 15, "другое соглашение", "cancel"),
+    });
+    expect(() => exceptionsIn(path.join(dir, AUDIT))).toThrow(`исключение importLegacy — в двух файлах: ${path.join(dir, AUDIT, "exceptions/a.json")}, ${path.join(dir, AUDIT, "exceptions/b.json")} — оставь один`);
+  });
+
+  it("файл в exceptions/ — не JSON-исключение { item, issue, reason }: ошибка с путём файла", () => {
+    writeTree(dir, { [`${AUDIT}/exceptions/importLegacy.ts`]: 'export default { item: "importLegacy" };\n' });
+    expect(() => exceptionsIn(path.join(dir, AUDIT))).toThrow(`${AUDIT}/exceptions/importLegacy.ts: исключение — файл <элемент>.json`);
+    writeTree(dir, { "tests/standards/other/exceptions/x.json": '{ "issue": 1 }' });
+    expect(() => exceptionsIn(path.join(dir, "tests/standards/other"))).toThrow("tests/standards/other/exceptions/x.json: исключение — { item, issue, reason }");
+  });
+
+  it("exceptions.ts в папке решения — упавший тест с подсказкой команды переноса", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: auditTest('import exceptions from "./exceptions.ts";', "exceptions"),
+      [`${AUDIT}/exceptions.ts`]: 'export default [{ item: "importLegacy", issue: 12, reason: "аудит в #12" }];\n',
+    });
+    const r = bunTest();
+    expect(r["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(r["исключения — файлом на элемент в exceptions/, а не в exceptions.ts"]).toBe(
+      `✗ ${AUDIT}/exceptions.ts: исключения — файл на элемент в ${AUDIT}/exceptions/ — перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts`,
+    );
+  });
+});
 
 /**
  * Исключение из линт-правила — отключение в коде, там, где нарушение: с названием правила и задачей, которая его

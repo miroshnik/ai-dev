@@ -249,7 +249,7 @@ function owners(model: Model, dir: string): string[] {
  * подходящим путём; вне модулей или один путь у нескольких — красный),
  * «<модуль> импортирует <пакет>» на каждый внешний пакет, который модуль импортирует (не разрешён — красный),
  * «<модуль> использует разрешённый пакет <пакет>» на каждый пакет модели (не импортируется — красный: убери из модели).
- * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions.ts`.
+ * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions/` папки решения.
  */
 export function architecture(it: It, opts: { root: string; model: Model; exceptions?: readonly Exception[] }): void {
   const { model } = opts;
@@ -326,7 +326,7 @@ function routeExceptions(exceptions: readonly Exception[], specs: Invariant<unkn
     const byRule = e.rule ? specs.findIndex((sp) => sp.registry === e.rule) : -1;
     let to = byRule >= 0 ? [byRule] : keys.flatMap((k, i) => (!e.rule && k.has(e.item) ? [i] : []));
     if (!to.length) to = [0];
-    for (const i of to) out[i]!.push({ item: e.item, issue: e.issue, reason: e.reason });
+    for (const i of to) out[i]!.push({ item: e.item, issue: e.issue, reason: e.reason, ...(e.file ? { file: e.file } : {}) });
   }
   return out;
 }
