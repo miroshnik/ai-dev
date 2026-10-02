@@ -116,8 +116,9 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
 
   it("spec-exceptions переносит под Node то же, что под Bun", () => {
     const AUDIT = "tests/standards/audit";
+    // "rule" в кавычках — как в фикстуре spec-exceptions.test.ts: литерал rule spec-diff принял бы за проверку
     const legacy = {
-      [`${AUDIT}/exceptions.ts`]: 'export default [{ item: "importLegacy", issue: 12, reason: "аудит в #12" }, { item: "a/b", rule: "cancel", issue: 7, reason: "r" }];\n',
+      [`${AUDIT}/exceptions.ts`]: 'export default [{ item: "importLegacy", issue: 12, reason: "аудит в #12" }, { item: "a/b", "rule": "cancel", issue: 7, reason: "r" }];\n',
       [`${AUDIT}/audit.test.ts`]: 'import { invariant } from "../../../harness.ts";\nimport exceptions from "./exceptions.ts";\n\ninvariant(it, { exceptions });\n',
     };
     for (const side of ["bun", "node"]) writeTree(path.join(dir, side), legacy);
