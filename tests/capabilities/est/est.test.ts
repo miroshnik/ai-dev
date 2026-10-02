@@ -477,16 +477,31 @@ describe("PR достаётся задаче, которую он делает, 
     expect(prs.map((p) => [p.number, p.why])).toEqual([[61, "Closes #50 в теле PR"], [63, "номер в ветке"]]);
     expect(weak).toBe(false);
   });
+
+  it("PR ветки с другим номером в каноническом месте задаче не достаётся, хотя её номер есть в слаге", () => {
+    const [prs] = resolveLinks(repo([pr(70, [128], "Closes #128", "fix/128-api-409-on-retry"), pr(71, [136], "Closes #136", "docs/136-api-409-schema")]), issue(409));
+    expect(prs.map((p) => p.number)).toEqual([]);
+  });
 });
 
 /** Номер привязывает работу к задаче, тип нужен истории оценок — аналоги ищутся среди задач того же типа. */
 describe("Ветка `<type>/<issue>-<slug>` даёт номер и тип задачи", () => {
-  it("номер — отдельный токен ветки, даты и однозначные числа без issue- не считаются", () => {
+  it("в канонической ветке номер задачи — первое число после типа, число в слаге номером не считается", () => {
     expect(branchHasIssue("feat/42-invoice-export", 42)).toBe(true);
-    expect(branchHasIssue("issue-7-login", 7)).toBe(true);
-    expect(branchHasIssue("release/2026-09-16", 9)).toBe(false);
-    expect(branchHasIssue("fix/7-login", 7)).toBe(false);
+    expect(branchHasIssue("fix/7-login", 7)).toBe(true);
+    expect(branchHasIssue("fix/128-api-409-on-retry", 128)).toBe(true);
+    expect(branchHasIssue("fix/128-api-409-on-retry", 409)).toBe(false);
+    expect(branchHasIssue("backend/docs/136-api-409-schema", 136)).toBe(true);
+    expect(branchHasIssue("backend/docs/136-api-409-schema", 409)).toBe(false);
     expect(branchHasIssue("feat/420-x", 42)).toBe(false);
+  });
+
+  it("в неканонической ветке номер — отдельный токен, даты и однозначные числа без issue- не считаются", () => {
+    expect(branchHasIssue("issue-7-login", 7)).toBe(true);
+    expect(branchHasIssue("gh-15-sync", 15)).toBe(true);
+    expect(branchHasIssue("api-409-on-retry", 409)).toBe(true);
+    expect(branchHasIssue("release/2026-09-16", 9)).toBe(false);
+    expect(branchHasIssue("hotfix-7-login", 7)).toBe(false);
   });
 
   it("конвенция <type>/N-slug даёт номер и тип, префикс области допустим", () => {
