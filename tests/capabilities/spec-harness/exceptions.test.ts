@@ -183,6 +183,30 @@ describe("Исключения папки решения — файл на эл�
       `✗ ${AUDIT}/exceptions.ts: исключения — файл на элемент в ${AUDIT}/exceptions/ — перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts`,
     );
   });
+
+  // каталог один на папку решения: exceptionsIn() теста любой подпапки читает каталог папки, а не подпапки
+  it("каталог exceptions/ в подпапке папки решения — упавший тест с местом каталога, исключение из него не читается", () => {
+    writeTree(dir, {
+      [`${AUDIT}/sub/sub.test.ts`]: auditTest("", "exceptionsIn()"),
+      [`${AUDIT}/sub/exceptions/importLegacy.json`]: exception("importLegacy", 12, "аудит в #12"),
+    });
+    const r = bunTest();
+    expect(r["исключения — файлы <элемент>.json в exceptions/ папки решения"]).toBe(
+      `✗ ${AUDIT}/sub/exceptions/importLegacy.json: исключения — только в ${AUDIT}/exceptions/ папки решения, не в подпапке`,
+    );
+    expect(r["importLegacy пишет аудит"]).toBe("✗ нет аудита");
+  });
+
+  it("exceptions.ts подпапки — упавший тест с подсказкой переноса в exceptions/ папки решения", () => {
+    writeTree(dir, {
+      [`${AUDIT}/sub/sub.test.ts`]: auditTest('import exceptions from "./exceptions.ts";', "exceptions"),
+      [`${AUDIT}/sub/exceptions.ts`]: 'export default [{ item: "importLegacy", issue: 12, reason: "аудит в #12" }];\n',
+    });
+    const r = bunTest();
+    expect(r["исключения — файлом на элемент в exceptions/, а не в exceptions.ts"]).toBe(
+      `✗ ${AUDIT}/sub/exceptions.ts: исключения — файл на элемент в ${AUDIT}/exceptions/ — перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts`,
+    );
+  });
 });
 
 /**
