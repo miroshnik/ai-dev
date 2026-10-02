@@ -8,7 +8,7 @@
 
 ## Под Node без Bun скрипты spec пишут то же, что под Bun
 
-<details><summary>✅ 7 тестов</summary>
+<details><summary>✅ 8 тестов</summary>
 
 - ✅ spec-doc пишет тот же docs/spec, что под Bun
 - ✅ spec-diff печатает тот же раздел для PR, что под Bun
@@ -16,6 +16,7 @@
 - ✅ spec-run находит под Node тот же прогон, что под Bun
 - ✅ spec-claims пишет под Node тот же отчёт, что под Bun
 - ✅ spec-break печатает под Node тот же отчёт, что под Bun
+- ✅ spec-exceptions переносит под Node то же, что под Bun
 - ✅ копия скилла в проекте без "type": "module" запускается под Node без предупреждений
   > Установка флоу кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev.
 

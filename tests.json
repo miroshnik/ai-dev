@@ -1311,6 +1311,13 @@
   "describes": [
    "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
   ],
+  "name": "правка только файлов `exceptions/` не даёт метку решения"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
   "name": "прежняя метка решения, которого нет в диффе, — не снимается, строка в выводе"
  },
  {
@@ -2175,6 +2182,13 @@
   "name": "исключение на точку без теста — зелёное; точка, у которой тест появился, — «убери исключение»"
  },
  {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Точка входа без теста — исключение с задачей, пока тест не появился"
+  ],
+  "name": "исключения — каталог: файл вместо каталога — код 2 и подсказка переноса"
+ },
+ {
   "path": "tests/capabilities/spec-diff/parse-source.test.ts",
   "describes": [
    "Названия берутся из исходников сканером — без прогона и без парсера"
@@ -2403,6 +2417,13 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
+  "name": "исключение файлом в exceptions/: добавленное и снятое"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
   "name": "исключения одного элемента из разных соглашений папки — разные строки"
  },
  {
@@ -2411,6 +2432,13 @@
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
   "name": "модуль, зависимость и пакет модели архитектуры: добавленные и снятые"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "перенос exceptions.ts в каталог — раздела «Исключения» нет"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -3043,6 +3071,34 @@
   "name": "элемент вне охвата — причина под строкой теста"
  },
  {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
+   "Исключения проекта переезжают в каталог exceptions/ одной командой"
+  ],
+  "name": "spec-exceptions переносит exceptions.ts в каталог — файл на исключение, старый удалён, импорт в тесте — exceptionsIn()"
+ },
+ {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
+   "Исключения проекта переезжают в каталог exceptions/ одной командой"
+  ],
+  "name": "повторный запуск — переносить нечего: код 0, файлы те же"
+ },
+ {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
+   "Исключения проекта переезжают в каталог exceptions/ одной командой"
+  ],
+  "name": "путь к exceptions.ts в package.json и workflow CI — на каталог"
+ },
+ {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
+   "Исключения проекта переезжают в каталог exceptions/ одной командой"
+  ],
+  "name": "ссылку, которую не переписать, команда называет — код 1; исключения названий spec-doc не трогает"
+ },
+ {
   "path": "tests/capabilities/spec-harness/architecture.test.ts",
   "describes": [
    "Внешние системы модели (C1) проверяются кодом"
@@ -3307,6 +3363,41 @@
    "Исключение из соглашения — явное, с задачей, и уходит, когда больше не нужно"
   ],
   "name": "исключённый элемент, который уже соблюдает соглашение, — упавший тест «убери исключение»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "exceptions.ts в папке решения — упавший тест с подсказкой команды переноса"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "два файла на один элемент — ошибка с путями обоих"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "исключение — файл в каталоге exceptions/ папки решения: exceptionsIn собирает каталог"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "исключение, которое больше не нарушает, — упавший тест «убери исключение» с путём файла"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "файл в exceptions/ — не JSON-исключение { item, issue, reason }: ошибка с путём файла"
  },
  {
   "path": "tests/capabilities/spec-harness/exceptions.test.ts",
@@ -4224,6 +4315,13 @@
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
   ],
+  "name": "spec-exceptions переносит под Node то же, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
   "name": "spec-publish публикует под Node то же дерево, что под Bun"
  },
  {
@@ -4489,6 +4587,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: скрипт spec-exceptions скилла spec назван"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: скрипт spec-publish скилла spec назван"
  },
  {
@@ -4725,6 +4830,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/spec-doc/spec-doc.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
