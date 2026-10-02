@@ -1687,18 +1687,42 @@ export interface PrFile {
   deletions: number;
 }
 
+// прежний формат исключений — массив в одном файле: exceptions.ts харнесса, names.exceptions.ts spec-doc
+const LEGACY_EXCEPTIONS = /^(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
+
 /**
- * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это исключение папки
- * решения — файл в `exceptions/`, прежний `exceptions.ts` (храповик исключений) или исключение названия в
- * `names.exceptions/` (spec-doc). Метку решения она не даёт — иначе при массовых правках задача получает метки
- * решений, которых не меняла.
+ * Файл исключений какой папки решения? Копия правила `exceptionFile` скилла spec (`speclib.ts`): скиллы ставятся по
+ * одному, импорт между ними сломал бы github без spec; стандарт `tests/standards/exception-files` сверяет обе копии
+ * с одной таблицей. Каталог `exceptions/` (`names.exceptions/`) папки `tests/<вид>/<имя>`, файл `.json` — исключение
+ * папки; иной файл в каталоге и каталог в подпапке — ошибка; `exceptions.*` (`names.exceptions.*`) в папке или
+ * подпапке — прежний формат; вне папок решений и скрытые — null.
+ */
+export function exceptionFile(p: string): { folder: string; dir: string; legacy: boolean; error?: string } | null {
+  const parts = p.split("/");
+  if (parts[0] !== "tests" || parts.length < 4 || !DECISION_KINDS.some((k) => DECISIONS[k].dir === parts[1])) return null;
+  const folder = parts.slice(0, 3).join("/");
+  const inner = parts.slice(3);
+  if (inner.some((s) => s.startsWith("."))) return null;
+  const at = inner.findIndex((s, i) => (i < inner.length - 1 ? s === "exceptions" || s === "names.exceptions" : LEGACY_EXCEPTIONS.test(s)));
+  if (at < 0) return null;
+  if (at === inner.length - 1) return { folder, dir: inner[at]!.startsWith("names.") ? "names.exceptions" : "exceptions", legacy: true };
+  const dir = inner[at]!;
+  if (at > 0) return { folder, dir, legacy: false, error: "каталог исключений — в подпапке" };
+  if (inner.length > 2 || !p.endsWith(".json")) return { folder, dir, legacy: false, error: "исключение — не файл .json" };
+  return { folder, dir, legacy: false };
+}
+
+/**
+ * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это файл исключений
+ * папки решения, который spec читает исключением (`exceptionFile` без ошибки): файл в `exceptions/`, прежний
+ * `exceptions.ts` (храповик исключений), исключение названия в `names.exceptions/` (spec-doc). Метку решения она не
+ * даёт — иначе при массовых правках задача получает метки решений, которых не меняла.
  */
 function mechanical(f: PrFile): boolean {
   if (f.changeType === "DELETED") return true;
   if (f.changeType === "RENAMED" && f.additions === 0 && f.deletions === 0) return true;
-  const parts = f.path.split("/");
-  if (parts[0] !== "tests") return false;
-  return (parts.length === 4 && parts[3] === "exceptions.ts") || (parts.length === 5 && (parts[3] === "exceptions" || parts[3] === "names.exceptions"));
+  const x = exceptionFile(f.path);
+  return !!x && !x.error;
 }
 
 /**
