@@ -444,6 +444,25 @@ describe("Решения вне названий тестов — модель, 
     expect(diffFrom(base).stdout).toContain(`**Исключения — снято (1):**\n\n- \`tests/capabilities/billing\` · «returns 201» в \`${BILLING}\` (#7) — переписать\n`);
   });
 
+  it("spec-diff: исключение названия файлом в `names.exceptions/` — добавленное и снятое", () => {
+    const DIR = "tests/capabilities/billing/names.exceptions";
+    const one = (name: string, issue: number) => JSON.stringify({ file: BILLING, name, issue, reason: "переписать" }, null, 2) + "\n";
+    const base = repo.commit({ [`${DIR}/returns-201.json`]: one("returns 201", 7), [`${DIR}/returns-404.json`]: one("returns 404", 7) });
+    repo.commit({ [`${DIR}/returns-201.json`]: null, [`${DIR}/createInvoice.json`]: one("createInvoice", 8) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain(`**Исключения — снято (1):**\n\n- \`tests/capabilities/billing\` · «returns 201» в \`${BILLING}\` (#7) — переписать\n`);
+    expect(out).toContain(`**Исключения — добавлено (1):**\n\n- \`tests/capabilities/billing\` · «createInvoice» в \`${BILLING}\` (#8) — переписать\n`);
+  });
+
+  // перенос spec-exceptions — то же исключение в другом файле, не снятие и не добавление
+  it("перенос `names.exceptions.ts` в каталог — раздела «Исключения» нет", () => {
+    const FOLDER = "tests/capabilities/billing/names.exceptions.ts";
+    const x = { file: BILLING, name: "returns 201", issue: 7, reason: "переписать" };
+    const base = repo.commit({ [FOLDER]: names([x]) });
+    repo.commit({ [FOLDER]: null, "tests/capabilities/billing/names.exceptions/returns-201.json": JSON.stringify(x, null, 2) + "\n" });
+    expect(diffFrom(base).stdout).not.toContain("**Исключения");
+  });
+
   it("исключения одного элемента из разных соглашений папки — разные строки", () => {
     const EXC = "tests/standards/audit/exceptions.ts";
     const base = repo.commit({ [EXC]: names(["audit", "cancel"].map((rule) => ({ item: "a", issue: 1, reason: "r", rule }))) });
