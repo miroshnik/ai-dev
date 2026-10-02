@@ -291,6 +291,20 @@ describe("pr labels ставит задаче метки решений по д�
     expect(r.out).toContain("○ audit — только механическая правка");
   });
 
+  it("правка только файлов `exceptions/` не даёт метку решения", () => {
+    const f = new FakeGitHub(REC);
+    f.label("audit", "1D76DB", "Решение: tests/standards/audit");
+    const files = [
+      { path: "tests/standards/audit/exceptions/importLegacy.json", changeType: "DELETED", additions: 0, deletions: 5 },
+      { path: "tests/standards/audit/exceptions/createInvoice.json", changeType: "ADDED", additions: 5, deletions: 0 },
+    ];
+    f.prs[120] = { files, closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(f.mutations).toEqual([]);
+    expect(r.out).toContain("○ audit — только механическая правка");
+  });
+
   it("удалённые файлы не дают метку ни решению, ни модулю модели", () => {
     const f = new FakeGitHub(REC);
     const files = [
