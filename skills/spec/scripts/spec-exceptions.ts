@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 /**
  * spec-exceptions — перенос исключений в формат «файл на элемент»: каждый `exceptions.ts` (`.mts`, `.js`, `.mjs`,
- * `.json`) папки решения в `tests/` раскладывается в каталог `exceptions/` рядом — файл `<элемент>.json` на
- * исключение (`{ item, rule?, issue, reason }`), старый файл удаляется. Импорт в файлах папки
+ * `.json`) папки решения `tests/<вид>/<имя>` или её подпапки раскладывается в каталог `exceptions/` папки решения —
+ * файл `<элемент>.json` на исключение (`{ item, rule?, issue, reason }`), старый файл удаляется; какой файл чей —
+ * правило `exceptionFile` (speclib). Импорт в файлах папки
  * (`import exceptions from "./exceptions.ts"`) становится `const exceptions = exceptionsIn()` харнесса, путь к старому
  * файлу в `package.json` и workflow CI (`spec-claims --exceptions`) — путём к каталогу. Чего не переписать (ссылка из
  * другой папки, нет импорта харнесса) — строка `!`. Исключения названий spec-doc (`{ file, name }`) — массив в
@@ -20,15 +21,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { decisionFolder, NAMES_DIR, type NameException, TESTS, writeNameException } from "./speclib.ts";
+import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, NAMES_DIR, type NameException, TESTS, writeNameException } from "./speclib.ts";
 
 const USAGE = "spec-exceptions.ts [--root DIR]";
-const LEGACY = /^exceptions\.(ts|mts|js|mjs|json)$/;
-const LEGACY_NAMES = /^names\.exceptions\.(ts|mts|js|mjs|json)$/;
 // флаг прежнего общего файла исключений названий spec-doc в скриптах проекта и CI: `--names-exceptions <путь>`
 const NAMES_FLAG = /[ \t]+--names-exceptions(?:=|[ \t]+)([^\s"']+)/g;
 const CODE = /\.[cm]?[jt]sx?$/;
-const SKIP_DIRS = new Set(["node_modules", ".git", "exceptions", NAMES_DIR]);
+const SKIP_DIRS = new Set(["node_modules", ".git", EXCEPTIONS_DIR, NAMES_DIR]);
 
 interface Entry {
   item: string;
@@ -131,11 +130,16 @@ export async function main(argv: string[]): Promise<number> {
   }
   const root = path.resolve(values.root ?? ".");
   const files = walk(root, TESTS);
-  const legacy = files.filter((f) => LEGACY.test(path.posix.basename(f)));
+  // прежние файлы — по правилу exceptionFile: в папке решения или её подпапке, переезжают в каталог папки решения
+  const legacyOf = (f: string) => {
+    const x = exceptionFile(f);
+    return x?.legacy ? x : null;
+  };
+  const legacy = files.filter((f) => legacyOf(f)?.dir === EXCEPTIONS_DIR);
   const configs = ["package.json", ...walk(root, ".github/workflows").filter((f) => /\.ya?ml$/.test(f))].filter((f) => existsSync(path.join(root, f)));
   // исключения названий: файлы папок, общий файл (он же exceptions.ts — ниже по содержимому) и названные флагом
   const flagged = configs.flatMap((f) => [...readFileSync(path.join(root, f), "utf8").matchAll(NAMES_FLAG)].map((m) => m[1]!));
-  const names = [...new Set([...files.filter((f) => LEGACY_NAMES.test(path.posix.basename(f))), ...flagged.filter((f) => existsSync(path.join(root, f)))])];
+  const names = [...new Set([...files.filter((f) => legacyOf(f)?.dir === NAMES_DIR), ...flagged.filter((f) => existsSync(path.join(root, f)))])];
   const out: string[] = [];
   const manual: string[] = [];
   const moved: string[] = [];
@@ -162,8 +166,8 @@ export async function main(argv: string[]): Promise<number> {
       console.error(`spec-exceptions: ${rel}: пункт ${bad + 1} — не исключение { item, issue, reason }`);
       return 2;
     }
-    const folder = path.posix.dirname(rel);
-    const dir = `${folder}/exceptions`;
+    const folder = legacyOf(rel)!.folder;
+    const dir = `${folder}/${EXCEPTIONS_DIR}`;
     const written: string[] = [];
     for (const e of list as Entry[]) {
       const body = json(e);
@@ -180,7 +184,7 @@ export async function main(argv: string[]): Promise<number> {
     moved.push(rel);
     out.push(`- ${rel} → ${dir}/ (${written.length})`, ...written.map((w) => `+ ${w}`));
 
-    // импорт в файлах папки — на exceptionsIn(): каталог папки теста харнесс находит сам
+    // импорт в файлах папки и её подпапок — на exceptionsIn(): каталог папки решения теста харнесс находит сам
     for (const file of files.filter((f) => f.startsWith(`${folder}/`) && CODE.test(f) && f !== rel)) {
       const text = readFileSync(path.join(root, file), "utf8");
       const names: string[] = [];
@@ -203,7 +207,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  // исключения названий — файл на название в папку решения своего теста; тест вне дерева — к папке прежнего файла
+  // исключения названий — файл на название в папку решения своего теста; тест вне дерева — к папке решения прежнего файла
   for (const rel of names) {
     let list: unknown;
     try {
@@ -218,7 +222,7 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     const written = (list as NameException[]).map((x) =>
-      writeNameException(root, decisionFolder(x.file) ?? path.posix.dirname(rel), { file: x.file, name: x.name, issue: x.issue, reason: String(x.reason ?? "") }),
+      writeNameException(root, decisionFolder(x.file) ?? legacyOf(rel)?.folder ?? path.posix.dirname(rel), { file: x.file, name: x.name, issue: x.issue, reason: String(x.reason ?? "") }),
     );
     rmSync(path.join(root, rel));
     movedNames.push(rel);
@@ -232,7 +236,7 @@ export async function main(argv: string[]): Promise<number> {
     for (const rel of moved) {
       const re = new RegExp(`(?<![\\w./-])${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w/-])`, "g");
       if (!re.test(text)) continue;
-      const dir = `${path.posix.dirname(rel)}/exceptions`;
+      const dir = `${legacyOf(rel)!.folder}/${EXCEPTIONS_DIR}`;
       text = text.replace(re, dir);
       out.push(`~ ${file}: ${rel} → ${dir}`);
     }
@@ -248,7 +252,7 @@ export async function main(argv: string[]): Promise<number> {
     const text = readFileSync(path.join(root, file), "utf8");
     for (const m of text.matchAll(ANY_IMPORT)) {
       const rel = moved.find((l) => pointsTo(file, m[2]!, l));
-      if (rel) manual.push(`! ${file}: ссылка на ${rel} — замени на exceptionsIn("${path.posix.dirname(rel)}") харнесса`);
+      if (rel) manual.push(`! ${file}: ссылка на ${rel} — замени на exceptionsIn("${legacyOf(rel)!.folder}") харнесса`);
     }
   }
 
