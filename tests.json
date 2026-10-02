@@ -852,6 +852,97 @@
   "name": "цикл или условие с git commit внутри — не листинг: хеш коммита — якорь"
  },
  {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main не ушёл после зелёного CI — CI проверил это слияние"
+  ],
+  "name": "CI считается с самого раннего check suite головы PR"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main не ушёл после зелёного CI — CI проверил это слияние"
+  ],
+  "name": "main не ушёл после зелёного CI — слияние не собирается, вливать можно"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main не ушёл после зелёного CI — CI проверил это слияние"
+  ],
+  "name": "движение main за минуту до CI считается уходом: merge-ref строится раньше check suite"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main не ушёл после зелёного CI — CI проверил это слияние"
+  ],
+  "name": "движение main не прочитано — слияние проверяется"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main не ушёл после зелёного CI — CI проверил это слияние"
+  ],
+  "name": "чеков у головы PR нет — слияние проверяется: что проверил CI, неизвестно"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
+  "name": "main ушёл — test:spec идёт на слиянии головы PR со свежим main во временном worktree, worktree убран"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
+  "name": "зависимости ставятся по lockfile слияния до test:spec"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
+  "name": "красный test:spec на слиянии — не вливать (код 1), вывод называет упавший тест"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
+  "name": "менеджер пакетов — по packageManager, иначе по lockfile; lockfile нет — без установки"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
+  "name": "скрипта test:spec нет — строка ○, вливать можно"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
+  "name": "слияние с текстовым конфликтом — не вливать (код 1), конфликтные файлы и подсказка rebase"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: проверить нельзя — ошибка, не «вливать»"
+  ],
+  "name": "PR не открыт — ошибка (код 2)"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: проверить нельзя — ошибка, не «вливать»"
+  ],
+  "name": "не чекаут репозитория PR — ошибка (код 2)"
+ },
+ {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
    "check показывает каждое расхождение с каноном отдельным пунктом"
@@ -4265,6 +4356,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: подкоманда github pr premerge названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: подкоманда github project check названа"
  },
  {
@@ -4550,6 +4648,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/est/est.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/github-premerge/github-premerge.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
