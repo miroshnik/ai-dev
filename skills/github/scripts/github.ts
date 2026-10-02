@@ -1689,15 +1689,16 @@ export interface PrFile {
 
 /**
  * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это исключение папки
- * решения — файл в `exceptions/` или прежний `exceptions.ts` (храповик исключений). Метку решения она не даёт — иначе
- * при массовых правках задача получает метки решений, которых не меняла.
+ * решения — файл в `exceptions/`, прежний `exceptions.ts` (храповик исключений) или исключение названия в
+ * `names.exceptions/` (spec-doc). Метку решения она не даёт — иначе при массовых правках задача получает метки
+ * решений, которых не меняла.
  */
 function mechanical(f: PrFile): boolean {
   if (f.changeType === "DELETED") return true;
   if (f.changeType === "RENAMED" && f.additions === 0 && f.deletions === 0) return true;
   const parts = f.path.split("/");
   if (parts[0] !== "tests") return false;
-  return (parts.length === 4 && parts[3] === "exceptions.ts") || (parts.length === 5 && parts[3] === "exceptions");
+  return (parts.length === 4 && parts[3] === "exceptions.ts") || (parts.length === 5 && (parts[3] === "exceptions" || parts[3] === "names.exceptions"));
 }
 
 /**
