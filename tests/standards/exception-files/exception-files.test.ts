@@ -20,8 +20,7 @@ interface Script {
 
 // своё знание путей исключений в коде: регулярка про exceptions, имя прежнего файла, путь …/exceptions; голое
 // "exceptions" — не оно: так же называются поле и переменная
-// (обратная кавычка — \x60: сканер названий spec-doc и spec-diff принял бы её в регулярке за начало шаблонной строки)
-const OWN = /exceptions\\[./]|(["'\x60])(?:names\.)?exceptions\.(?:[cm]?[jt]s|json)\1|\/(?:names\.)?exceptions["'\x60/]|(["'\x60])names\.exceptions\2/g;
+const OWN = /exceptions\\[./]|(["'`])(?:names\.)?exceptions\.(?:[cm]?[jt]s|json)\1|\/(?:names\.)?exceptions["'`/]|(["'`])names\.exceptions\2/g;
 const COPY = /^export function exceptionFile\(/m;
 const transpiler = new Bun.Transpiler({ loader: "ts" });
 
