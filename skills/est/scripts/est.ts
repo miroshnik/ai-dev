@@ -119,6 +119,8 @@ export function usageCost(model: string, vals: [number, number, number, number, 
 // Типы задач = типы conventional commits + research (спайк без кода). Те же слова —
 // префиксы веток: <type>/<issue>-<slug> (допускается префикс области: <area>/<type>/<issue>-<slug>).
 export const EST_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"] as const;
+// та же копия — TASK_TYPES и TASK_BRANCH_RE в skills/github/scripts/github.ts: общего модуля нет (скилл ставится
+// один), одинаковость разбора держит стандарт tests/standards/task-branch
 const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 const PR_PAGE = 50;
 const PR_MAX = 500;
@@ -1645,6 +1647,12 @@ function loadSessions(repo: Repo): Session[] {
 // Привязка задачи к PR/коммитам
 // ----------------------------------------------------------------------------
 
+/** Ветка задачи по канону — `[<область>/]<type>/<N>-<slug>`: тип (в нижнем регистре) и номер, иначе null. */
+export function taskBranch(branch: string | null | undefined): { type: string; issue: number } | null {
+  const m = BRANCH_CONV_RE.exec(branch || "");
+  return m ? { type: m[1]!.toLowerCase(), issue: parseInt(m[2]!, 10) } : null;
+}
+
 const branchTokens = (branch: string | null | undefined) => (branch || "").split(/[/_\-.]+/).filter(Boolean);
 const isDigits = (s: string) => /^\d+$/.test(s);
 
@@ -1654,8 +1662,8 @@ const isDigits = (s: string) => /^\d+$/.test(s);
  * вида 2026-09-16 не ловились).
  */
 export function branchHasIssue(branch: string | null | undefined, n: number): boolean {
-  const conv = BRANCH_CONV_RE.exec(branch || "");
-  if (conv) return parseInt(conv[2]!, 10) === n;
+  const conv = taskBranch(branch);
+  if (conv) return conv.issue === n;
   const toks = branchTokens(branch);
   const sn = String(n);
   for (let i = 0; i < toks.length; i++) {
@@ -1677,16 +1685,15 @@ export function branchHasIssue(branch: string | null | undefined, n: number): bo
  * Голые числа в других местах (release/2026-09) номером не считаются.
  */
 export function branchIssueNumber(branch: string | null | undefined): number | null {
-  const m = BRANCH_CONV_RE.exec(branch || "");
-  if (m) return parseInt(m[2]!, 10);
+  const conv = taskBranch(branch);
+  if (conv) return conv.issue;
   const m2 = /(?:^|[/_-])issues?[/_-]?(\d{1,6})(?:$|[/_-])/i.exec(branch || "");
   return m2 ? parseInt(m2[1]!, 10) : null;
 }
 
 /** Тип задачи из ветки <type>/N-slug, если ветка по конвенции. */
 export function branchType(branch: string | null | undefined): string | null {
-  const m = BRANCH_CONV_RE.exec(branch || "");
-  return m ? m[1]!.toLowerCase() : null;
+  return taskBranch(branch)?.type ?? null;
 }
 
 const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
