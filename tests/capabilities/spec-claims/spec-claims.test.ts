@@ -91,20 +91,30 @@ it("счёт создаётся", () => { createInvoice(); });
 
 describe("Точка входа без теста — исключение с задачей, пока тест не появился", () => {
   it("исключение на точку без теста — зелёное; точка, у которой тест появился, — «убери исключение»", () => {
+    const EXC = "tests/standards/entry-points/exceptions";
     writeTree(dir, {
       "entries.json": JSON.stringify(["POST /invoices", "job:cleanup", "GET /reports"]),
-      "exceptions.json": JSON.stringify([
-        { item: "job:cleanup", issue: 12, reason: "тест очистки — в #12" },
-        { item: "POST /invoices", issue: 13, reason: "было" },
-      ]),
+      [`${EXC}/job-cleanup.json`]: JSON.stringify({ item: "job:cleanup", issue: 12, reason: "тест очистки — в #12" }),
+      [`${EXC}/POST-invoices.json`]: JSON.stringify({ item: "POST /invoices", issue: 13, reason: "было" }),
       ".spec-journal/1.jsonl": line("POST /invoices", "tests/capabilities/billing/billing.test.ts") + line("GET /reports", "tests/capabilities/reports/reports.test.ts"),
     });
-    const r = claims("--exceptions", "exceptions.json");
+    const r = claims("--exceptions", EXC);
     expect(r.code).toBe(1);
     const xml = report();
     expect(passed(xml, "исключение: job:cleanup \\(#12\\)")).toBe(true);
     expect(failed(xml, "исключение: POST /invoices \\(#13\\)")).toBe(true);
-    expect(xml).toContain("POST /invoices уже вызывается тестом capability — убери исключение (#13)");
+    expect(xml).toContain(`POST /invoices уже вызывается тестом capability — убери исключение: удали ${EXC}/POST-invoices.json (#13)`);
+  });
+
+  it("исключения — каталог: файл вместо каталога — код 2 и подсказка переноса", () => {
+    writeTree(dir, {
+      "entries.json": JSON.stringify(["job:cleanup"]),
+      "tests/standards/entry-points/exceptions.ts": 'export default [{ item: "job:cleanup", issue: 12, reason: "тест — в #12" }];\n',
+      ".spec-journal/1.jsonl": "",
+    });
+    const r = claims("--exceptions", "tests/standards/entry-points/exceptions.ts");
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("--exceptions — каталог exceptions/ (файл на исключение), а не файл tests/standards/entry-points/exceptions.ts — перенеси командой spec-exceptions");
   });
 });
 

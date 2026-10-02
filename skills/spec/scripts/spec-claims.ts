@@ -5,30 +5,28 @@
  * складываются из каталога. Вызов не из `tests/capabilities/` не засчитывается: заявленное поведение — это
  * capability, а не стандарт или хелпер.
  *
- *   bun spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <file>]
+ *   bun spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <каталог>]
  *                      [--standard tests/standards/entry-points] [--report .spec-claims.xml]
  *
  * Реестр — JSON-массив строк или модуль проекта (default — массив или функция, которая его возвращает): точки входа
- * из кода, не рукописный список. Исключения — `[{ item, issue, reason }]`: точка без теста с задачей, пока тест не
- * появился; появился — «убери исключение». Отчёт — JUnit в папке стандарта (`spec-doc` кладёт его в спеку с описанием
+ * из кода, не рукописный список. Исключения — каталог `exceptions/` папки стандарта, файл на исключение
+ * (`{ item, issue, reason }`): точка без теста с задачей, пока тест не появился; появился — «убери исключение». Отчёт — JUnit в папке стандарта (`spec-doc` кладёт его в спеку с описанием
  * `<папка>.md` стандарта). Коды: 0 — всё заявлено, 1 — есть незаявленные или ошибки исключений, 2 — ошибка вызова.
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import { exceptionFiles } from "./harness.ts";
+import type { Exception } from "./harness.ts";
+
 const USAGE =
-  "spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <file>] [--standard tests/standards/entry-points] [--report .spec-claims.xml]";
+  "spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions tests/standards/entry-points/exceptions] [--standard tests/standards/entry-points] [--report .spec-claims.xml]";
 const DESCRIBE = "Каждая точка входа вызывается хотя бы одним тестом capability";
 const CAPABILITIES = "tests/capabilities/";
 
-interface Exception {
-  item: string;
-  issue: number;
-  reason: string;
-}
 interface Case {
   name: string;
   failure?: string;
@@ -109,7 +107,13 @@ export async function main(argv: string[]): Promise<number> {
     const raw = await load(path.resolve(v.entries));
     if (!Array.isArray(raw)) throw new Error(`${v.entries}: реестр — массив точек входа`);
     entries = [...new Set(raw.map((e) => (typeof e === "string" ? e : String((e as { id?: unknown }).id))))].sort();
-    if (v.exceptions) exceptions = (await load(path.resolve(v.exceptions))) as Exception[];
+    if (v.exceptions) {
+      // файл на исключение: прежний массив в одном файле — переносится командой, а не читается вторым путём
+      if (existsSync(v.exceptions) && !statSync(v.exceptions).isDirectory()) {
+        throw new Error(`--exceptions — каталог exceptions/ (файл на исключение), а не файл ${v.exceptions} — перенеси командой spec-exceptions`);
+      }
+      exceptions = exceptionFiles(v.exceptions);
+    }
     if (!existsSync(v.journal)) {
       throw new Error(`нет журнала ${v.journal} — его пишет journal харнесса во время прогона тестов (журналы шардов — в один каталог)`);
     }
@@ -134,8 +138,8 @@ export async function main(argv: string[]): Promise<number> {
     let failure: string | undefined;
     if (!Number.isInteger(e.issue) || e.issue <= 0) failure = `у исключения ${e.item} нет задачи`;
     else if (!e.reason?.trim()) failure = `у исключения ${e.item} нет причины`;
-    else if (!entries.includes(e.item)) failure = `точки входа ${e.item} в реестре нет — убери исключение`;
-    else if (claimed(e.item)) failure = `${e.item} уже вызывается тестом capability — убери исключение (#${e.issue})`;
+    else if (!entries.includes(e.item)) failure = `точки входа ${e.item} в реестре нет — убери исключение: удали ${e.file}`;
+    else if (claimed(e.item)) failure = `${e.item} уже вызывается тестом capability — убери исключение: удали ${e.file} (#${e.issue})`;
     cases.push({ name: `исключение: ${e.item} (#${e.issue})`, failure });
   }
 
