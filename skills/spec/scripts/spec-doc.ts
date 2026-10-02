@@ -554,12 +554,14 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
   return problems;
 }
 
-/** Прежний формат исключений названий — массив в одном файле папки решения и общий файл; не читается, переносит spec-exceptions. */
-const LEGACY_NAMES = /^names\.exceptions\.(ts|mts|js|mjs|json)$/;
+/** Прежний формат исключений названий — общий файл (папки — по правилу exceptionFile); не читается, переносит spec-exceptions. */
 const SHARED_NAMES = `${L.TESTS}/standards/spec-names/exceptions.ts`;
 const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
 
-/** Исключения названий — файлы каталогов `names.exceptions/` в tests/; `legacy` — файлы прежнего формата. */
+/**
+ * Исключения названий — файлы каталогов `names.exceptions/` папок решений по правилу `exceptionFile` (speclib);
+ * `legacy` — файлы прежнего формата; файл не на месте или не JSON — ошибка с путём.
+ */
 function findNameExceptions(root: string): { list: NameException[]; legacy: string[] } {
   const list: NameException[] = [];
   const legacy: string[] = [];
@@ -572,33 +574,33 @@ function findNameExceptions(root: string): { list: NameException[]; legacy: stri
     }
     for (const e of entries) {
       const at = `${rel}/${e.name}`;
-      if (e.isDirectory() && e.name === L.NAMES_DIR) list.push(...readNameExceptions(root, at));
-      else if (e.isDirectory()) walk(at);
-      else if (LEGACY_NAMES.test(e.name) || at === SHARED_NAMES) legacy.push(at);
+      if (e.isDirectory()) {
+        if (e.name !== "node_modules") walk(at);
+        continue;
+      }
+      const x = L.exceptionFile(at);
+      if (at === SHARED_NAMES || (x?.dir === L.NAMES_DIR && x.legacy)) legacy.push(at);
+      else if (x?.dir !== L.NAMES_DIR) continue;
+      else if (x.error) throw new Error(`${at}: ${x.error}`);
+      else list.push(readNameException(root, at));
     }
   };
   walk(L.TESTS);
   return { list: list.sort((a, b) => a.src.localeCompare(b.src)), legacy: legacy.sort() };
 }
 
-/** Каталог `names.exceptions/`: файл на исключение — JSON `{ file, name, issue, reason }`, иное — ошибка с путём. */
-function readNameExceptions(root: string, dir: string): NameException[] {
-  return readdirSync(path.join(root, dir))
-    .filter((n) => !n.startsWith("."))
-    .map((n) => {
-      const src = `${dir}/${n}`;
-      if (!n.endsWith(".json")) throw new Error(`${src}: исключение названия — файл <название>.json с { file, name, issue, reason }`);
-      let x: Partial<L.NameException> | null;
-      try {
-        x = JSON.parse(readFileSync(path.join(root, src), "utf8")) as Partial<L.NameException> | null;
-      } catch (e) {
-        throw new Error(`${src}: не JSON — ${(e as Error).message}`);
-      }
-      if (!x || typeof x.file !== "string" || typeof x.name !== "string" || !Number.isInteger(x.issue)) {
-        throw new Error(`${src}: исключение названия — { file, name, issue, reason }`);
-      }
-      return { file: x.file, name: x.name, issue: x.issue!, reason: String(x.reason ?? ""), src };
-    });
+/** Файл каталога `names.exceptions/` — JSON `{ file, name, issue, reason }`, иное — ошибка с путём. */
+function readNameException(root: string, src: string): NameException {
+  let x: Partial<L.NameException> | null;
+  try {
+    x = JSON.parse(readFileSync(path.join(root, src), "utf8")) as Partial<L.NameException> | null;
+  } catch (e) {
+    throw new Error(`${src}: не JSON — ${(e as Error).message}`);
+  }
+  if (!x || typeof x.file !== "string" || typeof x.name !== "string" || !Number.isInteger(x.issue)) {
+    throw new Error(`${src}: исключение названия — { file, name, issue, reason }`);
+  }
+  return { file: x.file, name: x.name, issue: x.issue!, reason: String(x.reason ?? ""), src };
 }
 
 const USAGE =

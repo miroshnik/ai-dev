@@ -101,6 +101,13 @@ describe("Названия-утверждения вводятся постеп�
     expect(doc([[["Счета"], "returns 201"]], "--stdout").stderr).toContain(`${NAMES}/returns-201.ts: исключение названия — файл <название>.json`);
   });
 
+  it("каталог `names.exceptions/` в подпапке папки решения — ошибка с местом каталога", () => {
+    exceptions([{ name: "returns 201", issue: 12, at: "tests/capabilities/billing/sub/names.exceptions" }]);
+    const r = doc([[["Счета"], "returns 201"]], "--stdout");
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain(`tests/capabilities/billing/sub/names.exceptions/returns-201.json: исключения названий — только в ${NAMES}/ папки решения, не в подпапке`);
+  });
+
   // второй формат — второй путь в коде: прежний массив не читается, его переносит одна команда
   it("`names.exceptions.ts` — ошибка с подсказкой `spec-exceptions`", () => {
     const LEGACY = "tests/capabilities/billing/names.exceptions.ts";
