@@ -399,9 +399,9 @@ export function checkFacts(files: Map<string, string>): string[] {
   return [...out].sort();
 }
 
-// exceptions/<элемент>.json — исключение харнесса файлом; прежние exceptions.* харнесса и names.exceptions.* —
-// исключения названий в папке решения (spec-doc) — массивом
-const EXCEPTION_FILE = /(^|\/)exceptions\/[^/]+\.json$/;
+// exceptions/<элемент>.json — исключение харнесса файлом, names.exceptions/<название>.json — исключение названия
+// (spec-doc); прежние exceptions.* харнесса и names.exceptions.* — массивом: базовая ревизия переноса ещё на них
+const EXCEPTION_FILE = /(^|\/)(names\.)?exceptions\/[^/]+\.json$/;
 const EXCEPTIONS = /(^|\/)(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
 const isExceptions = (p: string) => EXCEPTIONS.test(p) || EXCEPTION_FILE.test(p);
 
@@ -443,7 +443,7 @@ async function decisionsAt(rev: string | null, top: string, prefix: string, chan
   for (const p of excPaths) {
     const rel = p.slice(prefix.length);
     if (EXCEPTION_FILE.test(rel)) {
-      // файл на исключение: папка решения — над каталогом exceptions/
+      // файл на исключение: папка решения — над каталогом exceptions/ (names.exceptions/)
       const data = await loadData(files.get(rel) ?? "null", rel).catch(() => null);
       if (data && typeof data === "object") exceptions.push(exceptionLine(path.posix.dirname(path.posix.dirname(rel)), data as ExceptionEntry));
       continue;
