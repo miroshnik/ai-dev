@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { runScript, SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
+import { runScript, SCRIPTS, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -98,18 +98,69 @@ describe("Исключения проекта переезжают в катал
     expect(r.stdout).toContain("~ .github/workflows/ci.yml: tests/standards/entry-points/exceptions.ts → tests/standards/entry-points/exceptions");
   });
 
-  it("ссылку, которую не переписать, команда называет — код 1; исключения названий spec-doc не трогает", () => {
+  it("ссылку, которую не переписать, команда называет — код 1", () => {
     project();
-    writeTree(dir, {
-      "tests/standards/other/other.test.ts": 'import exceptions from "../audit/exceptions.ts";\nexport { exceptions };\n',
-      "tests/standards/spec-names/exceptions.ts": 'export default [{ file: "tests/x.test.ts", name: "returns 201", issue: 3, reason: "переписать" }];\n',
-      "tests/capabilities/billing/names.exceptions.ts": 'export default [{ file: "tests/capabilities/billing/billing.test.ts", name: "returns 201", issue: 3, reason: "переписать" }];\n',
-    });
+    writeTree(dir, { "tests/standards/other/other.test.ts": 'import exceptions from "../audit/exceptions.ts";\nexport { exceptions };\n' });
     const r = migrate();
     expect(r.code).toBe(1);
     expect(r.stdout).toContain(`! tests/standards/other/other.test.ts: ссылка на ${AUDIT}/exceptions.ts — замени на exceptionsIn("${AUDIT}") харнесса`);
-    expect(r.stdout).toContain("○ tests/standards/spec-names/exceptions.ts: исключения названий spec-doc — не переносятся");
-    expect(existsSync(path.join(dir, "tests/standards/spec-names/exceptions.ts"))).toBe(true);
-    expect(existsSync(path.join(dir, "tests/capabilities/billing/names.exceptions.ts"))).toBe(true);
+  });
+});
+
+const BILLING = "tests/capabilities/billing";
+const MAIN = `${BILLING}/billing.test.ts`;
+const E2E = `${BILLING}/billing.e2e.ts`;
+const AUDIT_TEST = `${AUDIT}/audit.test.ts`;
+const REASON = "название — не утверждение; переписать в #12";
+const named = (file: string, name: string) => ({ file, name, issue: 12, reason: REASON });
+const json = (x: object) => JSON.stringify(x, null, 2) + "\n";
+// прежний формат spec-doc --names-baseline — модуль с массивом { file, name, issue, reason }
+const namesModule = (list: object[]) => `const exceptions = [\n${list.map((x) => `  ${JSON.stringify(x)},`).join("\n")}\n];\n\nexport default exceptions;\n`;
+
+describe("Исключения названий spec-doc переезжают в names.exceptions/ той же командой", () => {
+  it("`spec-exceptions` переносит `names.exceptions.ts` в каталог", () => {
+    writeTree(dir, {
+      [`${BILLING}/names.exceptions.ts`]: namesModule([named(MAIN, "returns 201"), named(E2E, "returns 201"), named(MAIN, "createInvoice")]),
+      [`${BILLING}/billing.md`]: "Биллинг.\n",
+    });
+    const r = migrate();
+    expect(r.code).toBe(0);
+    expect(existsSync(path.join(dir, BILLING, "names.exceptions.ts"))).toBe(false);
+    expect(read(`${BILLING}/names.exceptions/returns-201.json`)).toBe(json(named(MAIN, "returns 201")));
+    // то же название в другом файле папки — свой файл с суффиксом
+    expect(read(`${BILLING}/names.exceptions/returns-201-2.json`)).toBe(json(named(E2E, "returns 201")));
+    expect(read(`${BILLING}/names.exceptions/createInvoice.json`)).toBe(json(named(MAIN, "createInvoice")));
+    expect(r.stdout).toContain(`- ${BILLING}/names.exceptions.ts → ${BILLING}/names.exceptions/ (3)`);
+    expect(r.stdout).toContain(`+ ${BILLING}/names.exceptions/returns-201.json`);
+    // после переезда spec-doc --strict зелёный: исключения те же, но из каталога
+    writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [MAIN]: [[["createInvoice"], "returns 201"]], [E2E]: [[["Счета"], "returns 201"]] }));
+    const doc = runScript("spec-doc", ["r.json", "--root", dir, "--stdout", "--strict"], dir);
+    expect(doc.stderr).not.toContain("не утверждение по-русски");
+    expect(doc.code).toBe(0);
+  });
+
+  it("`spec-exceptions` раскладывает общий файл `spec-names` по папкам тестов и убирает `--names-exceptions` из `package.json` и CI", () => {
+    const SHARED = "tests/standards/spec-names/exceptions.ts";
+    const CUSTOM = "tests/legacy-names.ts";
+    writeTree(dir, {
+      [SHARED]: namesModule([named(MAIN, "returns 201"), named(AUDIT_TEST, "writes row"), named("tests/x.test.ts", "orphan")]),
+      [CUSTOM]: namesModule([named(MAIN, "returns 404")]),
+      "package.json": JSON.stringify({ scripts: { "spec:doc": `node spec-doc.ts r.xml --strict --names-exceptions ${SHARED}` } }, null, 2) + "\n",
+      ".github/workflows/ci.yml": `      - run: node spec-doc.ts r.xml --names-exceptions=${CUSTOM} --strict\n`,
+    });
+    const r = migrate();
+    expect(r.code).toBe(0);
+    expect(existsSync(path.join(dir, SHARED))).toBe(false);
+    expect(existsSync(path.join(dir, CUSTOM))).toBe(false);
+    expect(read(`${BILLING}/names.exceptions/returns-201.json`)).toBe(json(named(MAIN, "returns 201")));
+    expect(read(`${BILLING}/names.exceptions/returns-404.json`)).toBe(json(named(MAIN, "returns 404")));
+    expect(read(`${AUDIT}/names.exceptions/writes-row.json`)).toBe(json(named(AUDIT_TEST, "writes row")));
+    // тест вне папки решения — исключение остаётся у прежнего файла: spec-doc назовёт его ненужным
+    expect(read("tests/standards/spec-names/names.exceptions/orphan.json")).toBe(json(named("tests/x.test.ts", "orphan")));
+    expect(r.stdout).toContain(`- ${SHARED} → ${BILLING}/names.exceptions/, ${AUDIT}/names.exceptions/, tests/standards/spec-names/names.exceptions/ (3)`);
+    expect(JSON.parse(read("package.json")).scripts["spec:doc"]).toBe("node spec-doc.ts r.xml --strict");
+    expect(read(".github/workflows/ci.yml")).toBe("      - run: node spec-doc.ts r.xml --strict\n");
+    expect(r.stdout).toContain(`~ package.json: --names-exceptions ${SHARED} убран`);
+    expect(r.stdout).toContain(`~ .github/workflows/ci.yml: --names-exceptions ${CUSTOM} убран`);
   });
 });
