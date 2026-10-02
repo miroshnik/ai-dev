@@ -67,7 +67,7 @@ export interface Exception {
 }
 
 const EXCEPTIONS_DIR = "exceptions";
-// прежний формат — массив в одном файле папки решения; исключения названий spec-doc (names.exceptions.*) — не он
+// прежний формат — массив в одном файле папки решения; исключения названий spec-doc (names.exceptions/) — не он
 const LEGACY_EXCEPTIONS = ["exceptions.ts", "exceptions.mts", "exceptions.js", "exceptions.mjs", "exceptions.json"];
 const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
 
