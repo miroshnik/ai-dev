@@ -1,15 +1,15 @@
 /**
- * speclib — общее для spec-doc, spec-diff и spec-publish: дерево tests/, модель теста,
+ * speclib — общее для spec-doc, spec-diff, spec-publish и spec-exceptions: дерево tests/, модель теста,
  * `Source:` публикации, разбор отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
- * от `bun test`) и статический разбор исходников тестов (сканер describe/it/test для TS/JS:
- * названия и проза из JSDoc).
+ * от `bun test`), статический разбор исходников тестов (сканер describe/it/test для TS/JS:
+ * названия и проза из JSDoc) и файлы исключений названий.
  *
  * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
  * зависимостей и без конфигурации под репозиторий: дерево tests/ из правила
  * «Спецификация — решения» (skills/spec/canon.md) и стандартные форматы отчётов.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const posix = path.posix;
@@ -100,6 +100,41 @@ export function classify(p: string): [Kind, string | null] {
   }
   if (parts.length >= 3 && parts[0] === TESTS && parts[1] === "lib") return ["lib", null];
   return ["out", null];
+}
+
+/** Папка решения теста — `tests/<вид>/<имя>`; тест вне дерева решений — null. */
+export function decisionFolder(file: string): string | null {
+  const [kind] = classify(file);
+  return kind === "capability" || kind === "architecture" || kind === "standard" ? file.split("/").slice(0, 3).join("/") : null;
+}
+
+/**
+ * Исключения названий spec-doc — каталог `names.exceptions/` папки решения, файл на название: параллельные PR
+ * снимают каждый свой файл, а в общем массиве соседние строки конфликтовали.
+ */
+export const NAMES_DIR = "names.exceptions";
+
+/** Исключение названия: тест, название, задача на переписывание и причина. */
+export interface NameException {
+  file: string;
+  name: string;
+  issue: number;
+  reason: string;
+}
+
+/**
+ * Исключение названия файлом в `<папка>/names.exceptions/`: имя — название латиницей (стабильно, видно в диффе);
+ * занято другим исключением — суффикс, тот же текст — тот же файл. Возвращает путь от корня.
+ */
+export function writeNameException(root: string, folder: string, x: NameException): string {
+  const dir = `${folder}/${NAMES_DIR}`;
+  const body = JSON.stringify({ file: x.file, name: x.name, issue: x.issue, reason: x.reason }, null, 2) + "\n";
+  const slug = x.name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 100) || "name";
+  let name = slug;
+  for (let n = 2; existsSync(path.join(root, dir, `${name}.json`)) && readFileSync(path.join(root, dir, `${name}.json`), "utf8") !== body; n++) name = `${slug}-${n}`;
+  mkdirSync(path.join(root, dir), { recursive: true });
+  writeFileSync(path.join(root, dir, `${name}.json`), body);
+  return `${dir}/${name}.json`;
 }
 
 /** Статус набора: любой failed → failed; иначе есть passed → passed; иначе todo/skipped. */
