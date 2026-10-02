@@ -114,6 +114,21 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     expect(node.stdout).toBe(bun.stdout);
   });
 
+  it("spec-exceptions переносит под Node то же, что под Bun", () => {
+    const AUDIT = "tests/standards/audit";
+    const legacy = {
+      [`${AUDIT}/exceptions.ts`]: 'export default [{ item: "importLegacy", issue: 12, reason: "аудит в #12" }, { item: "a/b", rule: "cancel", issue: 7, reason: "r" }];\n',
+      [`${AUDIT}/audit.test.ts`]: 'import { invariant } from "../../../harness.ts";\nimport exceptions from "./exceptions.ts";\n\ninvariant(it, { exceptions });\n',
+    };
+    for (const side of ["bun", "node"]) writeTree(path.join(dir, side), legacy);
+    const bun = runScript("spec-exceptions", [], path.join(dir, "bun"));
+    const node = runScript("spec-exceptions", [], path.join(dir, "node"), "node");
+    expect([bun.code, node.code]).toEqual([0, 0]);
+    expect(node.stdout).toContain(`- ${AUDIT}/exceptions.ts → ${AUDIT}/exceptions/ (2)`);
+    expect(node.stdout).toBe(bun.stdout);
+    expect(readTree(path.join(dir, "node"))).toEqual(readTree(path.join(dir, "bun")));
+  });
+
   /** Установка флоу кладёт скилл в `.agents/skills/spec` проекта — под `package.json` проекта, а не ai-dev. */
   it("копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений", () => {
     writeTree(dir, { [BILLING]: source("выставляется за месяц") });

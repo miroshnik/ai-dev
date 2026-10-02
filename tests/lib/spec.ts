@@ -21,7 +21,7 @@ export interface Run {
  * `env` — поверх окружения прогона (заглушка `gh` в PATH).
  */
 export function runScript(
-  name: "spec-doc" | "spec-diff" | "spec-publish" | "spec-run" | "spec-claims" | "spec-break",
+  name: "spec-doc" | "spec-diff" | "spec-publish" | "spec-run" | "spec-claims" | "spec-break" | "spec-exceptions",
   args: string[],
   cwd: string,
   runtime: "bun" | "node" = "bun",
