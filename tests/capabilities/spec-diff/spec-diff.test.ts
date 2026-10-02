@@ -399,6 +399,23 @@ describe("Решения вне названий тестов — модель, 
     expect(out).toContain("**Исключения — добавлено (2):**\n\n- `src/b.ts` · eqeqeq — #6 новое\n- `tests/standards/audit` · b (#2) — r2\n");
   });
 
+  it("исключение файлом в exceptions/: добавленное и снятое", () => {
+    const DIR = "tests/standards/audit/exceptions";
+    const one = (item: string, issue: number, reason: string, rule?: string) => JSON.stringify({ item, ...(rule ? { rule } : {}), issue, reason }) + "\n";
+    const base = repo.commit({ [`${DIR}/a.json`]: one("a", 1, "r1"), [`${DIR}/c.json`]: one("c", 3, "r3") });
+    repo.commit({ [`${DIR}/a.json`]: null, [`${DIR}/audit--b.json`]: one("b", 2, "r2", "audit") });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Исключения — снято (1):**\n\n- `tests/standards/audit` · a (#1) — r1\n");
+    expect(out).toContain("**Исключения — добавлено (1):**\n\n- `tests/standards/audit` · b (audit, #2) — r2\n");
+  });
+
+  // перенос spec-exceptions — не снятие и не добавление: то же исключение в другом файле
+  it("перенос exceptions.ts в каталог — раздела «Исключения» нет", () => {
+    const base = repo.commit({ "tests/standards/audit/exceptions.ts": 'export default [{ item: "a", issue: 1, reason: "r1" }];\n' });
+    repo.commit({ "tests/standards/audit/exceptions.ts": null, "tests/standards/audit/exceptions/a.json": JSON.stringify({ item: "a", issue: 1, reason: "r1" }) + "\n" });
+    expect(diffFrom(base).stdout).not.toContain("**Исключения");
+  });
+
   // исключения названий пишет spec-doc --names-baseline, и схема у них другая — { file, name }, а не { item }
   const NAMES = "tests/standards/spec-names/exceptions.ts";
   const names = (list: object[]) => `export default ${JSON.stringify(list)};\n`;
