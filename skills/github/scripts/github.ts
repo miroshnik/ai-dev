@@ -1688,15 +1688,16 @@ export interface PrFile {
 }
 
 /**
- * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это `exceptions.ts`
- * папки решения (храповик исключений). Метку решения она не даёт — иначе при массовых правках задача получает метки
- * решений, которых не меняла.
+ * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это исключение папки
+ * решения — файл в `exceptions/` или прежний `exceptions.ts` (храповик исключений). Метку решения она не даёт — иначе
+ * при массовых правках задача получает метки решений, которых не меняла.
  */
 function mechanical(f: PrFile): boolean {
   if (f.changeType === "DELETED") return true;
   if (f.changeType === "RENAMED" && f.additions === 0 && f.deletions === 0) return true;
   const parts = f.path.split("/");
-  return parts[0] === "tests" && parts.length === 4 && parts[3] === "exceptions.ts";
+  if (parts[0] !== "tests") return false;
+  return (parts.length === 4 && parts[3] === "exceptions.ts") || (parts.length === 5 && parts[3] === "exceptions");
 }
 
 /**
@@ -1768,7 +1769,7 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
   const { changed: decided, mechanical: skipped } = decisionsOfFiles(files, modules);
   const want = [...decided.keys()];
   io.out(`PR #${number} → ${closes.map((n) => `#${n}`).join(", ")}: ${want.join(", ") || "решений в диффе нет"}`);
-  for (const l of skipped) io.out(`○ ${l} — только механическая правка (удаление, переименование без правки, exceptions.ts): метка не ставится`);
+  for (const l of skipped) io.out(`○ ${l} — только механическая правка (удаление, переименование без правки, исключения): метка не ставится`);
   if (!want.length) return 0;
 
   const all = loadLabels(io, slug);
@@ -1933,7 +1934,7 @@ task status — «В работе» закрепляет задачу за се�
 task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
         эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
-            только механически (удаление, переименование без правки, exceptions.ts), — строка ○, без метки.
+            только механически (удаление, переименование без правки, исключения), — строка ○, без метки.
 pr premerge — перед gh pr merge, после PASS ci-wait: основная ветка ушла после CI PR — слияние головы PR с ней
             во временном worktree и ${PREMERGE_SCRIPT} из package.json; код 0 — вливать, 1 — не вливать (красное,
             конфликт), 2 — проверить не удалось.`;
