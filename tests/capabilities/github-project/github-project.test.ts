@@ -47,7 +47,7 @@ describe("check показывает каждое расхождение с ка
     const r = check(fake());
     expect(r.code).toBe(0);
     expect(r.out).toStartWith(`Проект ${REPO}: ${PROJECT_URL}`);
-    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅", Метки: "✅", Мерж: "✅" });
+    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅", Метки: "✅", Мерж: "✅", Способ: "✅" });
     expect(r.out).toContain("➖ Priority и типы issue — в личном аккаунте их нет");
   });
 
@@ -112,13 +112,13 @@ describe("check показывает каждое расхождение с ка
     expect(r.out).toContain("· без Status: #42");
   });
 
-  it("к репозиторию не привязан проект — из пунктов проекта только этот ❌, остальные без проекта не проверить; правило основной ветки сверяется", () => {
+  it("к репозиторию не привязан проект — из пунктов проекта только этот ❌, остальные без проекта не проверить; правило основной ветки и способ мержа сверяются", () => {
     const f = fake();
     f.unlinkAll();
     const r = check(f);
     expect(r.code).toBe(1);
     expect(r.out).toStartWith(`Проект ${REPO}: нет`);
-    expect(marks(r.out)).toEqual({ Проект: "❌", Мерж: "✅" });
+    expect(marks(r.out)).toEqual({ Проект: "❌", Мерж: "✅", Способ: "✅" });
   });
 
   it("облачная сессия — объяснение и код 2, а не сбой gh на Projects v2", () => {
@@ -665,6 +665,49 @@ describe("Мерж в основную ветку — только с зелён
     expect(r.out).toContain(`➖ ${MERGE} — правила ветки недоступны: Upgrade to GitHub Pro or make this repository public to enable this feature.`);
     fix(f);
     expect(ops(f)).toEqual([]);
+  });
+});
+
+/**
+ * Мерж — только rebase (канон, «PR»): правило мержа одно для всех репозиториев — `gh pr merge <N> --rebase`, и
+ * настройка репозитория держит его постоянным: другим способом PR не влить. Настройки мержа GraphQL не меняет — fix
+ * шлёт один запрос REST.
+ */
+describe("Способ мержа — только rebase", () => {
+  const STEP = "оставить только rebase: выключить merge commit и squash, включить rebase";
+
+  it("разрешены merge commit или squash, выключен rebase — ❌ по каждой причине; fix оставляет только rebase одним запросом REST", () => {
+    const f = fake();
+    f.merge.methods = { merge: true, squash: true, rebase: false };
+    const r = check(f);
+    expect(r.code).toBe(1);
+    expect(marks(r.out).Способ).toBe("❌");
+    expect(r.out).toContain("· rebase выключен — gh pr merge --rebase GitHub отклонит");
+    expect(r.out).toContain("· разрешён merge commit");
+    expect(r.out).toContain("· разрешён squash");
+    const x = fix(f);
+    expect(x.code).toBe(0);
+    expect(byOp(f, "UpdateRepository")).toEqual([{ allow_merge_commit: false, allow_squash_merge: false, allow_rebase_merge: true }]);
+    expect(x.out).toContain(`+ ${STEP}`);
+    expect(f.merge.methods).toEqual({ merge: false, squash: false, rebase: true });
+    expect(marks(x.out).Способ).toBe("✅");
+    // одна причина — тот же запрос
+    const g = fake();
+    g.merge.methods.squash = true;
+    expect(check(g).out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · разрешён squash"]);
+    fix(g);
+    expect(ops(g)).toEqual(["UpdateRepository"]);
+  });
+
+  it("настройки мержа не меняются (нет прав admin) — fix пишет строку ! с ответом GitHub и ссылкой на настройки, пункт остаётся ❌", () => {
+    const f = fake();
+    f.merge.methods.merge = true;
+    f.failing.UpdateRepository = "Must have admin rights to Repository.";
+    const x = fix(f);
+    expect(x.code).toBe(1);
+    expect(x.out).toContain(`! ${STEP}: PATCH repos/${REPO}: Must have admin rights to Repository. — в UI: https://github.com/${REPO}/settings`);
+    expect(marks(x.out).Способ).toBe("❌");
+    expect(f.merge.methods.merge).toBe(true);
   });
 });
 
