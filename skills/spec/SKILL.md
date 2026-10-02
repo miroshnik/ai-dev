@@ -429,6 +429,9 @@ SIGINT/SIGTERM/SIGHUP (команда теста убивается со все�
    "spec:publish": "node .agents/skills/spec/scripts/spec-publish.ts",
    "spec:claims": "node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
+   Быстрые проверки — скрипт `test:spec` раннера проекта, стандарты и
+   архитектура (`"test:spec": "vitest run tests/standards tests/architecture"`):
+   его гоняет `github pr premerge` перед мержем на слиянии со свежим `main`.
    Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
    spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
    `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,
