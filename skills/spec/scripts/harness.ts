@@ -18,7 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
-import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, skipString } from "./speclib.ts";
+import { BEFORE_REGEX, decisionFolder, EXCEPTIONS_DIR, exceptionFile, REGEX_WORDS, skipRegex, skipString } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
@@ -355,27 +355,6 @@ export interface Disable {
 const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage"]);
 const DIRECTIVE = /^(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\/|$)([^\n]*?)(?:\*\/|$)/m;
-// после них `/` начинает регулярное выражение, а не деление
-const BEFORE_REGEX = "(,=:[!&|?{};+-*%<>~^";
-const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await", "delete", "throw", "instanceof", "new"]);
-
-/** i — открывающий `/` регулярного выражения; индекс после флагов. Классы `[…]` и экранирование учтены. */
-function skipRegex(s: string, i: number): number {
-  let j = i + 1;
-  let cls = false;
-  while (j < s.length && s[j] !== "\n") {
-    const c = s[j]!;
-    if (c === "\\") j++;
-    else if (c === "[") cls = true;
-    else if (c === "]") cls = false;
-    else if (c === "/" && !cls) break;
-    j++;
-  }
-  j++;
-  while (j < s.length && /[a-z]/i.test(s[j]!)) j++;
-  return j;
-}
-
 /**
  * Комментарии кода — [начало, текст]: строки, шаблоны и регулярные выражения пропускаются. ESLint читает директивы
  * только в комментариях: `// eslint-disable` в строке — фикстура или сообщение, а не отключение.

@@ -439,6 +439,41 @@ export function skipString(s: string, i: number): number {
   return Math.min(j + 1, n);
 }
 
+// после них `/` начинает регулярное выражение, а не деление
+export const BEFORE_REGEX = "(,=:[!&|?{};+-*%<>~^";
+export const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await", "delete", "throw", "instanceof", "new"]);
+
+/**
+ * i — открывающий `/` регулярного выражения; индекс после флагов. Классы `[…]` и экранирование учтены. Литерал
+ * регулярки не переносится на другую строку: без закрывающего `/` в строке это не регулярка — индекс после `/`.
+ */
+export function skipRegex(s: string, i: number): number {
+  let j = i + 1;
+  let cls = false;
+  while (j < s.length && s[j] !== "\n") {
+    const c = s[j]!;
+    if (c === "\\") j++;
+    else if (c === "[") cls = true;
+    else if (c === "]") cls = false;
+    else if (c === "/" && !cls) break;
+    j++;
+  }
+  if (s[j] !== "/") return i + 1;
+  j++;
+  while (j < s.length && /[a-z]/i.test(s[j]!)) j++;
+  return j;
+}
+
+/** `/` в i (не комментарий) — начало регулярки, а не деление: по значащему символу или слову перед ним. */
+function regexAt(s: string, i: number): boolean {
+  let k = i - 1;
+  while (k >= 0 && WS.includes(s[k]!)) k--;
+  if (k < 0 || BEFORE_REGEX.includes(s[k]!)) return true;
+  let b = k;
+  while (b >= 0 && isIdentChar(s[b]!)) b--;
+  return s[b] !== "." && REGEX_WORDS.has(s.slice(b + 1, k + 1));
+}
+
 function skipTemplateExpr(s: string, i: number): number {
   const n = s.length;
   let d = 0;
@@ -447,6 +482,10 @@ function skipTemplateExpr(s: string, i: number): number {
     const c = s[j]!;
     if (c === "'" || c === '"' || c === "`") {
       j = skipString(s, j);
+      continue;
+    }
+    if (c === "/" && regexAt(s, j)) {
+      j = skipRegex(s, j);
       continue;
     }
     if (c === "{") d++;
@@ -476,6 +515,10 @@ export function skipBalanced(s: string, i: number): number {
     }
     if (s.startsWith("/*", j)) {
       j = skipBlockComment(s, j);
+      continue;
+    }
+    if (c === "/" && regexAt(s, j)) {
+      j = skipRegex(s, j);
       continue;
     }
     if (c === "(") d++;
@@ -596,6 +639,10 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
     code = true;
     if (c === "'" || c === '"' || c === "`") {
       i = skipString(s, i);
+      continue;
+    }
+    if (c === "/" && regexAt(s, i)) {
+      i = skipRegex(s, i);
       continue;
     }
     if (c === "{") {
