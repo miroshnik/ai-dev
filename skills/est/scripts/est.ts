@@ -1649,10 +1649,13 @@ const branchTokens = (branch: string | null | undefined) => (branch || "").split
 const isDigits = (s: string) => /^\d+$/.test(s);
 
 /**
- * Ветка содержит номер задачи как отдельный токен (issue-N-…, /N-…, -N-…),
- * соседние токены не чисто числовые (чтобы даты вида 2026-09-16 не ловились).
+ * Ветка по конвенции <type>/N-slug — задача N и только она: число в слаге (код ответа, версия) — не номер.
+ * Иначе — номер как отдельный токен (issue-N-…, /N-…, -N-…), соседние токены не чисто числовые (чтобы даты
+ * вида 2026-09-16 не ловились).
  */
 export function branchHasIssue(branch: string | null | undefined, n: number): boolean {
+  const conv = BRANCH_CONV_RE.exec(branch || "");
+  if (conv) return parseInt(conv[2]!, 10) === n;
   const toks = branchTokens(branch);
   const sn = String(n);
   for (let i = 0; i < toks.length; i++) {
