@@ -305,6 +305,18 @@ describe("pr labels ставит задаче метки решений по д�
     expect(r.out).toContain("○ audit — только механическая правка");
   });
 
+  // baseline исключений названий кладёт файл в папку каждого решения с долгом — метки всем им были бы шумом
+  it("`pr labels`: правка только файлов `names.exceptions/` не даёт метку решения", () => {
+    const f = new FakeGitHub(REC);
+    f.label("billing", CAP, "Решение: tests/capabilities/billing");
+    const files = [{ path: "tests/capabilities/billing/names.exceptions/returns-201.json", changeType: "ADDED", additions: 6, deletions: 0 }];
+    f.prs[120] = { files, closes: [49], head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(f.mutations).toEqual([]);
+    expect(r.out).toContain("○ billing — только механическая правка");
+  });
+
   it("удалённые файлы не дают метку ни решению, ни модулю модели", () => {
     const f = new FakeGitHub(REC);
     const files = [
