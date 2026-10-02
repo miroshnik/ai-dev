@@ -2,9 +2,51 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
-   "PR ждут, пока его чеки не зарегистрируются и не завершатся"
+   "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
   ],
-  "name": "сразу после push «no checks reported» — ожидание, а не ошибка"
+  "name": "лимит API — ожидание до сброса, а не ERROR"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
+  ],
+  "name": "обязательный чек базовой ветки из ruleset ещё не зарегистрирован — ожидание, хотя остальные завершились"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
+  ],
+  "name": "обязательный чек базовой ветки из классической защиты ещё не зарегистрирован — ожидание, хотя остальные завершились"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
+  ],
+  "name": "сразу после push чеков PR ещё нет — ожидание, а не ошибка"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
+  ],
+  "name": "чеки PR читаются по SHA головы через REST — и статусы хостинга, и check-runs Actions"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR с конфликтом с базой не ждут — CI на нём не запустится"
+  ],
+  "name": "PR с конфликтом с базой — ERROR сразу: CI на нём не запустится"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR с конфликтом с базой не ждут — CI на нём не запустится"
+  ],
+  "name": "mergeable ещё не вычислен — ожидание, а не ERROR"
  },
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
@@ -54,6 +96,20 @@
    "Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions"
   ],
   "name": "чеков на коммите ещё нет — ожидание, а не PASS"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Упавший чек завершает ожидание сразу — о красном CI сессия узнаёт, не дожидаясь долгих чеков"
+  ],
+  "name": "с --wait-all упавший чек — FAIL, только когда завершились все"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Упавший чек завершает ожидание сразу — о красном CI сессия узнаёт, не дожидаясь долгих чеков"
+  ],
+  "name": "упавший чек при другом ещё pending — FAIL сразу, не дожидаясь pending"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
