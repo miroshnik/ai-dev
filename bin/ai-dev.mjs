@@ -765,8 +765,9 @@ function updateLink(clone) {
 
 /**
  * Релиз — шаг владельца, из клона: тег vГГГГ.ММ.ДД (дата по UTC; второй за день — .1, .2…) на origin/main и GitHub
- * Release со списком изменений с прошлого релиза — коммиты первого родителя, затронувшие флоу или установщик (PR —
- * заголовком и номером). Выпускать нечего — отказ (код 1): проекты не должны обновляться впустую.
+ * Release со списком изменений с прошлого релиза — коммиты первого родителя, затронувшие флоу или установщик (PR,
+ * влитый merge-коммитом, — заголовком и номером; влитый rebase — своими коммитами с номером задачи из `Refs #N`).
+ * Выпускать нечего — отказ (код 1): проекты не должны обновляться впустую.
  * @param {boolean} preview `--dry-run`: показать тег и список, ничего не создавать
  */
 function releaseCmd(preview) {
@@ -792,7 +793,9 @@ function releaseCmd(preview) {
       const [subject = "", body = ""] = entry.split("\x1f");
       const pr = /^Merge pull request #(\d+) /.exec(subject);
       const title = body.trim().split("\n")[0];
-      return pr && title ? `- ${title} (#${pr[1]})` : `- ${subject}`;
+      if (pr && title) return `- ${title} (#${pr[1]})`;
+      const refs = [...new Set([...body.matchAll(/^Refs #(\d+)/gm)].map((m) => `#${m[1]}`))];
+      return refs.length ? `- ${subject} (${refs.join(", ")})` : `- ${subject}`;
     });
   const notes = last ? [`Изменения флоу с ${last.tag}:`, "", ...items].join("\n") : "Первый релиз: проекты ставят и обновляют флоу по релизам ai-dev, а не по main.";
   const day = `v${new Date().toISOString().slice(0, 10).replaceAll("-", ".")}`;
