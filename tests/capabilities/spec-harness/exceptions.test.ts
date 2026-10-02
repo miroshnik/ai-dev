@@ -237,6 +237,8 @@ describe("Отключение линт-правила в коде — искл�
         'export const a = "// eslint-disable-next-line no-console -- временно";',
         "export const b = `/* eslint-disable */ ${a}`;",
         'export const c = /"/.test(a) ? "// eslint-disable-next-line no-alert" : "";',
+        "f(); // регулярка после комментария — не деление (#269)",
+        '/"/.test(a) ? "// eslint-disable-next-line no-alert" : "";',
       ].join("\n") + "\n",
       "src/mixed.ts": 'const url = "http://x"; // eslint-disable-line no-console -- #3 адрес\nconst s = "// eslint-disable no-alert";\n',
     });

@@ -18,7 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
-import { BEFORE_REGEX, decisionFolder, EXCEPTIONS_DIR, exceptionFile, REGEX_WORDS, skipRegex, skipString } from "./speclib.ts";
+import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, regexAfter, skipRegex, skipString } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
@@ -361,8 +361,7 @@ const DIRECTIVE = /^(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\
  */
 function commentsIn(s: string): [number, string][] {
   const out: [number, string][] = [];
-  let prev = ""; // последний значащий символ кода
-  let word = ""; // последнее слово кода
+  let last = -1; // последний значащий символ кода — для regexAfter; комментарии его не сдвигают
   for (let i = 0; i < s.length; ) {
     const c = s[i]!;
     if (c === "/" && (s[i + 1] === "/" || s[i + 1] === "*")) {
@@ -374,28 +373,15 @@ function commentsIn(s: string): [number, string][] {
     }
     if (c === "'" || c === '"' || c === "`") {
       i = skipString(s, i);
-      prev = c;
-      word = "";
+      last = i - 1;
       continue;
     }
-    if (c === "/" && (prev === "" || BEFORE_REGEX.includes(prev) || REGEX_WORDS.has(word))) {
+    if (c === "/" && regexAfter(s, last)) {
       i = skipRegex(s, i);
-      prev = "/";
-      word = "";
+      last = i - 1;
       continue;
     }
-    if (/[\w$]/.test(c)) {
-      let j = i;
-      while (j < s.length && /[\w$]/.test(s[j]!)) j++;
-      word = s.slice(i, j);
-      prev = s[j - 1]!;
-      i = j;
-      continue;
-    }
-    if (!/\s/.test(c)) {
-      prev = c;
-      word = "";
-    }
+    if (!/\s/.test(c)) last = i;
     i++;
   }
   return out;

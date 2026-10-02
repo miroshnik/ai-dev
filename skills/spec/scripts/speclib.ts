@@ -440,8 +440,20 @@ export function skipString(s: string, i: number): number {
 }
 
 // после них `/` начинает регулярное выражение, а не деление
-export const BEFORE_REGEX = "(,=:[!&|?{};+-*%<>~^";
-export const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await", "delete", "throw", "instanceof", "new"]);
+const BEFORE_REGEX = "(,=:[!&|?{};+-*%<>~^";
+const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await", "delete", "throw", "instanceof", "new"]);
+
+/**
+ * `/` после кода, который кончается в last, — начало регулярки, а не деление: по символу или слову (не свойству)
+ * в last; last < 0 — кода до `/` нет. last — последний значащий символ кода: его ведёт сканер, комментарии и
+ * пробелы его не меняют — иначе символ берётся из комментария. Одно правило для названий тестов и харнесса.
+ */
+export function regexAfter(s: string, last: number): boolean {
+  if (last < 0 || BEFORE_REGEX.includes(s[last]!)) return true;
+  let b = last;
+  while (b >= 0 && isIdentChar(s[b]!)) b--;
+  return s[b] !== "." && REGEX_WORDS.has(s.slice(b + 1, last + 1));
+}
 
 /**
  * i — открывающий `/` регулярного выражения; индекс после флагов. Классы `[…]` и экранирование учтены. Литерал
@@ -464,28 +476,30 @@ export function skipRegex(s: string, i: number): number {
   return j;
 }
 
-/** `/` в i (не комментарий) — начало регулярки, а не деление: по значащему символу или слову перед ним. */
-function regexAt(s: string, i: number): boolean {
-  let k = i - 1;
-  while (k >= 0 && WS.includes(s[k]!)) k--;
-  if (k < 0 || BEFORE_REGEX.includes(s[k]!)) return true;
-  let b = k;
-  while (b >= 0 && isIdentChar(s[b]!)) b--;
-  return s[b] !== "." && REGEX_WORDS.has(s.slice(b + 1, k + 1));
-}
-
+/** i — индекс после `${`; вернуть индекс после парной `}`. */
 function skipTemplateExpr(s: string, i: number): number {
   const n = s.length;
   let d = 0;
   let j = i;
+  let last = i - 1; // последний значащий символ кода — для regexAfter
   while (j < n) {
     const c = s[j]!;
-    if (c === "'" || c === '"' || c === "`") {
-      j = skipString(s, j);
+    if (s.startsWith("//", j)) {
+      j = skipLineComment(s, j);
       continue;
     }
-    if (c === "/" && regexAt(s, j)) {
+    if (s.startsWith("/*", j)) {
+      j = skipBlockComment(s, j);
+      continue;
+    }
+    if (c === "'" || c === '"' || c === "`") {
+      j = skipString(s, j);
+      last = j - 1;
+      continue;
+    }
+    if (c === "/" && regexAfter(s, last)) {
       j = skipRegex(s, j);
+      last = j - 1;
       continue;
     }
     if (c === "{") d++;
@@ -493,6 +507,7 @@ function skipTemplateExpr(s: string, i: number): number {
       if (d === 0) return j + 1;
       d--;
     }
+    if (!WS.includes(c)) last = j;
     j++;
   }
   return n;
@@ -503,10 +518,12 @@ export function skipBalanced(s: string, i: number): number {
   const n = s.length;
   let d = 1;
   let j = i;
+  let last = i - 1; // последний значащий символ кода — для regexAfter
   while (j < n && d) {
     const c = s[j]!;
     if (c === "'" || c === '"' || c === "`") {
       j = skipString(s, j);
+      last = j - 1;
       continue;
     }
     if (s.startsWith("//", j)) {
@@ -517,12 +534,14 @@ export function skipBalanced(s: string, i: number): number {
       j = skipBlockComment(s, j);
       continue;
     }
-    if (c === "/" && regexAt(s, j)) {
+    if (c === "/" && regexAfter(s, last)) {
       j = skipRegex(s, j);
+      last = j - 1;
       continue;
     }
     if (c === "(") d++;
     else if (c === ")") d--;
+    if (!WS.includes(c)) last = j;
     j++;
   }
   return j;
@@ -591,6 +610,8 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   let doc: { text: string } | null = null; // последний JSDoc, пока после него не было кода
   let fileDoc: { text: string } | null = null; // первый JSDoc до кода
   let code = false;
+  let last = -1; // последний значащий символ кода — для regexAfter; комментарии и пробелы его не сдвигают
+  let wasCode = false; // прошлый шаг разобрал код: он кончается перед i
 
   const addDoc = (m: Map<string, string>, chain: string[], text: string): void => {
     if (!text) return;
@@ -610,6 +631,8 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   };
 
   while (i < n) {
+    if (wasCode) last = i - 1;
+    wasCode = false;
     const c = s[i]!;
     if (c === "/" && s.startsWith("//", i)) {
       i = skipLineComment(s, i);
@@ -632,11 +655,12 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
     const d = doc;
     doc = null;
     code = true;
+    wasCode = true;
     if (c === "'" || c === '"' || c === "`") {
       i = skipString(s, i);
       continue;
     }
-    if (c === "/" && regexAt(s, i)) {
+    if (c === "/" && regexAfter(s, last)) {
       i = skipRegex(s, i);
       continue;
     }
