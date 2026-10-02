@@ -5,8 +5,10 @@
  * исключение (`{ item, rule?, issue, reason }`), старый файл удаляется. Импорт в файлах папки
  * (`import exceptions from "./exceptions.ts"`) становится `const exceptions = exceptionsIn()` харнесса, путь к старому
  * файлу в `package.json` и workflow CI (`spec-claims --exceptions`) — путём к каталогу. Чего не переписать (ссылка из
- * другой папки, нет импорта харнесса) — строка `!`. Исключения названий spec-doc (`{ file, name }`) не переносятся —
- * у них свой формат. Повторный запуск ничего не меняет.
+ * другой папки, нет импорта харнесса) — строка `!`. Исключения названий spec-doc (`{ file, name }`) — массив в
+ * `names.exceptions.ts` папки, общий `tests/standards/spec-names/exceptions.ts` или файл `--names-exceptions` из
+ * `package.json` и workflow CI — раскладываются по каталогам `names.exceptions/` папок решений своих тестов (файл
+ * `<название>.json`), флаг `--names-exceptions` убирается. Повторный запуск ничего не меняет.
  *
  *   bun spec-exceptions.ts [--root DIR]
  *
@@ -18,12 +20,15 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { TESTS } from "./speclib.ts";
+import { decisionFolder, NAMES_DIR, type NameException, TESTS, writeNameException } from "./speclib.ts";
 
 const USAGE = "spec-exceptions.ts [--root DIR]";
 const LEGACY = /^exceptions\.(ts|mts|js|mjs|json)$/;
+const LEGACY_NAMES = /^names\.exceptions\.(ts|mts|js|mjs|json)$/;
+// флаг прежнего общего файла исключений названий spec-doc в скриптах проекта и CI: `--names-exceptions <путь>`
+const NAMES_FLAG = /[ \t]+--names-exceptions(?:=|[ \t]+)([^\s"']+)/g;
 const CODE = /\.[cm]?[jt]sx?$/;
-const SKIP_DIRS = new Set(["node_modules", ".git", "exceptions"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", "exceptions", NAMES_DIR]);
 
 interface Entry {
   item: string;
@@ -127,9 +132,14 @@ export async function main(argv: string[]): Promise<number> {
   const root = path.resolve(values.root ?? ".");
   const files = walk(root, TESTS);
   const legacy = files.filter((f) => LEGACY.test(path.posix.basename(f)));
+  const configs = ["package.json", ...walk(root, ".github/workflows").filter((f) => /\.ya?ml$/.test(f))].filter((f) => existsSync(path.join(root, f)));
+  // исключения названий: файлы папок, общий файл (он же exceptions.ts — ниже по содержимому) и названные флагом
+  const flagged = configs.flatMap((f) => [...readFileSync(path.join(root, f), "utf8").matchAll(NAMES_FLAG)].map((m) => m[1]!));
+  const names = [...new Set([...files.filter((f) => LEGACY_NAMES.test(path.posix.basename(f))), ...flagged.filter((f) => existsSync(path.join(root, f)))])];
   const out: string[] = [];
   const manual: string[] = [];
   const moved: string[] = [];
+  const movedNames: string[] = [];
 
   for (const rel of legacy) {
     let list: unknown;
@@ -144,7 +154,7 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     if (list.length && list.every((x) => x && typeof x === "object" && typeof x.item !== "string" && typeof x.name === "string")) {
-      out.push(`○ ${rel}: исключения названий spec-doc — не переносятся`);
+      if (!names.includes(rel)) names.push(rel);
       continue;
     }
     const bad = list.findIndex((x) => !x || typeof x !== "object" || typeof x.item !== "string");
@@ -193,18 +203,44 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  // путь к прежнему файлу в скриптах проекта и CI (spec-claims --exceptions) — путём к каталогу
-  const configs = ["package.json", ...walk(root, ".github/workflows").filter((f) => /\.ya?ml$/.test(f))];
-  for (const file of configs.filter((f) => existsSync(path.join(root, f)))) {
+  // исключения названий — файл на название в папку решения своего теста; тест вне дерева — к папке прежнего файла
+  for (const rel of names) {
+    let list: unknown;
+    try {
+      list = await loadLegacy(path.join(root, rel));
+    } catch (e) {
+      console.error(`spec-exceptions: ${rel} не загружается: ${(e as Error).message}`);
+      return 2;
+    }
+    const isName = (x: Partial<NameException> | null) => !!x && typeof x.file === "string" && typeof x.name === "string" && Number.isInteger(x.issue);
+    if (!Array.isArray(list) || !list.every(isName)) {
+      console.error(`spec-exceptions: ${rel} — нужен export default [{ file, name, issue, reason }]`);
+      return 2;
+    }
+    const written = (list as NameException[]).map((x) =>
+      writeNameException(root, decisionFolder(x.file) ?? path.posix.dirname(rel), { file: x.file, name: x.name, issue: x.issue, reason: String(x.reason ?? "") }),
+    );
+    rmSync(path.join(root, rel));
+    movedNames.push(rel);
+    out.push(`- ${rel} → ${[...new Set(written.map((w) => `${path.posix.dirname(w)}/`))].join(", ")} (${written.length})`, ...written.map((w) => `+ ${w}`));
+  }
+
+  // путь к прежнему файлу в скриптах проекта и CI (spec-claims --exceptions) — путём к каталогу, флаг прежнего файла
+  // исключений названий (spec-doc --names-exceptions) — долой: исключения уже в каталогах
+  for (const file of configs) {
     let text = readFileSync(path.join(root, file), "utf8");
     for (const rel of moved) {
       const re = new RegExp(`(?<![\\w./-])${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w/-])`, "g");
       if (!re.test(text)) continue;
       const dir = `${path.posix.dirname(rel)}/exceptions`;
       text = text.replace(re, dir);
-      writeFileSync(path.join(root, file), text);
       out.push(`~ ${file}: ${rel} → ${dir}`);
     }
+    text = text.replace(NAMES_FLAG, (_all, rel: string) => {
+      out.push(`~ ${file}: --names-exceptions ${rel} убран`);
+      return "";
+    });
+    if (text !== readFileSync(path.join(root, file), "utf8")) writeFileSync(path.join(root, file), text);
   }
 
   // ссылки на перенесённые файлы, которые команда не переписала, — руками
@@ -216,7 +252,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  if (!moved.length) out.push("exceptions.ts в папках решений нет — переносить нечего");
+  if (!moved.length && !movedNames.length) out.push("exceptions.ts в папках решений нет — переносить нечего");
   for (const l of [...out, ...manual]) console.log(l);
   return manual.length ? 1 : 0;
 }
