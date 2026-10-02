@@ -2466,6 +2466,13 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
+  "name": "перенос exceptions.ts подпапки в каталог папки решения — раздела «Исключения» нет"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
   "name": "реестр invariant и правило examples: добавленные и снятые"
  },
  {
@@ -2495,6 +2502,13 @@
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
   "name": "снятое исключение названия — с файлом теста и названием, без «undefined»"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "файл исключения не на месте — каталог в подпапке, не JSON — в разделе «Исключения» не показан"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -2768,6 +2782,13 @@
    "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
   ],
   "name": "исключения названий видны в оглавлении спеки — это долг"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "каталог `names.exceptions/` в подпапке папки решения — ошибка с местом каталога"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
@@ -3110,6 +3131,13 @@
   "describes": [
    "Исключения проекта переезжают в каталог exceptions/ одной командой"
   ],
+  "name": "exceptions.ts подпапки переезжает в exceptions/ папки решения — тест подпапки читает его через exceptionsIn()"
+ },
+ {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
+   "Исключения проекта переезжают в каталог exceptions/ одной командой"
+  ],
   "name": "spec-exceptions переносит exceptions.ts в каталог — файл на исключение, старый удалён, импорт в тесте — exceptionsIn()"
  },
  {
@@ -3411,6 +3439,13 @@
   "describes": [
    "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
   ],
+  "name": "exceptions.ts подпапки — упавший тест с подсказкой переноса в exceptions/ папки решения"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
   "name": "два файла на один элемент — ошибка с путями обоих"
  },
  {
@@ -3426,6 +3461,13 @@
    "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
   ],
   "name": "исключение, которое больше не нарушает, — упавший тест «убери исключение» с путём файла"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "каталог exceptions/ в подпапке папки решения — упавший тест с местом каталога, исключение из него не читается"
  },
  {
   "path": "tests/capabilities/spec-harness/exceptions.test.ts",
@@ -4316,6 +4358,90 @@
    "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
   ],
   "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» не пуст"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "github/github распознаёт файл исключений по таблице путей"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "pr labels: механическая правка — файл, который spec читает исключением"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "spec/harness распознаёт файл исключений правилом exceptionFile, без своего"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "spec/spec-diff распознаёт файл исключений правилом exceptionFile, без своего"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "spec/spec-doc распознаёт файл исключений правилом exceptionFile, без своего"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "spec/spec-exceptions распознаёт файл исключений правилом exceptionFile, без своего"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "spec/speclib распознаёт файл исключений по таблице путей"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "нарушитель не проходит: pr labels до стандарта: прежний файл — только exceptions.ts"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "нарушитель не проходит: spec-diff до стандарта: своя регулярка exceptions/"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "реестр «скрипты, распознающие файлы исключений» находит github/github, spec/harness, spec/spec-diff, spec/spec-doc, spec/spec-exceptions, spec/speclib"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "реестр «скрипты, распознающие файлы исключений» не пуст"
+ },
+ {
+  "path": "tests/standards/exception-files/exception-files.test.ts",
+  "describes": [
+   "Файл исключений папки решения распознаётся одинаково в spec и github"
+  ],
+  "name": "таблица ловит расхождения pr labels до стандарта: не JSON, прежний файл не .ts, подпапка, скрытый файл"
  },
  {
   "path": "tests/standards/node-runtime/node-runtime.test.ts",

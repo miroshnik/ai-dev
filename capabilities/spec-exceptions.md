@@ -19,12 +19,13 @@
 
 ## Исключения проекта переезжают в каталог exceptions/ одной командой
 
-<details><summary>✅ 4 теста</summary>
+<details><summary>✅ 5 тестов</summary>
 
 - ✅ spec-exceptions переносит exceptions.ts в каталог — файл на исключение, старый удалён, импорт в тесте — exceptionsIn()
 - ✅ повторный запуск — переносить нечего: код 0, файлы те же
 - ✅ путь к exceptions.ts в package.json и workflow CI — на каталог
 - ✅ ссылку, которую не переписать, команда называет — код 1
+- ✅ exceptions.ts подпапки переезжает в exceptions/ папки решения — тест подпапки читает его через exceptionsIn()
 
 </details>
 
