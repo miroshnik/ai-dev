@@ -1,8 +1,8 @@
 /**
- * speclib — общее для spec-doc, spec-diff, spec-publish и spec-exceptions: дерево tests/, модель теста,
+ * speclib — общее для spec-doc, spec-diff, spec-publish, spec-exceptions и харнесса: дерево tests/, модель теста,
  * `Source:` публикации, разбор отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
  * от `bun test`), статический разбор исходников тестов (сканер describe/it/test для TS/JS:
- * названия и проза из JSDoc) и файлы исключений названий.
+ * названия и проза из JSDoc) и правило файлов исключений папки решения (`exceptionFile`).
  *
  * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
  * зависимостей и без конфигурации под репозиторий: дерево tests/ из правила
@@ -108,11 +108,57 @@ export function decisionFolder(file: string): string | null {
   return kind === "capability" || kind === "architecture" || kind === "standard" ? file.split("/").slice(0, 3).join("/") : null;
 }
 
+/** Исключения папки решения — каталог `exceptions/`, файл на элемент реестра харнесса (`exceptionsIn`). */
+export const EXCEPTIONS_DIR = "exceptions";
+
 /**
  * Исключения названий spec-doc — каталог `names.exceptions/` папки решения, файл на название: параллельные PR
  * снимают каждый свой файл, а в общем массиве соседние строки конфликтовали.
  */
 export const NAMES_DIR = "names.exceptions";
+
+// прежний формат — массив в одном файле: exceptions.ts харнесса, names.exceptions.ts spec-doc
+const LEGACY_EXCEPTIONS = /^(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
+
+/** Чей файл исключений и в каком виде. */
+export interface ExceptionFile {
+  /** Папка решения `tests/<вид>/<имя>`, чьи это исключения. */
+  folder: string;
+  /** Каталог исключений папки: элементы реестров харнесса или названия spec-doc. */
+  dir: typeof EXCEPTIONS_DIR | typeof NAMES_DIR;
+  /** Прежний формат — массив в одном файле папки или её подпапки: переносит spec-exceptions в каталог `dir` папки. */
+  legacy: boolean;
+  /** Не на месте или не того вида — что не так; такой файл исключением не читается. */
+  error?: string;
+}
+
+/**
+ * Файл исключений какой папки решения? Одно правило на харнесс, spec-doc, spec-diff и spec-exceptions; копия в скилле
+ * github (`pr labels`: механическая правка) сверяется с ним стандартом `tests/standards/exception-files`.
+ *
+ * - `tests/<вид>/<имя>/exceptions/<элемент>.json` (`names.exceptions/<название>.json`) — исключение папки;
+ * - иной файл в каталоге (не `.json`, вложенный каталог) — ошибка: исключение — JSON-файл;
+ * - каталог в подпапке папки решения — ошибка: каталог один на папку, его читает `exceptionsIn()` теста любой подпапки;
+ * - `exceptions.{ts,mts,js,mjs,json}` (`names.exceptions.*`) в папке или подпапке — прежний формат исключений папки;
+ * - вне папок решений и скрытые файлы — не исключения (null).
+ */
+export function exceptionFile(p: string): ExceptionFile | null {
+  const folder = decisionFolder(p);
+  if (folder === null) return null;
+  const inner = p.split("/").slice(3);
+  if (inner.some((s) => s.startsWith("."))) return null;
+  const at = inner.findIndex((s, i) => (i < inner.length - 1 ? s === EXCEPTIONS_DIR || s === NAMES_DIR : LEGACY_EXCEPTIONS.test(s)));
+  if (at < 0) return null;
+  if (at === inner.length - 1) return { folder, dir: inner[at]!.startsWith(`${NAMES_DIR}.`) ? NAMES_DIR : EXCEPTIONS_DIR, legacy: true };
+  const dir = inner[at] as ExceptionFile["dir"];
+  const what = dir === NAMES_DIR ? "исключения названий" : "исключения";
+  if (at > 0) return { folder, dir, legacy: false, error: `${what} — только в ${folder}/${dir}/ папки решения, не в подпапке` };
+  if (inner.length > 2 || !p.endsWith(".json")) {
+    const form = dir === NAMES_DIR ? "исключение названия — файл <название>.json с { file, name, issue, reason }" : "исключение — файл <элемент>.json с { item, issue, reason }";
+    return { folder, dir, legacy: false, error: form };
+  }
+  return { folder, dir, legacy: false };
+}
 
 /** Исключение названия: тест, название, задача на переписывание и причина. */
 export interface NameException {

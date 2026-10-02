@@ -18,7 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
-import { skipString } from "./speclib.ts";
+import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, skipString } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
@@ -66,9 +66,6 @@ export interface Exception {
   file?: string;
 }
 
-const EXCEPTIONS_DIR = "exceptions";
-// прежний формат — массив в одном файле папки решения; исключения названий spec-doc (names.exceptions/) — не он
-const LEGACY_EXCEPTIONS = ["exceptions.ts", "exceptions.mts", "exceptions.js", "exceptions.mjs", "exceptions.json"];
 const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
 
 /**
@@ -123,19 +120,46 @@ function callerFolder(): string | null {
   return parts[0] === "tests" && parts.length > 3 ? parts.slice(0, 3).join("/") : path.posix.dirname(file);
 }
 
+/** Файлы под каталогом от корня проекта, по порядку; скрытые и зависимости — мимо. */
+function filesUnder(rel: string): string[] {
+  let entries;
+  try {
+    entries = readdirSync(path.resolve(process.cwd(), rel), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => !e.name.startsWith(".") && e.name !== "node_modules")
+    .flatMap((e) => (e.isDirectory() ? filesUnder(`${rel}/${e.name}`) : [`${rel}/${e.name}`]))
+    .sort();
+}
+
 /**
- * Прежний формат исключений — `exceptions.ts` в папке вызывающего теста: упавший тест с подсказкой переноса, один на
- * папку за прогон. Проверка регистрирует его сама — проект, который ещё импортирует `exceptions.ts`, `exceptionsIn` не зовёт.
+ * Исключения папки вызывающего теста не там или не в том виде (правило `exceptionFile`): прежний `exceptions.ts`
+ * папки или подпапки — упавший тест с подсказкой переноса, каталог `exceptions/` в подпапке и не JSON в каталоге —
+ * упавший тест с путями. Один на папку за прогон; проверка регистрирует его сама — проект, который ещё импортирует
+ * `exceptions.ts`, `exceptionsIn` не зовёт. Исключения названий spec-doc (`names.exceptions/`) проверяет spec-doc.
  */
 function legacyExceptions(it: It): void {
   const folder = callerFolder();
-  if (folder === null) return;
-  const legacy = LEGACY_EXCEPTIONS.map((n) => `${folder}/${n}`).find((f) => existsSync(path.resolve(process.cwd(), f)));
-  if (!legacy || seen.has(`legacy\0${folder}`)) return;
+  if (folder === null || decisionFolder(`${folder}/_`) !== folder || seen.has(`legacy\0${folder}`)) return;
   seen.add(`legacy\0${folder}`);
-  it("исключения — файлом на элемент в exceptions/, а не в exceptions.ts", () => {
-    throw new Error(`${legacy}: исключения — файл на элемент в ${folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
+  const found = filesUnder(folder).flatMap((f) => {
+    const x = exceptionFile(f);
+    return x?.dir === EXCEPTIONS_DIR ? [{ f, x }] : [];
   });
+  const legacy = found.filter(({ x }) => x.legacy).map(({ f, x }) => `${f}: исключения — файл на элемент в ${x.folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
+  const misplaced = found.filter(({ x }) => x.error).map(({ f, x }) => `${f}: ${x.error}`);
+  if (legacy.length) {
+    it("исключения — файлом на элемент в exceptions/, а не в exceptions.ts", () => {
+      throw new Error(legacy.join("\n"));
+    });
+  }
+  if (misplaced.length) {
+    it("исключения — файлы <элемент>.json в exceptions/ папки решения", () => {
+      throw new Error(misplaced.join("\n"));
+    });
+  }
 }
 
 /** Что сделать с ненужным исключением: удалить его файл, а исключение без файла — убрать из списка. */
