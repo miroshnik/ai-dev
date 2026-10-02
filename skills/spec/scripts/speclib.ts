@@ -572,11 +572,6 @@ export function parseJs(file: string, source: string): Test[] {
   return scanJs(file, source).tests;
 }
 
-/** JSDoc-проза исходника: у файла, у describe и у it / test (см. `scanJs`). */
-export function parseDocs(file: string, source: string): Docs {
-  return scanJs(file, source).docs;
-}
-
 /**
  * Один проход сканера — тесты и проза. JSDoc относится к ближайшему коду после него
  * (комментарии между ними не мешают): вызов describe / it — его проза; первый JSDoc файла,
