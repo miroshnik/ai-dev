@@ -105,6 +105,25 @@ describe("Исключения проекта переезжают в катал
     expect(r.code).toBe(1);
     expect(r.stdout).toContain(`! tests/standards/other/other.test.ts: ссылка на ${AUDIT}/exceptions.ts — замени на exceptionsIn("${AUDIT}") харнесса`);
   });
+
+  // каталог один на папку решения: exceptionsIn() теста подпапки читает каталог папки — перенос в каталог подпапки
+  // оставил бы исключения непрочитанными
+  it("exceptions.ts подпапки переезжает в exceptions/ папки решения — тест подпапки читает его через exceptionsIn()", () => {
+    writeTree(dir, {
+      [`${AUDIT}/sub/exceptions.ts`]: LEGACY,
+      [`${AUDIT}/sub/sub.test.ts`]: TEST,
+      [`${AUDIT}/sub/other.ts`]: 'export const other = "";\n',
+    });
+    const r = migrate();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`- ${AUDIT}/sub/exceptions.ts → ${AUDIT}/exceptions/ (2)`);
+    expect(r.stdout).toContain(`~ ${AUDIT}/sub/sub.test.ts: импорт → exceptionsIn()`);
+    expect(existsSync(path.join(dir, AUDIT, "sub/exceptions"))).toBe(false);
+    expect(JSON.parse(read(`${AUDIT}/exceptions/importLegacy.json`))).toEqual({ item: "importLegacy", issue: 12, reason: "импорт старых данных — аудит в #12" });
+    const t = spawnSync("bun", ["test", "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
+    expect(t.status).toBe(0);
+    expect(read("r.xml")).toMatch(/<testcase name="исключение: importLegacy \(#12\)"[^>]*\/>/);
+  });
 });
 
 const BILLING = "tests/capabilities/billing";
