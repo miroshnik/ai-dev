@@ -17,7 +17,7 @@
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
  * Метки решений сверяются с деревом спеки основной ветки; модель архитектуры читает отдельный процесс того же
  * рантайма (`modelModules`). Мерж в основную ветку — ruleset `ai-dev`: обязательные чеки, зелёные на последних
- * влитых PR.
+ * влитых PR; способ мержа — только rebase (настройка репозитория, REST).
  */
 
 import { spawnSync } from "node:child_process";
@@ -212,6 +212,8 @@ export interface Merge {
   merged: Head[];
   /** Открытые PR, у которых все чеки уже завершились: чека, которого у них нет, не будет. */
   open: Head[];
+  /** Разрешённые способы мержа PR (настройка репозитория): merge commit, squash, rebase. */
+  methods: { merge: boolean; squash: boolean; rebase: boolean };
 }
 export interface State {
   repo: { id: string; name: string; nameWithOwner: string; owner: Owner; linked: ProjectRef[] };
@@ -364,7 +366,7 @@ export const Q = {
   // Ref.rules — правила действующих ruleset (репозитория и организации), которые GitHub применяет к ветке
   MergeRules: `query MergeRules($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    isPrivate
+    isPrivate mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed
     defaultBranchRef {
       name
       branchProtectionRule { requiredStatusCheckContexts }
@@ -445,6 +447,14 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   UpdateRuleset: ["updateRepositoryRuleset", "UpdateRepositoryRulesetInput", "ruleset { id }"],
 };
 
+/**
+ * Мутации REST — чего нет в GraphQL: настройки мержа репозитория (`UpdateRepositoryInput` их не знает). Input — `repo`
+ * и поля запроса; `gh api -F` шлёт true/false булевыми.
+ */
+const REST: Record<string, (input: Record<string, unknown>) => string[]> = {
+  UpdateRepository: ({ repo, ...fields }) => ["api", "-X", "PATCH", `repos/${repo}`, ...Object.entries(fields).flatMap(([k, v]) => ["-F", `${k}=${v}`])],
+};
+
 function mutationQuery(op: string): string {
   const spec = M[op];
   if (!spec) throw new GhError(`неизвестная мутация ${op}`);
@@ -468,7 +478,22 @@ export function graphql(io: Io, query: string, variables: Record<string, unknown
 }
 
 function mutate(io: Io, m: Mutation): Any {
-  return graphql(io, mutationQuery(m.op), { input: m.input }, true);
+  const rest = REST[m.op];
+  return rest ? restCall(io, rest(m.input)) : graphql(io, mutationQuery(m.op), { input: m.input }, true);
+}
+
+/** Запрос REST; ответ об ошибке (realGh отдаёт JSON и при коде ≠ 0) — исключение с его message. */
+function restCall(io: Io, args: string[]): Any {
+  const what = `${args[2]} ${args[3]}`;
+  const out = io.gh(args);
+  let res: Any;
+  try {
+    res = JSON.parse(out);
+  } catch {
+    throw new GhError(`${what}: ответ не JSON: ${out.slice(0, 200)}`);
+  }
+  if (res?.message && res.id === undefined) throw new GhError(`${what}: ${res.message}`);
+  return res;
 }
 
 /** Реальный `gh`: код возврата ≠ 0 — исключение с stderr. */
@@ -592,6 +617,7 @@ function loadMerge(io: Io, slug: string): Merge | null {
       : null,
     merged: heads(r.merged?.nodes).slice(-STABLE_PRS),
     open: heads(r.open?.nodes).filter((h) => Object.values(h.checks).every((c) => c !== "pending")),
+    methods: { merge: !!r.mergeCommitAllowed, squash: !!r.squashMergeAllowed, rebase: !!r.rebaseMergeAllowed },
   };
 }
 
@@ -735,8 +761,12 @@ export function analyze(s: State): Check[] {
   };
 
   const link = add("link", `Проект привязан к репозиторию и называется ${q(s.repo.name)}`);
-  // правило основной ветки от проекта не зависит
-  const merge = () => s.merge && analyzeMerge(s.merge, s.repo.id, add("merge", `Мерж в ${s.merge.branch} — только с зелёными обязательными чеками`));
+  // правило основной ветки и способ мержа от проекта не зависят
+  const merge = () => {
+    if (!s.merge) return;
+    analyzeMerge(s.merge, s.repo.id, add("merge", `Мерж в ${s.merge.branch} — только с зелёными обязательными чеками`));
+    analyzeMethod(s.merge, s.repo.nameWithOwner, add("method", `Способ мержа PR — только rebase`));
+  };
   if (!p) {
     link("к репозиторию не привязан ни один открытый проект", { kind: "api", text: `найти, скопировать с эталона или создать проект ${q(s.repo.name)} и привязать к ${s.repo.nameWithOwner}` });
     merge();
@@ -1018,6 +1048,23 @@ function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...
   if (add.length) why.push(`не обязательны зелёные на последних ${m.merged.length} влитых PR: ${list(add)}`);
   for (const w of why) merge(w, step);
   if (!why.length && !enforced && !want.length) merge.skip(none);
+}
+
+/**
+ * Способ мержа — только rebase (канон, «PR»): правило мержа одно для всех репозиториев — `gh pr merge <N> --rebase`,
+ * в основную ветку уходят сами коммиты ветки. Настройка репозитория держит правило постоянным: другим способом PR не
+ * влить, а rebase не выключен. Все причины — один запрос.
+ */
+function analyzeMethod(m: Merge, slug: string, method: (text: string, ...steps: Step[]) => void): void {
+  const step: Step = {
+    kind: "api",
+    text: "оставить только rebase: выключить merge commit и squash, включить rebase",
+    url: `https://github.com/${slug}/settings`,
+    mutations: [{ op: "UpdateRepository", input: { repo: slug, allow_merge_commit: false, allow_squash_merge: false, allow_rebase_merge: true } }],
+  };
+  if (!m.methods.rebase) method("rebase выключен — gh pr merge --rebase GitHub отклонит", step);
+  if (m.methods.merge) method("разрешён merge commit", step);
+  if (m.methods.squash) method("разрешён squash", step);
 }
 
 // ----------------------------------------------------------------------------

@@ -49,11 +49,13 @@ export class FakeGitHub {
    * Основная ветка `main` (MergeRules) — как у ai-dev после fix: ruleset «ai-dev» без strict, с обязательным `tests`;
    * у влитых PR `tests` зелёный, `spec-publish` пропущен. Чеки головы PR: имя → вывод чека или IN_PROGRESS.
    * `org` — ruleset организации: действует на ветку, но в rulesets репозитория его нет. `upgrade` — приватный
-   * репозиторий на Free: GraphQL отдаёт пустые правила, REST — 403.
+   * репозиторий на Free: GraphQL отдаёт пустые правила, REST — 403. `methods` — разрешённые способы мержа PR, как у
+   * ai-dev после fix: только rebase; меняет их REST-запрос `PATCH repos/<репозиторий>`.
    */
   merge = {
     private: false,
     upgrade: false,
+    methods: { merge: false, squash: false, rebase: true },
     protection: null as { strict: boolean; contexts: string[] } | null,
     rulesets: [{ id: "RRS_ai-dev", name: "ai-dev", org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: false, contexts: ["tests"], admin: true }],
     merged: Array.from({ length: 12 }, (_, i) => ({ number: 120 + i, checks: { tests: "SUCCESS", "spec-publish": "SKIPPED" } as Record<string, string> })),
@@ -70,6 +72,7 @@ export class FakeGitHub {
     if (args[0] === "api" && args[1] === `repos/${this.repo.nameWithOwner}/rulesets`) {
       return JSON.stringify(this.merge.upgrade ? { message: "Upgrade to GitHub Pro or make this repository public to enable this feature.", status: "403" } : this.merge.rulesets.filter((r) => !r.org).map((r) => ({ id: r.id, name: r.name })));
     }
+    if (args[0] === "api" && args[1] === "-X" && args[2] === "PATCH" && args[3] === `repos/${this.repo.nameWithOwner}`) return this.updateRepository(args.slice(4));
     const patch = args[0] === "api" && args[1] === "-X" && args[2] === "PATCH" ? /^repos\/[^/]+\/[^/]+\/milestones\/(\d+)$/.exec(args[3] ?? "") : null;
     if (patch && args.includes("state=closed")) {
       this.closedMilestones.push(Number(patch[1]));
@@ -216,6 +219,25 @@ export class FakeGitHub {
       .sort((a, b) => b.number - a.number);
     return { data: { repository: { defaultBranchRef: { name: "main" }, pullRequests: { nodes } } } };
   }
+  /**
+   * REST «Update a repository»: поля `-F ключ=значение` (true/false — булевы, как их шлёт gh), в журнал мутаций — как
+   * UpdateRepository. Без прав admin или ни одного способа мержа — ответ GitHub с message и кодом.
+   */
+  private updateRepository(args: string[]): string {
+    const input: Record<string, unknown> = {};
+    for (let i = 0; i < args.length; i += 2) {
+      if (args[i] !== "-F" && args[i] !== "-f") throw new Error(`fake gh: неожиданный аргумент PATCH repos: ${args[i]}`);
+      const [k, v] = [args[i + 1]!.slice(0, args[i + 1]!.indexOf("=")), args[i + 1]!.slice(args[i + 1]!.indexOf("=") + 1)];
+      input[k] = args[i] === "-F" && (v === "true" || v === "false") ? v === "true" : v;
+    }
+    this.mutations.push({ op: "UpdateRepository", input });
+    if (this.failing.UpdateRepository) return JSON.stringify({ message: this.failing.UpdateRepository, documentation_url: "https://docs.github.com/rest/repos/repos#update-a-repository", status: "403" });
+    const m = this.merge.methods;
+    const next = { merge: (input.allow_merge_commit as boolean) ?? m.merge, squash: (input.allow_squash_merge as boolean) ?? m.squash, rebase: (input.allow_rebase_merge as boolean) ?? m.rebase };
+    if (!next.merge && !next.squash && !next.rebase) return JSON.stringify({ message: "Sorry, you need to allow at least one merge strategy. (no_merge_method)", status: "422" });
+    this.merge.methods = next;
+    return JSON.stringify({ id: 1, full_name: this.repo.nameWithOwner, allow_merge_commit: next.merge, allow_squash_merge: next.squash, allow_rebase_merge: next.rebase });
+  }
   // папка без решений в GitHub — не пустое дерево, а null
   private specTree(): Any {
     const t = this.tree;
@@ -242,6 +264,9 @@ export class FakeGitHub {
       data: {
         repository: {
           isPrivate: m.private,
+          mergeCommitAllowed: m.methods.merge,
+          squashMergeAllowed: m.methods.squash,
+          rebaseMergeAllowed: m.methods.rebase,
           defaultBranchRef: {
             name: "main",
             branchProtectionRule: m.protection && { requiresStrictStatusChecks: m.protection.strict, requiredStatusCheckContexts: m.protection.contexts },
