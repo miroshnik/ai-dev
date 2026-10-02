@@ -82,6 +82,18 @@ describe("Релиз — тег по дате на origin/main и список �
     expect(r.stdout).not.toContain("черновик");
   });
 
+  // мерж — только rebase: в main уходят сами коммиты ветки, у каждого в теле «Refs #N» задачи
+  it("PR, влитый rebase, — коммитами ветки, каждый с номером задачи из Refs", () => {
+    const o = owner();
+    o.tag(PREV);
+    o.up.repo.commit(o.rule("Правило из PR."), "feat(agents): правило из PR\n\nRefs #7");
+    o.up.repo.commit({ "bin/ai-dev.mjs": read(path.join(o.up.dir, "bin/ai-dev.mjs")) + "// правка\n" }, "fix(install): правка под правило\n\nПричина в одну строку.\nRefs #7");
+    const r = o.release();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("- feat(agents): правило из PR (#7)");
+    expect(r.stdout).toContain("- fix(install): правка под правило (#7)");
+  });
+
   it("релиз того же дня уже есть — патч: .1, затем .2", () => {
     const o = owner();
     const first = today();
