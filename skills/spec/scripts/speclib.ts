@@ -400,7 +400,8 @@ const MODS_OK = new Set([
   "skip", "only", "todo", "each", "for", "concurrent", "sequential", "fails",
   "runIf", "skipIf", "serial", "parallel", "fixme", "fail", "shuffle",
 ]);
-const WS = " \t\r\n";
+/** Пробел JS — WhiteSpace и LineTerminator стандарта (NBSP, `\f`, BOM…), ровно `\s` регулярок JS: одно понятие на весь обход. */
+const isSpace = (c: string): boolean => /\s/.test(c);
 
 function skipLineComment(s: string, i: number): number {
   const j = s.indexOf("\n", i);
@@ -412,8 +413,66 @@ function skipBlockComment(s: string, i: number): number {
   return j < 0 ? s.length : j + 2;
 }
 
+/** Кусок исходника JS в обходе: комментарий (и шебанг), строка (шаблон — целиком, с `${…}`), регулярка, пробел, символ кода. */
+export type JsPart = "comment" | "string" | "regex" | "space" | "code";
+
+/**
+ * Один обход кода JS — для сканера названий (`scanJs`, `skipBalanced`, шаблоны) и харнесса (`commentsIn`): next()
+ * отдаёт кусок с позиции i. Регулярку от деления отличает `regexAfter` по последнему значащему символу кода, который
+ * ведёт сам обход: комментарии и пробелы его не сдвигают. Копии обхода расходились в том, что считать пробелом, и
+ * NBSP перед регуляркой одному был кодом, другому — нет.
+ */
+export class JsWalk {
+  readonly s: string;
+  /** Позиция обхода: конец куска, который вернул next(). */
+  i: number;
+  /** Начало куска, который вернул next(). */
+  start: number;
+  /** Последний значащий символ кода (< 0 — кода не было): по нему решает regexAfter. */
+  last: number;
+
+  /** С позиции i: символ перед ней — код (`(`, `{` в `${`); с 0 — начало файла. */
+  constructor(s: string, i = 0) {
+    this.s = s;
+    this.i = this.start = i;
+    this.last = i - 1;
+  }
+
+  next(): JsPart {
+    const s = this.s;
+    const i = (this.start = this.i);
+    const c = s[i]!;
+    let part: JsPart = "code";
+    let end = i + 1;
+    if ((c === "/" && s[i + 1] === "/") || (c === "#" && i === 0 && s[1] === "!")) {
+      part = "comment"; // шебанг — тоже
+      end = skipLineComment(s, i);
+    } else if (c === "/" && s[i + 1] === "*") {
+      part = "comment";
+      end = skipBlockComment(s, i);
+    } else if (isSpace(c)) {
+      part = "space";
+    } else if (c === "'" || c === '"' || c === "`") {
+      part = "string";
+      end = skipString(s, i);
+    } else if (c === "/" && regexAfter(s, this.last)) {
+      part = "regex";
+      end = skipRegex(s, i);
+    }
+    this.i = end;
+    if (part !== "comment" && part !== "space") this.last = end - 1;
+    return part;
+  }
+
+  /** Код до j разобран снаружи (вызов, имя теста, скобки) — обход продолжается с j. */
+  skip(j: number): void {
+    this.i = j;
+    this.last = j - 1;
+  }
+}
+
 /** i — открывающая кавычка; вернуть индекс после закрывающей. Шаблонные строки — с ${…}. */
-export function skipString(s: string, i: number): number {
+function skipString(s: string, i: number): number {
   const q = s[i];
   const n = s.length;
   let j = i + 1;
@@ -445,10 +504,10 @@ const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of
 
 /**
  * `/` после кода, который кончается в last, — начало регулярки, а не деление: по символу или слову (не свойству)
- * в last; last < 0 — кода до `/` нет. last — последний значащий символ кода: его ведёт сканер, комментарии и
+ * в last; last < 0 — кода до `/` нет. last — последний значащий символ кода: его ведёт обход `JsWalk`, комментарии и
  * пробелы его не меняют — иначе символ берётся из комментария. Одно правило для названий тестов и харнесса.
  */
-export function regexAfter(s: string, last: number): boolean {
+function regexAfter(s: string, last: number): boolean {
   if (last < 0 || BEFORE_REGEX.includes(s[last]!)) return true;
   let b = last;
   while (b >= 0 && isIdentChar(s[b]!)) b--;
@@ -459,7 +518,7 @@ export function regexAfter(s: string, last: number): boolean {
  * i — открывающий `/` регулярного выражения; индекс после флагов. Классы `[…]` и экранирование учтены. Литерал
  * регулярки не переносится на другую строку: без закрывающего `/` в строке это не регулярка — индекс после `/`.
  */
-export function skipRegex(s: string, i: number): number {
+function skipRegex(s: string, i: number): number {
   let j = i + 1;
   let cls = false;
   while (j < s.length && s[j] !== "\n") {
@@ -478,73 +537,29 @@ export function skipRegex(s: string, i: number): number {
 
 /** i — индекс после `${`; вернуть индекс после парной `}`. */
 function skipTemplateExpr(s: string, i: number): number {
-  const n = s.length;
-  let d = 0;
-  let j = i;
-  let last = i - 1; // последний значащий символ кода — для regexAfter
-  while (j < n) {
-    const c = s[j]!;
-    if (s.startsWith("//", j)) {
-      j = skipLineComment(s, j);
-      continue;
-    }
-    if (s.startsWith("/*", j)) {
-      j = skipBlockComment(s, j);
-      continue;
-    }
-    if (c === "'" || c === '"' || c === "`") {
-      j = skipString(s, j);
-      last = j - 1;
-      continue;
-    }
-    if (c === "/" && regexAfter(s, last)) {
-      j = skipRegex(s, j);
-      last = j - 1;
-      continue;
-    }
+  const w = new JsWalk(s, i);
+  for (let d = 0; w.i < s.length; ) {
+    if (w.next() !== "code") continue;
+    const c = s[w.start];
     if (c === "{") d++;
     else if (c === "}") {
-      if (d === 0) return j + 1;
+      if (d === 0) return w.i;
       d--;
     }
-    if (!WS.includes(c)) last = j;
-    j++;
   }
-  return n;
+  return s.length;
 }
 
 /** i — индекс после '('; вернуть индекс после парной ')'. */
 export function skipBalanced(s: string, i: number): number {
-  const n = s.length;
-  let d = 1;
-  let j = i;
-  let last = i - 1; // последний значащий символ кода — для regexAfter
-  while (j < n && d) {
-    const c = s[j]!;
-    if (c === "'" || c === '"' || c === "`") {
-      j = skipString(s, j);
-      last = j - 1;
-      continue;
-    }
-    if (s.startsWith("//", j)) {
-      j = skipLineComment(s, j);
-      continue;
-    }
-    if (s.startsWith("/*", j)) {
-      j = skipBlockComment(s, j);
-      continue;
-    }
-    if (c === "/" && regexAfter(s, last)) {
-      j = skipRegex(s, j);
-      last = j - 1;
-      continue;
-    }
+  const w = new JsWalk(s, i);
+  for (let d = 1; d && w.i < s.length; ) {
+    if (w.next() !== "code") continue;
+    const c = s[w.start];
     if (c === "(") d++;
     else if (c === ")") d--;
-    if (!WS.includes(c)) last = j;
-    j++;
   }
-  return j;
+  return w.i;
 }
 
 const unescape = (name: string): string => name.replace(/\\(.)/g, "$1");
@@ -600,7 +615,6 @@ export function parseJs(file: string, source: string): Test[] {
 export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs } {
   const s = source;
   const n = s.length;
-  let i = s.startsWith("#!") ? skipLineComment(s, 0) : 0;
   let depth = 0;
   let paren = 0;
   const stack: { name: string; depth: number }[] = []; // describe и глубина фигурных скобок его тела
@@ -610,8 +624,6 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   let doc: { text: string } | null = null; // последний JSDoc, пока после него не было кода
   let fileDoc: { text: string } | null = null; // первый JSDoc до кода
   let code = false;
-  let last = -1; // последний значащий символ кода — для regexAfter; комментарии и пробелы его не сдвигают
-  let wasCode = false; // прошлый шаг разобрал код: он кончается перед i
 
   const addDoc = (m: Map<string, string>, chain: string[], text: string): void => {
     if (!text) return;
@@ -620,74 +632,50 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
     m.set(k, prev && prev !== text ? prev + "\n\n" + text : text);
   };
 
-  const prevSig = (j: number): string => {
-    let k = j - 1;
-    while (k >= 0 && WS.includes(s[k]!)) k--;
-    return k >= 0 ? s[k]! : "";
-  };
-  const skipWs = (j: number): number => {
-    while (j < n && WS.includes(s[j]!)) j++;
+  const skipSpace = (j: number): number => {
+    while (j < n && isSpace(s[j]!)) j++;
     return j;
   };
 
-  while (i < n) {
-    if (wasCode) last = i - 1;
-    wasCode = false;
-    const c = s[i]!;
-    if (c === "/" && s.startsWith("//", i)) {
-      i = skipLineComment(s, i);
-      continue;
-    }
-    if (c === "/" && s.startsWith("/*", i)) {
-      const end = skipBlockComment(s, i);
+  const w = new JsWalk(s);
+  while (w.i < n) {
+    const before = w.last; // значащий символ кода перед куском: `=>` или `)` перед телом describe
+    const part = w.next();
+    const i = w.start;
+    if (part === "comment") {
       if (s.startsWith("/**", i) && !s.startsWith("/**/", i)) {
-        doc = { text: jsdocText(s.slice(i, end)) };
+        doc = { text: jsdocText(s.slice(i, w.i)) };
         if (!code && !fileDoc) fileDoc = doc;
       }
-      i = end;
       continue;
     }
-    if (WS.includes(c)) {
-      i++;
-      continue;
-    }
+    if (part === "space") continue;
     // код: JSDoc до него — проза этого кода (вызова describe / it), дальше не тянется
     const d = doc;
     doc = null;
     code = true;
-    wasCode = true;
-    if (c === "'" || c === '"' || c === "`") {
-      i = skipString(s, i);
-      continue;
-    }
-    if (c === "/" && regexAfter(s, last)) {
-      i = skipRegex(s, i);
-      continue;
-    }
+    if (part !== "code") continue; // строка или регулярка
+    const c = s[i]!;
     if (c === "{") {
       depth++;
-      if (pending && paren === pending.paren + 1 && (prevSig(i) === ">" || prevSig(i) === ")")) {
+      if (pending && paren === pending.paren + 1 && (s[before] === ">" || s[before] === ")")) {
         stack.push({ name: pending.name, depth });
         pending = null;
       }
-      i++;
       continue;
     }
     if (c === "}") {
       if (stack.length && stack[stack.length - 1]!.depth === depth) stack.pop();
       depth--;
-      i++;
       continue;
     }
     if (c === "(") {
       paren++;
-      i++;
       continue;
     }
     if (c === ")") {
       paren--;
       if (pending && paren <= pending.paren) pending = null;
-      i++;
       continue;
     }
     if (/[A-Za-z_$]/.test(c)) {
@@ -703,16 +691,16 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
         if (mods.includes("each") || mods.includes("for")) {
           j = skipBalanced(s, j);
           paren--;
-          const k = skipWs(j);
+          const k = skipSpace(j);
           if (s[k] === "(") {
             j = k + 1;
             paren++;
           } else {
-            i = j;
+            w.skip(j);
             continue;
           }
         }
-        const k = skipWs(j);
+        const k = skipSpace(j);
         const q = s[k];
         if (q === "'" || q === '"' || q === "`") {
           const end = skipString(s, k);
@@ -728,18 +716,16 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
             out.push(t);
             addDoc(docs.tests, chain, d?.text ?? "");
           }
-          i = end;
+          w.skip(end);
           continue;
         }
-        i = j;
+        w.skip(j);
         continue;
       }
       let j = i + 1;
       while (j < n && isIdentChar(s[j]!)) j++;
-      i = j;
-      continue;
+      w.skip(j);
     }
-    i++;
   }
   docs.file = fileDoc?.text ?? "";
   return { tests: out, docs };

@@ -18,7 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
-import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, regexAfter, skipRegex, skipString } from "./speclib.ts";
+import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, JsWalk } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
@@ -356,34 +356,13 @@ const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage"]);
 const DIRECTIVE = /^(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\/|$)([^\n]*?)(?:\*\/|$)/m;
 /**
- * Комментарии кода — [начало, текст]: строки, шаблоны и регулярные выражения пропускаются. ESLint читает директивы
- * только в комментариях: `// eslint-disable` в строке — фикстура или сообщение, а не отключение.
+ * Комментарии кода — [начало, текст]: строки, шаблоны и регулярные выражения пропускаются, обход — тот же, что у
+ * сканера названий (`JsWalk`). ESLint читает директивы только в комментариях: `// eslint-disable` в строке — фикстура
+ * или сообщение, а не отключение.
  */
 function commentsIn(s: string): [number, string][] {
   const out: [number, string][] = [];
-  let last = -1; // последний значащий символ кода — для regexAfter; комментарии его не сдвигают
-  for (let i = 0; i < s.length; ) {
-    const c = s[i]!;
-    if (c === "/" && (s[i + 1] === "/" || s[i + 1] === "*")) {
-      const j = s[i + 1] === "/" ? s.indexOf("\n", i) : s.indexOf("*/", i + 2);
-      const end = j < 0 ? s.length : s[i + 1] === "/" ? j : j + 2;
-      out.push([i, s.slice(i, end)]);
-      i = end;
-      continue;
-    }
-    if (c === "'" || c === '"' || c === "`") {
-      i = skipString(s, i);
-      last = i - 1;
-      continue;
-    }
-    if (c === "/" && regexAfter(s, last)) {
-      i = skipRegex(s, i);
-      last = i - 1;
-      continue;
-    }
-    if (!/\s/.test(c)) last = i;
-    i++;
-  }
+  for (const w = new JsWalk(s); w.i < s.length; ) if (w.next() === "comment") out.push([w.start, s.slice(w.start, w.i)]);
   return out;
 }
 
