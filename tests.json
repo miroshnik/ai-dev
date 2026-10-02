@@ -1269,6 +1269,13 @@
   "describes": [
    "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
   ],
+  "name": "`pr labels`: правка только файлов `names.exceptions/` не даёт метку решения"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
+  ],
   "name": "задача из «Closes #N» получает метки решений по папкам спеки в диффе PR"
  },
  {
@@ -2396,6 +2403,13 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
+  "name": "spec-diff: исключение названия файлом в `names.exceptions/` — добавленное и снятое"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
   "name": "без изменений модели, исключений и проверок — разделов нет"
  },
  {
@@ -2432,6 +2446,13 @@
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
   "name": "модуль, зависимость и пакет модели архитектуры: добавленные и снятые"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "перенос `names.exceptions.ts` в каталог — раздела «Исключения» нет"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -2711,35 +2732,21 @@
   "describes": [
    "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
   ],
-  "name": "--names-baseline раскладывает исключения по папкам их тестов"
+  "name": "`--names-baseline` пишет файл на название и удаляет ненужные"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
    "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
   ],
-  "name": "--names-exceptions с файлом — baseline пишет в этот файл, как раньше"
+  "name": "`names.exceptions.ts` — ошибка с подсказкой `spec-exceptions`"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
    "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
   ],
-  "name": "исключение из общего файла по-прежнему действует рядом с исключениями папок"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "исключение на название, которое стало утверждением или пропало, — spec-doc просит его убрать"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "исключение названия в папке решения — --strict его пропускает"
+  "name": "исключение на название, которое стало утверждением или пропало, — spec-doc просит удалить его файл"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
@@ -2747,6 +2754,13 @@
    "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
   ],
   "name": "исключение названия не в папке своего теста — ошибка --strict"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "исключение названия — файл в `names.exceptions/` папки решения"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
@@ -2761,6 +2775,13 @@
    "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
   ],
   "name": "старое название из исключений не валит --strict, новое — валит"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+  ],
+  "name": "файл в `names.exceptions/` — не исключение названия: ошибка с путём"
  },
  {
   "path": "tests/capabilities/spec-doc/sequence.test.ts",
@@ -3073,6 +3094,20 @@
  {
   "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
   "describes": [
+   "Исключения названий spec-doc переезжают в names.exceptions/ той же командой"
+  ],
+  "name": "`spec-exceptions` переносит `names.exceptions.ts` в каталог"
+ },
+ {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
+   "Исключения названий spec-doc переезжают в names.exceptions/ той же командой"
+  ],
+  "name": "`spec-exceptions` раскладывает общий файл `spec-names` по папкам тестов и убирает `--names-exceptions` из `package.json` и CI"
+ },
+ {
+  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
+  "describes": [
    "Исключения проекта переезжают в каталог exceptions/ одной командой"
   ],
   "name": "spec-exceptions переносит exceptions.ts в каталог — файл на исключение, старый удалён, импорт в тесте — exceptionsIn()"
@@ -3096,7 +3131,7 @@
   "describes": [
    "Исключения проекта переезжают в каталог exceptions/ одной командой"
   ],
-  "name": "ссылку, которую не переписать, команда называет — код 1; исключения названий spec-doc не трогает"
+  "name": "ссылку, которую не переписать, команда называет — код 1"
  },
  {
   "path": "tests/capabilities/spec-harness/architecture.test.ts",
