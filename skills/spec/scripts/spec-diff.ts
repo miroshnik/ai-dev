@@ -399,11 +399,13 @@ export function checkFacts(files: Map<string, string>): string[] {
   return [...out].sort();
 }
 
-// exceptions/<элемент>.json — исключение харнесса файлом, names.exceptions/<название>.json — исключение названия
-// (spec-doc); прежние exceptions.* харнесса и names.exceptions.* — массивом: базовая ревизия переноса ещё на них
-const EXCEPTION_FILE = /(^|\/)(names\.)?exceptions\/[^/]+\.json$/;
-const EXCEPTIONS = /(^|\/)(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
-const isExceptions = (p: string) => EXCEPTIONS.test(p) || EXCEPTION_FILE.test(p);
+// файл исключений — по правилу exceptionFile (speclib), как его читают харнесс и spec-doc: exceptions/<элемент>.json —
+// исключение харнесса, names.exceptions/<название>.json — названия; прежние exceptions.* и names.exceptions.* —
+// массивом (базовая ревизия переноса ещё на них); файл не на месте исключением не читается — его и не показываем
+const readable = (rel: string) => {
+  const x = L.exceptionFile(rel);
+  return x && !x.error ? x : null;
+};
 
 /** Пункт exceptions.*: элемент реестра харнесса (`rule` — соглашение) или название теста (spec-names: `file`, `name`). */
 type ExceptionEntry = { item?: string; rule?: string; file?: string; name?: string; issue: number; reason: string };
@@ -434,22 +436,22 @@ async function decisionsAt(rev: string | null, top: string, prefix: string, chan
   const listed = rev !== null ? gitText(["ls-tree", "-r", "--name-only", "-z", rev, "--", prefix + L.TESTS], top).split("\0") : [];
   const excPaths =
     rev !== null
-      ? listed.filter((p) => p.startsWith(prefix) && isExceptions(p))
-      : walkTests(path.join(top, prefix, L.TESTS)).map((p) => prefix + p).filter(isExceptions);
+      ? listed.filter((p) => p.startsWith(prefix) && readable(p.slice(prefix.length)))
+      : walkTests(path.join(top, prefix, L.TESTS)).filter((p) => readable(p)).map((p) => prefix + p);
   const modelPath = `${prefix}${L.TESTS}/architecture/model.ts`;
   const files = readFiles(rev, top, prefix, [modelPath, ...excPaths, ...changedCode]);
   const model = files.has(`${L.TESTS}/architecture/model.ts`) ? ((await loadData(files.get(`${L.TESTS}/architecture/model.ts`)!, modelPath)) as ModelData) : undefined;
   const exceptions: string[] = [];
   for (const p of excPaths) {
     const rel = p.slice(prefix.length);
-    if (EXCEPTION_FILE.test(rel)) {
-      // файл на исключение: папка решения — над каталогом exceptions/ (names.exceptions/)
+    const { folder, legacy } = readable(rel)!;
+    if (!legacy) {
       const data = await loadData(files.get(rel) ?? "null", rel).catch(() => null);
-      if (data && typeof data === "object") exceptions.push(exceptionLine(path.posix.dirname(path.posix.dirname(rel)), data as ExceptionEntry));
+      if (data && typeof data === "object") exceptions.push(exceptionLine(folder, data as ExceptionEntry));
       continue;
     }
     const data = await loadData(files.get(rel) ?? "[]", rel);
-    for (const e of Array.isArray(data) ? (data as ExceptionEntry[]) : []) exceptions.push(exceptionLine(path.posix.dirname(rel), e));
+    for (const e of Array.isArray(data) ? (data as ExceptionEntry[]) : []) exceptions.push(exceptionLine(folder, e));
   }
   for (const p of changedCode) {
     const rel = p.slice(prefix.length);

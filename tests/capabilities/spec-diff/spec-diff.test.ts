@@ -416,6 +416,23 @@ describe("Решения вне названий тестов — модель, 
     expect(diffFrom(base).stdout).not.toContain("**Исключения");
   });
 
+  // прежний файл подпапки — исключения папки решения (правило exceptionFile): перенос в её каталог — то же исключение
+  it("перенос exceptions.ts подпапки в каталог папки решения — раздела «Исключения» нет", () => {
+    const base = repo.commit({ "tests/standards/audit/sub/exceptions.ts": 'export default [{ item: "a", issue: 1, reason: "r1" }];\n' });
+    repo.commit({ "tests/standards/audit/sub/exceptions.ts": null, "tests/standards/audit/exceptions/a.json": JSON.stringify({ item: "a", issue: 1, reason: "r1" }) + "\n" });
+    expect(diffFrom(base).stdout).not.toContain("**Исключения");
+  });
+
+  // файл не на месте исключением не читается — харнесс на нём падает, а в теле PR его нет
+  it("файл исключения не на месте — каталог в подпапке, не JSON — в разделе «Исключения» не показан", () => {
+    const base = repo.commit({ "tests/standards/audit/exceptions/a.json": JSON.stringify({ item: "a", issue: 1, reason: "r1" }) + "\n" });
+    repo.commit({
+      "tests/standards/audit/sub/exceptions/b.json": JSON.stringify({ item: "b", issue: 2, reason: "r2" }) + "\n",
+      "tests/standards/audit/exceptions/c.txt": JSON.stringify({ item: "c", issue: 3, reason: "r3" }) + "\n",
+    });
+    expect(diffFrom(base).stdout).not.toContain("**Исключения");
+  });
+
   // исключения названий пишет spec-doc --names-baseline, и схема у них другая — { file, name }, а не { item }
   const NAMES = "tests/standards/spec-names/exceptions.ts";
   const names = (list: object[]) => `export default ${JSON.stringify(list)};\n`;
