@@ -3479,6 +3479,27 @@
  {
   "path": "tests/capabilities/spec-harness/exceptions.test.ts",
   "describes": [
+   "Исключение с rule — к правилу инварианта папки: опечатка не выпадает из спеки молча"
+  ],
+  "name": "исключение с rule инварианта из другого файла папки — не ошибка"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключение с rule — к правилу инварианта папки: опечатка не выпадает из спеки молча"
+  ],
+  "name": "исключение с rule, которого нет ни у одного инварианта папки, — упавший тест с путём файла"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключение с rule — к правилу инварианта папки: опечатка не выпадает из спеки молча"
+  ],
+  "name": "исключения с rule своих инвариантов и без rule — зелёные, как раньше"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
    "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
   ],
   "name": "exceptions.ts в папке решения — упавший тест с подсказкой команды переноса"
