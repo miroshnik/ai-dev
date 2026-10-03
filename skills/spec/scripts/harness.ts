@@ -60,7 +60,10 @@ export interface Exception {
   item: string;
   issue: number;
   reason: string;
-  /** Соглашение (`rule` инварианта), к которому исключение относится; без него — ко всем инвариантам папки. */
+  /**
+   * Соглашение (`rule` инварианта), к которому исключение относится; без него — ко всем инвариантам папки. Правила нет
+   * ни у одного инварианта папки — упавший тест «исключения с rule — к правилам инвариантов папки» с путём файла.
+   */
   rule?: string;
   /** Файл исключения — его ставит `exceptionsIn`: храповик называет, какой файл удалить. */
   file?: string;
@@ -115,7 +118,11 @@ export function exceptionFiles(at: string): Exception[] {
 /** Папка решения вызывающего теста от корня проекта (cwd): `tests/<вид>/<имя>`, вне `tests/` — каталог файла. */
 function callerFolder(): string | null {
   const file = callerTest(process.cwd());
-  if (!file) return null;
+  return file && folderOf(file);
+}
+
+/** Папка решения файла теста от корня проекта: `tests/<вид>/<имя>`, вне `tests/` — каталог файла. */
+function folderOf(file: string): string {
   const parts = file.split("/");
   return parts[0] === "tests" && parts.length > 3 ? parts.slice(0, 3).join("/") : path.posix.dirname(file);
 }
@@ -160,6 +167,64 @@ function legacyExceptions(it: It): void {
       throw new Error(misplaced.join("\n"));
     });
   }
+}
+
+/** Правила инвариантов файла теста за прогон и исключения, которые инвариант не взял: у них `rule` другого правила. */
+interface RuleLedger {
+  rules: Set<string>;
+  skipped: Exception[];
+}
+
+// по `it` и файлу теста: сборщик тестов в тесте харнесса — свой `it`, и его сверка не смешивается с чужой
+const ledgers = new WeakMap<It, Map<string, RuleLedger>>();
+
+/**
+ * Исключение с `rule`, которого нет ни у одного инварианта папки (опечатка, правило переименовали или удалили), не
+ * берёт ни один инвариант: храповик его не видит, долг молча выпадает из спеки. Инвариант отложил исключение с чужим
+ * `rule` — регистрируется тест сверки, один на файл; он идёт после сбора файла и знает правила всех его инвариантов.
+ * Правила других файлов папки (подпапки с общим `exceptions/`) идут в другом процессе или позже — их сверка ищет
+ * строкой в коде этих файлов.
+ */
+function unknownRules(it: It, spec: { rule?: string; exceptions?: readonly Exception[] }): void {
+  const file = callerTest(process.cwd()) ?? "";
+  const byFile = ledgers.get(it) ?? new Map<string, RuleLedger>();
+  ledgers.set(it, byFile);
+  const ledger = byFile.get(file) ?? { rules: new Set<string>(), skipped: [] };
+  byFile.set(file, ledger);
+  if (spec.rule) ledger.rules.add(spec.rule);
+  const skipped = (spec.exceptions ?? []).filter((e) => e.rule && e.rule !== spec.rule);
+  if (!skipped.length) return;
+  const first = !ledger.skipped.length;
+  ledger.skipped.push(...skipped);
+  if (!first) return;
+  it("исключения с rule — к правилам инвариантов папки", () => {
+    const lost = new Map<string, Exception>();
+    let elsewhere: Set<string> | null = null;
+    for (const e of ledger.skipped) {
+      if (ledger.rules.has(e.rule!)) continue;
+      elsewhere ??= file ? stringsBeside(file) : new Set();
+      if (!elsewhere.has(e.rule!)) lost.set(e.file ?? `${e.rule}\0${e.item}`, e);
+    }
+    if (!lost.size) return;
+    const rules = [...ledger.rules].sort();
+    const have = rules.length ? `у инвариантов файла: ${rules.join(", ")}` : "инварианты файла — без rule";
+    throw new Error(
+      [...lost.values()]
+        .map((e) => `${e.file ?? `исключение ${e.item}`}: правила «${e.rule}» нет ни у одного инварианта папки (${have}) — поправь rule или ${e.file ? "удали файл" : "убери исключение"}`)
+        .join("\n"),
+    );
+  });
+}
+
+/** Строки в коде других файлов папки решения теста: правила их инвариантов, которых этот прогон не видит. */
+function stringsBeside(file: string): Set<string> {
+  const out = new Set<string>();
+  for (const f of filesUnder(folderOf(file))) {
+    if (f === file || !CODE.test(f)) continue;
+    const s = readFileSync(path.resolve(process.cwd(), f), "utf8");
+    for (const w = new JsWalk(s); w.i < s.length; ) if (w.next() === "string") out.add(s.slice(w.start + 1, w.i - 1));
+  }
+  return out;
 }
 
 /** Что сделать с ненужным исключением: удалить его файл, а исключение без файла — убрать из списка. */
@@ -231,6 +296,7 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
       throw new Error(`${e.item} уже соблюдает соглашение — ${dropHint(e)} (#${e.issue})`);
     });
   }
+  unknownRules(it, spec);
 }
 
 const byName = (a: { name: string }, b: { name: string }): number => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
