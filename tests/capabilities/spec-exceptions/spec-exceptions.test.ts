@@ -43,6 +43,16 @@ invariant(it, {
   violator: { name: "без аудита", item: "importLegacy" },
   exceptions,
 });
+invariant(it, {
+  "rule": "cancel",
+  "registry": "отмены",
+  items: ["export:src/math.ts#factorial", "importLegacy"],
+  name: (m) => m + " отменяется",
+  key: (m) => m,
+  check: (m) => { throw new Error(m + " без отмены"); },
+  violator: { name: "без отмены", item: "importLegacy" },
+  exceptions,
+});
 `;
 
 const project = () =>

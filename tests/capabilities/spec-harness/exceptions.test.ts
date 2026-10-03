@@ -111,9 +111,9 @@ invariant(it, {
 });
 `;
 
-/** bun test в проекте: имя теста → «✓» или «✗ сообщение» из JUnit-отчёта. */
-function bunTest(): Record<string, string> {
-  spawnSync("bun", ["test", "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
+/** bun test в проекте (`files` — только эти файлы тестов): имя теста → «✓» или «✗ сообщение» из JUnit-отчёта. */
+function bunTest(...files: string[]): Record<string, string> {
+  spawnSync("bun", ["test", ...files.map((f) => `./${f}`), "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
   const xml = readFileSync(path.join(dir, "r.xml"), "utf8");
   const out: Record<string, string> = {};
   const unescape = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/&amp;/g, "&");
@@ -206,6 +206,85 @@ describe("Исключения папки решения — файл на эл�
     expect(r["исключения — файлом на элемент в exceptions/, а не в exceptions.ts"]).toBe(
       `✗ ${AUDIT}/sub/exceptions.ts: исключения — файл на элемент в ${AUDIT}/exceptions/ — перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts`,
     );
+  });
+});
+
+/** Тест папки: инвариант на каждое правило над одним реестром, исключения — каталог папки (`exceptionsIn`). */
+const rulesTest = (...rules: string[]) => `import { it } from "bun:test";
+import { exceptionsIn, invariant } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};
+const exceptions = exceptionsIn();
+${rules
+  .map(
+    (rule) => `invariant(it, {
+  rule: ${JSON.stringify(rule)},
+  registry: "мутации",
+  items: ["createInvoice", "importLegacy"],
+  name: (m) => m + " соблюдает ${rule}",
+  key: (m) => m,
+  check: (m) => { if (m === "importLegacy") throw new Error("нарушает ${rule}"); },
+  violator: { name: "нарушитель ${rule}", item: "importLegacy" },
+  exceptions,
+});`,
+  )
+  .join("\n")}
+`;
+const RULES = "исключения с rule — к правилам инвариантов папки";
+
+/**
+ * Исключение с `rule` берёт только инвариант этого правила. Опечатка в `rule`, переименованное или удалённое правило —
+ * и исключение не попадает ни в один тест: храповик его не видит, файл живёт вечно, долг молча выпадает из спеки.
+ * Правила своего файла харнесс знает по прогону; правила других файлов папки (подпапки с общим `exceptions/`) идут в
+ * другом процессе или позже — их он ищет строкой в коде этих файлов.
+ */
+describe("Исключение с rule — к правилу инварианта папки: опечатка не выпадает из спеки молча", () => {
+  it("исключение с rule, которого нет ни у одного инварианта папки, — упавший тест с путём файла", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: rulesTest("audit"),
+      [`${AUDIT}/exceptions/audit--importLegacy.json`]: exception("importLegacy", 12, "аудит в #12", "audit"),
+      [`${AUDIT}/exceptions/audti--importLegacy.json`]: exception("importLegacy", 13, "опечатка в rule", "audti"),
+      "tests/standards/plain/plain.test.ts": auditTest("", "exceptionsIn()"),
+      "tests/standards/plain/exceptions/audit--importLegacy.json": exception("importLegacy", 12, "у инварианта нет rule", "audit"),
+    });
+    const r = bunTest(`${AUDIT}/audit.test.ts`);
+    expect(r["исключение (audit): importLegacy (#12)"]).toBe("✓");
+    expect(r[RULES]).toBe(`✗ ${AUDIT}/exceptions/audti--importLegacy.json: правила «audti» нет ни у одного инварианта папки (у инвариантов файла: audit) — поправь rule или удали файл`);
+    const plain = bunTest("tests/standards/plain/plain.test.ts");
+    expect(plain[RULES]).toBe("✗ tests/standards/plain/exceptions/audit--importLegacy.json: правила «audit» нет ни у одного инварианта папки (инварианты файла — без rule) — поправь rule или удали файл");
+    expect(plain["importLegacy пишет аудит"]).toBe("✗ нет аудита");
+  });
+
+  it("исключение с rule инварианта из другого файла папки — не ошибка", () => {
+    writeTree(dir, {
+      [`${AUDIT}/client/client.test.ts`]: rulesTest("client"),
+      [`${AUDIT}/server/server.test.ts`]: rulesTest("server"),
+      [`${AUDIT}/exceptions/client--importLegacy.json`]: exception("importLegacy", 12, "клиент — в #12", "client"),
+      [`${AUDIT}/exceptions/server--importLegacy.json`]: exception("importLegacy", 13, "сервер — в #13", "server"),
+    });
+    // файл папки отдельно — как в раннере, что изолирует файлы: правило другого файла в этом процессе не регистрируется
+    const client = bunTest(`${AUDIT}/client/client.test.ts`);
+    expect(client["исключение (client): importLegacy (#12)"]).toBe("✓");
+    expect(client[RULES]).toBe("✓");
+    expect(bunTest(`${AUDIT}/server/server.test.ts`)[RULES]).toBe("✓");
+    writeTree(dir, { [`${AUDIT}/exceptions/srever--importLegacy.json`]: exception("importLegacy", 14, "опечатка", "srever") });
+    expect(bunTest(`${AUDIT}/client/client.test.ts`)[RULES]).toStartWith(`✗ ${AUDIT}/exceptions/srever--importLegacy.json: правила «srever» нет`);
+  });
+
+  // сторож от перекоррекции: сверка не трогает исключения, которые берёт инвариант папки
+  it("исключения с rule своих инвариантов и без rule — зелёные, как раньше", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: rulesTest("audit", "cancel"),
+      [`${AUDIT}/exceptions/audit--importLegacy.json`]: exception("importLegacy", 12, "аудит в #12", "audit"),
+      [`${AUDIT}/exceptions/cancel--importLegacy.json`]: exception("importLegacy", 13, "отмена в #13", "cancel"),
+      "tests/standards/single/single.test.ts": rulesTest("audit"),
+      "tests/standards/single/exceptions/importLegacy.json": exception("importLegacy", 14, "без rule — ко всем соглашениям папки"),
+    });
+    const r = bunTest(`${AUDIT}/audit.test.ts`);
+    expect(r["исключение (audit): importLegacy (#12)"]).toBe("✓");
+    expect(r["исключение (cancel): importLegacy (#13)"]).toBe("✓");
+    expect(Object.entries(r).filter(([, v]) => v !== "✓")).toEqual([]);
+    const single = bunTest("tests/standards/single/single.test.ts");
+    expect(single["исключение (audit): importLegacy (#14)"]).toBe("✓");
+    expect(single[RULES]).toBeUndefined();
   });
 });
 
