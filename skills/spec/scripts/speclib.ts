@@ -393,8 +393,9 @@ function junitCase(a: Record<string, string>, body: string, stack: Suite[], root
 // ---------- статический разбор исходников ----------
 
 // describe / it / test / suite / context (+ x/f-варианты Jest, test.describe Playwright),
-// модификаторы — только из списка: test.step, test.use, test.beforeEach и т. п. — не тесты.
-const JS_CALL = /(?<![\w$.])(?:test\.)?[xf]?(describe|it|test|suite|context)((?:\.\w+)*)\s*\(/y;
+// модификаторы — только из списка: test.step, test.use, test.beforeEach и т. п. — не тесты. Скобку вызова (и аргумент
+// типа `<…>` перед ней) ищет callParen в scanJs.
+const JS_CALL = /(?<![\w$.])(?:test\.)?[xf]?(describe|it|test|suite|context)((?:\.\w+)*)(?![\w$])/y;
 const DESCRIBE_KINDS = new Set(["describe", "suite", "context"]);
 const MODS_OK = new Set([
   "skip", "only", "todo", "each", "for", "concurrent", "sequential", "fails",
@@ -562,6 +563,26 @@ export function skipBalanced(s: string, i: number): number {
   return w.i;
 }
 
+/**
+ * i — `<` аргумента типа перед скобкой вызова (`it.each<T>(`); индекс после парной `>` или -1: `<` без пары до `;` или
+ * до закрывающей скобки снаружи — сравнение (`it < max`), а не тип. `>` в `=>` типа функции пары не закрывает.
+ */
+function skipTypeArgs(s: string, i: number): number {
+  const w = new JsWalk(s, i + 1);
+  for (let angle = 1, br = 0; w.i < s.length; ) {
+    if (w.next() !== "code") continue;
+    const c = s[w.start]!;
+    if (c === "<") angle++;
+    else if (c === ">" && s[w.start - 1] !== "=") {
+      if (--angle === 0) return w.i;
+    } else if ("([{".includes(c)) br++;
+    else if (")]}".includes(c)) {
+      if (--br < 0) return -1;
+    } else if (c === ";" && br === 0) return -1;
+  }
+  return -1;
+}
+
 const unescape = (name: string): string => name.replace(/\\(.)/g, "$1");
 const isIdentChar = (c: string): boolean => /[\w$]/.test(c);
 
@@ -599,8 +620,8 @@ export function jsdocText(comment: string): string {
 /**
  * Сканер без полного парсера: строки, комментарии, скобки; describe с телом-колбэком
  * (после `=>` или `function(...)`) открывает вложенность, it/test — тест. Имя — только
- * строковый литерал первым аргументом (у .each / .for — второго вызова); вызов с
- * выражением вместо имени пропускается.
+ * строковый литерал первым аргументом (у .each / .for — второго вызова), аргумент типа
+ * `<…>` перед скобкой вызова пропускается; вызов с выражением вместо имени пропускается.
  */
 export function parseJs(file: string, source: string): Test[] {
   return scanJs(file, source).tests;
@@ -635,6 +656,16 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   const skipSpace = (j: number): number => {
     while (j < n && isSpace(s[j]!)) j++;
     return j;
+  };
+  // j — после имени вызова или его первых скобок (`.each(…)`): индекс `(` вызова, аргумент типа перед ней пропущен; -1 — не вызов
+  const callParen = (j: number): number => {
+    let k = skipSpace(j);
+    if (s[k] === "<") {
+      k = skipTypeArgs(s, k);
+      if (k < 0) return -1;
+      k = skipSpace(k);
+    }
+    return s[k] === "(" ? k : -1;
   };
 
   const w = new JsWalk(s);
@@ -682,17 +713,18 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
       JS_CALL.lastIndex = i;
       const m = JS_CALL.exec(s);
       const mods = m ? m[2]!.split(".").filter(Boolean) : [];
-      if (m && mods.every((x) => MODS_OK.has(x))) {
+      const open = m && mods.every((x) => MODS_OK.has(x)) ? callParen(m.index + m[0].length) : -1;
+      if (m && open >= 0) {
         if (d && d === fileDoc) fileDoc = null; // вплотную к вызову — проза вызова, а не файла
         const kind = m[1]!;
         const p0 = paren;
-        let j = m.index + m[0].length;
+        let j = open + 1;
         paren++;
         if (mods.includes("each") || mods.includes("for")) {
           j = skipBalanced(s, j);
           paren--;
-          const k = skipSpace(j);
-          if (s[k] === "(") {
+          const k = callParen(j);
+          if (k >= 0) {
             j = k + 1;
             paren++;
           } else {

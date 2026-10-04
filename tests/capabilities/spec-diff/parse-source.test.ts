@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { codeOnly } from "../../../skills/spec/scripts/harness.ts";
-import { parseJs } from "../../../skills/spec/scripts/speclib.ts";
+import { parseJs, scanJs } from "../../../skills/spec/scripts/speclib.ts";
 
 const names = (src: string) => parseJs("tests/capabilities/x/a.test.ts", src).map((t) => [...t.describes, t.name].join(" › "));
 
@@ -36,6 +36,25 @@ describe("Названия берутся из исходников сканер
       test.for([1, 2])("для %s", () => {});
     });`;
     expect(names(src)).toEqual(["набор %s › сумма %i + %i", "набор %s › для %s"]);
+  });
+
+  // после `each` шёл `<…>`, а не `(`: тест с аргументом типа пропадал из spec-diff, его JSDoc — из spec-doc (#275)
+  it("it.each<T>, describe.each<T>, test.for<T> и test<T> с аргументом типа сканер находит, JSDoc такого теста — его проза", () => {
+    const src = `describe.each<[string]>([["a"]])("набор %s", () => {
+      /** Проза суммы. */
+      it.each<Array<Map<string, number>>>([])("сумма %s", () => {});
+      test.for <{ f: (x: number) => void; s: ">" | "<" }> ([])("для %s", () => {});
+      it.each([1])<number>("второй вызов %s", () => {});
+    });
+    test<Ctx>("с контекстом", () => {});`;
+    expect(names(src)).toEqual(["набор %s › сумма %s", "набор %s › для %s", "набор %s › второй вызов %s", "с контекстом"]);
+    expect(scanJs("tests/capabilities/x/a.test.ts", src).docs.tests.get(JSON.stringify(["набор %s", "сумма %s"]))).toBe("Проза суммы.");
+  });
+
+  // сторож от перекоррекции: `<` без пары до `)` или `;` — сравнение, иначе `>` в теле закрыл бы «аргумент типа» и съел тест
+  it("сравнение с именем `it` / `test` (`it < max`) вызовом с аргументом типа не считается", () => {
+    const src = 'if (it < max) it("а", () => expect(n > (0)).toBe(true));\nconst ok = test < 3; it("б", () => expect(n > (0)).toBe(true));';
+    expect(names(src)).toEqual(["а", "б"]);
   });
 
   it("комментарии и строки не считаются вызовами", () => {
