@@ -2214,6 +2214,13 @@
   "describes": [
    "Названия берутся из исходников сканером — без прогона и без парсера"
   ],
+  "name": "it.each<T>, describe.each<T>, test.for<T> и test<T> с аргументом типа сканер находит, JSDoc такого теста — его проза"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
   "name": "test.describe Playwright и модификаторы skip/only/serial/todo/fixme"
  },
  {
@@ -2285,6 +2292,13 @@
    "Названия берутся из исходников сканером — без прогона и без парсера"
   ],
   "name": "регулярку с обратной кавычкой после строчного комментария сканер пропускает"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников сканером — без прогона и без парсера"
+  ],
+  "name": "сравнение с именем `it` / `test` (`it < max`) вызовом с аргументом типа не считается"
  },
  {
   "path": "tests/capabilities/spec-diff/parse-source.test.ts",
