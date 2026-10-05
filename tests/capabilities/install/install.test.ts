@@ -9,7 +9,7 @@ import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-const SKILLS = ["ci-wait", "dashboard", "est", "github", "spec"];
+const SKILLS = ["ci-wait", "dashboard", "est", "github", "slot", "spec"];
 
 let sb: Sandbox;
 let tmp: string;
