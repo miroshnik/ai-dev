@@ -3073,6 +3073,34 @@
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
   "describes": [
+   "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
+  ],
+  "name": "describe проверки харнесса, которого PR не менял, сценария не закрывает; сменился реестр — закрывает"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
+  ],
+  "name": "сценарий совпадает с describe, в котором вызван invariant"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
+  ],
+  "name": "сценарий стандарта сверяется без отчёта раннера"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
+  ],
+  "name": "тесты, порождённые проверкой харнесса, — тесты её сценария, а не сверх сценариев"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
    "Тест — это папка, цепочка describe и имя: перекладка между файлами папки — не изменение"
   ],
   "name": "перенос в другую capability — удалён и добавлен"
