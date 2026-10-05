@@ -6,10 +6,12 @@ import { parseJs, scanJs } from "../../../skills/spec/scripts/speclib.ts";
 const names = (src: string) => parseJs("tests/capabilities/x/a.test.ts", src).map((t) => [...t.describes, t.name].join(" › "));
 
 /**
- * Парсер TypeScript — зависимость, прогон — минуты, поэтому имя теста — строковый литерал первым аргументом
- * `describe` / `it` / `test`. Динамическое имя видно с плейсхолдером (`it.each`) или не видно вовсе.
+ * Прогон — минуты, поэтому имя теста берётся из исходника: строка, известная без прогона (литерал, шаблон без
+ * подстановок), первым аргументом `describe` / `it` / `test`. Динамическое имя видно с плейсхолдером (`it.each`) или
+ * строкой в stderr. Исходник разбирает парсер TypeScript — `@babel/parser` файлом в скилле, без зависимостей: свой
+ * лексер угадывал, где регулярка, шаблон и аргумент типа, и терял тесты молча.
  */
-describe("Названия берутся из исходников сканером — без прогона и без парсера", () => {
+describe("Названия берутся из исходников парсером — без прогона", () => {
   it("вложенные describe дают цепочку, объект опций перед колбэком не считается телом", () => {
     const src = `describe("Счета", { timeout: 1 }, () => {
       describe("за месяц", () => { it("выставляется", () => {}); });
@@ -74,9 +76,59 @@ describe("Названия берутся из исходников сканер
     expect(names(src)).toEqual(["шаг"]);
   });
 
-  it("шаблонная строка с подстановкой сохраняется как есть, экранирование снимается", () => {
-    const src = "it(`ставка ${rate}%`, () => {}); it('it\\'s', () => {});";
-    expect(names(src)).toEqual(["ставка ${rate}%", "it's"]);
+  it("экранирование в названии снимается, шаблон без подстановок и сложение строк — название", () => {
+    const src = "it('it\\'s', () => {}); it(\"неразрывный\\u00a0пробел\", () => {}); it(`шаблон`, () => {}); it(\"сло\" + `жение`, () => {});";
+    expect(names(src)).toEqual(["it's", "неразрывный\u00a0пробел", "шаблон", "сложение"]);
+  });
+
+  it("название, которое не вычислить (шаблон с подстановкой, переменная), сканер отдаёт местом и выражением, а не тестом", () => {
+    const src = 'it(`ставка ${rate}%`, () => {});\n/** Проза. */\ndescribe(title, () => { it("внутри", () => {}); });\nit("видимый", () => {});';
+    const scan = scanJs("tests/capabilities/x/a.test.ts", src);
+    expect(scan.tests.map((t) => t.name)).toEqual(["видимый"]);
+    expect(scan.unnamed).toEqual([
+      { line: 1, kind: "it", name: "`ставка ${rate}%`", doc: "" },
+      { line: 3, kind: "describe", name: "title", doc: "Проза." },
+    ]);
+  });
+
+  it("условный `test.skip(условие, \"причина\")` и `test.fail()` Playwright — не тесты и не невычислимые названия", () => {
+    const src = 'test("вход", async ({ browserName }) => { test.skip(browserName === "webkit", "нет поддержки"); test.fail(); });';
+    const scan = scanJs("tests/capabilities/x/a.test.ts", src);
+    expect([scan.tests.map((t) => t.name), scan.unnamed]).toEqual([["вход"], []]);
+  });
+
+  it("it.skipIf / it.runIf и it.each с таблицей-шаблоном — имя второго вызова", () => {
+    const src = 'it.skipIf(ci)("локально", () => {});\ndescribe.runIf(db)("с базой", () => { it("пишет", () => {}); });\nit.each`a | b\n${1} | ${2}`("табл $a", () => {});';
+    expect(names(src)).toEqual(["локально", "с базой › пишет", "табл $a"]);
+  });
+
+  // лексер угадывал, где регулярка и где JSX, и терял тесты молча (#267, #269, #271, #275): парсер не угадывает (#277)
+  it("названия тестов и их JSDoc сканер берёт из AST: регулярки, шаблонные строки, комментарии, неразрывные пробелы и аргументы типа тест не теряют", () => {
+    const ts = [
+      "if (ok) /[`]/.test(s);",
+      'it("после условия", () => {});',
+      "while (i--) /`/.exec(s);",
+      "label: {}\n/`/.test(s);",
+      "const id = <T,>(x: T) => x; const cfg = {} satisfies Cfg;",
+      "@sealed class Fixture { constructor(@inject() private x: X) {} accessor n = 1; }",
+      "/** Проза. */",
+      'it.each<Array<[string]>>([["a"]])("с аргументом типа %s", () => {});',
+      'describe("набор", () => { /** Проза вложенного. */ it(\"вложенный\", () => { const t = `${/* } */ "`"}`; }); });',
+    ].join("\n");
+    expect(names(ts)).toEqual(["после условия", "с аргументом типа %s", "набор › вложенный"]);
+    const { docs } = scanJs("tests/capabilities/x/a.test.ts", ts);
+    expect([docs.tests.get(JSON.stringify(["с аргументом типа %s"])), docs.tests.get(JSON.stringify(["набор", "вложенный"]))]).toEqual(["Проза.", "Проза вложенного."]);
+    const tsx = 'const view = <p title="//x">it\'s // не комментарий {"`"}</p>;\nit("после JSX", () => {});';
+    expect(parseJs("tests/capabilities/x/a.test.tsx", tsx).map((t) => t.name)).toEqual(["после JSX"]);
+  });
+
+  it("исходник, который не разобрать, — ошибка с местом, а не пустой список тестов", () => {
+    expect(() => parseJs("tests/capabilities/x/a.test.ts", 'it("а", () => {\n')).toThrow(/^не разобран: .*\(2:0\)/);
+  });
+
+  it("текст JSX с `//` и комментарий в `${…}` харнесс видит как парсер: первое — код, второе — комментарий", () => {
+    const src = 'const v = <a href="//x">// текст</a>;\nconst t = `${/* c */ 1}`;\n';
+    expect(codeOnly(src, "src/view.tsx")).toBe('const v = <a href="//x">// текст</a>;\nconst t = `${        1}`;\n');
   });
 
   it("xit / xdescribe / fit Jest и suite / context Mocha", () => {
@@ -121,10 +173,10 @@ describe("Названия берутся из исходников сканер
 
   // обход кода был скопирован в сканер и харнесс и расходился в пробелах и шебанге (#271)
   it("на трудных исходниках (комментарий перед регуляркой, комментарий в `${…}`, NBSP, `\\f`, BOM, шебанг) сканер названий и харнесс одинаково видят, где код", () => {
-    // исходник и он же глазами харнесса: комментарии — пробелами; шаблон с `${…}` — строка целиком
+    // исходник и он же глазами харнесса: комментарии — пробелами, и в `${…}` шаблона тоже
     const hard: [string, string][] = [
       ["f(); /* c */ /[`]/.test(y);", "f();         /[`]/.test(y);"],
-      ["const t = `${/* c */ /[`]/.source}`;", "const t = `${/* c */ /[`]/.source}`;"],
+      ["const t = `${/* c */ /[`]/.source}`;", "const t = `${        /[`]/.source}`;"],
       ["const ok = x = /[`]/.test(y);", "const ok = x = /[`]/.test(y);"],
       ["const ok = x =\f/[`]/.test(y);", "const ok = x =\f/[`]/.test(y);"],
       ["﻿/[`]/.test(y);", "﻿/[`]/.test(y);"],

@@ -18,7 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
-import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, JsWalk } from "./speclib.ts";
+import { commentsOf, decisionFolder, EXCEPTIONS_DIR, exceptionFile, stringsOf } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
 export type It = (name: string, fn: () => void | Promise<unknown>) => unknown;
@@ -221,8 +221,7 @@ function stringsBeside(file: string): Set<string> {
   const out = new Set<string>();
   for (const f of filesUnder(folderOf(file))) {
     if (f === file || !CODE.test(f)) continue;
-    const s = readFileSync(path.resolve(process.cwd(), f), "utf8");
-    for (const w = new JsWalk(s); w.i < s.length; ) if (w.next() === "string") out.add(s.slice(w.start + 1, w.i - 1));
+    for (const s of stringsOf(readFileSync(path.resolve(process.cwd(), f), "utf8"), f)) out.add(s);
   }
   return out;
 }
@@ -421,16 +420,6 @@ export interface Disable {
 const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage"]);
 const DIRECTIVE = /^(?:\/\/|\/\*)\s*eslint-disable(?:-next-line|-line)?(?=\s|\*\/|$)([^\n]*?)(?:\*\/|$)/m;
-/**
- * Комментарии кода — [начало, текст]: строки, шаблоны и регулярные выражения пропускаются, обход — тот же, что у
- * сканера названий (`JsWalk`). ESLint читает директивы только в комментариях: `// eslint-disable` в строке — фикстура
- * или сообщение, а не отключение.
- */
-function commentsIn(s: string): [number, string][] {
-  const out: [number, string][] = [];
-  for (const w = new JsWalk(s); w.i < s.length; ) if (w.next() === "comment") out.push([w.start, s.slice(w.start, w.i)]);
-  return out;
-}
 
 /** Файл кода для реестра над исходниками: путь от корня и текст. */
 export interface SourceFile {
@@ -480,21 +469,28 @@ function codeFiles(root: string, dirs: string[]): string[] {
   return out.sort();
 }
 
-/** Текст без комментариев (заменены пробелами, переводы строк сохранены): сканеры кода не видят прозу и старый код. */
-export function codeOnly(text: string): string {
+/**
+ * Текст без комментариев (заменены пробелами, переводы строк сохранены): сканеры кода не видят прозу и старый код.
+ * Комментарии — по разбору парсером, как у сканера названий: `//` в строке или тексте JSX — не комментарий. `file` —
+ * путь для разбора по расширению (`.tsx` — с JSX; нет — TypeScript, затем TSX); исходник, который не разобрать, — ошибка.
+ */
+export function codeOnly(text: string, file?: string): string {
   let out = "";
   let at = 0;
-  for (const [i, c] of commentsIn(text)) {
+  for (const [i, c] of commentsOf(text, file)) {
     out += text.slice(at, i) + c.replace(/[^\n]/g, " ");
     at = i + c.length;
   }
   return out + text.slice(at);
 }
 
-/** Отключения линт-правил в файле: `// eslint-disable-next-line a, b -- #12 причина` и такие же блочные комментарии. */
+/**
+ * Отключения линт-правил в файле: `// eslint-disable-next-line a, b -- #12 причина` и такие же блочные комментарии.
+ * ESLint читает директивы только в комментариях: `// eslint-disable` в строке — фикстура или сообщение, не отключение.
+ */
 export function disablesIn(file: string, text: string): Disable[] {
   const out: Disable[] = [];
-  for (const [at, comment] of commentsIn(text)) {
+  for (const [at, comment] of commentsOf(text, file)) {
     const m = DIRECTIVE.exec(comment);
     if (!m) continue;
     const [head, ...desc] = m[1]!.split(/\s--\s|\s--$/);
@@ -765,8 +761,8 @@ const ENV_SERVICE = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV
 
 /** Переменные окружения, которые читает код: имя → файлы. */
 /** Имена переменных окружения, которые читает исходник. */
-export function envNamesIn(source: string): string[] {
-  const text = codeOnly(source);
+export function envNamesIn(source: string, file?: string): string[] {
+  const text = codeOnly(source, file);
   const out = new Set<string>();
   // process.env под другим именем: параметр по умолчанию `(env = process.env)` или `const e = process.env`
   for (const [, alias] of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=\s*process\.env\b(?!\s*[.[])/g)) {
@@ -784,7 +780,7 @@ export function envNamesIn(source: string): string[] {
 function envReads(root: string, dirs: string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const file of codeFiles(root, dirs)) {
-    for (const n of envNamesIn(readFileSync(path.join(root, file), "utf8"))) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
+    for (const n of envNamesIn(readFileSync(path.join(root, file), "utf8"), file)) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
   }
   return out;
 }

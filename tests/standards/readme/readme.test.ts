@@ -51,7 +51,8 @@ function executables(): { skill: string; name: string; source: string }[] {
   const skills = readdirSync(path.join(ROOT, "skills")).filter((n) => existsSync(path.join(ROOT, "skills", n, "SKILL.md")));
   return skills.flatMap((s) => {
     const dir = path.join(ROOT, "skills", s, "scripts");
-    const names = existsSync(dir) ? readdirSync(dir) : [];
+    // подкаталог (vendor/ — чужой код файлом) — не скрипт
+    const names = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name) : [];
     return names.map((n) => ({ skill: s, name: n.replace(/\.[^.]+$/, ""), source: read(`skills/${s}/scripts/${n}`) })).filter((x) => x.source.startsWith("#!"));
   });
 }

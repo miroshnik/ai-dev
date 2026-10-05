@@ -265,22 +265,23 @@ describe("Счета", () => {
     expect(r.stdout).toContain("### billing\n\n#### Счета\n\nСчёт — документ на оплату.\n\n<details>");
   });
 
-  // сканер без парсера не всемогущ: `/` после `)` для него деление — тесты файла пропадают, но не молча (#267)
-  it("файл теста, где сканер не нашёл тестов, spec-doc называет в stderr", () => {
-    const LOST = "tests/capabilities/billing/lost.test.ts";
+  // лексер принимал `/` после `)` за деление, и проза файла пропадала (#267); парсер не угадывает (#277)
+  it("проза теста, чьё название не вычислить статически, не теряется молча: spec-doc называет место в stderr", () => {
+    const REGEX = "tests/capabilities/billing/regex.test.ts";
     const DYNAMIC = "tests/capabilities/billing/dynamic.test.ts";
     writeTree(dir, {
       "tests/capabilities/billing/billing.md": "Биллинг.\n",
       [MAIN]: `import { describe, it } from "bun:test";\n${BODY}`,
-      [LOST]: `import { it } from "bun:test";\nif (ok) /\`/.test(s);\n/** Проза. */\nit("потерян", () => {});\n`,
-      [DYNAMIC]: `import { it } from "bun:test";\nfor (const name of ["a"]) it(name, () => {});\n`,
+      [REGEX]: `import { it } from "bun:test";\nif (ok) /\`/.test(s);\n/** Проза после регулярки. */\nit("после регулярки", () => {});\n`,
+      [DYNAMIC]: `import { it } from "bun:test";\nfor (const name of ["a"]) it(name, () => {});\n/** Проза счёта. */\nit(\`счёт \${n}\`, () => {});\n`,
     });
-    const report = vitestReport(dir, { [MAIN]: [[["Счета"], "выставляется за месяц"]], [LOST]: [[[], "потерян"]], [DYNAMIC]: [[[], "a"]] });
+    const report = vitestReport(dir, { [MAIN]: [[["Счета"], "выставляется за месяц"]], [REGEX]: [[[], "после регулярки"]], [DYNAMIC]: [[[], "счёт 1"]] });
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain(`spec-doc: сканер не нашёл тестов в ${LOST} — проза JSDoc не взята, spec-diff без --report его тестов не видит`);
-    expect(r.stderr).not.toContain(`сканер не нашёл тестов в ${MAIN}`);
-    expect(r.stderr).not.toContain(`сканер не нашёл тестов в ${DYNAMIC}`);
+    expect(r.stdout).toContain("- ✅ после регулярки\n  > Проза после регулярки.");
+    expect(r.stderr.split("\n").filter((l) => l.includes("не вычислить"))).toEqual([
+      `spec-doc: ${DYNAMIC}:4: название it не вычислить статически (\`счёт \${n}\`) — проза JSDoc не взята`,
+    ]);
   });
 
   it("нет исходника (отчёт с другой машины) — документация без прозы, не ошибка", () => {
