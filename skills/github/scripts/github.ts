@@ -14,7 +14,7 @@
  *   github task actualize — после мержа, параллельно с деплоем: задание субагенту актуализации блока (или «не нужна»)
  *   github task close    — после мержа и деплоя: факт, «Готово», эпик и milestone, влитая ветка долой
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
- *   github pr premerge   — перед мержем: основная ветка ушла после CI PR — test:spec на слиянии с ней
+ *   github pr premerge   — перед мержем: основная ветка ушла после CI PR — typecheck и test:spec на слиянии с ней
  *
  * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
  * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
@@ -1879,29 +1879,35 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
 // Проверка слияния перед мержем
 // ----------------------------------------------------------------------------
 
-/** Быстрые проверки проекта — этот скрипт `package.json`: стандарты и архитектура, минуты, а не весь `test`. */
-export const PREMERGE_SCRIPT = "test:spec";
+/**
+ * Быстрые проверки проекта — эти скрипты `package.json`, какие есть, по порядку CI: типы (семантический конфликт двух
+ * PR, секунды), затем стандарты и архитектура — минуты, а не весь `test`.
+ */
+export const PREMERGE_SCRIPTS = ["typecheck", "test:spec"];
 /** Merge-ref GitHub строит до события, по которому создаётся check suite: движение main в эту минуту — уход. */
 const MERGE_REF_SLACK_MS = 60_000;
 const LOCKFILES: [file: string, pm: string][] = [["bun.lock", "bun"], ["bun.lockb", "bun"], ["pnpm-lock.yaml", "pnpm"], ["yarn.lock", "yarn"], ["package-lock.json", "npm"]];
 const INSTALL: Record<string, string[]> = { bun: ["bun", "install", "--frozen-lockfile"], pnpm: ["pnpm", "install", "--frozen-lockfile"], yarn: ["yarn", "install", "--frozen-lockfile"], npm: ["npm", "ci"] };
-/** Строки раннеров об упавшем тесте: bun `(fail)`, Vitest `FAIL` и `×`, Jest `●`, Playwright `✘`. */
-const FAILED_LINE = /^\s*(\(fail\)|FAIL\s|×|✗|✘|●\s)/;
+/** Строки об упавшем: тест — bun `(fail)`, Vitest `FAIL` и `×`, Jest `●`, Playwright `✘`; ошибка компилятора — `error TS2304:`. */
+const FAILED_LINE = /^\s*(\(fail\)|FAIL\s|×|✗|✘|●\s)|\berror TS\d+:/;
 
 /**
  * Команды проекта в каталоге: менеджер пакетов — `packageManager` в package.json, иначе по lockfile; зависимости
  * ставятся по lockfile без его правки, lockfile нет — без установки.
  */
-export function projectCommands(dir: string): { install: string[] | null; run: string[] } {
+export function projectCommands(dir: string): { install: string[] | null; run: (script: string) => string[] } {
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
   const lock = LOCKFILES.find(([f]) => existsSync(path.join(dir, f)));
   const pm = /^(bun|pnpm|yarn|npm)@/.exec(pkg.packageManager ?? "")?.[1] ?? lock?.[1] ?? "npm";
-  return { install: lock ? INSTALL[pm]! : null, run: [pm, "run", PREMERGE_SCRIPT] };
+  return { install: lock ? INSTALL[pm]! : null, run: (script) => [pm, "run", script] };
 }
 
 const tail = (r: RunResult, n = 20) => `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => l.trim()).slice(-n);
-/** Строка упавшего теста без времени прогона: bun `[1.2ms]`, Vitest `12ms` — одно падение на слиянии и на main. */
-const failedTest = (l: string) => l.trim().replace(/\s*\[[\d.]+\s*m?s\]$/, "").replace(/\s+[\d.]+\s*m?s$/, "");
+/**
+ * Строка упавшего без времени прогона (bun `[1.2ms]`, Vitest `12ms`) и позиции ошибки компилятора (`a.ts(3,5):` — tsc
+ * без TTY; правка PR выше по файлу её сдвигает) — одно падение на слиянии и на main.
+ */
+const failure = (l: string) => l.trim().replace(/\s*\[[\d.]+\s*m?s\]$/, "").replace(/\s+[\d.]+\s*m?s$/, "").replace(/^(\S+?)\(\d+,\d+\)(?=:)/, "$1");
 
 /** Ожидание закрытия бага — скрипт ci-wait рядом (`../ci-wait`: так лежат копия в проекте, `~/.agents/skills` и клон). */
 const WAIT_CI = path.resolve(import.meta.dir, "../../ci-wait/scripts/wait-ci.sh");
@@ -1933,10 +1939,10 @@ function mainBugsOf(io: Io, slug: string, base: string): { number: number; title
 }
 
 /**
- * Перед мержем зелёного PR: main ушёл после его CI — слияние головы PR со свежим main во временном worktree и
- * `test:spec`; не ушёл — CI проверил ровно это слияние. Что проверил CI, GitHub не хранит (merge-ref пересобирается),
- * поэтому по времени: самый ранний check suite головы против последнего события основной ветки (REST: квота GraphQL
- * общая на все сессии). Неизвестное — проверяется. Красный main — не этот PR: красный чек последнего коммита main или
+ * Перед мержем зелёного PR: main ушёл после его CI — слияние головы PR со свежим main во временном worktree и быстрые
+ * проверки (`typecheck`, затем `test:spec`, как в CI); не ушёл — CI проверил ровно это слияние. Что проверил CI, GitHub
+ * не хранит (merge-ref пересобирается), поэтому по времени: самый ранний check suite головы против последнего события
+ * основной ветки (REST: квота GraphQL общая на все сессии). Неизвестное — проверяется. Красный main — не этот PR: красный чек последнего коммита main или
  * слияние красное тем же, что голый main. Код 0 — вливать, 1 — не вливать (PR ломает), 3 — main красный.
  */
 export function cmdPrPremerge(io: Io, slug: string, number: number): number {
@@ -2026,21 +2032,31 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     if (add.status !== 0) throw new GhError(`git worktree add: ${add.stderr.trim()}`);
     return dir;
   };
-  /** `test:spec` дерева с зависимостями по его lockfile; скрипта нет — null. */
-  const spec = (dir: string, where: string): { cmd: string; result: RunResult; failed: string[] } | null => {
+  type Red = { script: string; cmd: string; result: RunResult; failed: string[] };
+  /** Быстрые проверки дерева (`scripts` — какие есть) с зависимостями по его lockfile, до первой красной; ни одной — null. */
+  const checks = (dir: string, where: string, scripts: string[]): { ran: string[]; red: Red | null } | null => {
     const pkg = path.join(dir, "package.json");
-    if (!existsSync(pkg) || !JSON.parse(readFileSync(pkg, "utf8")).scripts?.[PREMERGE_SCRIPT]) return null;
+    const defined = existsSync(pkg) ? (JSON.parse(readFileSync(pkg, "utf8")).scripts ?? {}) : {};
+    const present = scripts.filter((s) => defined[s]);
+    if (!present.length) return null;
     const cmds = projectCommands(dir);
     if (cmds.install) {
       const r = run(cmds.install[0]!, cmds.install.slice(1), dir);
       if (r.status !== 0) throw new GhError(`установка зависимостей ${where} упала (${cmds.install.join(" ")}): ${tail(r, 5).join(" / ")}`);
       io.out(`+ зависимости${where === "на слиянии" ? "" : ` ${where}`}: ${cmds.install.join(" ")}`);
     }
-    const result = run(cmds.run[0]!, cmds.run.slice(1), dir);
-    const failed = [...new Set(`${result.stdout}\n${result.stderr}`.split("\n").filter((l) => FAILED_LINE.test(l)).map((l) => l.trim()))];
-    return { cmd: cmds.run.join(" "), result, failed };
+    const ran: string[] = [];
+    for (const script of present) {
+      const cmd = cmds.run(script);
+      const result = run(cmd[0]!, cmd.slice(1), dir);
+      ran.push(script);
+      if (result.status === 0) continue;
+      const failed = [...new Set(`${result.stdout}\n${result.stderr}`.split("\n").filter((l) => FAILED_LINE.test(l)).map((l) => l.trim()))];
+      return { ran, red: { script, cmd: cmd.join(" "), result, failed } };
+    }
+    return { ran, red: null };
   };
-  const breaks = `❌ не вливать: ${PREMERGE_SCRIPT} красный на слиянии с origin/${base} — чинить корень в PR: rebase на origin/${base}, правка, push --force-with-lease, снова ci-wait`;
+  const breaks = (script: string) => `❌ не вливать: ${script} красный на слиянии с origin/${base} — чинить корень в PR: rebase на origin/${base}, правка, push --force-with-lease, снова ci-wait`;
   try {
     const dir = worktree();
     const short = (ref: string) => git(dir, "rev-parse", "--short=7", ref).stdout.trim();
@@ -2053,39 +2069,40 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       return 1;
     }
     io.out(`+ слияние ${head.slice(0, 7)} с origin/${base} ${short("HEAD^1")} — без конфликтов`);
-    const merged = spec(dir, "на слиянии");
+    const merged = checks(dir, "на слиянии", PREMERGE_SCRIPTS);
     if (!merged) {
-      io.out(`○ быстрых проверок нет: в package.json слияния нет скрипта ${PREMERGE_SCRIPT} — шаг пропущен`);
+      io.out(`○ быстрых проверок нет: в package.json слияния нет скриптов ${PREMERGE_SCRIPTS.join(" и ")} — шаг пропущен`);
       io.out(`✅ вливать: слияние с origin/${base} без конфликтов`);
       return 0;
     }
-    if (merged.result.status === 0) {
-      io.out(`✅ вливать: ${PREMERGE_SCRIPT} зелёный на слиянии с origin/${base}`);
+    const red = merged.red;
+    if (!red) {
+      io.out(`✅ вливать: ${merged.ran.join(" и ")} ${merged.ran.length > 1 ? "зелёные" : "зелёный"} на слиянии с origin/${base}`);
       return 0;
     }
-    io.out(`${merged.cmd} упал:`);
-    for (const l of (merged.failed.length ? merged.failed.slice(0, 20) : tail(merged.result))) io.out(`  ${l.trim()}`);
+    io.out(`${red.cmd} упал:`);
+    for (const l of (red.failed.length ? red.failed.slice(0, 20) : tail(red.result))) io.out(`  ${l.trim()}`);
 
-    // красное слияние — красный ли голый main: тогда ломает не этот PR
+    // красное слияние — красный ли голый main тем же: тогда ломает не этот PR
     io.out(`проверяю голый origin/${base}: красный ли он сам`);
-    const bare = spec(worktree(), `на origin/${base}`);
-    if (!bare || bare.result.status === 0) {
-      io.out(breaks);
+    const bare = checks(worktree(), `на origin/${base}`, [red.script])?.red;
+    if (!bare) {
+      io.out(breaks(red.script));
       return 1;
     }
-    const onMain = new Set(bare.failed.map(failedTest));
-    const own = merged.failed.filter((l) => !onMain.has(failedTest(l)));
+    const onMain = new Set(bare.failed.map(failure));
+    const own = red.failed.filter((l) => !onMain.has(failure(l)));
     // не разобрать, что упало, — не отличить: main красный, после его починки premerge проверит PR снова
     if (own.length && bare.failed.length) {
       io.out(`${base} красный и сам, PR ломает сверх него:`);
       for (const l of own.slice(0, 20)) io.out(`  ${l}`);
-      io.out(breaks);
+      io.out(breaks(red.script));
       return 1;
     }
-    const why = `${PREMERGE_SCRIPT} красный и на голом origin/${base} тем же`;
-    const code = mainRed(`${base} красный и сам: ${why}`, why, PREMERGE_SCRIPT);
+    const why = `${red.script} красный и на голом origin/${base} тем же`;
+    const code = mainRed(`${base} красный и сам: ${why}`, why, red.script);
     if (code !== null) return code;
-    io.out(breaks);
+    io.out(breaks(red.script));
     return 1;
   } finally {
     for (const dir of dirs) {
@@ -2129,9 +2146,9 @@ task close — после мержа PR и деплоя (или закрытия
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
             только механически (удаление, переименование без правки, исключения), — строка ○, без метки.
 pr premerge — перед gh pr merge, после PASS ci-wait: основная ветка ушла после CI PR — слияние головы PR с ней
-            во временном worktree и ${PREMERGE_SCRIPT} из package.json; код 0 — вливать, 1 — не вливать (красное,
-            конфликт), 2 — проверить не удалось, 3 — main красный и сам (${PREMERGE_SCRIPT} на голом main, красный
-            чек его последнего коммита): не вливать, один баг на него — ждать его закрытия.`;
+            во временном worktree и ${PREMERGE_SCRIPTS.join(", затем ")} из package.json (какие есть, как в CI); код 0 —
+            вливать, 1 — не вливать (красное, конфликт), 2 — проверить не удалось, 3 — main красный и сам (та же
+            проверка на голом main, красный чек его последнего коммита): не вливать, один баг на него — ждать его закрытия.`;
 
 const issueNumber = (s: string | undefined, what: string): number => {
   const m = /^#?(\d+)$/.exec((s ?? "").trim());
