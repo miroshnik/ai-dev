@@ -23,6 +23,9 @@
  * или флагом `--auto` / `--no-auto`; по умолчанию «нет», без терминала и флага — прежнее значение, `update` его
  * сохраняет. С auto `install` подсказывает правило разрешений Claude Code на мерж (MERGE_HINT) — настройки машины
  * не меняет. В клон ai-dev флоу не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto`.
+ * Копия в проекте коммитится — файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`),
+ * установка снимает исключениями блоком ai-dev в конце `.gitignore`, `check` называет их несоответствием
+ * (`gitignoreFlow`).
  *
  * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
  * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
@@ -80,11 +83,13 @@ const USAGE = `Использование: ai-dev <команда> [-g]
   install -g         на машину только скиллы (~/.agents/skills, ~/.claude/skills) и хук SessionStart; правила —
                      из проекта, копию на машине прошлой установки убирает
   install -g --link  из клона ai-dev: симлинки на клон вместо копий, правки видны сразу
-  check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт, 2 — проверка недоступна;
-                     копию сверяет последний релиз, клон --link — origin/main; у проекта называет режим (auto)
+  check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт или файлы флоу игнорирует
+                     git проекта, 2 — проверка недоступна; копию сверяет последний релиз, клон --link — origin/main;
+                     у проекта называет режим (auto)
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
   update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
-                     (режим проекта — auto — сохраняется)
+                     (режим проекта — auto — сохраняется); в проекте install и update снимают с файлов флоу шаблоны
+                     .gitignore исключениями в его конце
   release [--dry-run]  из клона ai-dev: тег vГГГГ.ММ.ДД на origin/main и GitHub Release со списком изменений флоу
                      с прошлого релиза; --dry-run — только показать
 
@@ -92,8 +97,10 @@ const USAGE = `Использование: ai-dev <команда> [-g]
 `;
 
 /**
- * Холостой прогон (`check`): вместо записи на диск установка складывает сюда, что бы она изменила; null — пишет.
- * @type {{ op: "+" | "-" | "~", path: string }[] | null}
+ * Холостой прогон (`check`): вместо записи на диск установка складывает сюда, что бы она изменила, и файлы флоу,
+ * которые игнорирует git проекта (`❌`, в note — правило, manual — исключением не снять); null — пишет.
+ * @typedef {{ op: "+" | "-" | "~" | "❌", path: string, note?: string, manual?: boolean }} Change
+ * @type {Change[] | null}
  */
 let dry = null;
 
@@ -104,9 +111,15 @@ let release = null;
 const note = (s) => dry || process.stdout.write(s + "\n");
 /** @param {string} s */
 const warn = (s) => dry || process.stderr.write("!! " + s + "\n");
+/** Несоответствие, которое установка не исправила. @param {string} s */
+const fail = (s) => dry || process.stderr.write("❌ " + s + "\n");
 
-/** Что изменила бы установка: `+` появится, `-` уберётся, `~` изменится; каталог — с `/` в конце. @param {"+" | "-" | "~"} op @param {string} p */
-const change = (op, p) => dry?.push({ op, path: p });
+/**
+ * Что изменила бы установка: `+` появится, `-` уберётся, `~` изменится, `❌` — файл флоу игнорирует git; каталог — с `/`
+ * в конце.
+ * @param {Change["op"]} op @param {string} p @param {{ note?: string, manual?: boolean }} [extra]
+ */
+const change = (op, p, extra = {}) => dry?.push({ op, path: p, ...extra });
 
 /** @param {string} p */
 function lstat(p) {
@@ -437,6 +450,181 @@ function agentsBlock(root) {
   note("AGENTS.md — блок со ссылкой на .agents/ai-dev/AGENTS.md");
 }
 
+const GI_BEGIN = "# ai-dev:begin";
+const GI_END = "# ai-dev:end";
+const GI_HEAD = `${GI_BEGIN} — файлы флоу, которые иначе игнорирует git; ставит \`npx -y github:${SOURCE} install\`, руками не править`;
+
+/** `.gitignore` без блока ai-dev; блока нет — как есть. @param {string} text */
+function withoutGiBlock(text) {
+  const b = text.indexOf(GI_BEGIN);
+  const e = text.indexOf(GI_END, b);
+  if (b < 0 || e < 0) return text;
+  const rest = [text.slice(0, b).replace(/\n+$/, ""), text.slice(e + GI_END.length).replace(/^\n+|\n+$/g, "")].filter(Boolean).join("\n");
+  return rest ? rest + "\n" : "";
+}
+
+/** Блок — в конце `.gitignore`: исключение действует, только если идёт после игнорирующего правила. @param {string} base @param {string[]} lines */
+function withGiBlock(base, lines) {
+  if (!lines.length) return base;
+  const block = [GI_HEAD, ...lines, GI_END].join("\n") + "\n";
+  return base ? base.replace(/\n*$/, "\n\n") + block : block;
+}
+
+/** Путь как шаблон `.gitignore`: спецсимволы — буквально. @param {string} p */
+const glob = (p) => p.replace(/[\\*?[]/g, "\\$&");
+
+/**
+ * Порядок строк блока: исключение каталога `!/a/`, затем `/a/*` — его прочее содержимое снова игнорируется, затем
+ * исключения глубже. @param {string} line
+ */
+const giKey = (line) => line.replace(/^!?\//, "").replace(/\/$/, "/\0").replace(/\/\*$/, "/\x01");
+
+/** Каталоги над путём от корня: `a/b/c` → `a`, `a/b`. @param {string} p */
+const dirsAbove = (p) => p.split("/").slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join("/"));
+
+/**
+ * Что из путей (от корня проекта) игнорирует git проекта: путь → правило «источник:строка «шаблон»». Отслеживаемых git
+ * не называет — правила на них не действуют. local — правило из `.gitignore` репозитория, а не личное
+ * (core.excludesFile, `.git/info/exclude`).
+ * @param {string} root @param {string[]} paths @returns {Map<string, { rule: string, local: boolean }>}
+ */
+function ignoredBy(root, paths) {
+  /** @type {Map<string, { rule: string, local: boolean }>} */
+  const out = new Map();
+  if (!paths.length) return out;
+  const r = spawnSync("git", ["-C", root, "check-ignore", "-v", "-z", "--stdin"], { input: paths.join("\0") + "\0", encoding: "utf8" });
+  if (r.error) throw r.error;
+  if (r.status !== 0 && r.status !== 1) throw new Error(`git check-ignore — ${String(r.stderr).trim().split("\n")[0]}`);
+  const home = os.homedir();
+  const fields = r.stdout.split("\0");
+  for (let i = 0; i + 3 < fields.length; i += 4) {
+    const [source = "", line = "", pattern = "", p = ""] = fields.slice(i, i + 4);
+    if (pattern.startsWith("!")) continue; // -v называет и исключения: путь не игнорируется
+    const shown = source.startsWith(home + path.sep) ? `~${source.slice(home.length)}` : source;
+    out.set(p, { rule: `${shown}:${line} «${pattern}»`, local: !path.isAbsolute(source) && path.basename(source) === ".gitignore" });
+  }
+  return out;
+}
+
+/** Что ставит установка в проект и что должно попасть в коммит: каталоги копий, файлы и симлинки. @param {string} root */
+function flowEntries(root) {
+  const skills = readManifest(root).skills ?? [];
+  return [
+    { path: ".agents/ai-dev", dir: true },
+    ...skills.map((n) => ({ path: `.agents/skills/${n}`, dir: true })),
+    { path: ".agents/ai-dev.json", dir: false },
+    { path: ".claude/rules/ai-dev.md", dir: false },
+    { path: ".claude/rules/ai-dev-claude.md", dir: false },
+    ...skills.map((n) => ({ path: `.claude/skills/${n}`, dir: false })),
+    { path: "AGENTS.md", dir: false },
+  ].filter((e) => lstat(path.join(root, e.path))?.isDirectory() === e.dir);
+}
+
+/** @typedef {{ rule: string, personal?: boolean }} Ignored */
+
+/**
+ * Один проход: файлы флоу, которые игнорирует git, → строки исключений и что игнорируется (путь — файл или верхний
+ * исключённый каталог). Каталог флоу (`.agents/skills/spec/…/vendor/`) исключается целиком — всё в нём наше. Каталог над
+ * файлом флоу (`.claude/`) — цепочкой `!/.claude/`, `/.claude/*`, `!/.claude/rules/` … до файла: прочее в нём
+ * игнорируется, как раньше; только по правилу репозитория — `/.claude/*` из личного правила спрятал бы прочее у всех,
+ * у кого его нет (personal). Шаблон глубже снимет следующий проход.
+ * @param {string} root @param {{ path: string, dir: boolean }[]} entries
+ */
+function giRound(root, entries) {
+  const files = entries.flatMap((e) => (e.dir ? [...walk(path.join(root, e.path)).keys()].map((rel) => `${e.path}/${rel}`) : [e.path]));
+  const ignored = ignoredBy(root, files);
+  /** @type {string[]} */
+  const lines = [];
+  /** @type {Map<string, Ignored>} */
+  const found = new Map();
+  if (!ignored.size) return { lines, found };
+  const dirs = ignoredBy(root, [...new Set([...ignored.keys()].flatMap(dirsAbove))]);
+  for (const [file, own] of ignored) {
+    const entry = entries.find((e) => file === e.path || file.startsWith(e.path + "/"));
+    const above = dirsAbove(file);
+    const top = above.find((d) => dirs.has(d));
+    const rule = top ? dirs.get(top) : undefined;
+    if (!entry || !top || !rule) {
+      lines.push(`!/${glob(file)}`);
+      found.set(file, { rule: own.rule });
+    } else if (top === entry.path || top.startsWith(entry.path + "/")) {
+      lines.push(`!/${glob(top)}/`);
+      found.set(top + "/", { rule: rule.rule });
+    } else if (!rule.local) {
+      found.set(top + "/", { rule: rule.rule, personal: true });
+    } else {
+      for (const d of above.slice(above.indexOf(top), dirsAbove(entry.path).length)) lines.push(`!/${glob(d)}/`, `/${glob(d)}/*`);
+      lines.push(`!/${glob(entry.path)}${entry.dir ? "/" : ""}`);
+      found.set(top + "/", { rule: rule.rule });
+    }
+  }
+  return { lines, found };
+}
+
+/** Почему путь игнорируется: правило и, если исключением его не снять, что делать. @param {Ignored} i @param {boolean} stuck */
+function ignoredNote(i, stuck) {
+  if (i.personal) return `${i.rule}: каталог исключён вне проекта, исключение в .gitignore проекта спрятало бы прочее в нём у всех — поправь правило`;
+  return stuck ? `${i.rule}: исключение в конце .gitignore его не снимает — поправь правило` : i.rule;
+}
+
+/**
+ * Файлы флоу — в коммит: копию, которую игнорирует git проекта, не видят чужой чекаут и облачная сессия, а
+ * закоммиченный симлинк `.claude/rules` ведёт в пустоту. Исключения — блоком ai-dev в конце `.gitignore` корня
+ * (giRound), он пересобирается каждой установкой: проходы, пока появляются новые строки; не нужен — убирается. Что
+ * исключением не снять — `❌`. Холостой прогон только называет игнорируемое. Не git — проверять нечего.
+ * @param {string} root @returns {boolean} `.gitignore` изменён
+ */
+function gitignoreFlow(root) {
+  try {
+    git(root, "rev-parse", "--git-dir");
+  } catch {
+    return false;
+  }
+  const entries = flowEntries(root);
+  if (dry) {
+    for (const [p, i] of giRound(root, entries).found) change("❌", path.join(root, p), { note: ignoredNote(i, false), manual: Boolean(i.personal) });
+    return false;
+  }
+  const file = path.join(root, ".gitignore");
+  const before = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const put = (/** @type {string} */ text) => {
+    if (text === (existsSync(file) ? readFileSync(file, "utf8") : "")) return;
+    if (text) writeFileSync(file, text);
+    else rmSync(file, { force: true });
+  };
+  const base = withoutGiBlock(before);
+  /** @type {string[]} */
+  let lines = [];
+  /** @type {Map<string, Ignored>} */
+  const fixed = new Map();
+  /** @type {Map<string, Ignored>} */
+  let stuck = new Map();
+  try {
+    put(base);
+    for (let pass = 0; ; pass++) {
+      const r = giRound(root, entries);
+      const fresh = r.lines.filter((l) => !lines.includes(l));
+      if (!fresh.length || pass === 10) {
+        stuck = r.found;
+        break;
+      }
+      for (const [p, i] of r.found) fixed.set(p, i);
+      lines = [...new Set([...lines, ...fresh])].sort((a, b) => (giKey(a) < giKey(b) ? -1 : 1));
+      put(withGiBlock(base, lines));
+    }
+  } catch (e) {
+    put(before);
+    return warn(`.gitignore не проверен — ${reason(e)}`), false;
+  }
+  const after = withGiBlock(base, lines);
+  put(after);
+  for (const p of stuck.keys()) fixed.delete(p);
+  if (fixed.size) note(`.gitignore — исключения ai-dev: git игнорировал ${[...fixed].map(([p, i]) => `${p} (${i.rule})`).join(", ")}`);
+  else if (after !== before && !lines.length) note(".gitignore — блок исключений ai-dev убран: git файлы флоу не игнорирует");
+  for (const [p, i] of stuck) fail(`${p} — ${ignoredNote(i, true)}`);
+  return after !== before;
+}
+
 /** Корень git-репозитория текущего каталога; null — не репозиторий. */
 function gitRoot() {
   try {
@@ -479,13 +667,14 @@ function installClone(root, auto) {
 /**
  * auto — режим проекта; его задаёт только `install` (флаг или вопрос в терминале), `update` и `check` идут с прежним
  * значением манифеста.
- * @param {string} src @param {string} root @param {boolean} [auto]
+ * @param {string} src @param {string} root @param {boolean} [auto] @returns {boolean} `.gitignore` изменён
  */
 function installProject(src, root, auto = autoOf(root)) {
   installRules(src, root, false);
   installSkills(src, root, false, true, auto);
   claudeRules(root);
   agentsBlock(root);
+  return gitignoreFlow(root);
 }
 
 /** Глобальные файлы правил агентов, которые прошлая установка делала симлинками на `~/.agents/ai-dev/AGENTS.md`. */
@@ -572,12 +761,15 @@ function capped(lines) {
   return lines.length > MAX_LINES ? [...lines.slice(0, MAX_LINES), `  … и ещё ${lines.length - MAX_LINES}`] : lines;
 }
 
-/** Изменения холостого прогона — строками `  ~ путь`; на машине путь от `~/`. @param {{ op: string, path: string }[]} changes @param {string} root @param {boolean} global */
+/** Изменения холостого прогона — строками `  ~ путь`; на машине путь от `~/`. @param {Change[]} changes @param {string} root @param {boolean} global */
 function changeLines(changes, root, global) {
-  return changes.map((c) => `  ${c.op} ${global ? "~/" : ""}${path.relative(root, c.path)}${c.path.endsWith("/") ? "/" : ""}`);
+  return changes.map((c) => `  ${c.op} ${global ? "~/" : ""}${path.relative(root, c.path)}${c.path.endsWith("/") ? "/" : ""}${c.note ? ` — ${c.note}` : ""}`);
 }
 
-/** @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean }} Result */
+/**
+ * behind — отстаёт: update поставит новое; ignored — файлы флоу игнорирует git проекта: update допишет исключения.
+ * @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean, behind?: boolean, ignored?: boolean }} Result
+ */
 
 /** Проверка упала: что и почему. @param {boolean} global @param {unknown} e @returns {Result} */
 const unavailable = (global, e) => ({ code: 2, text: `ai-dev ${global ? "на машине" : "в проекте"}: проверка недоступна — ${reason(e)}` });
@@ -623,12 +815,21 @@ function check(global) {
   const mode = global ? [] : [modeLine(root)];
   if (!changes.length) return { code: 0, text: [`ai-dev ${where}: актуально (${fresh})`, ...mode].join("\n") };
   const m = readManifest(root);
+  const stale = changes.filter((c) => c.op !== "❌");
+  const ignored = changes.filter((c) => c.op === "❌");
+  const fixable = ignored.some((c) => !c.manual);
+  const lost = "игнорирует файлы флоу — их нет в коммите, чужом чекауте и облачной сессии:";
   return {
     code: 1,
+    behind: stale.length > 0,
+    ignored: ignored.length > 0,
     text: [
-      `ai-dev ${where}: отстаёт — стоит ${m.tag ?? short(m.sha) ?? "без SHA"}, свежий ${fresh}`,
-      ...capped(changeLines(changes, root, global)),
-      `Обновить: npx -y github:${SOURCE} update${global ? " -g" : ""}`,
+      stale.length ? `ai-dev ${where}: отстаёт — стоит ${m.tag ?? short(m.sha) ?? "без SHA"}, свежий ${fresh}` : `ai-dev ${where}: актуально (${fresh}), но git ${lost}`,
+      ...capped(changeLines(stale, root, global)),
+      ...(stale.length && ignored.length ? [`Git ${lost}`] : []),
+      ...capped(changeLines(ignored, root, global)),
+      // личное правило update не исправит — что делать, сказано в строке ❌
+      ...(stale.length || fixable ? [`${stale.length ? "Обновить" : "Исправить"}: npx -y github:${SOURCE} update${global ? " -g" : ""}${fixable ? " — допишет исключения в .gitignore" : ""}`] : []),
       ...mode,
     ].join("\n"),
   };
@@ -660,6 +861,7 @@ function checkLink(home, clone) {
   const op = (/** @type {string} */ status) => (status === "A" ? "+" : status === "D" ? "-" : "~");
   return {
     code: 1,
+    behind: true,
     text: [
       `ai-dev ${where}: отстаёт — клон ${short(head)}, origin/main ${short(main)}`,
       ...capped([...files.map((l) => `  ${op(l.split("\t")[0] ?? "")} ${l.split("\t")[1]}`), ...changeLines(links, home, true)]),
@@ -706,7 +908,8 @@ function hook(failed) {
   if (results[1]?.absent && gitRoot()) shown.push({ code: 0, text: `ai-dev в проекте: не установлен — поставь: npx -y github:${SOURCE} install` });
   if (!shown.length) return 0;
   const tail = [];
-  if (shown.some((r) => r.code === 1)) tail.push("Отстаёт — update, копию в проекте закоммитить, перечитать обновлённое.");
+  if (shown.some((r) => r.behind)) tail.push("Отстаёт — update, копию в проекте закоммитить, перечитать обновлённое.");
+  if (shown.some((r) => r.ignored)) tail.push("Файлы флоу игнорирует git — update допишет исключения в .gitignore, закоммитить его с копией; правило вне проекта — поправить самому.");
   if (shown.some((r) => r.code === 2)) tail.push("Проверка недоступна — работать по текущему флоу и сказать об этом.");
   note(["Флоу ai-dev (AGENTS.md, «Первый шаг сессии»):", ...shown.map((r) => r.text), ...tail].join("\n"));
   return 0;
@@ -726,12 +929,12 @@ function update(global) {
   }
   const root = projectRoot();
   if (isAiDevClone(root)) return note(CLONE_NOTE), 0;
-  installProject(SRC, root);
+  const gitignore = installProject(SRC, root);
   const version = release ?? short(sourceSha(SRC));
   note(
     [
       "Копию в проекте — отдельным коммитом в ветку текущей задачи:",
-      `  git add -A .agents .claude/rules .claude/skills AGENTS.md && git commit -m "chore(agents): флоу ai-dev${version ? ` ${version}` : ""}"`,
+      `  git add -A .agents .claude/rules .claude/skills AGENTS.md${gitignore ? " .gitignore" : ""} && git commit -m "chore(agents): флоу ai-dev${version ? ` ${version}` : ""}"`,
     ].join("\n"),
   );
   return 0;

@@ -119,6 +119,74 @@ describe("В проект — копия, которую видят облачн
 });
 
 /**
+ * Копия флоу коммитится: облачная сессия, чужой чекаут и CI видят только репозиторий. Шаблон из .gitignore проекта
+ * (`CLAUDE.md` — частая практика прятать личные заметки агента, `.claude/`, `vendor/`) молча оставляет файл флоу вне
+ * коммита, а закоммиченный симлинк `.claude/rules` — ведущим в пустоту. Исключение действует, только если идёт после
+ * игнорирующего правила, — поэтому блок ai-dev в конце `.gitignore`.
+ */
+describe("Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии", () => {
+  const gitignore = () => read(path.join(proj, ".gitignore"));
+  // игнорируемые git файлы проекта — по одному, и внутри игнорируемых каталогов
+  const ignored = () => execFileSync("git", ["ls-files", "--others", "--ignored", "--exclude-standard"], { cwd: proj, env, encoding: "utf8" }).split("\n").filter(Boolean).sort();
+
+  it("шаблон CLAUDE.md в .gitignore проекта — install дописывает в конец .gitignore блок ai-dev с исключением: копия claude/CLAUDE.md не игнорируется, свои строки .gitignore на месте, повторная установка блок не дублирует", () => {
+    writeTree(proj, { ".gitignore": "node_modules/\nCLAUDE.md\n", "notes/CLAUDE.md": "мои заметки\n" });
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(".gitignore");
+    expect(ignored()).toEqual(["notes/CLAUDE.md"]);
+    const text = gitignore();
+    expect(text).toStartWith("node_modules/\nCLAUDE.md\n");
+    expect(text).toContain("\n!/.agents/ai-dev/claude/CLAUDE.md\n");
+    expect(text).toMatch(/\n# ai-dev:begin[^\n]*\n[^]*\n# ai-dev:end\n$/);
+    install();
+    expect(gitignore()).toBe(text);
+  });
+
+  it("каталог .claude/ в .gitignore проекта — исключения снимают его только с файлов флоу: правила и скиллы не игнорируются, свои файлы в .claude по-прежнему игнорируются", () => {
+    writeTree(proj, { ".gitignore": ".claude/\n", ".claude/settings.local.json": "{}\n", ".claude/rules/mine.md": "моё правило\n", ".claude/skills/mine/SKILL.md": "мой скилл\n" });
+    expect(install().code).toBe(0);
+    expect(ignored()).toEqual([".claude/rules/mine.md", ".claude/settings.local.json", ".claude/skills/mine/SKILL.md"]);
+  });
+
+  /** `vendor/` — у скилла spec есть `scripts/vendor`: шаблон внутри скилла снимается уже после исключения на `.agents`. */
+  it("игнорируются .agents/ и vendor/ — после install ни один файл флоу не игнорируется, свои vendor/ проекта и прочее в .agents игнорируются", () => {
+    writeTree(proj, { ".gitignore": ".agents/\nvendor/\n", "vendor/lib.js": "// чужое\n", ".agents/notes.md": "мои заметки\n" });
+    expect(install().code).toBe(0);
+    expect(ignored()).toEqual([".agents/notes.md", "vendor/lib.js"]);
+  });
+
+  it("ничего не игнорируется — .gitignore не создаётся и не меняется; ставший ненужным блок убирается", () => {
+    install();
+    expect(existsSync(path.join(proj, ".gitignore"))).toBe(false);
+    writeFileSync(path.join(proj, ".gitignore"), "dist");
+    install();
+    expect(gitignore()).toBe("dist");
+    writeFileSync(path.join(proj, ".gitignore"), "dist\nCLAUDE.md\n");
+    install();
+    expect(gitignore()).toContain("# ai-dev:begin");
+    writeFileSync(path.join(proj, ".gitignore"), gitignore().replace("dist\nCLAUDE.md\n", "dist\n"));
+    install();
+    expect(gitignore()).toBe("dist\n");
+  });
+
+  /**
+   * Личные правила (core.excludesFile, `.git/info/exclude`) — не проекта. Исключение файла безвредно для всех, а
+   * исключение каталога с `/<каталог>/*` спрятало бы остальное в нём у тех, у кого такого правила нет.
+   */
+  it("шаблон файла вне проекта (core.excludesFile) снимается исключением в .gitignore проекта; каталог, исключённый вне проекта, — ❌ с правилом, исключений на него в .gitignore проекта нет", () => {
+    writeTree(home, { ".config/git/ignore": "CLAUDE.md\n.claude/\n" });
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(gitignore()).toContain("\n!/.agents/ai-dev/claude/CLAUDE.md\n");
+    expect(gitignore()).not.toContain("/.claude");
+    expect(r.stderr).toContain("❌ .claude/ — ");
+    expect(r.stderr).toContain(".config/git/ignore:2 «.claude/»");
+    expect(ignored()).toEqual([".claude/rules/ai-dev-claude.md", ".claude/rules/ai-dev.md", ...SKILLS.map((s) => `.claude/skills/${s}`)]);
+  });
+});
+
+/**
  * Правила грузятся из проекта: вторая копия на машине читалась бы Claude Code на каждом ходу каждого агента
  * (~20k токенов). На машине — только скиллы и хук.
  */
