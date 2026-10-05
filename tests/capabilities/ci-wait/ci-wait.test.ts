@@ -208,6 +208,31 @@ describe("PR с конфликтом с базой не ждут — CI на н�
 });
 
 /**
+ * После мержа SHA добывали отдельными ходами `gh pr view` (замер #285: в 10 закрытиях из 17), на пиковом контексте
+ * сессии; `merged <N>` берёт его из PR сам — ожидание запускается тем же ходом, что `task actualize`.
+ */
+describe("Коммит мержа ждут по номеру PR — SHA мержа скрипт берёт сам", () => {
+  const MERGE = "9b1e3f7c2d4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c";
+
+  it("влитый PR — ждут чеки коммита мержа: SHA скрипт берёт из PR сам", () => {
+    write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
+    writeChecks([{ runs: [run("spec-publish", "queued")] }, { runs: [ok("spec-publish")] }]);
+    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    expect(calls()).toContain(`repos/{owner}/{repo}/commits/${MERGE}/status`);
+    expect(calls().filter((c) => c.includes(HEAD))).toEqual([]);
+  });
+
+  it("невлитый PR — ERROR сразу, а не ожидание чеков", () => {
+    write("pull", [{ state: "open", merged: false, merge_commit_sha: HEAD, head: { sha: HEAD }, base: { ref: "main" } }]);
+    writeChecks([{ runs: [run("tests", "in_progress")] }]);
+    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    expect(r.code).toBe(3);
+    expect(r.result).toStartWith("ERROR PR #7 not merged");
+  });
+});
+
+/**
  * Красный `main` чинит одна сессия по багу «main красный…», остальные ждут его закрытия (`github pr premerge`, код 3,
  * #282): фоновой командой, чьё завершение будит сессию, а не опросом руками.
  */

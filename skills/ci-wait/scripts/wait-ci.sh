@@ -13,6 +13,10 @@
 #       check-runs (GitHub Actions). --context — один чек по имени, среди обоих.
 #       SHA — полный, из git.
 #
+#   wait-ci.sh merged <N> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+#       Ждёт все чеки коммита мержа PR (как status): SHA берёт из PR сам — после мержа
+#       его не добывать. PR не влит — ERROR.
+#
 #   wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
 #       Ждёт закрытия issue — бага на красный main (github pr premerge, код 3):
 #       PASS, когда закрыт; нет такого issue — ERROR.
@@ -27,7 +31,7 @@
 # Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR или неверный вызов.
 set -uo pipefail
 
-usage() { sed -n '3,27p' "$0" >&2; exit 3; }
+usage() { awk 'NR > 2 && !/^#/ { exit } NR > 2' "$0" >&2; exit 3; }
 
 mode=${1:-}; target=${2:-}
 [ -n "$mode" ] && [ -n "$target" ] || usage
@@ -114,6 +118,23 @@ case "$mode" in
     : "${interval:=20}" "${timeout:=1200}"
     label="${context:-commit}@${target:0:7}"
     poll() { checks "$target"; }
+    ;;
+  merged)
+    [[ "$target" =~ ^[0-9]+$ ]] || finish "ERROR PR number expected, got: $target" 3
+    : "${interval:=20}" "${timeout:=1200}"
+    label="merge#$target"; merge_sha=""
+    poll() {
+      local pull
+      if [ -z "$merge_sha" ]; then
+        pull=$(gh api "repos/{owner}/{repo}/pulls/$target" 2>&1) || {
+          out=$pull; [[ "$pull" == *"HTTP 404"* ]] && { out="PR #$target not found: $pull"; return 2; }; return 1; }
+        [ "$(jq -r .merged <<<"$pull")" == true ] || { out="PR #$target not merged (state $(jq -r .state <<<"$pull")) — nothing to wait for"; return 2; }
+        # SHA своего мержа — из PR: git rev-parse origin/main при параллельных мержах отдаёт чужой коммит
+        merge_sha=$(jq -r .merge_commit_sha <<<"$pull")
+        label="${context:-merge#$target}@${merge_sha:0:7}"
+      fi
+      checks "$merge_sha"
+    }
     ;;
   issue)
     [[ "$target" =~ ^[0-9]+$ ]] || finish "ERROR issue number expected, got: $target" 3
