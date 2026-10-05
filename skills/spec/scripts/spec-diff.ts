@@ -395,17 +395,22 @@ export function modelFacts(m: ModelData | undefined): string[] {
   ];
 }
 
-const REGISTRY = /\bregistry:\s*(["'`])(.+?)\1/g;
-const RULE = /\brule:\s*(["'`])(.+?)\1/g;
+// у invariant `rule` — соглашение папки, а не правило линтера: проверка — его реестр
+const HARNESS_CALLS = { invariant: "registry", examples: "rule" };
 
-/** Проверки харнесса в исходниках тестов: реестры invariant и правила examples по литералам вызова. */
+/** Проверки харнесса в исходниках тестов: реестры invariant и правила examples — опции вызова по AST. */
 export function checkFacts(files: Map<string, string>): string[] {
   const out = new Set<string>();
   for (const [file, text] of files) {
+    if (!/\b(?:invariant|examples)\b/.test(text)) continue;
     const folder = path.posix.dirname(file);
-    // значение с подстановкой ${…} — не литерал: реестр вычисляется, статически его не назвать
-    for (const m of text.matchAll(REGISTRY)) if (!m[2]!.includes("${")) out.add(`\`${folder}\` · реестр «${m[2]}»`);
-    for (const m of text.matchAll(RULE)) if (!m[2]!.includes("${")) out.add(`\`${folder}\` · правило ${m[2]}`);
+    let options: [string, string][];
+    try {
+      options = L.callOptions(text, HARNESS_CALLS, file);
+    } catch {
+      continue; // файл не разобран — об этом уже сказал разбор названий (parseFiles)
+    }
+    for (const [call, value] of options) out.add(`\`${folder}\` · ${call === "invariant" ? `реестр «${value}»` : `правило ${value}`}`);
   }
   return [...out].sort();
 }
