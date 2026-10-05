@@ -397,6 +397,8 @@ export interface Row {
   labels: string[];
   /** Тип issue организации («Эпик»); в личном аккаунте типов нет — эпик помечен меткой `epic`. */
   issueType?: string | null;
+  /** Размер описания issue, знаков без ответов на вопросы (descSize) — признак объёма при подборе аналогов. */
+  size?: number;
   est: number | null;
   fact: number | null;
   status: string | null;
@@ -644,7 +646,7 @@ export class Repo implements FactRepo {
     const q = `
         query($id:ID!,$c:String){ node(id:$id){ ... on ProjectV2{
           items(first:100,after:$c){ pageInfo{hasNextPage endCursor} nodes{ id type
-            content{ __typename ... on Issue{ id number title state stateReason closedAt createdAt issueType{name}
+            content{ __typename ... on Issue{ id number title body state stateReason closedAt createdAt issueType{name}
               labels(first:15){nodes{name}} comments(last:25){nodes{databaseId body}} } }
             fieldValues(first:20){ nodes{ __typename
               ... on ProjectV2ItemFieldNumberValue{ number field{ ... on ProjectV2Field{name} } }
@@ -668,6 +670,7 @@ export class Repo implements FactRepo {
           createdAt: parseTs(c.createdAt),
           labels: c.labels.nodes.map((l: Any) => l.name),
           issueType: c.issueType?.name ?? null,
+          size: descSize(c.body ?? ""),
           est: null,
           fact: null,
           status: null,
@@ -1720,7 +1723,7 @@ function closingRe(repo: Pick<Repo, "owner" | "name">, n: number): RegExp {
 function fetchIssue(repo: Repo, number: number): Any {
   const q = `
     query($o:String!,$r:String!,$n:Int!){ repository(owner:$o,name:$r){ issue(number:$n){
-      id number title state stateReason closedAt createdAt url
+      id number title body state stateReason closedAt createdAt url
       issueType{name}
       labels(first:20){nodes{name}}
       closedByPullRequestsReferences(first:20){nodes{number repository{nameWithOwner}}}
@@ -3126,8 +3129,107 @@ function hiddenAnalogs(repo: Repo, analogs: (number | string)[]): string[] {
   });
 }
 
+// ----------------------------------------------------------------------------
+// Подбор аналогов скриптом
+// ----------------------------------------------------------------------------
+
+/** Метки, которые не решение: `epic` — вид задачи, «вопросы» — её состояние. */
+const NOT_DECISION = new Set(["epic", "вопросы"]);
+/** Служебные слова заголовка (короче трёх букв отсекаются и так): на сходство задач не указывают. */
+const STOP_WORDS = new Set("для без при что как или все это его из от до за под над про через после перед если чем где когда только также уже ещё еще так the and for with from into".split(" "));
+/** Основа слова — первые четыре буквы: «оценка», «оценки», «оценок» — одно слово (пять букв беглая гласная «оценок» уже
+ * разводит); грубо, но без словаря, и в бэктесте #279 не хуже пяти. */
+const STEM = 4;
+
+/** Слова заголовка по основам: основа → слово, как оно стоит в заголовке (в нижнем регистре), по порядку. */
+export function titleWords(title: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const w of title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) {
+    if (w.length < 3 || STOP_WORDS.has(w)) continue;
+    const stem = w.slice(0, STEM);
+    if (!out.has(stem)) out.set(stem, w);
+  }
+  return out;
+}
+
+/** Ответ на вопрос в «## Вопросы»: от «Ответ…:» до следующего пункта списка или пустой строки. */
+const ANSWER_RE = /\s*(?:\*\*)?Ответ[^:\n]*:(?:\*\*)?[^\n]*(?:\n(?![ \t]*(?:\d+\.|$))[^\n]*)*/gm;
+
 /**
- * Оценка = прогноз по фактам аналогов: часы, токены и стоимость — медианы фактов × поправка.
+ * Размер описания issue, знаков, — признак объёма задачи: в бэктесте #279 он связан с фактом теснее ручной оценки.
+ * Ответы на вопросы и отметки ✅ не в счёт: их дописывают после оценки, и у закрытых задач они раздували бы размер.
+ */
+export function descSize(body: string): number {
+  return body.replace(/(?<=^|\n)## Вопросы\n[\s\S]*?(?=\n## |$)/, (sec) => sec.replace(ANSWER_RE, "").replace(/✅\s*/g, "")).length;
+}
+
+const isEpicRow = (r: Row): boolean => r.labels.includes("epic") || /^(эпик|epic)$/i.test(r.issueType ?? "");
+/** Закрытая задача с измеренным фактом (покрытие full), не эпик (его факт — сумма подзадач): аналог и выборка бэктеста. */
+const factRow = (r: Row): boolean => r.state === "CLOSED" && r.fact !== null && r.fact > 0 && (r.fact_marker?.cov ?? "full") === "full" && !isEpicRow(r);
+
+/** Задача, которой подбираются аналоги, — её признаки на момент оценки. */
+export interface AnalogTarget {
+  number: number;
+  title: string;
+  labels: string[];
+  createdAt: number | null;
+  size: number;
+}
+
+/** Аналог и чем он похож: общие метки решений, тот же тип, общие слова (как в заголовке задачи), размер к размеру задачи. */
+export interface Analog {
+  row: Row;
+  score: number;
+  labels: string[];
+  sameType: boolean;
+  words: string[];
+  sizeRatio: number | null;
+}
+
+/** Сколько аналогов берёт скрипт: медиана трёх устойчивее двух, а четвёртый в бэктесте точности не добавил. */
+const ANALOG_K = 3;
+const wordsCache = new WeakMap<Row, Map<string, string>>();
+
+/**
+ * Аналоги — самые похожие закрытые задачи с фактом full, закрытые до создания оцениваемой (как оценил бы скрипт в
+ * день создания: бэктест не заглядывает в будущее). Сходство — сумма: общая метка решения ×3, тот же тип ×2, общее
+ * слово заголовка ×1, минус 3 × |ln| отношения размеров описаний (+200 знаков — пустое описание не уходит в
+ * бесконечность); при равенстве — недавно закрытые. Веса — из бэктеста #279: очередь признаков «метки → тип → слова →
+ * размер» давала заметно меньше попаданий, размер описания весит не меньше меток.
+ */
+export function pickAnalogs(target: AnalogTarget, type: string, rows: Row[], k = ANALOG_K): Analog[] {
+  const tl = new Set(target.labels.filter((l) => !NOT_DECISION.has(l)));
+  const tw = titleWords(target.title);
+  const out: Analog[] = [];
+  for (const r of rows) {
+    if (r.number === target.number || !factRow(r)) continue;
+    if (target.createdAt !== null && !(r.closedAt !== null && r.closedAt < target.createdAt)) continue;
+    let cw = wordsCache.get(r);
+    if (!cw) wordsCache.set(r, (cw = titleWords(r.title)));
+    const labels = r.labels.filter((l) => tl.has(l));
+    const sameType = rowType(r) === type;
+    const words = [...tw].filter(([stem]) => cw.has(stem)).map(([, w]) => w);
+    const size = r.size ?? 0;
+    const score = 3 * labels.length + (sameType ? 2 : 0) + words.length - 3 * Math.abs(Math.log((target.size + 200) / (size + 200)));
+    out.push({ row: r, score, labels, sameType, words, sizeRatio: target.size > 0 && size > 0 ? size / target.size : null });
+  }
+  out.sort((a, b) => b.score - a.score || (b.row.closedAt ?? 0) - (a.row.closedAt ?? 0) || b.row.number - a.row.number);
+  return out.slice(0, k);
+}
+
+/** Чем аналог похож на задачу — для комментария «Оценка»: «метка est · тип feat · слова «a», «b» · описание ×0.8». */
+function analogWhy(a: Analog, type: string): string {
+  const parts: string[] = [];
+  if (a.labels.length) parts.push(`${plural(a.labels.length, "метка", "метки", "меток")} ${a.labels.join(", ")}`);
+  if (a.sameType) parts.push(`тип ${type}`);
+  if (a.words.length) parts.push(`${plural(a.words.length, "слово", "слова", "слов")} ${a.words.map((w) => `«${w}»`).join(", ")}`);
+  if (a.sizeRatio !== null) parts.push(`описание ×${fmtH(a.sizeRatio, 1)}`);
+  return parts.join(" · ");
+}
+
+/**
+ * Оценка = прогноз по фактам аналогов: часы, токены и стоимость — медианы фактов × поправка. Аналоги подбирает скрипт
+ * (pickAnalogs), --analogs — ручной выбор, когда агент видит отличие, которого признаки не ловят.
  * --hours — только экспертная оценка, когда аналогов с фактом нет (доверие C). k справочный.
  */
 function cmdEstimate(args: EstimateArgs): void {
@@ -3138,6 +3240,7 @@ function cmdEstimate(args: EstimateArgs): void {
   if (![0.5, 1, 1.5, 2].includes(args.mult)) throw new EstError("--mult допускает только 0.5, 1, 1.5 или 2");
   if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
   const tokMult = args.tokMult ?? args.mult;
+  const auto = !args.analogs.trim() && args.hours === undefined; // ни --analogs, ни --hours — аналоги подбирает скрипт
   const repo = new Repo(resolveRepo(args.repo), registry);
   // аналоги: номер issue этого репо (254) или задача другого репо из реестра (owner/repo#254)
   const analogs: (number | string)[] = []; // number — этот репо; "owner/repo#N" — другой
@@ -3172,7 +3275,7 @@ function cmdEstimate(args: EstimateArgs): void {
   const otherParts = new Map<string, string[]>();
   const otherRows = new Map<string, Map<number, Row>>();
 
-  const take = (r: Row, label: string, bucket: string[]) => {
+  const take = (r: Row, label: string, bucket: string[], why = "") => {
     const fm = r.fact_marker ?? {};
     if (r.fact === null) {
       bucket.push(`${label} (факт неизвестен)`);
@@ -3187,9 +3290,10 @@ function cmdEstimate(args: EstimateArgs): void {
     const tt = fm.tok?.total;
     if (tt) toks.push(tt / 1e6);
     if (fm.usd !== undefined && fm.usd !== null) usds.push(Number(fm.usd));
-    bucket.push(`${label} (факт ${fmtH(r.fact)} ч)`);
+    bucket.push(`${label} (факт ${fmtH(r.fact)} ч${why ? `: ${why}` : ""})`);
   };
 
+  const issue = fetchIssue(repo, args.number);
   for (const a of analogs) {
     if (typeof a === "string") {
       const [full, numS] = a.split("#") as [string, string];
@@ -3217,6 +3321,16 @@ function cmdEstimate(args: EstimateArgs): void {
       continue;
     }
     take(r, `#${a}`, parts);
+  }
+  if (auto) {
+    // без --analogs и --hours аналогов в списке нет — их подбирает скрипт
+    const target = { number: args.number, title: issue.title, labels: (issue.labels?.nodes ?? []).map((l: Any) => l.name), createdAt: parseTs(issue.createdAt), size: descSize(issue.body ?? "") };
+    const picked = pickAnalogs(target, args.type, rows);
+    if (picked.length < 2) throw new EstError(`в ${repo.full} закрытых до создания #${args.number} задач с фактом (покрытие full) меньше двух — аналоги из другого репо (--analogs owner/repo#N) или экспертная оценка (--hours)`);
+    for (const a of picked) {
+      analogs.push(a.row.number);
+      take(a.row, `#${a.row.number}`, parts, analogWhy(a, args.type));
+    }
   }
   for (const [full, lst] of otherParts) parts.push(`из проекта ${full}: ` + lst.join(", "));
   const analogTxt = parts.length ? parts.join("; ") : "нет";
@@ -3264,7 +3378,7 @@ function cmdEstimate(args: EstimateArgs): void {
   let multTxt = facts.length ? ` Поправка: ×${fmtH(args.mult)}${note}.` : "";
   if (facts.length && tokMult !== args.mult) multTxt += ` Поправка токенов и стоимости: ×${fmtH(tokMult)}${args.tokNote ? ` (${args.tokNote})` : ""}.`;
   const kTxt = c.n ? `k=${c.k} (n=${c.n}, уровень «${level}»; справочно, к прогнозу не применяется)` : "k: истории нет";
-  const text = `${headline} (тип ${args.type}, доверие ${conf}; ${basis}). Аналоги: ${analogTxt}.${multTxt}${spreadTxt ?? ""} ${kTxt}.`;
+  const text = `${headline} (тип ${args.type}, доверие ${conf}; ${basis}). Аналоги${auto ? " (подбор скриптом)" : ""}: ${analogTxt}.${multTxt}${spreadTxt ?? ""} ${kTxt}.`;
   const marker = {
     v: 2,
     h,
@@ -3276,12 +3390,12 @@ function cmdEstimate(args: EstimateArgs): void {
     tok: tokF !== null ? round2(tokF) : null,
     usd: usdF !== null ? round2(usdF) : null,
     expert,
+    auto,
     k: c.k,
     n: c.n,
     conf,
   };
   const body = text + "\n" + `<!-- est ${pyDumps(marker)} -->`;
-  const issue = fetchIssue(repo, args.number);
   const cur = issueProjectFields(issue, meta);
   console.log(`== ${repo.full}#${args.number}: ${issue.title}`);
   console.log(`текущая «${FIELD_EST}»: ${fmtH(cur.est)}; статус: ${cur.status || "—"}`);
@@ -3307,7 +3421,8 @@ const USAGE = `est — оценка задач по истории проект�
   est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
   est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
   est fact --sweep [--since 90d] [--repo o/r] [--write]
-  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult 0.5|1|1.5|2] [--note "причина"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]
+  est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "причина"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]   — аналоги подбирает скрипт
+  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — аналоги вручную
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
   est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Облачная сессия») в источники факта
   <type> — ${EST_TYPES.join(" ")}`;
@@ -3387,7 +3502,7 @@ export function main(argv: string[]): number {
       cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, tokMult: floatArg(values["tok-mult"], "--tok-mult"), tokNote: values["tok-note"], note: values.note, write: values.write });
       return 0;
     }
-    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact или estimate`);
+    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact, estimate или cloud-import`);
   } catch (e) {
     if (e instanceof EstError) die(e.message);
     if (e && typeof e === "object" && (e as Any).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") die((e as Error).message, 2);

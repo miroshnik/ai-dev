@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudPartsIn, cloudSessionsIn, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
-  roundScale, usageCost,
+  cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
+  pickAnalogs, roundScale, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
@@ -968,9 +968,11 @@ appendFileSync(dir + "/calls.jsonl", JSON.stringify({ args, stdin }) + "\\n");
 const world = JSON.parse(readFileSync(dir + "/world.json", "utf8"));
 const print = (x) => console.log(JSON.stringify(x));
 const num = (name, number) => ({ __typename: "ProjectV2ItemFieldNumberValue", number, field: { name } });
-const factMarker = (i) => '<!-- fact {"v": 1, "h": ' + i.fact + ', "cov": "full", "tok": {"total": 2000000}, "usd": 1.5, "type": "fix"} -->';
-const issueOf = (i) => ({ __typename: "Issue", id: "I_" + i.number, number: i.number, title: i.title, state: i.state, stateReason: null, closedAt: null, createdAt: null,
-  labels: { nodes: [] }, comments: { nodes: i.fact ? [{ databaseId: i.number, body: factMarker(i) }] : [] } });
+const factMarker = (i) => "<!-- fact " + JSON.stringify({ v: 1, h: i.fact, cov: i.cov ?? "full", tok: { total: 2000000 }, usd: 1.5, type: i.type ?? "fix" }) + " -->";
+const estMarker = (i) => "<!-- est " + JSON.stringify({ v: 2, h: i.est, type: i.type ?? "fix", mult: i.mult ?? 1 }) + " -->";
+const issueOf = (i) => ({ __typename: "Issue", id: "I_" + i.number, number: i.number, title: i.title, state: i.state, stateReason: null,
+  closedAt: i.closedAt ?? null, createdAt: i.createdAt ?? null, body: i.body ?? "", labels: { nodes: (i.labels ?? []).map((name) => ({ name })) },
+  comments: { nodes: [...(i.est ? [{ databaseId: 1000 + i.number, body: estMarker(i) }] : []), ...(i.fact ? [{ databaseId: i.number, body: factMarker(i) }] : [])] } });
 if (args[1] === "graphql") {
   const { query, variables: v } = JSON.parse(stdin);
   const repo = world[v.o + "/" + v.r];
@@ -983,7 +985,8 @@ if (args[1] === "graphql") {
     print({ data: { [owner]: { projectV2: { id: "P" + v.n, title: "p", number: v.n, fields } } } });
   } else if (query.includes("node(id:$id)")) {
     const r = byProject((p) => "P" + p === v.id);
-    const nodes = r.issues.map((i) => ({ id: "PI_" + i.number, type: "ISSUE", content: issueOf(i), fieldValues: { nodes: i.fact ? [num("Факт, ч", i.fact)] : [] } }));
+    const fieldValues = (i) => ({ nodes: [...(i.fact ? [num("Факт, ч", i.fact)] : []), ...(i.est ? [num("Оценка, ч", i.est)] : [])] });
+    const nodes = r.issues.map((i) => ({ id: "PI_" + i.number, type: "ISSUE", content: issueOf(i), fieldValues: fieldValues(i) }));
     print({ data: { node: { items: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
   } else if (query.includes("issue(number:$n)")) {
     const i = repo.issues.find((x) => x.number === v.n);
@@ -996,6 +999,26 @@ if (args[1] === "graphql") {
   else print({});
 } else { console.error("fake gh: " + args.join(" ")); process.exit(1); }
 `;
+
+/** `est <args>` с фейковым gh в мире `world` (все его репо — в реестре): исход, записи в GitHub, тело нового комментария. */
+function withFakeGh(world: Record<string, unknown>, args: string[]) {
+  const bin = path.join(dir, "bin");
+  const cfg = path.join(dir, "ai-dev");
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(cfg, { recursive: true });
+  writeFileSync(path.join(bin, "fake-gh.mjs"), FAKE_GH);
+  writeFileSync(path.join(bin, "gh"), `#!/usr/bin/env bash\nexec bun "$FAKE_GH/fake-gh.mjs" "$@"\n`);
+  chmodSync(path.join(bin, "gh"), 0o755);
+  writeFileSync(path.join(bin, "world.json"), JSON.stringify(world));
+  writeFileSync(path.join(cfg, "repos.json"), JSON.stringify(Object.fromEntries(Object.keys(world).map((k) => [k, {}]))));
+  const log = path.join(bin, "calls.jsonl");
+  writeFileSync(log, "");
+  const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin } });
+  const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));
+  const comment = calls.filter((c) => c.args.includes("POST")).map((c) => JSON.parse(c.stdin).body as string)[0] ?? null;
+  return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, writes, comment };
+}
 
 /**
  * Комментарий «Оценка» называет аналог из другого репо как `owner/repo#N`. В публичном репо это раскрыло бы имя и номер
@@ -1010,25 +1033,8 @@ describe("Оценка в публичном репо не называет за
   const WORLD = { "o/pub": repoWorld("public", 1), "o/pub2": repoWorld("public", 2), "o/priv": repoWorld("private", 3), "o/priv2": repoWorld("private", 4) };
 
   /** `est estimate 10 --repo <repo> --type fix --analogs <analogs>` с фейковым gh: исход, записи в GitHub, тело комментария. */
-  function estimate(repo: string, analogs: string, write = true) {
-    const bin = path.join(dir, "bin");
-    const cfg = path.join(dir, "ai-dev");
-    mkdirSync(bin, { recursive: true });
-    mkdirSync(cfg, { recursive: true });
-    writeFileSync(path.join(bin, "fake-gh.mjs"), FAKE_GH);
-    writeFileSync(path.join(bin, "gh"), `#!/usr/bin/env bash\nexec bun "$FAKE_GH/fake-gh.mjs" "$@"\n`);
-    chmodSync(path.join(bin, "gh"), 0o755);
-    writeFileSync(path.join(bin, "world.json"), JSON.stringify(WORLD));
-    writeFileSync(path.join(cfg, "repos.json"), JSON.stringify(Object.fromEntries(Object.keys(WORLD).map((k) => [k, {}]))));
-    const log = path.join(bin, "calls.jsonl");
-    writeFileSync(log, "");
-    const args = [EST, "estimate", "10", "--repo", repo, "--type", "fix", "--analogs", analogs, ...(write ? ["--write"] : [])];
-    const r = spawnSync("bun", args, { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin } });
-    const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-    const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));
-    const comment = calls.filter((c) => c.args.includes("POST")).map((c) => JSON.parse(c.stdin).body as string)[0] ?? null;
-    return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, writes, comment };
-  }
+  const estimate = (repo: string, analogs: string, write = true) =>
+    withFakeGh(WORLD, ["estimate", "10", "--repo", repo, "--type", "fix", "--analogs", analogs, ...(write ? ["--write"] : [])]);
 
   it("в публичный репо не пишется аналог из непубличного репо — отказ до записи", () => {
     const r = estimate("o/pub", "1,o/priv#1,o/priv#2");
@@ -1060,6 +1066,91 @@ describe("Оценка в публичном репо не называет за
       expect(r.comment).toContain(`из проекта ${from}: #1 (факт 0.5 ч), #2 (факт 1 ч)`);
       expect(r.writes).toHaveLength(2);
     }
+  });
+});
+
+/**
+ * Оценка — один вызов: без `--analogs` аналоги подбирает скрипт среди закрытых задач с фактом (покрытие full, не
+ * эпиков), закрытых до создания оцениваемой. Сходство — сумма признаков: общая метка решения ×3, тот же тип ×2, общее
+ * слово заголовка ×1, минус 3 × |ln| отношения размеров описаний; берутся три самых похожих, при равенстве — свежие.
+ * Веса выбраны бэктестом (#279): размер описания — признак объёма не слабее меток, поэтому он в сумме, а не последним
+ * в очереди признаков. Размер считается без ответов на вопросы — их дописывают после оценки.
+ */
+describe("Аналоги подбирает скрипт — по меткам решений, типу, словам заголовка и размеру описания", () => {
+  const row = (n: number, o: Partial<Row> = {}): Row => ({
+    item_id: "i", issue_id: "I", number: n, title: "Прочее", state: "CLOSED", stateReason: null, closedAt: 500 + n, createdAt: 1, labels: [],
+    est: null, fact: 1, status: null, est_marker: null, fact_marker: { cov: "full", type: "fix" }, size: 1000, ...o,
+  });
+  const target = { number: 99, title: "Биллинг · экспорт счетов в PDF", labels: ["billing"], createdAt: 1000, size: 1000 };
+
+  it("аналоги — три самых похожих по сумме признаков: общая метка решения, тот же тип, общие слова заголовка, близкий размер описания", () => {
+    const feat = { cov: "full", type: "feat" };
+    const rows = [
+      row(1, { labels: ["billing"], title: "Биллинг · экспорт счетов в CSV", fact_marker: feat }),
+      row(2, { labels: ["billing", "epic-x"], title: "Биллинг · скидки" }),
+      row(3, { title: "Экспорт отчётов", fact_marker: feat }),
+      row(4, { labels: ["billing"], title: "Биллинг · экспорт счетов в XLS", fact_marker: feat, size: 20000 }),
+      row(5),
+    ];
+    const a = pickAnalogs(target, "feat", rows);
+    expect(a.map((x) => x.row.number)).toEqual([1, 2, 3]);
+    expect(a[0]).toMatchObject({ labels: ["billing"], sameType: true, words: ["биллинг", "экспорт", "счетов"], sizeRatio: 1 });
+    expect(a[1]).toMatchObject({ labels: ["billing"], sameType: false, words: ["биллинг"] });
+  });
+
+  it("аналог оценки — только задача, закрытая до создания оцениваемой, с фактом full: бэктест не заглядывает в будущее", () => {
+    const same = { labels: ["billing"], title: target.title };
+    const rows = [
+      row(1, { ...same, closedAt: 2000 }),
+      row(2, { ...same, labels: ["billing", "epic"] }),
+      row(3, { ...same, issueType: "Эпик" }),
+      row(4, { ...same, fact_marker: { cov: "partial", type: "fix" } }),
+      row(5, { ...same, state: "OPEN", closedAt: null, fact: null }),
+      row(6, { ...same, fact: null }),
+      row(99, same),
+      row(7),
+      row(8),
+    ];
+    expect(pickAnalogs(target, "feat", rows).map((x) => x.row.number)).toEqual([8, 7]);
+  });
+
+  it("размер описания — без ответов на вопросы: ответ, дописанный после оценки, размер не меняет", () => {
+    const asked = "## Что сделать\nЭкспорт.\n\n## Вопросы\n1. Формат? Рекомендация: PDF.\n2. Шаблон? Рекомендация: из макета.\n\n## Готово, когда\nЕсть PDF.\n";
+    const answered = "## Что сделать\nЭкспорт.\n\n## Вопросы\n1. ✅ Формат? Рекомендация: PDF. **Ответ (авто):** по рекомендации — PDF,\n   шаблон из макета.\n2. ✅ Шаблон? Рекомендация: из макета.\n   **Ответ:** из макета.\n\n## Готово, когда\nЕсть PDF.\n";
+    expect(descSize(answered)).toBe(descSize(asked));
+    expect(descSize(asked)).toBeGreaterThan(descSize("## Что сделать\nЭкспорт.\n"));
+  });
+});
+
+/** Мир фейкового gh для оценки одним вызовом и бэктеста: задачи с метками, датами, описанием, фактом и ручной оценкой. */
+const day = (d: number) => `2026-09-${String(d).padStart(2, "0")}T00:00:00Z`;
+
+describe("Оценка — один вызов: est estimate без --analogs", () => {
+  const closed = (number: number, title: string, labels: string[], type: string, fact: number, d: number, extra: Record<string, unknown> = {}) =>
+    ({ number, title, labels, type, fact, state: "CLOSED", createdAt: day(1), closedAt: day(d), body: "x".repeat(1000), ...extra });
+  const WORLD = {
+    "o/r": {
+      visibility: "private", project: 1,
+      issues: [
+        closed(1, "est · история оценок по фактам", ["est"], "feat", 0.5, 2, { body: "x".repeat(800) }),
+        closed(2, "est · факт из транскриптов", ["est"], "feat", 1, 3),
+        closed(3, "github · закрытие задачи", ["github-task"], "fix", 4, 4),
+        closed(4, "est · оценка по аналогам без ручного выбора", ["est"], "feat", 8, 20),
+        closed(5, "est · оценка токенов", ["est"], "feat", 2, 5, { cov: "partial" }),
+        { number: 10, title: "est · оценка одним вызовом", labels: ["est"], state: "OPEN", createdAt: day(10), body: "x".repeat(1000) },
+      ],
+    },
+  };
+
+  it("без --analogs скрипт выбирает аналоги по меткам решений, типу и словам заголовка и называет их в комментарии «Оценка»", () => {
+    const r = withFakeGh(WORLD, ["estimate", "10", "--repo", "o/r", "--type", "feat", "--write"]);
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.comment).toStartWith("Оценка: 1 ч");
+    expect(r.comment).toContain("Аналоги (подбор скриптом): #1 (факт 0.5 ч: метка est · тип feat · слова «est», «оценка» · описание ×0.8); #2 (факт 1 ч: метка est · тип feat · слово «est» · описание ×1); #3 (факт 4 ч: описание ×1).");
+    expect(r.comment).not.toContain("#4");
+    expect(parseMarker(r.comment, "est")).toMatchObject({ h: 1, analogs: [1, 2, 3], auto: true });
+    expect(r.writes).toHaveLength(2); // комментарий и поле «Оценка, ч»
   });
 });
 
