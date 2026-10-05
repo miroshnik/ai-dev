@@ -25,12 +25,14 @@ function scratch(): string {
   return dir;
 }
 
-// Проект: реестр items.txt и проверка «реестр + инвариант» — каждая ссылка из uses.txt есть в реестре, как у
-// стандартов проекта; test:spec — она. Lockfile bun — зависимости ставятся `bun install`.
-const CHECK = `for u in $(cat uses.txt 2>/dev/null); do
-  grep -qx "$u" items.txt || { echo "(fail) реестр > ссылка $u есть в реестре" >&2; exit 1; }
+// Проект: реестр items.txt и проверка «реестр + инвариант» — каждая ссылка из uses*.txt есть в реестре, как у
+// стандартов проекта, тест на ссылку; test:spec — она. Lockfile bun — зависимости ставятся `bun install`.
+const CHECK = `fail=0
+for u in $(cat uses*.txt 2>/dev/null); do
+  grep -qx "$u" items.txt || { echo "(fail) реестр > ссылка $u есть в реестре [0.0$u ms]" >&2; fail=1; }
 done
 echo "(pass) реестр"
+exit $fail
 `;
 const PKG = (scripts: Record<string, string> = { "test:spec": "sh check.sh" }) => JSON.stringify({ name: "x", private: true, scripts }, null, 2) + "\n";
 
@@ -61,14 +63,33 @@ function project({ pr, mainAfter, files = {} }: { pr: Record<string, string | nu
   return { work, head, git: repo.git };
 }
 
-/** `gh` — внешний край: PR, check suites его головы и последнее событие основной ветки (REST). */
-function fakeGh(head: string, { suites = [CI], moved = "2026-10-02T09:30:00Z", state = "open", activity }: { suites?: string[]; moved?: string | null; state?: string; activity?: string } = {}) {
+const MAIN_SHA = "c0ffee1" + "0".repeat(33);
+
+interface MainChecks {
+  runs?: { id?: number; name: string; status?: string; conclusion: string | null }[];
+  statuses?: { context: string; state: string }[];
+}
+
+/**
+ * `gh` — внешний край: PR, check suites его головы, последнее событие основной ветки, чеки последнего коммита main и
+ * поиск открытого бага «main красный» (REST).
+ */
+function fakeGh(
+  head: string,
+  { suites = [CI], moved = "2026-10-02T09:30:00Z", state = "open", activity, main = {}, bugs = [], body = "", owner = "User" }: { suites?: string[]; moved?: string | null; state?: string; activity?: string; main?: MainChecks; bugs?: { number: number; title: string }[]; body?: string; owner?: string } = {},
+) {
   const calls: string[] = [];
   const gh = (args: string[]) => {
     const url = args[1] ?? "";
     calls.push(url);
     if (args[0] !== "api") throw new Error(`fake gh: неожиданный вызов gh ${args.join(" ")}`);
-    if (url === `repos/${SLUG}/pulls/${PR}`) return JSON.stringify({ id: 1, number: PR, state, merged: state !== "open", head: { sha: head, ref: "feat/7-x" }, base: { ref: "main" } });
+    if (url === `repos/${SLUG}/pulls/${PR}`) return JSON.stringify({ id: 1, number: PR, state, merged: state !== "open", body, head: { sha: head, ref: "feat/7-x" }, base: { ref: "main", repo: { owner: { type: owner } } } });
+    if (url.startsWith(`repos/${SLUG}/commits/main/check-runs`)) {
+      const runs = (main.runs ?? []).map((r, i) => ({ id: r.id ?? i + 1, name: r.name, status: r.status ?? "completed", conclusion: r.conclusion }));
+      return JSON.stringify({ total_count: runs.length, check_runs: runs });
+    }
+    if (url === `repos/${SLUG}/commits/main/status`) return JSON.stringify({ sha: MAIN_SHA, state: "pending", statuses: main.statuses ?? [] });
+    if (url.startsWith("search/issues?")) return JSON.stringify({ total_count: bugs.length, items: bugs.map((b) => ({ ...b, state: "open" })) });
     if (url.startsWith(`repos/${SLUG}/commits/${head}/check-suites`)) return JSON.stringify({ total_count: suites.length, check_suites: suites.map((t, i) => ({ id: i + 1, created_at: t })) });
     if (url.startsWith(`repos/${SLUG}/activity?`)) {
       if (activity) return JSON.stringify({ message: activity, status: "404" });
@@ -219,6 +240,91 @@ describe("pr premerge: main ушёл — быстрые проверки на с
       const cmds = projectCommands(dir);
       expect([cmds.install?.join(" ") ?? null, cmds.run.join(" ")]).toEqual([install, run]);
     }
+  });
+});
+
+const WAIT = path.resolve(import.meta.dir, "../../../skills/ci-wait/scripts/wait-ci.sh");
+const GITHUB = path.resolve(import.meta.dir, "../../../skills/github/scripts/github.ts");
+const MAIN_RED = "⛔ не вливать: main красный, не этот PR — в своём PR не чинить";
+
+/**
+ * Красный `main` видели только следующие PR: каждая сессия чинила его в своём PR или ждала вслепую, а владелец
+ * рассылал «не пушить» (#282). `premerge` отличает «мой PR ломает» от «`main` уже красный»: слияние красное —
+ * `test:spec` ещё и на голом `main`; красный там тем же — отдельный исход, код 3. Красный чек последнего коммита
+ * `main` (деплой, смоук) — тот же исход. Сессия не вливает и в своём PR не чинит: один баг «main красный…» на всех,
+ * `premerge` называет открытый или команду завести, остальные ждут его закрытия. PR, который этот баг закрывает, — починка:
+ * красный `main` его не останавливает.
+ */
+describe("pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR", () => {
+  const AFTER = "2026-10-02T10:20:00Z";
+
+  it("красный test:spec и на слиянии PR, и на голом main — код 3 «main красный», а не «PR ломает»", () => {
+    // после CI PR main сам сломал реестр; PR его не трогает
+    const p = project({ pr: { "other.txt": "x\n" }, mainAfter: { "uses.txt": "z\n" } });
+    const proc = processes();
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
+    expect(r.code).toBe(3);
+    expect(proc.seen).toEqual([
+      { "items.txt": "a\nb\n", "uses.txt": "z\n" },
+      { "items.txt": "a\nb\n", "uses.txt": "z\n" },
+    ]);
+    expect(r.out).toContain("main красный и сам: test:spec красный и на голом origin/main тем же");
+    expect(r.last).toBe(MAIN_RED);
+    expect(worktrees(p.work)).toHaveLength(1);
+  });
+
+  it("main красный, а PR ломает ещё своё — код 1, вывод называет тесты, которые ломает PR", () => {
+    const p = project({ pr: { "uses-pr.txt": "q\n" }, mainAfter: { "uses.txt": "z\n" } });
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("main красный и сам, PR ломает сверх него:\n  (fail) реестр > ссылка q есть в реестре");
+    expect(r.out).not.toContain("сверх него:\n  (fail) реестр > ссылка z");
+    expect(r.last).toStartWith("❌ не вливать: test:spec красный на слиянии с origin/main");
+  });
+
+  it("красный чек последнего коммита main — premerge не вливает и называет чек", () => {
+    const p = project({ pr: { "uses.txt": "a\n" } });
+    const proc = processes();
+    const main: MainChecks = {
+      runs: [
+        { id: 1, name: "deploy", conclusion: "failure" },
+        { id: 2, name: "tests", conclusion: "failure" },
+        { id: 3, name: "tests", conclusion: "success" }, // перезапуск позеленел — чек не красный
+        { id: 4, name: "smoke", status: "in_progress", conclusion: null },
+      ],
+      statuses: [{ context: "preview", state: "error" }, { context: "lint", state: "success" }],
+    };
+    const r = premerge(fakeGh(p.head, { main }).gh, p.work, proc.run);
+    expect(r.code).toBe(3);
+    expect(r.out).toContain("main красный: чеки deploy, preview последнего коммита main (c0ffee1)");
+    expect(r.last).toBe(MAIN_RED);
+    expect(proc.calls).toEqual([]);
+  });
+
+  it("открытый баг «main красный…» — premerge называет его и команду ожидания; бага нет — команду завести", () => {
+    const p = project({ pr: { "uses.txt": "a\n" } });
+    const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
+    const found = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чек deploy" }] }).gh, p.work);
+    expect(found.out).toContain(`баг на красный main — #41 «main красный: чек deploy»: ждать его закрытия — bash ${WAIT} issue 41 фоновой командой, затем снова pr premerge ${PR}`);
+    const none = fakeGh(p.head, { main, owner: "Organization" });
+    const r = premerge(none.gh, p.work);
+    expect(none.calls.find((c) => c.startsWith("search/issues?"))).toBe(`search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "main красный"`)}&per_page=20`);
+    expect(r.out).toContain(`бага на красный main нет — заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
+    expect(r.code).toBe(3);
+  });
+
+  it("PR закрывает открытый баг «main красный…» — красный main его не останавливает: это починка", () => {
+    const bugs = [{ number: 41, title: "main красный: test:spec" }];
+    const fix = project({ pr: { "uses.txt": "a\n" } });
+    const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }] };
+    const r = premerge(fakeGh(fix.head, { main, bugs, body: "Чиню деплой.\n\nCloses #41" }).gh, fix.work);
+    expect(r.out).toContain("○ main красный — чек deploy последнего коммита main (c0ffee1); PR закрывает баг #41 на него — проверяю PR как обычно");
+    expect(r.code).toBe(0);
+    // починка, которая не чинит: красное слияние — её, код 1
+    const p = project({ pr: { "other.txt": "x\n" }, mainAfter: { "uses.txt": "z\n" } });
+    const red = premerge(fakeGh(p.head, { moved: AFTER, bugs, body: "Fixes #41" }).gh, p.work);
+    expect(red.code).toBe(1);
+    expect(red.last).toStartWith("❌ не вливать: test:spec красный на слиянии с origin/main");
   });
 });
 
