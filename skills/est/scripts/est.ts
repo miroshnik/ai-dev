@@ -36,6 +36,9 @@ const CACHE_DIR = path.join(EST_DIR, "cache");
 const PROJECTS_DIR = path.join(HOME, ".claude", "projects");
 const CODEX_DIRS = [path.join(HOME, ".codex", "sessions"), path.join(HOME, ".codex", "archived_sessions")];
 export const CLOUD_DIR = path.join(EST_DIR, "cloud");
+// Закрепления сессий за задачами: `github task status` «В работе» пишет <каталог состояния>/sessions/<id сессии> со
+// строкой owner/repo#N — прямой факт «эта сессия вела эту задачу», сильнее любых признаков в транскрипте.
+export const PINS_DIR = path.join(EST_DIR, "sessions");
 
 // Перенос — только пока каталога нет: github до переноса кладёт закрепления в старый каталог и новый не создаёт
 // (github.ts, configDir) — иначе реестр и цены остались бы в старом.
@@ -490,6 +493,8 @@ export interface FactRepo {
   commitDiff(oid: string): number | null;
   /** Интервалы уже записанных фактов: issue → sid (8 знаков) → [(начало, конец)]; из маркеров «Факт». */
   recorded?(): Recorded;
+  /** Закрепления сессий за задачами: id сессии → `owner/repo#N` (loadPins); сессия без закрепления — по признакам. */
+  pins?(): Map<string, string>;
 }
 
 export type Recorded = Map<number, Record<string, [number, number][]>>;
@@ -547,6 +552,7 @@ export class Repo implements FactRepo {
   private sessions_: Session[] | null = null;
   private rows_: Row[] | null = null;
   private recorded_: Recorded | null = null;
+  private pins_: Map<string, string> | null = null;
 
   constructor(full: string, registry: Registry) {
     this.full = full;
@@ -629,6 +635,12 @@ export class Repo implements FactRepo {
       }
     }
     return this.recorded_;
+  }
+
+  /** Закрепления сессий за задачами, один раз за запуск. */
+  pins(): Map<string, string> {
+    if (this.pins_ === null) this.pins_ = loadPins();
+    return this.pins_;
   }
 
   private findProject(): [string, number] {
@@ -1613,6 +1625,56 @@ export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: s
   return out;
 }
 
+const PIN_RE = /^[\w.-]+\/[\w.-]+#\d+$/;
+
+/** Закрепления сессий за задачами: файл — id сессии, строка в нём — задача `owner/repo#N`; прочее (`.gitignore`) — мимо. */
+export function loadPins(dir = PINS_DIR): Map<string, string> {
+  const out = new Map<string, string>();
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return out;
+  }
+  for (const sid of names) {
+    if (sid.startsWith(".")) continue;
+    let task: string;
+    try {
+      task = readFileSync(path.join(dir, sid), "utf8").trim();
+    } catch {
+      continue;
+    }
+    if (PIN_RE.test(task)) out.set(sid, task);
+  }
+  return out;
+}
+
+/**
+ * Транскрипты сессий, закреплённых за задачами репозитория, — в любом каталоге ~/.claude/projects: закрепление
+ * называет сессию по id, а id — имя файла её транскрипта. Сессия, начатая вне каталогов реестра, тоже найдётся.
+ */
+export function pinnedTranscripts(slug: string, pins: Map<string, string>, projectsDir = PROJECTS_DIR): string[] {
+  const prefix = slug.toLowerCase() + "#";
+  const sids = new Set([...pins].filter(([, task]) => task.toLowerCase().startsWith(prefix)).map(([sid]) => sid));
+  return sids.size ? transcriptFilesWhere(() => true, projectsDir).filter((f) => sids.has(path.basename(f, ".jsonl"))) : [];
+}
+
+/**
+ * Сессии репозитория из разобранных транскриптов: из его каталогов, гости и закреплённые за его задачами. Закреплённая
+ * не отбрасывается как рутина (мало промптов, без PR и коммитов) и не помечается гостем: её задачу назвал `task status`.
+ */
+export function selectSessions(parsed: Record<string, Session>, paths: string[], guests: Set<string>, pinned: Set<string>): Session[] {
+  const sessions: Session[] = [];
+  for (const [f, s] of Object.entries(parsed)) {
+    if (!s.ev.length) continue;
+    if (pinned.has(f)) sessions.push(s);
+    else if (s.routine) continue;
+    else if (inRepo(s, paths)) sessions.push(s);
+    else if (guests.has(f)) sessions.push({ ...s, guest: true });
+  }
+  return sessions;
+}
+
 /** Разбор транскриптов с кэшем по mtime (инкрементально). */
 function loadSessions(repo: Repo): Session[] {
   if (!repo.paths.length) throw new EstError(`для ${repo.full} не заданы локальные пути в ${REGISTRY_PATH} — транскрипты искать негде`);
@@ -1621,7 +1683,8 @@ function loadSessions(repo: Repo): Session[] {
   const out: Record<string, Session> = {};
   let changed = false;
   const guests = new Set(guestTranscripts(repo.full, repo.paths, repo.otherPaths, PROJECTS_DIR, path.join(repo.cacheDir, "guest-index.json")));
-  const files = uniqSortedStrs(transcriptFiles(repo).concat([...guests])).concat(codexFiles(repo), cloudFiles(repo));
+  const pinned = new Set(pinnedTranscripts(repo.full, repo.pins()));
+  const files = uniqSortedStrs(transcriptFiles(repo).concat([...guests], [...pinned])).concat(codexFiles(repo), cloudFiles(repo));
   for (const f of files) {
     let mtime: number;
     try {
@@ -1648,13 +1711,7 @@ function loadSessions(repo: Repo): Session[] {
   }
   const same = Object.keys(cache).length === Object.keys(out).length && Object.keys(cache).every((k) => k in out);
   if (changed || !same) saveJson(file, out);
-  const sessions: Session[] = [];
-  for (const [f, s] of Object.entries(out)) {
-    if (!s.ev.length || s.routine) continue;
-    if (inRepo(s, repo.paths)) sessions.push(s);
-    else if (guests.has(f)) sessions.push({ ...s, guest: true });
-  }
-  return sessions;
+  return selectSessions(out, repo.paths, guests, pinned);
 }
 
 // ----------------------------------------------------------------------------
@@ -1930,7 +1987,7 @@ export interface Fact {
   sub_missing?: number;
   iv?: Record<string, [number, number][]>; // интервалы по сессиям (sid, 8 знаков) — в маркер «Факт»
   taken?: { issue: number; h: number }[]; // не засчитано: уже в записанном факте другой задачи
-  overlap?: { issue: number; h: number }[]; // засчитано (ветка, субагент, коммит), но есть и в чужом факте
+  overlap?: { issue: number; h: number }[]; // засчитано (закрепление, ветка, субагент, коммит), но есть и в чужом факте
   cloud_missing?: string[]; // облачные сессии из трейлера коммитов PR, выгрузки которых нет (est cloud-import)
   cloud_parts?: CloudPart[]; // части, посчитанные облачными сессиями (маркер cloud) — хранятся в маркере при перезаписи
 }
@@ -1957,6 +2014,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   const cidx = repo.closers();
   const sessions = repo.sessions();
   const neutral = repo.neutralBranches();
+  const pins = repo.pins?.() ?? new Map<string, string>();
   const gap = gapMin * 60.0;
 
   const ourPrs = new Set(prObjs.map((p) => p.number));
@@ -2078,6 +2136,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   for (const s of sessions) {
     const ev = s.ev;
     if (!ev.length) continue;
+    // Закреплённая сессия (github task status) целиком — задаче из закрепления, с субагентами (у них тот же id) и с
+    // временем до «В работе»: признаки ниже ей не нужны, чужие хеши, ветки и номера в её выводах время не уводят.
+    // Закреплённая за другой задачей — не наша, какие бы признаки этой в ней ни были. Без закрепления — признаки.
+    const pin = pins.get(s.sid);
+    if (pin !== undefined && pin.toLowerCase() !== ourKey.toLowerCase()) continue;
+    const pinned = pin !== undefined;
     // Гость — транскрипт из каталога другого репозитория: номера задач и ветки там свои. Его ветка — наша, только
     // если это точно ветка нашего PR; чужая — только если это ветка чужого PR нашего репозитория.
     const guest = !!s.guest;
@@ -2108,6 +2172,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // гостя привязывает только признак нашего репозитория; номер в названии — лишь вместе с ним
     if (
       guest &&
+      !pinned &&
       !anchors.some((a) => a[1] === "own") &&
       !ev.some((e) => ourBranches.has(e[1]) || e[3] === ourKey) &&
       !urlRefs(s.first_urls ?? []).includes(number) &&
@@ -2189,6 +2254,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const weak: string[] = []; // правило слабой привязки («название» / «промпт») или ""
     const rules: Record<string, number> = {};
     for (const e of ev) {
+      if (pinned) {
+        attributed.push(1.0);
+        weak.push("");
+        rules["закрепление"] = (rules["закрепление"] ?? 0) + 1;
+        continue;
+      }
       const [ts, b] = [e[0] as number, e[1] as string];
       const hint: string = e.length > 3 ? e[3] : "";
       let w = 0.0;
@@ -2221,8 +2292,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       weak.push(weakRule);
     }
     // Запись, уже засчитанная в записанном факте другой задачи этой сессии (маркер хранит интервалы):
-    // привязанная только названием или первым промптом — не засчитывается повторно; привязанная веткой,
-    // субагентом или своим коммитом — остаётся, но пересечение выводится (чужой факт, вероятно, неверен).
+    // привязанная только названием или первым промптом — не засчитывается повторно; привязанная закреплением,
+    // веткой, субагентом или своим коммитом — остаётся, но пересечение выводится (чужой факт, вероятно, неверен).
     const sid8 = sidKey(s.sid);
     const others: [number, [number, number][]][] = [];
     for (const [n, bySid] of recorded) if (n !== number && bySid[sid8]?.length) others.push([n, bySid[sid8]]);
@@ -2956,7 +3027,7 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
     console.log(`  сессия ${sidKey(d.sid)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
   }
   for (const x of res.taken ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч по названию/первому промпту уже в факте #${x.issue} — здесь не засчитано; если там ошибка — est fact ${x.issue} --write, потом снова эту задачу`);
-  for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
+  for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (закрепление, ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
   for (const sid of res.cloud_missing ?? []) console.log(`ВНИМАНИЕ: часть работы — облачная сессия https://claude.ai/code/${sid}, её события не импортированы: выгрузить браузером и est cloud-import (SKILL.md est, «Облачная сессия»)`);
 }
 
