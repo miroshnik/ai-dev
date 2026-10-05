@@ -16,8 +16,8 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+concurrency: # main — своя группа у прогона: не ждёт и не вытесняется, очередь — у spec-publish
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -94,9 +94,10 @@ jobs:
     needs: spec
     runs-on: ubuntu-latest
     permissions: { contents: write } # пуш ветки spec — только здесь
-    concurrency: { group: spec-publish, cancel-in-progress: false }
+    concurrency: { group: spec-publish, queue: max } # ожидающая публикация не вытесняется следующей
     steps:
       - uses: actions/checkout@v7
+        with: { fetch-depth: 0 } # прогоны main параллельны: история — для «уже новее»
       - uses: actions/setup-node@v7
         with: { node-version: 24, package-manager-cache: false }
       - uses: actions/download-artifact@v8
@@ -121,6 +122,13 @@ jobs:
 `spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами,
 `spec:doc`, артефакт на `main`; `spec-publish` — так же отдельно. ai-dev сам на
 Bun — его `.github/workflows/ci.yml` образцом для проекта на Node не служит.
+
+Прогон `main` — в своей группе (`github.run_id`): тестам общий ресурс не
+нужен, а `queue: max` с отменой прогонов PR в одном workflow не сочетается.
+Очередь — только у `spec-publish`; публикации идут не по порядку мержей, и
+старую поверх новой не пускает «уже новее» — поэтому checkout с историей.
+Деплою в этом же workflow так нельзя — ему нужен порядок мержей: отдельный
+workflow (`docs/ci-concurrency.md`).
 
 ## Без CI на `main` — публикация на мерж PR
 
@@ -154,7 +162,7 @@ jobs:
     if: github.event.pull_request.merged == true # закрытый без мержа PR не публикует
     runs-on: ubuntu-latest
     permissions: { contents: write, actions: read } # пуш ветки spec, артефакт прогона PR
-    concurrency: { group: spec-publish, cancel-in-progress: false }
+    concurrency: { group: spec-publish, queue: max } # ожидающая публикация не вытесняется следующей
     env:
       GH_TOKEN: ${{ github.token }}
       MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}

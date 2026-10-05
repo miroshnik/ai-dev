@@ -124,8 +124,8 @@ export function main(argv: string[]): number {
     }
 
     const source = v.source ?? git(root, ["rev-parse", "HEAD"]);
-    // публикации приходят не по порядку мержей: поверх собранного из потомка старое не публикуется. Сравнить можно
-    // только при истории: в мелком клоне (CI на main) опубликованный исходник неизвестен — публикуется, как всегда
+    // публикации приходят не по порядку мержей (прогоны main параллельны): поверх собранного из потомка старое не
+    // публикуется. Сравнить можно только при истории: в мелком клоне опубликованный исходник неизвестен — публикуется
     const was = head ? sourceOf(git(root, ["log", "-1", "--format=%B", head])) : undefined;
     const sha = tryGit(root, ["rev-parse", "--verify", "-q", `${source}^{commit}`]);
     if (was && sha && sha !== was && tryGit(root, ["merge-base", "--is-ancestor", sha, was]) !== null) {
