@@ -43,7 +43,7 @@ flowchart LR
   end
   subgraph done ["4 · Закрытие"]
     direction TB
-    F["Факт est<br>часы · токены · $"] --> U["Актуализация<br>открытых задач блока"]
+    U["Актуализация блока<br>параллельно с деплоем"] --> F["Факт est<br>часы · токены · $"]
   end
   task --> work --> ship --> done
 ```
@@ -184,9 +184,9 @@ node bin/ai-dev.mjs release --dry-run   # что войдёт в релиз; б�
 
 ### [`github`](skills/github/SKILL.md) — проект и задачи по канону
 
-Сверяет и чинит проект GitHub и правило основной ветки, заводит задачу со всеми полями одной командой, перед мержем проверяет слияние PR со свежим `main`, если тот ушёл после CI, после мержа закрывает задачу одним вызовом — факт `est`, «Готово», эпик и milestone, влитая ветка долой, — ставит метки решений по диффу PR.
+Сверяет и чинит проект GitHub и правило основной ветки, заводит задачу со всеми полями одной командой, перед мержем проверяет слияние PR со свежим `main`, если тот ушёл после CI, после мержа печатает задание субагенту актуализации блока и закрывает задачу одним вызовом — факт `est`, «Готово», эпик и milestone, влитая ветка долой, — ставит метки решений по диффу PR.
 
-`github project check` · `github project fix` · `github task new | status | drop | close` · `github pr labels | premerge`
+`github project check` · `github project fix` · `github task new | status | drop | actualize | close` · `github pr labels | premerge`
 
 ### [`est`](skills/est/SKILL.md) — оценка по фактам
 

@@ -11,6 +11,8 @@
  *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача); «В работе» закрепляет
  *                          задачу за сессией — другой задаче в той же сессии отказ
  *   github task drop     — закрыть без выполнения и убрать из проекта
+ *   github task actualize — после мержа, параллельно с деплоем: задание субагенту актуализации блока (или «не нужна»)
+ *   github task close    — после мержа и деплоя: факт, «Готово», эпик и milestone, влитая ветка долой
  *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
  *   github pr premerge   — перед мержем: основная ветка ушла после CI PR — test:spec на слиянии с ней
  *
@@ -319,7 +321,7 @@ export const Q = {
       issueType { name }
       labels(first: 20) { nodes { name } }
       parent { id number }
-      subIssues(first: 100) { nodes { number state } }
+      subIssues(first: 100) { nodes { number state title } }
       milestone { id number title issues(states: OPEN) { totalCount } }
       closedByPullRequestsReferences(first: 20, includeClosedPrs: true) { nodes { number state merged headRefName baseRefName } }
       projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: "${STATUS}") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } }
@@ -1198,7 +1200,7 @@ interface Issue {
   type: string | null;
   labels: string[];
   parent: { id: string; number: number } | null;
-  subIssues: { number: number; state: string }[];
+  subIssues: { number: number; state: string; title: string }[];
   /** Milestone задачи и число открытых задач в нём (включая эту, если открыта). */
   milestone: { id: string; number: number; title: string; open: number } | null;
   /** PR, закрывающие задачу («Closes #N»), включая закрытые: влит ли, голова и база. */
@@ -1520,11 +1522,60 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 // Закрытие задачи одной командой
 // ----------------------------------------------------------------------------
 
+/** Пять проверок актуализации — из reference.md скилла, одного места канона: список между «Пять проверок:» и «Что поправил». */
+function actualizeChecks(): string {
+  const file = path.resolve(import.meta.dir, "../reference.md");
+  const m = existsSync(file) ? /Пять проверок:\n\n([\s\S]*?)\n\nЧто поправил/.exec(readFileSync(file, "utf8")) : null;
+  if (!m) throw new GhError(`пять проверок актуализации не найдены в ${file}: ожидается список между «Пять проверок:» и «Что поправил»`);
+  return m[1]!;
+}
+
+/**
+ * Задание субагенту актуализации блока — сразу после мержа, параллельно с деплоем: актуализация от деплоя не
+ * зависит. Сессия на пиковом контексте задание не собирает и справочник не читает — команда печатает его целиком:
+ * задача и её PR, эпик, его открытые задачи, пять проверок. Нет эпика или открытых задач в нём — строка «не нужна».
+ * Первым словом — «Задача #N»: по нему est привязывает работу субагента к задаче.
+ */
+export function cmdTaskActualize(io: Io, slug: string, number: number): number {
+  const issue = loadIssue(io, slug, number);
+  const later = `Дальше: task close ${number} — после деплоя, где мерж выкатывает.`;
+  if (!issue.parent) return io.out(`○ актуализация не нужна: у #${number} нет эпика. ${later}`), 0;
+  const epic = loadIssue(io, slug, issue.parent.number);
+  const open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number);
+  if (!open.length) return io.out(`○ актуализация не нужна: в эпике #${epic.number} открытых задач, кроме #${number}, нет. ${later}`), 0;
+  const checks = actualizeChecks();
+  const linked = issue.prs.filter((p) => p.merged);
+  const prs = linked.length ? linked : unlinkedPrs(io, slug, number).prs.filter((p) => p.merged);
+  const shipped = prs.length
+    ? `PR ${prs.map((p) => `#${p.number} (\`gh pr view ${p.number}\`, \`gh pr diff ${p.number}\`)`).join(", ")}`
+    : `PR не найден — коммиты \`git log origin/main --grep '#${number}'\``;
+  const github = `bun ${import.meta.path}`;
+  for (const line of [
+    `Задача #${number} (эпик #${epic.number}): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.`,
+    `Репозиторий ${slug}. Выкачено: #${number} ${q(issue.title)}, ${shipped}.`,
+    `Эпик #${epic.number} ${q(epic.title)}. Открытые задачи эпика:`,
+    ...open.map((x) => `- #${x.number} ${q(x.title)}`),
+    "",
+    "Пять проверок (канон — reference.md скилла github, «Актуализация блока при закрытии задачи»):",
+    "",
+    checks,
+    "",
+    `Меняешь только задачи GitHub — описание, «## Вопросы», связи, статус; скрипт скилла github — \`${github}\`: ` +
+      `без выполнения — \`task drop <N>\`, новая — \`task new … --epic ${epic.number}\` и оценка скиллом est. ` +
+      `Код, ветки и git не трогать; #${number}, эпик #${epic.number} и их milestone не закрывать — это сделает task close после тебя.`,
+    `Что поправил — одной строкой в комментарии к эпику #${epic.number} (\`gh issue comment ${epic.number} --repo ${slug}\`); править нечего — без комментария.`,
+    "Ответ — правки по строке с номерами задач и вопросы владельцу, если есть; иначе «Блок актуален».",
+  ])
+    io.out(line);
+  return 0;
+}
+
 /**
  * Ритуал закрытия после мержа PR — факт, Status «Готово», эпик, milestone, уборка влитой ветки — одним вызовом:
  * сессия делала его по шагу на ход на самом большом контексте. Актуализация блока (пять проверок канона) —
- * не здесь: её делает субагент со свежим контекстом, команда лишь называет это следующим шагом — и три строки, одной
- * из которых сессия после него заканчивает ответ, и архивацию сессии в режиме auto — кроме сессии с вопросами владельцу.
+ * не здесь: она идёт до close, параллельно с деплоем, субагентом с заданием `task actualize`; close о ней лишь
+ * напоминает, где в эпике есть открытые задачи, — и называет три строки, одной из которых сессия заканчивает ответ, и
+ * архивацию сессии в режиме auto — кроме сессии с вопросами владельцу.
  */
 export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
   const ctx = taskContext(io, slug);
@@ -1558,9 +1609,10 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   setStatus(io, ctx, item.id, DONE);
   io.out(`+ #${number}: ${STATUS} ${q(DONE)}${item.added ? " (добавлена в проект)" : ""}`);
   closeMilestone(io, slug, issue, wasOpen);
+  let open = 0; // открытые задачи эпика, кроме этой: есть — блок актуализирует субагент
   if (issue.parent) {
     const epic = loadIssue(io, slug, issue.parent.number);
-    const open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
+    open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
     if (epic.state === "OPEN" && epic.subIssues.length && !open) {
       mutate(io, { op: "CloseIssue", input: { issueId: epic.id, stateReason: "COMPLETED" } });
       setStatus(io, ctx, ensureItem(io, ctx, epic).id, DONE);
@@ -1570,8 +1622,8 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   }
   if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
   io.out(
-    `Дальше: актуализация блока — субагентом со свежим контекстом (задача #${number}${issue.parent ? `, эпик #${issue.parent.number}` : ""}), пять проверок — reference.md скилла github, «Актуализация блока при закрытии задачи»; ` +
-      `после неё — последней строкой ответа одна из трёх: «Всё сделано. Сессию можно закрывать.»; ` +
+    `Дальше: ${open ? `актуализация блока, если её не было до close, — субагент с заданием task actualize ${number}; затем ` : ""}` +
+      `последней строкой ответа одна из трёх: «Всё сделано. Сессию можно закрывать.»; ` +
       `владельцу есть что решать — «Всё сделано, но есть вопросы: …» с самими вопросами, без «Сессию можно закрывать»; ` +
       `что-то осталось — «Осталось: …». ` +
       // манифест проекта команда не читает: режим знает сессия, условие названо словами
@@ -1944,6 +1996,7 @@ const USAGE = `github — проект и задачи GitHub репозитор
                        [--labels <решение>,<вид>:<новое решение>,<метка>] [--repo owner/repo]
   github task status   <N> <Бэклог|В работе|Готово> [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
+  github task actualize <N> [--repo owner/repo]
   github task close    <N> [--no-git] [--repo owner/repo]
   github pr labels     <N> [--repo owner/repo]
   github pr premerge   <N> [--repo owner/repo]
@@ -1956,8 +2009,10 @@ fix   — исправляет через API; шаги UI печатает со
 task  — задача по канону; new печатает созданное и следующий шаг (оценка через est).
 task status — «В работе» закрепляет задачу за сессией (файл sessions/<CLAUDE_CODE_SESSION_ID> в ~/.config/ai-dev):
         другой задаче в той же сессии — отказ (код 2), ей нужна новая сессия; закрепление снимает человек.
-task close — после мержа PR (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
-        эпик и milestone, влитая ветка долой (--no-git — без git); актуализация блока — субагентом.
+task actualize — сразу после мержа, параллельно с деплоем: печатает задание субагенту актуализации блока (задача,
+        эпик, его открытые задачи, пять проверок); нет эпика или открытых задач в нём — «актуализация не нужна».
+task close — после мержа PR и деплоя (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
+        эпик и milestone, влитая ветка долой (--no-git — без git).
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
             только механически (удаление, переименование без правки, исключения), — строка ○, без метки.
 pr premerge — перед gh pr merge, после PASS ci-wait: основная ветка ушла после CI PR — слияние головы PR с ней
@@ -1984,9 +2039,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "close"], pr: ["labels", "premerge"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "actualize", "close"], pr: ["labels", "premerge"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|close или pr labels|premerge`);
+      io.err(`неизвестная команда «${argv.slice(0, 2).join(" ")}»; ожидается project check|fix, task new|status|drop|actualize|close или pr labels|premerge`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
@@ -2044,6 +2099,7 @@ export function main(argv: string[], io: Io): number {
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));
       if (positionals.length > 1) throw new GhError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
       if (cmd === "close") return cmdTaskClose(io, slug, number, { git: !values["no-git"] });
+      if (cmd === "actualize") return cmdTaskActualize(io, slug, number);
       return cmdTaskDrop(io, slug, number, values["duplicate-of"] === undefined ? undefined : issueNumber(values["duplicate-of"], "--duplicate-of"));
     }
     const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, confirm: { type: "boolean", default: false }, template: { type: "string", default: DEFAULT_TEMPLATE } } });

@@ -140,6 +140,8 @@ export class FakeGitHub {
     const i = this.issue(number);
     if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
     const out = structuredClone(i);
+    // подзадачи с заголовком, как у GitHub: заголовок — из записи подзадачи
+    out.subIssues = { nodes: i.subIssues.nodes.map((s: Any) => ({ ...s, title: this.issue(s.number)?.title ?? "" })) };
     const lag = this.issueRefLag[number] ?? 0;
     if (lag > 0) {
       this.issueRefLag[number] = lag - 1;
