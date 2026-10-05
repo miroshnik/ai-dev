@@ -132,7 +132,7 @@ npx -y github:miroshnik/ai-dev install -g
 Держать флоу актуальным:
 
 ```bash
-npx -y github:miroshnik/ai-dev check -g    # 0 — актуально, 1 — отстаёт, 2 — не проверить; ничего не меняет
+npx -y github:miroshnik/ai-dev check -g    # 0 — актуально, 1 — отстаёт (в проекте и: git игнорирует файлы флоу), 2 — не проверить; ничего не меняет
 npx -y github:miroshnik/ai-dev update -g   # довести до последнего релиза
 ```
 
@@ -149,6 +149,7 @@ npx -y github:miroshnik/ai-dev update -g   # довести до последн�
 - Claude Code — симлинки `.claude/rules/ai-dev.md`, `.claude/rules/ai-dev-claude.md` (грузятся сами, при любом `CLAUDE.md` проекта) и `.claude/skills/<name>`.
 - Остальные агенты — блок в начале `AGENTS.md` проекта со ссылкой на `.agents/ai-dev/AGENTS.md` (целиком канон не влезет в бюджет Codex — 32 КиБ на все `AGENTS.md` проекта) и `.agents/skills/` — общая точка скиллов Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp.
 - Обновление — `update` и коммит копии `chore(agents): флоу ai-dev <тег>`; `.agents/` и `.claude/` исключить из линтеров и форматтеров проекта.
+- Файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`, `vendor/`), `install` и `update` снимают исключениями — блок ai-dev в конце `.gitignore`, коммитится с копией; что исключением не снять (каталог исключён личным правилом), и игнорируемое до `update` — `❌` в выводе установки и `check`.
 
 **На машину** (`-g`) — только скиллы и хук, правил на машине нет: их грузит проект, а вторая копия читалась бы на каждом ходу каждого агента (~20k токенов). `~/.agents/skills` — всем агентам; Claude Code — ещё `~/.claude/skills` и хук `SessionStart` в `~/.claude/settings.json`. Правила прошлой установки (`~/.agents/ai-dev`, симлинки `~/.claude/rules` и глобальных файлов Codex, Gemini CLI, Copilot CLI, OpenCode, Amp) `install -g` убирает; чужой файл не трогает.
 
