@@ -13,7 +13,7 @@ README читают первым, а правят последним: новый
 
 ## README называет всё, что ставит флоу, и не ссылается на то, чего нет
 
-<details><summary>✅ 46 тестов</summary>
+<details><summary>✅ 48 тестов</summary>
 
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, ai-dev install, ai-dev release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
@@ -26,10 +26,12 @@ README читают первым, а правят последним: новый
 - ✅ README: скилл dashboard — со ссылкой на skills/dashboard/SKILL.md
 - ✅ README: скилл est — со ссылкой на skills/est/SKILL.md
 - ✅ README: скилл github — со ссылкой на skills/github/SKILL.md
+- ✅ README: скилл slot — со ссылкой на skills/slot/SKILL.md
 - ✅ README: скилл spec — со ссылкой на skills/spec/SKILL.md
 - ✅ README: скрипт dashboard скилла dashboard назван
 - ✅ README: скрипт est скилла est назван
 - ✅ README: скрипт github скилла github назван
+- ✅ README: скрипт slot скилла slot назван
 - ✅ README: скрипт spec-break скилла spec назван
 - ✅ README: скрипт spec-claims скилла spec назван
 - ✅ README: скрипт spec-diff скилла spec назван

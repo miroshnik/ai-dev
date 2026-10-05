@@ -29,7 +29,7 @@
 
 ## Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev
 
-<details><summary>✅ 7 тестов</summary>
+<details><summary>✅ 8 тестов</summary>
 
 - ✅ реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» не пуст
 - ✅ реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/ai-dev.mjs
@@ -37,6 +37,7 @@
 - ✅ нарушитель не проходит: скрипт читает AI_DEV_CONFIG_DIR, а каталог по умолчанию у него свой
 - ✅ skills/est/scripts/est.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev
 - ✅ skills/github/scripts/github.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev
+- ✅ skills/slot/scripts/slot.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev
 - ✅ вне охвата: bin/ai-dev.mjs
   > установщик каталог не вычисляет, а готовит место по умолчанию: `install -g` с `AI_DEV_PRIVATE` делает `~/.config/ai-dev` симлинком на личный чекаут; `AI_DEV_CONFIG_DIR` переопределяет каталог целиком — симлинк ей не нужен, скиллы смотрят туда, куда она указывает
 

@@ -20,7 +20,7 @@ GitHub, фрагменты CI — живёт там, где его читают 
 
 ## Ядро канона умещается в бюджет контекста
 
-<details><summary>✅ 18 тестов</summary>
+<details><summary>✅ 19 тестов</summary>
 
 - ✅ реестр «файлы ядра канона с бюджетом» не пуст
 - ✅ реестр «файлы ядра канона с бюджетом» находит AGENTS.md, claude/CLAUDE.md
@@ -39,6 +39,7 @@ GitHub, фрагменты CI — живёт там, где его читают 
 - ✅ skills/ci-wait/SKILL.md есть в репозитории
 - ✅ skills/est/SKILL.md есть в репозитории
 - ✅ skills/github/SKILL.md есть в репозитории
+- ✅ skills/slot/SKILL.md есть в репозитории
 - ✅ skills/spec/SKILL.md есть в репозитории
 
 </details>

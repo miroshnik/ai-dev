@@ -2345,6 +2345,41 @@
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "обёрнутый скрипт идёт как прежде: кавычки команды на месте, аргументы — в её конце"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "повторная установка не оборачивает дважды, отступ и конец package.json — как были"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "проект на Bun зовёт slot через bun, остальные — через node"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
    "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
   ],
   "name": "игнорируются .agents/ и vendor/ — после install ни один файл флоу не игнорируется, свои vendor/ проекта и прочее в .agents игнорируются"
@@ -2432,6 +2467,76 @@
    "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
   ],
   "name": "релиз того же дня уже есть — патч: .1, затем .2"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Без очереди — там, где она лишняя или ждала бы сама себя"
+  ],
+  "name": "в CI команда идёт сразу, без очереди"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Без очереди — там, где она лишняя или ждала бы сама себя"
+  ],
+  "name": "вложенный вызов внутри слота идёт сразу"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Команда в слоте — как без него, с долей ядер для раннера"
+  ],
+  "name": "аргументы дописываются в конец команды, как у npm run"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Команда в слоте — как без него, с долей ядер для раннера"
+  ],
+  "name": "код выхода — код команды"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Команда в слоте — как без него, с долей ядер для раннера"
+  ],
+  "name": "команда получает четверть ядер в AI_DEV_SLOT_CPUS"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Команда в слоте — как без него, с долей ядер для раннера"
+  ],
+  "name": "под Node без Bun — то же, что под Bun"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода"
+  ],
+  "name": "ожидающая команда печатает, кого ждёт"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода"
+  ],
+  "name": "очередь — по порядку прихода"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода"
+  ],
+  "name": "слот процесса, убитого без уборки, освобождается"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода"
+  ],
+  "name": "третья команда ждёт, пока идут две, и стартует, когда одна закончилась"
  },
  {
   "path": "tests/capabilities/spec-break/spec-break.test.ts",
@@ -2821,6 +2926,13 @@
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
   "describes": [
+   "Изменённые тесты вне дерева видны по имени файла"
+  ],
+  "name": "файл теста в копии флоу (`.agents/`, `.claude/`) в список вне дерева не попадает"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
    "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
   ],
   "name": "--worktree: перенос до коммита тоже сворачивается"
@@ -2915,6 +3027,13 @@
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
   "name": "модуль, зависимость и пакет модели архитектуры: добавленные и снятые"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
+  "name": "отключение линта в копии флоу (`.agents/`, `.claude/`) — не исключение проекта, тот же файл вне копии — исключение"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -4853,6 +4972,13 @@
   "describes": [
    "Ядро канона умещается в бюджет контекста"
   ],
+  "name": "skills/slot/SKILL.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
   "name": "skills/spec/SKILL.md есть в репозитории"
  },
  {
@@ -4988,6 +5114,13 @@
    "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
   ],
   "name": "skills/github/scripts/github.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  ],
+  "name": "skills/slot/scripts/slot.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
@@ -5371,6 +5504,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: скилл slot — со ссылкой на skills/slot/SKILL.md"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: скилл spec — со ссылкой на skills/spec/SKILL.md"
  },
  {
@@ -5393,6 +5533,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: скрипт github скилла github назван"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: скрипт slot скилла slot назван"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -5621,6 +5768,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/release/release.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/slot/slot.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
