@@ -190,6 +190,70 @@ describe("Счета", () => {
 });
 
 /**
+ * У каждого пакета монорепо свой раннер (алиасы, окружение, плагины), а решение одно — и страница одна: тесты решения
+ * лежат по подпапкам пакетов `tests/<вид>/<имя>/<пакет>/`, главный файл — в корне папки или в подпапке пакета.
+ */
+describe("В монорепо подпапка пакета — часть папки решения", () => {
+  const EXPORT = "tests/capabilities/export";
+  const at = (out: string) => (s: string) => out.indexOf(s);
+
+  it("главный файл в подпапке пакета открывает страницу решения", () => {
+    writeTree(dir, {
+      [`${EXPORT}/export.md`]: "Экспорт отчётов.\n",
+      [`${EXPORT}/web/a.test.ts`]: `import { describe, it } from "bun:test";\ndescribe("Формат", () => { it("CSV по умолчанию", () => {}); });\n`,
+      [`${EXPORT}/web/export.test.ts`]: `import { describe, it } from "bun:test";\ndescribe("Кнопка", () => { it("скачивает файл", () => {}); });\n`,
+    });
+    const r = doc(
+      "r.json",
+      vitestReport(dir, {
+        [`${EXPORT}/web/a.test.ts`]: [[["Формат"], "CSV по умолчанию"]],
+        [`${EXPORT}/web/export.test.ts`]: [[["Кнопка"], "скачивает файл"]],
+      }),
+      "--stdout",
+      "--strict",
+    );
+    expect(r.stderr).not.toContain("нет главного файла");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("### export\n\nЭкспорт отчётов.\n\n#### Кнопка\n\n");
+    expect(at(r.stdout)("#### Кнопка")).toBeLessThan(at(r.stdout)("#### Формат"));
+  });
+
+  // по пути `api/export.test.ts` раньше `export.test.ts`: равный ранг главных файлов отдал бы страницу пакету
+  it("главный файл в корне папки решения идёт раньше главных файлов подпапок", () => {
+    const r = doc(
+      "r.json",
+      vitestReport(dir, {
+        [`${EXPORT}/a.test.ts`]: [[["Права"], "только владелец отчёта"]],
+        [`${EXPORT}/api/export.test.ts`]: [[["Выгрузка"], "отдаёт файл по ссылке"]],
+        [`${EXPORT}/export.test.ts`]: [[["Отчёт"], "собирается из всех пакетов"]],
+      }),
+      "--stdout",
+    );
+    const pos = at(r.stdout);
+    expect(pos("#### Отчёт")).toBeLessThan(pos("#### Выгрузка"));
+    expect(pos("#### Выгрузка")).toBeLessThan(pos("#### Права"));
+  });
+
+  it("главные файлы двух пакетов идут по имени пакета", () => {
+    const r = doc(
+      "r.json",
+      vitestReport(dir, {
+        [`${EXPORT}/web/export.test.ts`]: [[["Кнопка"], "скачивает файл"]],
+        [`${EXPORT}/api/a.test.ts`]: [[["Права"], "только владелец отчёта"]],
+        [`${EXPORT}/api/export.e2e.ts`]: [[["Выгрузка"], "ссылка открывается в браузере"]],
+        [`${EXPORT}/api/export.test.ts`]: [[["Выгрузка"], "отдаёт файл по ссылке"]],
+      }),
+      "--stdout",
+    );
+    const pos = at(r.stdout);
+    expect(pos("#### Выгрузка")).toBeLessThan(pos("#### Кнопка"));
+    expect(pos("#### Кнопка")).toBeLessThan(pos("#### Права"));
+    // в пакете — как в корне папки: юниты, затем e2e
+    expect(pos("отдаёт файл по ссылке")).toBeLessThan(pos("ссылка открывается в браузере"));
+  });
+});
+
+/**
  * Отчёты раннеров комментариев не несут — прозу `spec-doc` берёт из `<папка>.md` и JSDoc у `describe` и `it` тем же
  * сканером, что `spec-diff`. Причины решений и отвергнутое — в `<папка>.md`; устройство теста и ссылки на задачи —
  * `//`, для читателя кода.
@@ -525,6 +589,29 @@ describe("Нарушение структуры спеки видно при с�
     expect(r.code).toBe(0);
     expect(r.stderr).toContain("нет главного файла tests/capabilities/billing/billing.test.ts — его describe открывают страницу");
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
+  });
+
+  // главный файл — `<имя>.*` в корне папки или в подпапке пакета; файл по имени пакета и вложенная глубже — не главные
+  it("папка без главного файла ни в корне, ни в подпапках — «нет главного файла»", () => {
+    const EXPORT = "tests/capabilities/export";
+    writeTree(dir, {
+      [`${EXPORT}/export.md`]: "Экспорт.\n",
+      [`${EXPORT}/web/web.test.ts`]: `import { it } from "bun:test";\nit("кнопка скачивает файл", () => {});\n`,
+      [`${EXPORT}/web/e2e/export.e2e.ts`]: `import { it } from "bun:test";\nit("файл открывается", () => {});\n`,
+    });
+    const report = vitestReport(dir, {
+      [`${EXPORT}/web/web.test.ts`]: [[[], "кнопка скачивает файл"]],
+      [`${EXPORT}/web/e2e/export.e2e.ts`]: [[[], "файл открывается"]],
+    });
+    const r = doc("r.json", report, "--stdout");
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain(
+      `нет главного файла ${EXPORT}/export.test.ts или ${EXPORT}/<пакет>/export.test.ts — его describe открывают страницу`,
+    );
+    expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
+    // главный файл другого пакета — на диске, его тестов в этом отчёте нет: главный файл у папки есть
+    writeTree(dir, { [`${EXPORT}/api/export.test.ts`]: `import { it } from "bun:test";\nit("отдаёт файл", () => {});\n` });
+    expect(doc("r.json", report, "--stdout", "--strict").code).toBe(0);
   });
 
   // Название — требование; идентификатор или английская фраза не говорят читателю спеки, что система делает
