@@ -1,13 +1,19 @@
+import { spawnSync } from "node:child_process";
 import { chmodSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { deadCode, envNamesIn, envVars } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
-import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { tmpDir, writeTree } from "../../lib/spec.ts";
+import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
+
+// TypeScript и типы Node — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
+const TSC = path.join(path.dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin/tsc");
+const TYPES = path.join(path.dirname(createRequire(import.meta.url).resolve("@types/node/package.json")), "..");
 
 // `it` раннера подменяется сборщиком: харнесс только регистрирует тесты, запускать их — дело раннера
 async function outcomes(register: (it: It) => void): Promise<Record<string, string>> {
@@ -173,5 +179,20 @@ describe("Каждая переменная окружения объявлен�
 
   it("переменная в комментарии — не чтение", () => {
     expect(envNamesIn("// раньше: process.env.OLD_KEY\n/* process.env.GONE */\nconst k = process.env.NEW_KEY;\n")).toEqual(["NEW_KEY"]);
+  });
+
+  // проект зовёт `sources.flatMap(envNamesIn)`: второй необязательный параметр получил бы индекс flatMap — TS2345 (#303)
+  it("envNamesIn вызывается ссылкой в flatMap без ошибки типов: параметр у неё один", () => {
+    writeTree(dir, {
+      "env.test.mts": `import { envNamesIn } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};\n\nexport const names: string[] = ["const a = process.env.A;"].flatMap(envNamesIn);\n`,
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { strict: true, target: "es2022", module: "nodenext", noEmit: true, allowImportingTsExtensions: true, skipLibCheck: true, typeRoots: [TYPES], types: ["node"] },
+        files: ["env.test.mts"],
+      }),
+    });
+    const r = spawnSync("node", [TSC, "-p", dir], { encoding: "utf8" });
+    expect(r.stdout + r.stderr).toBe("");
+    expect(exitOf(r)).toBe(0);
+    expect(["const a = process.env.A; // process.env.OLD", "const b = import.meta.env.VITE_B;"].flatMap(envNamesIn)).toEqual(["A", "VITE_B"]);
   });
 });

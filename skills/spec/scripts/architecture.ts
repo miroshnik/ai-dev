@@ -15,7 +15,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 
-import { codeOnly, envNamesIn, invariant } from "./harness.ts";
+import { codeOnly, envNamesInCode, invariant } from "./harness.ts";
 import type { Exception, Invariant, It } from "./harness.ts";
 
 export interface Module {
@@ -219,7 +219,7 @@ function sources(root: string, model: Model): Source[] {
         if (!SKIP.has(e.name)) walk(child);
       } else if (CODE.test(e.name) && !/\.d\.[cm]?ts$/.test(e.name)) {
         const text = readFileSync(path.join(root, child), "utf8");
-        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsIn(text, child), env: envNamesIn(text, child) });
+        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsIn(text, child), env: envNamesInCode(text) });
       }
     }
   };
