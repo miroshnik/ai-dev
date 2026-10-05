@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -183,6 +183,86 @@ describe("Файлы флоу не игнорируются git проекта �
     expect(r.stderr).toContain("❌ .claude/ — ");
     expect(r.stderr).toContain(".config/git/ignore:2 «.claude/»");
     expect(ignored()).toEqual([".claude/rules/ai-dev-claude.md", ".claude/rules/ai-dev.md", ...SKILLS.map((s) => `.claude/skills/${s}`)]);
+  });
+});
+
+/**
+ * Тяжёлые проверки проекта идут очередью машины (capability `slot`). Обёртка — в самих скриптах `package.json`: их
+ * зовёт любой — Claude, Codex, человек в терминале. `build` не оборачивается — его запускают хостинг и Docker, где
+ * копии скилла может не быть; watch — долгий, занял бы слот надолго.
+ */
+describe("Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot", () => {
+  const SCRIPTS = {
+    build: "next build",
+    dev: "next dev",
+    lint: "eslint .",
+    typecheck: "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    test: "vitest run",
+    "test:e2e": "playwright test",
+    "test:watch": "vitest",
+  };
+  const pkgFile = () => path.join(proj, "package.json");
+  const scripts = () => JSON.parse(read(pkgFile())).scripts;
+  const slot = (runtime: string, cmd: string) => `${runtime} .agents/skills/slot/scripts/slot.ts '${cmd}'`;
+
+  it("установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ name: "app", scripts: SCRIPTS }, null, 2) + "\n" });
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("package.json");
+    expect(scripts()).toEqual({
+      ...SCRIPTS,
+      lint: slot("node", "eslint ."),
+      typecheck: slot("node", SCRIPTS.typecheck),
+      test: slot("node", "vitest run"),
+      "test:e2e": slot("node", "playwright test"),
+    });
+  });
+
+  /** npm и bun дописывают аргументы к скрипту в конец его строки: `npm test -- <файл>` — так же и с обёрткой. */
+  it("обёрнутый скрипт идёт как прежде: кавычки команды на месте, аргументы — в её конце", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: `printf '%s|' "it's"` } }) });
+    install();
+    const r = spawnSync("sh", ["-c", `${scripts().test} 'a b'`], { cwd: proj, env, encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toBe("it's|a b|");
+  });
+
+  it("повторная установка не оборачивает дважды, отступ и конец package.json — как были", () => {
+    writeTree(proj, { "package.json": `{\n\t"name": "app",\n\t"scripts": {\n\t\t"test": "vitest run"\n\t}\n}` });
+    install();
+    const once = read(pkgFile());
+    expect(once).toBe(`{\n\t"name": "app",\n\t"scripts": {\n\t\t"test": "${slot("node", "vitest run")}"\n\t}\n}`);
+    install();
+    expect(read(pkgFile())).toBe(once);
+  });
+
+  it("проект на Bun зовёт slot через bun, остальные — через node", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: "bun test" } }), "bun.lock": "" });
+    install();
+    expect(scripts().test).toBe(slot("bun", "bun test"));
+    rmSync(path.join(proj, "bun.lock"));
+    install();
+    expect(scripts().test).toBe(slot("node", "bun test"));
+    writeTree(proj, { "package.json": JSON.stringify({ packageManager: "bun@1.4.2", scripts: { test: "bun test" } }) });
+    install();
+    expect(scripts().test).toBe(slot("bun", "bun test"));
+  });
+
+  it("check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "vitest run" } }) });
+    install();
+    expect(aiDev(sb, ["check"]).code).toBe(0);
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: "vitest run" } }) });
+    const c = aiDev(sb, ["check"]);
+    expect(c.code).toBe(1);
+    expect(c.stdout).toMatch(/~ package\.json — [^\n]*\btest\b/);
+    expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
+    const u = aiDev(sb, ["update"]);
+    expect(u.code).toBe(0);
+    expect(scripts().test).toBe(slot("node", "vitest run"));
+    expect(u.stdout).toMatch(/git add [^\n]* package\.json/);
+    expect(aiDev(sb, ["check"]).code).toBe(0);
   });
 });
 

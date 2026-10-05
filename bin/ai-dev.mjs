@@ -25,7 +25,8 @@
  * не меняет. В клон ai-dev флоу не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto`.
  * Копия в проекте коммитится — файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`),
  * установка снимает исключениями блоком ai-dev в конце `.gitignore`, `check` называет их несоответствием
- * (`gitignoreFlow`).
+ * (`gitignoreFlow`). Проверки проекта — скрипты `package.json` `lint`, `typecheck`, `test`, `test:*` — установка
+ * оборачивает в очередь машины, скилл slot (`slotScripts`).
  *
  * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
  * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
@@ -89,7 +90,8 @@ const USAGE = `Использование: ai-dev <команда> [-g]
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
   update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
                      (режим проекта — auto — сохраняется); в проекте install и update снимают с файлов флоу шаблоны
-                     .gitignore исключениями в его конце
+                     .gitignore исключениями в его конце и оборачивают проверки package.json (lint, typecheck,
+                     test, test:*) в очередь машины slot
   release [--dry-run]  из клона ai-dev: тег vГГГГ.ММ.ДД на origin/main и GitHub Release со списком изменений флоу
                      с прошлого релиза; --dry-run — только показать
 
@@ -360,6 +362,7 @@ function readManifest(root) {
  * auto — настройка проекта «задача целиком без спроса», пишется всегда; у машины её нет (undefined).
  * Холостой прогон её тоже не сравнивает: правка поля руками установку «отставшей» не делает.
  * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude @param {boolean} [auto]
+ * @returns {string[]} поставленные скиллы
  */
 function installSkills(src, root, linkMode, claude, auto) {
   const manifestPath = path.join(root, ".agents/ai-dev.json");
@@ -393,11 +396,60 @@ function installSkills(src, root, linkMode, claude, auto) {
   if (dry) {
     const m = readManifest(root);
     if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
-    return;
+    return installed;
   }
   const sha = sourceSha(src);
   const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }) };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  return installed;
+}
+
+/** Скрипт очереди машины в копии флоу проекта: его зовут скрипты package.json, в CI тоже (там — сразу, без очереди). */
+const SLOT_SCRIPT = ".agents/skills/slot/scripts/slot.ts";
+/** Скрипт package.json, уже обёрнутый в slot (любым рантаймом): команда — в кавычках sh. */
+const SLOT_WRAPPED = /^(?:node|bun) \.agents\/skills\/slot\/scripts\/slot\.ts '((?:[^']|'\\'')*)'$/;
+/**
+ * Скрипты проверок, которые идут очередью машины: `lint`, `typecheck`, `test`, `test:*`. Не `build` — его запускают
+ * хостинг и Docker, где копии скилла может не быть; не watch — долгий, занял бы слот надолго.
+ * @param {string} name
+ */
+const slotted = (name) => /^(?:lint|typecheck|test)$|^test:/.test(name) && !name.includes("watch");
+
+/**
+ * Проверки проекта — очередью машины (скилл slot): скрипты `slotted` в package.json корня оборачиваются в
+ * `<рантайм> SLOT_SCRIPT '<команда>'` — их зовёт любой агент и человек. Рантайм — bun у проекта на Bun
+ * (`packageManager`, `bun.lock`), иначе node. Уже обёрнутый — переписывается только при смене рантайма. Отступ и
+ * перевод строки в конце файла — как были. Скилл slot не поставлен (чужой каталог с тем же именем) — не трогаем.
+ * @param {string} root @param {string[]} skills поставленные скиллы @returns {boolean} package.json изменён
+ */
+function slotScripts(root, skills) {
+  const file = path.join(root, "package.json");
+  if (!skills.includes("slot") || !existsSync(file)) return false;
+  const text = readFileSync(file, "utf8");
+  /** @type {{ scripts?: Record<string, unknown>, packageManager?: unknown }} */
+  let pkg;
+  try {
+    pkg = JSON.parse(text);
+  } catch {
+    return warn("package.json — не JSON: проверки проекта не обёрнуты в очередь slot"), false;
+  }
+  const scripts = pkg.scripts;
+  if (!scripts || typeof scripts !== "object") return false;
+  const bun = String(pkg.packageManager ?? "").startsWith("bun@") || ["bun.lock", "bun.lockb"].some((f) => existsSync(path.join(root, f)));
+  /** @type {string[]} */
+  const wrapped = [];
+  for (const [name, cmd] of Object.entries(scripts)) {
+    if (!slotted(name) || typeof cmd !== "string") continue;
+    const inner = SLOT_WRAPPED.exec(cmd)?.[1]?.replaceAll("'\\''", "'") ?? cmd;
+    const want = `${bun ? "bun" : "node"} ${SLOT_SCRIPT} '${inner.replaceAll("'", "'\\''")}'`;
+    if (cmd !== want) (scripts[name] = want), wrapped.push(name);
+  }
+  if (!wrapped.length) return false;
+  if (dry) return change("~", file, { note: `проверки без очереди slot: ${wrapped.join(", ")}` }), false;
+  const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? 2;
+  writeFileSync(file, JSON.stringify(pkg, null, indent) + (text.endsWith("\n") ? "\n" : ""));
+  note(`package.json — проверки очередью машины (slot): ${wrapped.join(", ")}`);
+  return true;
 }
 
 /** Claude Code: правила из `.claude/rules` грузятся сами, при любом CLAUDE.md. @param {string} root */
@@ -667,14 +719,16 @@ function installClone(root, auto) {
 /**
  * auto — режим проекта; его задаёт только `install` (флаг или вопрос в терминале), `update` и `check` идут с прежним
  * значением манифеста.
- * @param {string} src @param {string} root @param {boolean} [auto] @returns {boolean} `.gitignore` изменён
+ * @param {string} src @param {string} root @param {boolean} [auto] @returns {string[]} изменённые файлы проекта вне
+ * копии флоу — им тоже в коммит
  */
 function installProject(src, root, auto = autoOf(root)) {
   installRules(src, root, false);
-  installSkills(src, root, false, true, auto);
+  const skills = installSkills(src, root, false, true, auto);
   claudeRules(root);
   agentsBlock(root);
-  return gitignoreFlow(root);
+  const pkg = slotScripts(root, skills);
+  return [...(gitignoreFlow(root) ? [".gitignore"] : []), ...(pkg ? ["package.json"] : [])];
 }
 
 /** Глобальные файлы правил агентов, которые прошлая установка делала симлинками на `~/.agents/ai-dev/AGENTS.md`. */
@@ -929,12 +983,12 @@ function update(global) {
   }
   const root = projectRoot();
   if (isAiDevClone(root)) return note(CLONE_NOTE), 0;
-  const gitignore = installProject(SRC, root);
+  const changed = installProject(SRC, root);
   const version = release ?? short(sourceSha(SRC));
   note(
     [
       "Копию в проекте — отдельным коммитом в ветку текущей задачи:",
-      `  git add -A .agents .claude/rules .claude/skills AGENTS.md${gitignore ? " .gitignore" : ""} && git commit -m "chore(agents): флоу ai-dev${version ? ` ${version}` : ""}"`,
+      `  git add -A .agents .claude/rules .claude/skills AGENTS.md${changed.map((f) => ` ${f}`).join("")} && git commit -m "chore(agents): флоу ai-dev${version ? ` ${version}` : ""}"`,
     ].join("\n"),
   );
   return 0;
