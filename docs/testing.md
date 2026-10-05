@@ -23,6 +23,10 @@ env-файлы читает каждая команда, что вшиваетс
   workers: Number(process.env.AI_DEV_SLOT_CPUS) || (process.env.CI ? 2 : undefined), // playwright.config.ts
   ```
 
+  Монорепо на turbo 2 — `"globalPassThroughEnv": ["AI_DEV_SLOT",
+  "AI_DEV_SLOT_CPUS"]` в `turbo.json`: strict env mode иначе не пропустит их
+  задачам, а `env`/`globalEnv` внесли бы их в хэш кэша.
+
   Время сравнивать по CI или по CPU (`user` у `time`), а не по wall-clock: в
   нём и ожидание очереди. Флаку проверять повтором (`--repeat-each`) —
   скриптом проекта, в слоте, иначе повтор меряет соседей.

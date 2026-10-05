@@ -59,6 +59,20 @@ workers: Number(process.env.AI_DEV_SLOT_CPUS) || (process.env.CI ? 2 : undefined
 // jest — флагом скрипта: jest --maxWorkers=${AI_DEV_SLOT_CPUS:-50%}
 ```
 
+**Монорепо на turbo.** turbo 2 в strict env mode (по умолчанию) пропускает
+задачам только переменные, названные в `turbo.json`: без проброса конфиг
+раннера `AI_DEV_SLOT_CPUS` не видит и берёт машину целиком, а вложенный
+скрипт в `slot` без `AI_DEV_SLOT` ждёт собственный слот. В корень
+`turbo.json`:
+
+```json
+"globalPassThroughEnv": ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"]
+```
+
+Не `env` и не `globalEnv`: они входят в хэш кэша, а `AI_DEV_SLOT` у каждого
+прогона свой и доля ядер зависит от машины. Скрипт в `slot` зовёт turbo без
+проброса — `install` и `check` предупреждают готовой строкой.
+
 ## Очередь
 
 Билет на прогон — файл `<время>-<pid>` в `slots/` каталога личной
