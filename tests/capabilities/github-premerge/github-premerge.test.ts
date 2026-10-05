@@ -258,7 +258,7 @@ const MAIN_RED = "⛔ не вливать: main красный, не этот PR
 describe("pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR", () => {
   const AFTER = "2026-10-02T10:20:00Z";
 
-  it("красный test:spec и на слиянии PR, и на голом main — код 3 «main красный», а не «PR ломает»", () => {
+  it("красный test:spec и на слиянии PR, и на голом main — premerge выходит отдельным кодом «main красный», а не «PR ломает»", () => {
     // после CI PR main сам сломал реестр; PR его не трогает
     const p = project({ pr: { "other.txt": "x\n" }, mainAfter: { "uses.txt": "z\n" } });
     const proc = processes();
