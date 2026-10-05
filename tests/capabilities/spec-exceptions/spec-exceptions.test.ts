@@ -18,13 +18,12 @@ const HARNESS = JSON.stringify(path.join(SCRIPTS, "harness.ts"));
 const read = (rel: string) => readFileSync(path.join(dir, rel), "utf8");
 const migrate = (...args: string[]) => runScript("spec-exceptions", args, dir);
 
-// исключения проекта до переезда — модуль с типом из харнесса и двумя соглашениями папки; ключи в кавычках:
-// spec-diff ищет проверки харнесса по литералам rule и registry в исходниках тестов, фикстура — не проверка
+// исключения проекта до переезда — модуль с типом из харнесса и двумя соглашениями папки
 const LEGACY = `import type { Exception } from ${HARNESS};
 
 const exceptions: Exception[] = [
   { item: "importLegacy", issue: 12, reason: "импорт старых данных — аудит в #12" },
-  { item: "export:src/math.ts#factorial", "rule": "cancel", issue: 7, reason: "уйдёт в #7" },
+  { item: "export:src/math.ts#factorial", rule: "cancel", issue: 7, reason: "уйдёт в #7" },
 ];
 export default exceptions;
 `;
@@ -35,7 +34,7 @@ import exceptions from "./exceptions.ts";
 import { other } from "./other.ts";
 
 invariant(it, {
-  "registry": "мутации",
+  registry: "мутации",
   items: ["createInvoice", "importLegacy"],
   name: (m) => m + " пишет аудит" + other,
   key: (m) => m,
@@ -44,8 +43,8 @@ invariant(it, {
   exceptions,
 });
 invariant(it, {
-  "rule": "cancel",
-  "registry": "отмены",
+  rule: "cancel",
+  registry: "отмены",
   items: ["export:src/math.ts#factorial", "importLegacy"],
   name: (m) => m + " отменяется",
   key: (m) => m,
