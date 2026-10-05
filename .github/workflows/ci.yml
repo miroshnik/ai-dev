@@ -1,7 +1,7 @@
 # CI ai-dev: тесты скиллов (bun test), типы, документация спеки собирается (--strict), дифф спеки в summary PR;
 # на main — публикация docs/spec в ветку spec (в main документации нет). Ветки и PR — параллельно, устаревший прогон PR отменяется;
-# прогон main не отменяется (docs/ci-concurrency.md, вариант «CI и деплой в одном workflow»
-# — деплоя здесь нет, но правило то же).
+# прогон main не отменяется и не вытесняется (docs/ci-concurrency.md): группа у него своя — общий ресурс (ветка spec) только
+# у spec-publish, очередь — там.
 name: CI
 
 on:
@@ -10,7 +10,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -36,15 +36,17 @@ jobs:
         if: github.event_name == 'pull_request'
         run: bun run spec:diff --base "origin/${{ github.base_ref }}" --report .spec-report.xml --full >> "$GITHUB_STEP_SUMMARY"
 
-  # Токен на запись — только здесь: job не ставит зависимости и не идёт на PR. Публикации — по очереди, не отменяются.
+  # Токен на запись — только здесь: job не ставит зависимости и не идёт на PR. Публикации — по очереди, не отменяются и не
+  # вытесняются (queue: max); прогоны main параллельны, порядок публикаций держит «уже новее» spec-publish — нужна история.
   spec-publish:
     if: github.event_name == 'push'
     needs: tests
     runs-on: ubuntu-latest
     permissions: { contents: write }
-    concurrency: { group: spec-publish, cancel-in-progress: false }
+    concurrency: { group: spec-publish, queue: max }
     steps:
       - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: docs-spec, path: docs/spec }
