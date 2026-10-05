@@ -153,6 +153,57 @@ describe("Копия в проекте сверяется со свежим ai-d
   });
 });
 
+/**
+ * Копия, которую игнорирует git проекта, в коммит не попадёт — чужой чекаут и облачная сессия работают без неё. Это
+ * несоответствие флоу, как отставание: чинит тот же `update` (capability `install` — как).
+ */
+describe("Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением", () => {
+  it("check: код 1, ❌ с путём и правилом, команда update; check ничего не меняет", () => {
+    aiDev(sb, ["install"]);
+    writeFileSync(path.join(sb.proj, ".gitignore"), "CLAUDE.md\n");
+    const before = snapshot(sb.proj);
+    const r = aiDev(sb, ["check"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("в проекте: актуально");
+    expect(r.stdout).toContain("git игнорирует файлы флоу");
+    expect(r.stdout).toContain("  ❌ .agents/ai-dev/claude/CLAUDE.md — .gitignore:1 «CLAUDE.md»\n");
+    expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update — допишет исключения в .gitignore\n");
+    expect(r.stdout).toEndWith(MODE_ASK);
+    expect(snapshot(sb.proj)).toEqual(before);
+  });
+
+  it("update дописывает исключения, подсказка коммита включает .gitignore — её git add берёт копию и симлинки; после него check — актуально", () => {
+    aiDev(sb, ["install"]);
+    writeFileSync(path.join(sb.proj, ".gitignore"), "CLAUDE.md\n.claude/\n");
+    const u = aiDev(sb, ["update"]);
+    expect(u.code).toBe(0);
+    const add = /git add -A [^&\n]+/.exec(u.stdout)?.[0] ?? "";
+    expect(add).toContain(".gitignore");
+    execFileSync("sh", ["-c", add], { cwd: sb.proj, env: sb.env });
+    const staged = git(sb.proj, "diff", "--cached", "--name-only").split("\n");
+    expect(staged).toEqual(expect.arrayContaining([".gitignore", ".agents/ai-dev/claude/CLAUDE.md", ".claude/rules/ai-dev-claude.md", ".claude/skills/spec"]));
+    expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringContaining("в проекте: актуально") });
+  });
+
+  /** Сторож от перекоррекции: свои правки .gitignore проекта в коммит флоу не уходят. */
+  it("ничего не игнорируется — подсказка коммита update без .gitignore", () => {
+    aiDev(sb, ["install"]);
+    writeFileSync(path.join(sb.proj, ".gitignore"), "dist/\n");
+    expect(aiDev(sb, ["update"]).stdout).toContain("git add -A .agents .claude/rules .claude/skills AGENTS.md && git commit");
+  });
+
+  it("каталог флоу исключён правилом вне проекта — check: ❌ с правилом и «поправь правило», без команды update: её исключение не поможет", () => {
+    aiDev(sb, ["install"]);
+    writeFileSync(path.join(sb.home, ".gitconfig"), `[core]\n\texcludesFile = ${path.join(sb.home, "personal-ignore")}\n`);
+    writeFileSync(path.join(sb.home, "personal-ignore"), ".claude/\n");
+    const r = aiDev(sb, ["check"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("  ❌ .claude/ — ~/personal-ignore:1 «.claude/»: каталог исключён вне проекта");
+    expect(r.stdout).toContain("поправь правило");
+    expect(r.stdout).not.toContain("ai-dev update");
+  });
+});
+
 describe("Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude")));
 
@@ -547,6 +598,18 @@ describe("В начале сессии Claude Code проверка идёт с�
     const r = runHook();
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/ai-dev в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n/);
+  });
+
+  it("вывод хука называет игнорируемый файл флоу и что update допишет исключения в .gitignore", () => {
+    aiDev(sb, ["install", "-g"]);
+    aiDev(sb, ["install"]);
+    writeFileSync(path.join(sb.proj, ".gitignore"), "CLAUDE.md\n");
+    npxServes(base.bin);
+    const r = runHook();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("❌ .agents/ai-dev/claude/CLAUDE.md");
+    expect(r.stdout).toContain("Файлы флоу игнорирует git — update допишет исключения в .gitignore");
+    expect(r.stdout).not.toContain("Отстаёт —");
   });
 
   it("npx недоступен — код хука 0, в выводе — что проверка недоступна", () => {
