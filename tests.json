@@ -2403,7 +2403,21 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
+  "name": "предупреждения нет, если переменные очереди доходят до задач turbo — globalPassThroughEnv или globalEnv с масками, envMode loose, --env-mode=loose — или turbo зовёт скрипт вне очереди"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
   "name": "проект на Bun зовёт slot через bun, остальные — через node"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "скрипт в slot зовёт turbo без проброса переменных очереди — install и check предупреждают готовой строкой для turbo.json, отставанием это не считается"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
