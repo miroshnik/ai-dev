@@ -193,8 +193,8 @@ const XMLNS = /xmlns(?::[\w-]+)?\s*=\s*$/;
 const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
 
 /** Хосты внешних систем в литералах URL исходника; комментарии, пространства имён и зарезервированные домены — нет. */
-export function hostsIn(source: string): string[] {
-  const text = codeOnly(source);
+export function hostsIn(source: string, file?: string): string[] {
+  const text = codeOnly(source, file);
   const out = new Set<string>();
   for (const m of text.matchAll(URL_HOST)) {
     const h = m[1]!.toLowerCase();
@@ -219,7 +219,7 @@ function sources(root: string, model: Model): Source[] {
         if (!SKIP.has(e.name)) walk(child);
       } else if (CODE.test(e.name) && !/\.d\.[cm]?ts$/.test(e.name)) {
         const text = readFileSync(path.join(root, child), "utf8");
-        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsIn(text), env: envNamesIn(text) });
+        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsIn(text, child), env: envNamesIn(text, child) });
       }
     }
   };

@@ -101,11 +101,22 @@ function testsInWorktree(root: string): Map<string, string> {
   return files;
 }
 
+// невычислимое название — строкой в stderr один раз: тот же тест есть и в базе, и в голове
+const unnamedSeen = new Set<string>();
+
+/** Тесты файлов; файл, который не разобрать, и тест, чьё название не вычислить статически, — строкой в stderr. */
 function parseFiles(files: Map<string, string>, label: string): Test[] {
   const tests: Test[] = [];
   for (const file of [...files.keys()].sort()) {
     try {
-      tests.push(...L.parseSource(file, files.get(file)!));
+      const scan = L.scanJs(file, files.get(file)!);
+      tests.push(...scan.tests);
+      for (const u of scan.unnamed) {
+        const key = JSON.stringify([file, u.kind, u.name]);
+        if (unnamedSeen.has(key)) continue;
+        unnamedSeen.add(key);
+        console.error(`spec-diff: ${label}: ${file}:${u.line}: название ${u.kind} не вычислить статически (${u.name}) — теста нет в списке`);
+      }
     } catch (e) {
       console.error(`spec-diff: ${label}: ${file}: ${(e as Error).message}`);
     }

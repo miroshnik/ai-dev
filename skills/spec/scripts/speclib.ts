@@ -1,15 +1,17 @@
 /**
  * speclib — общее для spec-doc, spec-diff, spec-publish, spec-exceptions и харнесса: дерево tests/, модель теста,
  * `Source:` публикации, разбор отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
- * от `bun test`), статический разбор исходников тестов (сканер describe/it/test для TS/JS:
- * названия и проза из JSDoc) и правило файлов исключений папки решения (`exceptionFile`).
+ * от `bun test`), разбор исходников тестов парсером (describe/it/test для TS/JS: названия и
+ * проза из JSDoc) и правило файлов исключений папки решения (`exceptionFile`).
  *
  * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
- * зависимостей и без конфигурации под репозиторий: дерево tests/ из правила
- * «Спецификация — решения» (skills/spec/canon.md) и стандартные форматы отчётов.
+ * зависимостей (парсер — файл скилла `vendor/babel-parser.cjs`) и без конфигурации под
+ * репозиторий: дерево tests/ из правила «Спецификация — решения» (skills/spec/canon.md) и
+ * стандартные форматы отчётов.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 const posix = path.posix;
@@ -390,206 +392,172 @@ function junitCase(a: Record<string, string>, body: string, stack: Suite[], root
   return makeTest(file, describes, a.name ?? "", status, reason);
 }
 
-// ---------- статический разбор исходников ----------
+// ---------- разбор исходников ----------
 
-// describe / it / test / suite / context (+ x/f-варианты Jest, test.describe Playwright),
-// модификаторы — только из списка: test.step, test.use, test.beforeEach и т. п. — не тесты. Скобку вызова (и аргумент
-// типа `<…>` перед ней) ищет callParen в scanJs.
-const JS_CALL = /(?<![\w$.])(?:test\.)?[xf]?(describe|it|test|suite|context)((?:\.\w+)*)(?![\w$])/y;
+/** Узел AST Babel: вид, границы в исходнике и поля своего вида. */
+interface AstNode {
+  type: string;
+  start: number;
+  end: number;
+  loc: { start: { line: number; column: number } };
+  [field: string]: unknown;
+}
+
+/** Комментарий из разбора: блочный или строчный, границы в исходнике. */
+interface AstComment {
+  type: "CommentBlock" | "CommentLine";
+  start: number;
+  end: number;
+}
+
+interface Parsed {
+  program: AstNode & { interpreter?: AstNode | null };
+  comments: AstComment[];
+}
+
+/**
+ * Парсер — `@babel/parser` 7.29.9 файлом в скилле: `vendor/babel-parser.cjs` — `lib/index.js` пакета как есть (один
+ * файл без `require`), лицензия рядом; скрипты скилла — без зависимостей, job `spec-diff` в CI проекта — без установки
+ * пакетов. Обновить — `npm pack @babel/parser`: его `lib/index.js` и `LICENSE` — сюда, версию — в этот комментарий.
+ * Свой лексер угадывал, где регулярка, шаблон, комментарий и аргумент типа, и терял тесты молча (#267, #269, #271,
+ * #275); синтаксис TypeScript шире любой догадки (#277).
+ */
+const babel = createRequire(import.meta.url)("./vendor/babel-parser.cjs") as { parse(source: string, options: object): Parsed };
+
+const OPTIONS = {
+  sourceType: "module",
+  // ошибки, после которых AST есть (строгий режим, декоратор параметра), разбору не мешают
+  errorRecovery: true,
+  allowReturnOutsideFunction: true,
+  allowAwaitOutsideFunction: true,
+  allowImportExportEverywhere: true,
+  allowUndeclaredExports: true,
+  allowNewTargetOutsideFunction: true,
+  allowSuperOutsideMethod: true,
+};
+// декораторы — и в позиции после export, и у параметров (TS experimentalDecorators — ошибкой с восстановлением)
+const DECORATORS = ["decorators", "decoratorAutoAccessors"];
+
+/**
+ * Наборы плагинов по расширению файла, по порядку попыток: `.ts` — без JSX (`<T>x` — приведение типа), `.tsx` — с
+ * JSX, JS — с JSX; файл неизвестен — TypeScript, затем TSX.
+ */
+function pluginSets(file?: string): unknown[][] {
+  const ts = ["typescript", ...DECORATORS];
+  if (file && /\.d\.[cm]?ts$/.test(file)) return [[["typescript", { dts: true }], ...DECORATORS]];
+  if (file && /\.[cm]?ts$/.test(file)) return [ts];
+  if (file && /\.tsx$/.test(file)) return [[...ts, "jsx"]];
+  if (file && /\.[cm]?jsx?$/.test(file)) return [["jsx", ...DECORATORS]];
+  return [ts, [...ts, "jsx"]];
+}
+
+/** AST исходника TS/JS; не разобрать — ошибка с местом (`Unexpected token (3:7)`). */
+function parseCode(source: string, file?: string): Parsed {
+  let first: Error | undefined;
+  for (const plugins of pluginSets(file)) {
+    try {
+      return babel.parse(source, { ...OPTIONS, plugins });
+    } catch (e) {
+      first ??= e as Error;
+    }
+  }
+  throw new Error(`не разобран: ${first!.message}`);
+}
+
+const isNode = (v: unknown): v is AstNode => !!v && typeof v === "object" && typeof (v as AstNode).type === "string" && typeof (v as AstNode).start === "number";
+
+/** Дочерние узлы в порядке исходника; комментарии, привязанные к узлу, — не узлы. */
+function children(node: AstNode): AstNode[] {
+  const out: AstNode[] = [];
+  for (const [k, v] of Object.entries(node)) {
+    if (k.endsWith("Comments")) continue;
+    if (Array.isArray(v)) out.push(...v.filter(isNode));
+    else if (isNode(v)) out.push(v);
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** Обход AST в порядке исходника: visit вернул false — внутрь узла не идти. */
+function walkAst(node: AstNode, visit: (n: AstNode) => boolean | void): void {
+  if (visit(node) === false) return;
+  for (const c of children(node)) walkAst(c, visit);
+}
+
+/** Комментарии исходника по разбору — [начало, текст]; шебанг — тоже комментарий. */
+export function commentsOf(source: string, file?: string): [number, string][] {
+  const ast = parseCode(source, file);
+  const out: [number, string][] = ast.comments.map((c) => [c.start, source.slice(c.start, c.end)]);
+  const bang = ast.program.interpreter;
+  if (bang) out.unshift([bang.start, source.slice(bang.start, bang.end)]);
+  return out;
+}
+
+/** Строки исходника, известные без прогона: литералы и шаблоны без подстановок. */
+export function stringsOf(source: string, file?: string): string[] {
+  const out: string[] = [];
+  walkAst(parseCode(source, file).program, (n) => {
+    const s = staticString(n);
+    if (s !== null && n.type !== "BinaryExpression") out.push(s);
+  });
+  return out;
+}
+
+/** Строка, известная без прогона: литерал, шаблон без подстановок или их сложение через `+`; иначе null. */
+function staticString(n: AstNode | undefined): string | null {
+  if (!n) return null;
+  if (n.type === "StringLiteral") return n.value as string;
+  if (n.type === "TemplateLiteral") {
+    const quasis = n.quasis as { value: { cooked: string | null } }[];
+    return quasis.length === 1 ? quasis[0]!.value.cooked : null;
+  }
+  if (n.type === "BinaryExpression" && n.operator === "+") {
+    const a = staticString(n.left as AstNode);
+    const b = a === null ? null : staticString(n.right as AstNode);
+    return b === null ? null : a + b;
+  }
+  return null;
+}
+
+// describe / it / test / suite / context (+ x/f-варианты Jest, test.describe Playwright), модификаторы — только из
+// списка: test.step, test.use, test.beforeEach и т. п. — не тесты
+const KIND = /^[xf]?(describe|it|test|suite|context)$/;
 const DESCRIBE_KINDS = new Set(["describe", "suite", "context"]);
 const MODS_OK = new Set([
   "skip", "only", "todo", "each", "for", "concurrent", "sequential", "fails",
   "runIf", "skipIf", "serial", "parallel", "fixme", "fail", "shuffle",
 ]);
-/** Пробел JS — WhiteSpace и LineTerminator стандарта (NBSP, `\f`, BOM…), ровно `\s` регулярок JS: одно понятие на весь обход. */
-const isSpace = (c: string): boolean => /\s/.test(c);
+// модификаторы с двумя вызовами: `it.each(таблица)(имя, …)`, `it.each\`таблица\`(имя, …)`, `it.skipIf(условие)(имя, …)`
+const CURRIED = ["each", "for", "runIf", "skipIf"];
 
-function skipLineComment(s: string, i: number): number {
-  const j = s.indexOf("\n", i);
-  return j < 0 ? s.length : j;
-}
-
-function skipBlockComment(s: string, i: number): number {
-  const j = s.indexOf("*/", i + 2);
-  return j < 0 ? s.length : j + 2;
-}
-
-/** Кусок исходника JS в обходе: комментарий (и шебанг), строка (шаблон — целиком, с `${…}`), регулярка, пробел, символ кода. */
-export type JsPart = "comment" | "string" | "regex" | "space" | "code";
-
-/**
- * Один обход кода JS — для сканера названий (`scanJs`, `skipBalanced`, шаблоны) и харнесса (`commentsIn`): next()
- * отдаёт кусок с позиции i. Регулярку от деления отличает `regexAfter` по последнему значащему символу кода, который
- * ведёт сам обход: комментарии и пробелы его не сдвигают. Копии обхода расходились в том, что считать пробелом, и
- * NBSP перед регуляркой одному был кодом, другому — нет.
- */
-export class JsWalk {
-  readonly s: string;
-  /** Позиция обхода: конец куска, который вернул next(). */
-  i: number;
-  /** Начало куска, который вернул next(). */
-  start: number;
-  /** Последний значащий символ кода (< 0 — кода не было): по нему решает regexAfter. */
-  last: number;
-
-  /** С позиции i: символ перед ней — код (`(`, `{` в `${`); с 0 — начало файла. */
-  constructor(s: string, i = 0) {
-    this.s = s;
-    this.i = this.start = i;
-    this.last = i - 1;
+/** Вид вызова теста по цепочке имён (`test.describe.serial` → describe); не тест — null. */
+function testCallee(n: unknown): { kind: string; curried: boolean } | null {
+  const names: string[] = [];
+  let c = n as AstNode;
+  while (isNode(c) && c.type === "MemberExpression" && !c.computed && (c.property as AstNode).type === "Identifier") {
+    names.unshift((c.property as AstNode).name as string);
+    c = c.object as AstNode;
   }
-
-  next(): JsPart {
-    const s = this.s;
-    const i = (this.start = this.i);
-    const c = s[i]!;
-    let part: JsPart = "code";
-    let end = i + 1;
-    if ((c === "/" && s[i + 1] === "/") || (c === "#" && i === 0 && s[1] === "!")) {
-      part = "comment"; // шебанг — тоже
-      end = skipLineComment(s, i);
-    } else if (c === "/" && s[i + 1] === "*") {
-      part = "comment";
-      end = skipBlockComment(s, i);
-    } else if (isSpace(c)) {
-      part = "space";
-    } else if (c === "'" || c === '"' || c === "`") {
-      part = "string";
-      end = skipString(s, i);
-    } else if (c === "/" && regexAfter(s, this.last)) {
-      part = "regex";
-      end = skipRegex(s, i);
-    }
-    this.i = end;
-    if (part !== "comment" && part !== "space") this.last = end - 1;
-    return part;
-  }
-
-  /** Код до j разобран снаружи (вызов, имя теста, скобки) — обход продолжается с j. */
-  skip(j: number): void {
-    this.i = j;
-    this.last = j - 1;
-  }
+  if (!isNode(c) || c.type !== "Identifier") return null;
+  names.unshift(c.name as string);
+  const at = names[0] === "test" && names.length > 1 && KIND.test(names[1]!) ? 1 : 0;
+  const kind = KIND.exec(names[at]!)?.[1];
+  const mods = names.slice(at + 1);
+  if (!kind || !mods.every((x) => MODS_OK.has(x))) return null;
+  return { kind, curried: mods.some((x) => CURRIED.includes(x)) };
 }
 
-/** i — открывающая кавычка; вернуть индекс после закрывающей. Шаблонные строки — с ${…}. */
-function skipString(s: string, i: number): number {
-  const q = s[i];
-  const n = s.length;
-  let j = i + 1;
-  if (q !== "`") {
-    while (j < n && s[j] !== q) {
-      if (s[j] === "\\") j++;
-      else if (s[j] === "\n") break;
-      j++;
-    }
-    return Math.min(j + 1, n);
-  }
-  while (j < n && s[j] !== "`") {
-    if (s[j] === "\\") {
-      j += 2;
-      continue;
-    }
-    if (s.startsWith("${", j)) {
-      j = skipTemplateExpr(s, j + 2);
-      continue;
-    }
-    j++;
-  }
-  return Math.min(j + 1, n);
+/** Вызов теста или describe — вид и аргументы с именем первым; таблица `.each(…)` и иной вызов — null. */
+function testCall(call: AstNode): { kind: string; args: AstNode[] } | null {
+  const args = call.arguments as AstNode[];
+  const direct = testCallee(call.callee);
+  if (direct) return direct.curried ? null : { kind: direct.kind, args };
+  const callee = call.callee as AstNode;
+  const inner = callee.type === "CallExpression" ? callee.callee : callee.type === "TaggedTemplateExpression" ? callee.tag : null;
+  const curried = testCallee(inner);
+  return curried?.curried ? { kind: curried.kind, args } : null;
 }
 
-// после них `/` начинает регулярное выражение, а не деление
-const BEFORE_REGEX = "(,=:[!&|?{};+-*%<>~^";
-const REGEX_WORDS = new Set(["return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await", "delete", "throw", "instanceof", "new"]);
-
-/**
- * `/` после кода, который кончается в last, — начало регулярки, а не деление: по символу или слову (не свойству)
- * в last; last < 0 — кода до `/` нет. last — последний значащий символ кода: его ведёт обход `JsWalk`, комментарии и
- * пробелы его не меняют — иначе символ берётся из комментария. Одно правило для названий тестов и харнесса.
- */
-function regexAfter(s: string, last: number): boolean {
-  if (last < 0 || BEFORE_REGEX.includes(s[last]!)) return true;
-  let b = last;
-  while (b >= 0 && isIdentChar(s[b]!)) b--;
-  return s[b] !== "." && REGEX_WORDS.has(s.slice(b + 1, last + 1));
-}
-
-/**
- * i — открывающий `/` регулярного выражения; индекс после флагов. Классы `[…]` и экранирование учтены. Литерал
- * регулярки не переносится на другую строку: без закрывающего `/` в строке это не регулярка — индекс после `/`.
- */
-function skipRegex(s: string, i: number): number {
-  let j = i + 1;
-  let cls = false;
-  while (j < s.length && s[j] !== "\n") {
-    const c = s[j]!;
-    if (c === "\\") j++;
-    else if (c === "[") cls = true;
-    else if (c === "]") cls = false;
-    else if (c === "/" && !cls) break;
-    j++;
-  }
-  if (s[j] !== "/") return i + 1;
-  j++;
-  while (j < s.length && /[a-z]/i.test(s[j]!)) j++;
-  return j;
-}
-
-/** i — индекс после `${`; вернуть индекс после парной `}`. */
-function skipTemplateExpr(s: string, i: number): number {
-  const w = new JsWalk(s, i);
-  for (let d = 0; w.i < s.length; ) {
-    if (w.next() !== "code") continue;
-    const c = s[w.start];
-    if (c === "{") d++;
-    else if (c === "}") {
-      if (d === 0) return w.i;
-      d--;
-    }
-  }
-  return s.length;
-}
-
-/** i — индекс после '('; вернуть индекс после парной ')'. */
-export function skipBalanced(s: string, i: number): number {
-  const w = new JsWalk(s, i);
-  for (let d = 1; d && w.i < s.length; ) {
-    if (w.next() !== "code") continue;
-    const c = s[w.start];
-    if (c === "(") d++;
-    else if (c === ")") d--;
-  }
-  return w.i;
-}
-
-/**
- * i — `<` аргумента типа перед скобкой вызова (`it.each<T>(`); индекс после парной `>` или -1: `<` без пары до `;` или
- * до закрывающей скобки снаружи — сравнение (`it < max`), а не тип. `>` в `=>` типа функции пары не закрывает.
- */
-function skipTypeArgs(s: string, i: number): number {
-  const w = new JsWalk(s, i + 1);
-  for (let angle = 1, br = 0; w.i < s.length; ) {
-    if (w.next() !== "code") continue;
-    const c = s[w.start]!;
-    if (c === "<") angle++;
-    else if (c === ">" && s[w.start - 1] !== "=") {
-      if (--angle === 0) return w.i;
-    } else if ("([{".includes(c)) br++;
-    else if (")]}".includes(c)) {
-      if (--br < 0) return -1;
-    } else if (c === ";" && br === 0) return -1;
-  }
-  return -1;
-}
-
-const unescape = (name: string): string => name.replace(/\\(.)/g, "$1");
-const isIdentChar = (c: string): boolean => /[\w$]/.test(c);
-
-/** Тесты из исходника TS/JS. */
-export function parseSource(file: string, source: string): Test[] {
-  return parseJs(file, source);
-}
+const isFunction = (n: AstNode): boolean => n.type === "ArrowFunctionExpression" || n.type === "FunctionExpression";
 
 /**
  * Проза из JSDoc исходника — то, чего не видно из названий. Ключи — JSON цепочки имён,
@@ -599,6 +567,16 @@ export interface Docs {
   file: string; // JSDoc в начале файла, до кода: что это за capability или стандарт
   describes: Map<string, string>; // JSDoc вплотную перед describe
   tests: Map<string, string>; // JSDoc вплотную перед it / test
+}
+
+/** Вызов теста или describe, чьё название не вычислить без прогона (шаблон с подстановкой, переменная). */
+export interface Unnamed {
+  line: number;
+  kind: string;
+  /** Выражение названия из исходника, сокращённое. */
+  name: string;
+  /** JSDoc вплотную перед вызовом — проза, которую не к чему привязать. */
+  doc: string;
 }
 
 /**
@@ -618,147 +596,88 @@ export function jsdocText(comment: string): string {
 }
 
 /**
- * Сканер без полного парсера: строки, комментарии, скобки; describe с телом-колбэком
- * (после `=>` или `function(...)`) открывает вложенность, it/test — тест. Имя — только
- * строковый литерал первым аргументом (у .each / .for — второго вызова), аргумент типа
- * `<…>` перед скобкой вызова пропускается; вызов с выражением вместо имени пропускается.
+ * JSDoc по месту кода: проза — последний JSDoc перед кодом, комментарии между ними не мешают. Комментарии подряд, между
+ * которыми только пробелы, — одна группа; ключ — начало кода после группы. Первый JSDoc группы до всякого кода —
+ * кандидат в прозу файла. `//` и блочный комментарий с одной звёздочкой — не проза.
  */
+function jsdocs(source: string, ast: Parsed): { at: Map<number, string>; head: { at: number; text: string } | null } {
+  const at = new Map<number, string>();
+  let head: { at: number; text: string } | null = null;
+  const blank = (from: number, to: number) => !source.slice(from, to).trim();
+  const isDoc = (c: AstComment) => source.startsWith("/**", c.start) && !source.startsWith("/**/", c.start);
+  const comments = ast.comments;
+  const codeFrom = ast.program.interpreter?.end ?? 0;
+  for (let i = 0; i < comments.length; ) {
+    let j = i;
+    while (j + 1 < comments.length && blank(comments[j]!.end, comments[j + 1]!.start)) j++;
+    const group = comments.slice(i, j + 1);
+    let after = comments[j]!.end;
+    while (after < source.length && /\s/.test(source[after]!)) after++;
+    const docs = group.filter(isDoc).map((c) => jsdocText(source.slice(c.start, c.end)));
+    if (docs.length) {
+      at.set(after, docs[docs.length - 1]!);
+      if (i === 0 && blank(codeFrom, group[0]!.start)) head = { at: docs.length > 1 ? -1 : after, text: docs[0]! };
+    }
+    i = j + 1;
+  }
+  return { at, head };
+}
+
+/** Тесты из исходника TS/JS. */
 export function parseJs(file: string, source: string): Test[] {
   return scanJs(file, source).tests;
 }
 
 /**
- * Один проход сканера — тесты и проза. JSDoc относится к ближайшему коду после него
- * (комментарии между ними не мешают): вызов describe / it — его проза; первый JSDoc файла,
- * за которым идёт не вызов (обычно импорты), — проза файла. `//` и блочный комментарий с одной
- * звёздочкой — не проза.
+ * Тесты и проза исходника по AST. Имя — строка, известная без прогона (литерал, шаблон без подстановок), первым
+ * аргументом вызова (у .each / .for / .runIf / .skipIf — второго), аргумент типа `<…>` в любом месте; describe
+ * открывает вложенность для всех своих аргументов. Название, которое не вычислить, — в `unnamed`, вызов не
+ * разбирается дальше: цепочка его тестов неизвестна. JSDoc вплотную перед вызовом — его проза; первый JSDoc файла, за
+ * которым идёт не вызов (обычно импорты), — проза файла. Не разобрать — ошибка.
  */
-export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs } {
-  const s = source;
-  const n = s.length;
-  let depth = 0;
-  let paren = 0;
-  const stack: { name: string; depth: number }[] = []; // describe и глубина фигурных скобок его тела
-  let pending: { name: string; paren: number } | null = null; // describe, у которого ещё не найдено тело
+export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs; unnamed: Unnamed[] } {
+  const ast = parseCode(source, file);
+  const doc = jsdocs(source, ast);
   const out: Test[] = [];
+  const unnamed: Unnamed[] = [];
   const docs: Docs = { file: "", describes: new Map(), tests: new Map() };
-  let doc: { text: string } | null = null; // последний JSDoc, пока после него не было кода
-  let fileDoc: { text: string } | null = null; // первый JSDoc до кода
-  let code = false;
+  const calls = new Set<number>(); // начала вызовов тестов: JSDoc перед ними — не проза файла
 
-  const addDoc = (m: Map<string, string>, chain: string[], text: string): void => {
+  const addDoc = (m: Map<string, string>, chain: string[], text: string | undefined): void => {
     if (!text) return;
     const k = JSON.stringify(chain);
     const prev = m.get(k);
     m.set(k, prev && prev !== text ? prev + "\n\n" + text : text);
   };
 
-  const skipSpace = (j: number): number => {
-    while (j < n && isSpace(s[j]!)) j++;
-    return j;
+  const visit = (chain: string[]) => (n: AstNode): boolean => {
+    if (n.type !== "CallExpression") return true;
+    const call = testCall(n);
+    if (!call) return true;
+    calls.add(n.start);
+    const [first, ...rest] = call.args;
+    const name = staticString(first);
+    if (name === null) {
+      // `test.fail()`, `test.skip(условие, "причина")` Playwright — не тест: колбэка нет
+      if (!first || !rest.some(isFunction)) return true;
+      const text = source.slice(first.start, first.end).replace(/\s+/g, " ");
+      unnamed.push({ line: first.loc.start.line, kind: call.kind, name: text.length > 60 ? text.slice(0, 59) + "…" : text, doc: doc.at.get(n.start) ?? "" });
+      return false;
+    }
+    const inner = [...chain, name];
+    if (DESCRIBE_KINDS.has(call.kind)) {
+      addDoc(docs.describes, inner, doc.at.get(n.start));
+    } else {
+      // тело — остаток аргументов вызова: переименованный тест с той же проверкой узнаётся по нему
+      const t = makeTest(file, chain, name);
+      t.body = source.slice(first!.end, n.end - 1).replace(/\s+/g, "");
+      out.push(t);
+      addDoc(docs.tests, inner, doc.at.get(n.start));
+    }
+    for (const a of rest) walkAst(a, visit(DESCRIBE_KINDS.has(call.kind) ? inner : chain));
+    return false;
   };
-  // j — после имени вызова или его первых скобок (`.each(…)`): индекс `(` вызова, аргумент типа перед ней пропущен; -1 — не вызов
-  const callParen = (j: number): number => {
-    let k = skipSpace(j);
-    if (s[k] === "<") {
-      k = skipTypeArgs(s, k);
-      if (k < 0) return -1;
-      k = skipSpace(k);
-    }
-    return s[k] === "(" ? k : -1;
-  };
-
-  const w = new JsWalk(s);
-  while (w.i < n) {
-    const before = w.last; // значащий символ кода перед куском: `=>` или `)` перед телом describe
-    const part = w.next();
-    const i = w.start;
-    if (part === "comment") {
-      if (s.startsWith("/**", i) && !s.startsWith("/**/", i)) {
-        doc = { text: jsdocText(s.slice(i, w.i)) };
-        if (!code && !fileDoc) fileDoc = doc;
-      }
-      continue;
-    }
-    if (part === "space") continue;
-    // код: JSDoc до него — проза этого кода (вызова describe / it), дальше не тянется
-    const d = doc;
-    doc = null;
-    code = true;
-    if (part !== "code") continue; // строка или регулярка
-    const c = s[i]!;
-    if (c === "{") {
-      depth++;
-      if (pending && paren === pending.paren + 1 && (s[before] === ">" || s[before] === ")")) {
-        stack.push({ name: pending.name, depth });
-        pending = null;
-      }
-      continue;
-    }
-    if (c === "}") {
-      if (stack.length && stack[stack.length - 1]!.depth === depth) stack.pop();
-      depth--;
-      continue;
-    }
-    if (c === "(") {
-      paren++;
-      continue;
-    }
-    if (c === ")") {
-      paren--;
-      if (pending && paren <= pending.paren) pending = null;
-      continue;
-    }
-    if (/[A-Za-z_$]/.test(c)) {
-      JS_CALL.lastIndex = i;
-      const m = JS_CALL.exec(s);
-      const mods = m ? m[2]!.split(".").filter(Boolean) : [];
-      const open = m && mods.every((x) => MODS_OK.has(x)) ? callParen(m.index + m[0].length) : -1;
-      if (m && open >= 0) {
-        if (d && d === fileDoc) fileDoc = null; // вплотную к вызову — проза вызова, а не файла
-        const kind = m[1]!;
-        const p0 = paren;
-        let j = open + 1;
-        paren++;
-        if (mods.includes("each") || mods.includes("for")) {
-          j = skipBalanced(s, j);
-          paren--;
-          const k = callParen(j);
-          if (k >= 0) {
-            j = k + 1;
-            paren++;
-          } else {
-            w.skip(j);
-            continue;
-          }
-        }
-        const k = skipSpace(j);
-        const q = s[k];
-        if (q === "'" || q === '"' || q === "`") {
-          const end = skipString(s, k);
-          const name = unescape(s.slice(k + 1, end - 1));
-          const chain = [...stack.map((x) => x.name), name];
-          if (DESCRIBE_KINDS.has(kind)) {
-            pending = { name, paren: p0 };
-            addDoc(docs.describes, chain, d?.text ?? "");
-          } else {
-            // тело — остаток аргументов вызова: переименованный тест с той же проверкой узнаётся по нему
-            const t = makeTest(file, chain.slice(0, -1), name);
-            t.body = s.slice(end, Math.max(end, skipBalanced(s, end) - 1)).replace(/\s+/g, "");
-            out.push(t);
-            addDoc(docs.tests, chain, d?.text ?? "");
-          }
-          w.skip(end);
-          continue;
-        }
-        w.skip(j);
-        continue;
-      }
-      let j = i + 1;
-      while (j < n && isIdentChar(s[j]!)) j++;
-      w.skip(j);
-    }
-  }
-  docs.file = fileDoc?.text ?? "";
-  return { tests: out, docs };
+  walkAst(ast.program, visit([]));
+  if (doc.head && !calls.has(doc.head.at)) docs.file = doc.head.text;
+  return { tests: out, docs, unnamed };
 }

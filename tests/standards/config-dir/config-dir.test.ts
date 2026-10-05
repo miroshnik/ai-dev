@@ -13,12 +13,12 @@ const MENTION = /(?<![$\w])AI_DEV_CONFIG_DIR\b|(?<!~\/)\.config(?:\/|["'`]\s*,\s
 
 /** Обращения к каталогу мимо правила — `файл:строка`; комментарии не в счёт. */
 function violations(f: SourceFile): string[] {
-  const rest = codeOnly(f.text).replace(RULE, (m) => m.replace(/[^\n]/g, " "));
+  const rest = codeOnly(f.text, f.file).replace(RULE, (m) => m.replace(/[^\n]/g, " "));
   return [...rest.matchAll(MENTION)].map((m) => `${f.file}:${rest.slice(0, m.index).split("\n").length} — каталог личной конфигурации мимо правила: ${m[0]}`);
 }
 
 /** Скрипту нужен каталог личной конфигурации: в коде названа переменная или путь по умолчанию. */
-const needsConfigDir = (f: SourceFile): boolean => codeOnly(f.text).search(MENTION) >= 0;
+const needsConfigDir = (f: SourceFile): boolean => codeOnly(f.text, f.file).search(MENTION) >= 0;
 
 const INSTALLER =
   "установщик каталог не вычисляет, а готовит место по умолчанию: `install -g` с `AI_DEV_PRIVATE` делает `~/.config/ai-dev` симлинком на личный чекаут; " +
