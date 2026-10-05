@@ -13,6 +13,10 @@
 #       check-runs (GitHub Actions). --context — один чек по имени, среди обоих.
 #       SHA — полный, из git.
 #
+#   wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
+#       Ждёт закрытия issue — бага на красный main (github pr premerge, код 3):
+#       PASS, когда закрыт; нет такого issue — ERROR.
+#
 # Пустой список чеков — pending; PASS засчитывается, когда снимок без pending повторился
 # два опроса подряд (поздно регистрирующиеся чеки не проскакивают) и чеков не меньше
 # --expect. Первый упавший чек — сразу FAIL; --wait-all — FAIL, когда завершились все.
@@ -23,7 +27,7 @@
 # Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR или неверный вызов.
 set -uo pipefail
 
-usage() { sed -n '3,23p' "$0" >&2; exit 3; }
+usage() { sed -n '3,27p' "$0" >&2; exit 3; }
 
 mode=${1:-}; target=${2:-}
 [ -n "$mode" ] && [ -n "$target" ] || usage
@@ -110,6 +114,19 @@ case "$mode" in
     : "${interval:=20}" "${timeout:=1200}"
     label="${context:-commit}@${target:0:7}"
     poll() { checks "$target"; }
+    ;;
+  issue)
+    [[ "$target" =~ ^[0-9]+$ ]] || finish "ERROR issue number expected, got: $target" 3
+    : "${interval:=60}" "${timeout:=7200}"
+    label="issue#$target"
+    poll() {
+      local issue
+      issue=$(gh api "repos/{owner}/{repo}/issues/$target" 2>&1) || {
+        out=$issue; [[ "$issue" == *"HTTP 404"* ]] && { out="issue #$target not found: $issue"; return 2; }; return 1; }
+      # закрыт — исход известен сразу: повторный опрос, как у чеков, нужен поздно регистрирующимся, а не issue
+      [ "$(jq -r .state <<<"$issue")" == closed ] && finish "PASS issue #$target closed ($(jq -r '.state_reason // "closed"' <<<"$issue"))" 0
+      out=$(jq -nc --arg n "issue #$target" '[{ name: $n, bucket: "pending" }]')
+    }
     ;;
   *) usage ;;
 esac
