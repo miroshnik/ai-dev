@@ -1467,7 +1467,7 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   io.out(`Создана #${created.number} ${created.title} — ${created.url}`);
   for (const d of done) io.out(`+ ${d}`);
   if (o.type === "Эпик") io.out("Дальше: эпик не оценивается — его «Оценка, ч» = сумма оценок подзадач.");
-  else io.out(`Дальше: оценка — скилл est (est estimate ${created.number} --type <тип ветки> --analogs …)${epic ? `; «Оценка, ч» эпика #${epic.number} — пересчитать суммой подзадач` : ""}.`);
+  else io.out(`Дальше: оценка — одним вызовом скилла est: est estimate ${created.number} --type <тип ветки> --write (аналоги подбирает скрипт)${epic ? `; «Оценка, ч» эпика #${epic.number} — пересчитать суммой подзадач` : ""}.`);
   // сессия с закреплённой задачей новую в работу не возьмёт (pinTask)
   const held = pinnedTask(io);
   if (held) io.out(`Дальше: сессия ведёт ${held} — #${created.number} в новой сессии, первый промпт: #${created.number}.`);
