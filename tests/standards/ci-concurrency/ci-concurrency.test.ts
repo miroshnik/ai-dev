@@ -1,11 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 import { invariant } from "../../../skills/spec/scripts/harness.ts";
-
-const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+import { documentsOf, FRAGMENT_FILES, indentOf, readFragmentFile } from "../../lib/yaml-fragments.ts";
 
 /** Блок `concurrency` workflow или job: место, путь YAML, группа и `queue`, события `on:` его документа (null — `on:` нет). */
 interface Found {
@@ -24,7 +20,6 @@ const PR_EVENTS = new Set(["pull_request", "pull_request_target"]);
 // фрагмент без `on:` идёт под любым событием — проверяем и PR, и push
 const ANY_EVENT = ["pull_request", "push"];
 
-const indentOf = (l: string): number => l.length - l.trimStart().length;
 const skippable = (l: string): boolean => !l.trim() || l.trimStart().startsWith("#");
 
 /** Ключ со строки `i` и строки под ним глубже отступом — YAML одного ключа, отступ снят. */
@@ -82,24 +77,6 @@ function blocksIn(file: string, text: string, offset = 0): Found[] {
   return out;
 }
 
-/** Документы YAML файла: workflow целиком, у Markdown — блоки ```yaml со строкой начала. */
-function documentsOf(file: string, text: string): { text: string; offset: number }[] {
-  if (!file.endsWith(".md")) return [{ text, offset: 0 }];
-  const out: { text: string; offset: number }[] = [];
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const open = /^(\s*)(`{3,}|~{3,})\s*ya?ml\b/.exec(lines[i]!);
-    if (!open) continue;
-    const fence = open[2]!;
-    const body: string[] = [];
-    let j = i + 1;
-    for (; j < lines.length && !lines[j]!.trim().startsWith(fence); j++) body.push(lines[j]!.slice(Math.min(open[1]!.length, indentOf(lines[j]!))));
-    out.push({ text: body.join("\n"), offset: i + 1 });
-    i = j;
-  }
-  return out;
-}
-
 /** Ключ блока: файл, путь YAML и группа; одинаковые в одном файле — с номером по порядку. */
 function withKeys(blocks: Found[]): Block[] {
   const seen = new Map<string, number>();
@@ -114,22 +91,7 @@ function withKeys(blocks: Found[]): Block[] {
 /** Блоки файла от корня проекта по тексту. */
 const blocksOf = (file: string, text: string): Block[] => withKeys(documentsOf(file, text).flatMap((d) => blocksIn(file, d.text, d.offset)));
 
-/** Файлы под каталогом от корня проекта (подкаталоги — при `deep`) с подходящим именем; скрытые и зависимости — мимо. */
-function filesIn(dir: string, deep: boolean, match: RegExp): string[] {
-  let entries;
-  try {
-    entries = readdirSync(path.join(ROOT, dir), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((e) => !e.name.startsWith(".") && e.name !== "node_modules")
-    .flatMap((e) => (e.isDirectory() ? (deep ? filesIn(`${dir}/${e.name}`, deep, match) : []) : match.test(e.name) ? [`${dir}/${e.name}`] : []))
-    .sort();
-}
-
-const FILES = [...filesIn(".github/workflows", false, /\.ya?ml$/), ...filesIn("skills", true, /\.md$/), ...filesIn("docs", false, /\.md$/)];
-const BLOCKS = FILES.flatMap((f) => blocksOf(f, readFileSync(path.join(ROOT, f), "utf8")));
+const BLOCKS = FRAGMENT_FILES.flatMap((f) => blocksOf(f, readFragmentFile(f)));
 
 /**
  * Своя ли группа у PR или прогона на событии. Выражение `a || b` берёт первое непустое: номер PR вне PR пуст — значит,
