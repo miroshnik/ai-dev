@@ -264,6 +264,49 @@ describe("Проверки проекта идут очередью машины
     expect(u.stdout).toMatch(/git add [^\n]* package\.json/);
     expect(aiDev(sb, ["check"]).code).toBe(0);
   });
+
+  /**
+   * turbo 2 в strict env mode пропускает задачам только переменные, названные в turbo.json: без проброса раннер не
+   * видит `AI_DEV_SLOT_CPUS` и берёт машину целиком, а вложенный скрипт в slot — `AI_DEV_SLOT` и ждёт собственный
+   * слот. `globalPassThroughEnv`, а не `globalEnv`: в хэш кэша они не входят, а `AI_DEV_SLOT` у каждого прогона свой.
+   * turbo.json правит владелец проекта (в нём бывают комментарии — JSONC), поэтому install и check только
+   * предупреждают; отставанием флоу это не считается.
+   */
+  it("скрипт в slot зовёт turbo без проброса переменных очереди — install и check предупреждают готовой строкой для turbo.json, отставанием это не считается", () => {
+    writeTree(proj, {
+      "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "turbo run test --filter=web" } }),
+      "turbo.json": `{\n  // кэш\n  "globalPassThroughEnv": ["SENTRY_*", "AI_DEV_SLOT_CPUS",],\n  "tasks": { "test": {} }\n}\n`,
+    });
+    const ready = `"globalPassThroughEnv": ["SENTRY_*", "AI_DEV_SLOT_CPUS", "AI_DEV_SLOT"]`;
+    const i = install();
+    expect(i.code).toBe(0);
+    expect(i.stderr).toContain(`!! turbo.json — AI_DEV_SLOT не доходит до раннера`);
+    expect(i.stderr).toContain(ready);
+    const c = aiDev(sb, ["check"]);
+    expect(c.code).toBe(0);
+    expect(c.stdout).toMatch(/актуально[^\n]*\n {2}! turbo\.json — AI_DEV_SLOT не доходит до раннера: turbo в strict env mode/);
+    expect(c.stdout).toContain(ready);
+    expect(aiDev(sb, ["check", "--hook"]).stdout).toContain(ready);
+  });
+
+  it("предупреждения нет, если переменные очереди доходят до задач turbo — globalPassThroughEnv или globalEnv с масками, envMode loose, --env-mode=loose — или turbo зовёт скрипт вне очереди", () => {
+    const warning = (scripts: Record<string, string>, turbo: string, file = "turbo.json") => {
+      for (const f of ["turbo.json", "turbo.jsonc"]) rmSync(path.join(proj, f), { force: true });
+      writeTree(proj, { "package.json": JSON.stringify({ scripts }), [file]: turbo });
+      return /^!! turbo\.jsonc? — .*$/m.exec(install().stderr)?.[0] ?? null;
+    };
+    const test = { test: "npx turbo test" };
+    expect(warning(test, `{ "tasks": {} }`)).toContain(`"globalPassThroughEnv": ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"]`);
+    expect(warning(test, `{ "globalPassThroughEnv": ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"] }`)).toBeNull();
+    expect(warning(test, `{ "globalEnv": ["AI_DEV_*"] }`)).toBeNull();
+    expect(warning(test, `{ "globalPassThroughEnv": ["AI_DEV_*", "!AI_DEV_SLOT"] }`)).toContain(`"globalPassThroughEnv": ["AI_DEV_*", "AI_DEV_SLOT"]`);
+    expect(warning(test, `{ "envMode": "loose" }`)).toBeNull();
+    expect(warning({ test: "turbo run test --env-mode=loose" }, `{}`)).toBeNull();
+    expect(warning({ test: "vitest run --turbo" }, `{}`)).toBeNull();
+    expect(warning({ build: "turbo run build" }, `{}`)).toBeNull();
+    expect(warning(test, `{ /* JSONC */ "tasks": {}, }`, "turbo.jsonc")).toMatch(/^!! turbo\.jsonc — /);
+    expect(warning(test, `{ /* JSONC */ "globalPassThroughEnv": ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"] }`, "turbo.jsonc")).toBeNull();
+  });
 });
 
 /**
