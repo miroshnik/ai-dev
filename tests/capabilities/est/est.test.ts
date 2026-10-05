@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
-  cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, plural, resolveLinks,
-  pickAnalogs, roundScale, usageCost,
+  cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, loadPins, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, pinnedTranscripts, plural, resolveLinks,
+  pickAnalogs, roundScale, selectSessions, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
@@ -53,7 +53,7 @@ function claudeFixture(): string {
 
 type Recorded = Map<number, Record<string, [number, number][]>>;
 
-function stubRepo(sessions: Session[], prs: PR[], closingPr: Record<string, number[]> = {}, recorded: Recorded = new Map()): FactRepo {
+function stubRepo(sessions: Session[], prs: PR[], closingPr: Record<string, number[]> = {}, recorded: Recorded = new Map(), pins = new Map<string, string>()): FactRepo {
   return {
     full: "o/r",
     prs: () => new Map(prs.map((p) => [p.number, p])),
@@ -63,6 +63,7 @@ function stubRepo(sessions: Session[], prs: PR[], closingPr: Record<string, numb
     neutralBranches: () => new Set(["main"]),
     commitDiff: () => null,
     recorded: () => recorded,
+    pins: () => pins,
   };
 }
 
@@ -282,6 +283,116 @@ describe("Сессия, которая ведёт задачи подряд, д�
     expect(f41.h).toBe(0.25);
     expect(f41.overlap).toEqual([{ issue: 43, h: 0.05 }]);
     expect(factCommentBody(f41, null, [], 0, null)).toContain("Пересечение с фактом #43: 0.05 ч — пересчитать #43.");
+  });
+});
+
+/**
+ * `github task status` «В работе» закрепляет задачу за сессией: файл `<каталог конфигурации>/sessions/<id сессии>` со
+ * строкой `owner/repo#N`. Это прямой факт «сессия вела эту задачу» — сильнее признаков в транскрипте (хешей, веток,
+ * `#N` в названии и первом промпте), на которых привязка ошибалась. Сессия без закрепления (до него, облако, Codex,
+ * сессия эпика) привязывается признаками, как раньше.
+ */
+describe("Закреплённая сессия целиком — задаче из закрепления, признаки — запасной путь для сессий без него", () => {
+  const SID = "66666666-7777-8888-9999-aaaaaaaaaaaa";
+  const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+  const WT = "claude/calm-hopper-1a2b3c";
+  const B7 = "fix/7-login";
+  const work = (hhmm: string, gitBranch: string) => ({ type: "assistant", timestamp: at(hhmm), cwd: "/repo", gitBranch, message: { content: [{ type: "text", text: "…" }] } });
+  const prompt = (hhmm: string, gitBranch: string, text: string) => ({ type: "user", timestamp: at(hhmm), cwd: "/repo", gitBranch, origin: { kind: "human" }, message: { role: "user", content: text } });
+  const FOREIGN = "b1b2b3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0";
+  const pr78: PR = { ...pr77(), number: 78, headRefName: B7, closing: [7], body: "Closes #7", commits: [{ oid: FOREIGN, at: ts("10:05") }] };
+  const pinTo = (task: string) => new Map([[SID, task]]);
+
+  // сессия вела #42 (закрепление), а в её выводах — название и первый промпт #7, коммит, PR, ветка и субагент задачи #7
+  function session(): Session {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([
+      { type: "custom-title", customTitle: "#7 Логин", sessionId: SID },
+      prompt("10:00", WT, "#7 почини логин"),
+      { type: "assistant", timestamp: at("10:05"), cwd: "/repo", gitBranch: B7, message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: { command: 'git commit -m "fix: логин"' } }] } },
+      { type: "user", timestamp: at("10:05"), cwd: "/repo", gitBranch: B7, message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: `[${B7} b1b2b3b] fix: логин` }] } },
+      { type: "pr-link", timestamp: at("10:08"), prNumber: 78 },
+      work("10:12", B7), work("10:20", "HEAD"),
+    ]));
+    mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+    writeFileSync(path.join(dir, SID, "subagents", "agent-1.jsonl"), jsonl([prompt("10:14", WT, "Задача #7: проверь тесты"), work("10:15", WT)]));
+    return parseSessionFile(file);
+  }
+  const fact = (s: Session, n: number, pins?: Map<string, string>, recorded?: Recorded) =>
+    computeFact(stubRepo([s], [pr78], {}, recorded, pins), n, n === 7 ? [{ ...pr78, why: "закрыл issue" }] : [], []);
+
+  it("сессия с файлом закрепления целиком относится к задаче из файла, даже если в её выводах хеши и ветки чужих задач", () => {
+    const f42 = fact(session(), 42, pinTo("o/r#42"));
+    expect(f42.h).toBe(0.33); // 10:00–10:20, с субагентом
+    expect(f42.details[0]!.rules).toEqual({ закрепление: 7 });
+    expect(f42.agents).toBe(1);
+    const f7 = fact(session(), 7, pinTo("o/r#42"));
+    expect(f7.h).toBeNull();
+    expect(f7.cov).toBe("none");
+  });
+
+  it("закреплённая сессия не достаётся другой задаче по `#N` в названии или в первом промпте", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([{ type: "custom-title", customTitle: "#43 Отчёт", sessionId: SID }, prompt("10:00", "HEAD", "#43 сделай отчёт"), work("10:10", "HEAD"), work("10:20", "HEAD")]));
+    const s = parseSessionFile(file);
+    expect(computeFact(stubRepo([s], [], {}, new Map(), pinTo("o/r#42")), 43, [], []).cov).toBe("none");
+    expect(computeFact(stubRepo([s], [], {}, new Map(), pinTo("O/R#42")), 42, [], []).h).toBe(0.33); // регистр owner/repo не важен
+  });
+
+  it("закрепление за задачей другого репозитория уводит сессию и от задачи с тем же номером в этом", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([{ type: "custom-title", customTitle: "#42 Экспорт", sessionId: SID }, prompt("10:00", "feat/42-export", "#42"), work("10:10", "feat/42-export")]));
+    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()], {}, new Map(), pinTo("o/x#42")), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    expect(res.cov).toBe("none");
+  });
+
+  it("сессия без файла закрепления привязывается признаками, как раньше", () => {
+    const f7 = fact(session(), 7);
+    expect(f7.h).toBe(0.33);
+    expect(f7.details[0]!.rules.закрепление).toBeUndefined();
+    expect(f7.cov).toBe("full");
+    expect(fact(session(), 42).cov).toBe("none");
+  });
+
+  it("время закреплённой сессии, записанное признаками в факт другой задачи, остаётся ей — пересечение велит пересчитать тот факт", () => {
+    const recorded: Recorded = new Map([[7, { [sidKey(SID)]: [[ts("10:00"), ts("10:20")]] }]]);
+    const f42 = fact(session(), 42, pinTo("o/r#42"), recorded);
+    expect(f42.h).toBe(0.33);
+    expect(f42.taken).toEqual([]);
+    expect(f42.overlap).toEqual([{ issue: 7, h: 0.33 }]);
+  });
+
+  it("закрепления читаются из каталога: имя файла — id сессии, строка — задача `owner/repo#N`; прочее пропускается", () => {
+    const sessions = path.join(dir, "sessions");
+    mkdirSync(sessions);
+    writeFileSync(path.join(sessions, SID), "o/r#42\n");
+    writeFileSync(path.join(sessions, ".gitignore"), "*\n");
+    writeFileSync(path.join(sessions, "77777777-0000-0000-0000-000000000000"), "не задача\n");
+    expect(loadPins(sessions)).toEqual(new Map([[SID, "o/r#42"]]));
+    expect(loadPins(path.join(dir, "нет"))).toEqual(new Map());
+  });
+
+  it("транскрипт закреплённой сессии находится в любом каталоге транскриптов, закреплённой за другим репозиторием — нет", () => {
+    const projects = path.join(dir, "projects");
+    const put = (rel: string) => {
+      mkdirSync(path.dirname(path.join(projects, rel)), { recursive: true });
+      writeFileSync(path.join(projects, rel), "{}\n");
+    };
+    const OTHER = "88888888-0000-0000-0000-000000000000";
+    put(`-Users-u-elsewhere/${SID}.jsonl`);
+    put(`-Users-u-repo/${OTHER}.jsonl`);
+    put("-Users-u-repo/99999999-0000-0000-0000-000000000000.jsonl");
+    const pins = new Map([[SID, "O/R#42"], [OTHER, "o/x#1"]]);
+    expect(pinnedTranscripts("o/r", pins, projects).map((f) => path.relative(projects, f))).toEqual([`-Users-u-elsewhere/${SID}.jsonl`]);
+  });
+
+  it("закреплённая сессия не отбрасывается как рутина и вне каталогов репозитория; незакреплённая рутина — отбрасывается", () => {
+    const routine = (sid: string): Session => ({
+      sid, cwd: "/elsewhere", n_human: 1, ev: [[ts("10:00"), "HEAD", 1, "", -1], [ts("10:10"), "HEAD", 0, "", -1]],
+      prlinks: [], commits: [], first_refs: [], first_urls: [], usage: [], models: [], title: "", title_refs: [], title_urls: [], n_subagents: 0, source: "claude", routine: true,
+    });
+    const parsed = { "/p/a.jsonl": routine("a"), "/p/b.jsonl": routine("b") };
+    expect(selectSessions(parsed, ["/repo"], new Set(), new Set(["/p/a.jsonl"]))).toEqual([routine("a")]);
   });
 });
 
