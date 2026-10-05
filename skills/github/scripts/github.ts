@@ -1924,12 +1924,12 @@ function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: 
   return { sha: String(status.sha ?? ""), names: [...new Set(names)].sort() };
 }
 
-/** Открытый баг на красную основную ветку — заголовок «<base> красный…»; один на всех: первый по номеру. */
-function mainBugOf(io: Io, slug: string, base: string): { number: number; title: string } | null {
+/** Открытые баги на красную основную ветку — заголовок «<base> красный…», по номеру: поиск отстаёт, бывает и дубль. */
+function mainBugsOf(io: Io, slug: string, base: string): { number: number; title: string }[] {
   const prefix = `${base} красный`;
   const q = `repo:${slug} is:issue is:open in:title "${prefix}"`;
   const items: Any[] = restCall(io, ["api", `search/issues?q=${encodeURIComponent(q)}&per_page=20`]).items ?? [];
-  return items.filter((i) => !i.pull_request && String(i.title).startsWith(prefix)).sort((a, b) => a.number - b.number)[0] ?? null;
+  return items.filter((i) => !i.pull_request && String(i.title).startsWith(prefix)).sort((a, b) => a.number - b.number);
 }
 
 /**
@@ -1951,14 +1951,17 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
    * закрывает этот баг, — починка: null, проверка идёт как обычно.
    */
   const mainRed = (lead: string, why: string, title: string): number | null => {
-    let bug: { number: number; title: string } | null = null;
+    let bugs: { number: number; title: string }[] = [];
     try {
-      bug = mainBugOf(io, slug, base);
+      bugs = mainBugsOf(io, slug, base);
     } catch (e) {
       if (!(e instanceof GhError)) throw e;
       io.out(`○ открытый баг на красный ${base} не найден поиском: ${e.message}`);
     }
-    if (bug && closes.includes(bug.number)) {
+    // починка — PR, который закрывает любой из открытых багов; ждать — первого по номеру
+    const fix = bugs.find((b) => closes.includes(b.number));
+    const bug = fix ?? bugs[0];
+    if (fix && bug) {
       io.out(`○ ${base} красный — ${why}; PR закрывает баг #${bug.number} на него — проверяю PR как обычно`);
       return null;
     }
