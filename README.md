@@ -190,9 +190,9 @@ node bin/ai-dev.mjs release --dry-run   # что войдёт в релиз; б�
 
 ### [`est`](skills/est/SKILL.md) — оценка по фактам
 
-Оценка — по аналогам с измеренным фактом; факт — активные часы, токены и API-эквивалент в $ из транскриптов Claude Code, Codex и облачных сессий.
+Оценка — одним вызовом по аналогам с измеренным фактом, аналоги подбирает скрипт; факт — активные часы, токены и API-эквивалент в $ из транскриптов Claude Code, Codex и облачных сессий; бэктест сверяет механику с ручными оценками.
 
-`est estimate` · `est fact` · `est history` · `est cloud-import`
+`est estimate` · `est fact` · `est history` · `est backtest` · `est cloud-import`
 
 ### [`dashboard`](skills/dashboard/SKILL.md) — оценка, факт и цена по времени
 
