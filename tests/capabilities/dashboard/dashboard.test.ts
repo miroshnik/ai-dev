@@ -155,7 +155,8 @@ describe("Страница — один график: часы, токены и 
 });
 
 // `gh` — внешний край, подменяется он: проект репозитория и его элементы — из мира $FAKE_GH/world.json
-// (перечитывается на каждый вызов), `fail` — ошибка gh; каждый вызов — строкой JSON в $FAKE_GH/calls.jsonl.
+// (перечитывается на каждый вызов), PR, эпики задач и задачи с вопросами — его `live`, `fail` — ошибка gh; каждый вызов —
+// строкой JSON в $FAKE_GH/calls.jsonl.
 const FAKE_GH = `import { appendFileSync, readFileSync } from "node:fs";
 const dir = process.env.FAKE_GH;
 const args = process.argv.slice(2);
@@ -174,6 +175,12 @@ else if (query.includes("projectV2(number:$n)")) {
 } else if (query.includes("node(id:$id)")) {
   const r = Object.values(world.repos).find((x) => "P" + x.project === v.id);
   print({ data: { node: { items: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: r.items } } } });
+} else if (query.includes("pullRequests(")) {
+  // задачи — элементы проекта со статусом из фильтра $q, как отбирает GitHub; эпик задачи — из live.parents
+  const l = repo.live ?? {};
+  const status = /status:"([^"]+)"/.exec(v.q)?.[1];
+  const items = repo.items.filter((it) => it.fieldValues.nodes.some((f) => f.field?.name === "Status" && f.name === status)).map((it) => ({ content: { ...it.content, parent: (l.parents ?? {})[it.content.number] ?? null } }));
+  print({ data: { project: { items: { nodes: items } }, repository: { open: { nodes: l.open ?? [] }, merged: { nodes: l.merged ?? [] }, questions: { nodes: l.questions ?? [] } } } });
 } else { console.error("fake gh: " + query.slice(0, 80)); process.exit(1); }
 `;
 
@@ -188,12 +195,21 @@ function item(number: number, title: string, day: number, issueType: string | nu
   };
 }
 
+/** Открытая задача проекта со статусом: «В работе» — строка вкладки «Сессии». */
+function openItem(number: number, title: string, status: string, issueType: string | null = null) {
+  const it = item(number, title, 0, issueType);
+  return {
+    ...it, content: { ...it.content, state: "OPEN", stateReason: null, closedAt: null, comments: { nodes: [] } },
+    fieldValues: { nodes: [{ __typename: "ProjectV2ItemFieldSingleSelectValue", name: status, field: { name: "Status" } }] },
+  };
+}
+
 describe("Команда dashboard сервит страницу сама и открывает её в браузере", () => {
   let dir: string;
   let cleanup: () => void;
   let bin: string;
   let running: ChildProcess[];
-  const world = (w: { repos: Record<string, { project: number; items: unknown[] }>; fail?: string }) => writeFileSync(path.join(bin, "world.json"), JSON.stringify(w));
+  const world = (w: { repos: Record<string, { project: number; items: unknown[]; live?: unknown }>; fail?: string }) => writeFileSync(path.join(bin, "world.json"), JSON.stringify(w));
   const ONE = { repos: { "o/a": { project: 1, items: [item(1, "Экспорт счетов", 1), item(2, "Импорт выписок", 2), item(3, "Сверка платежей", 3), item(9, "Биллинг · эпик", 3, "Эпик")] } } };
 
   beforeEach(() => {
@@ -248,12 +264,12 @@ describe("Команда dashboard сервит страницу сама и о�
     const r = await fetch(d.url);
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toContain("text/html");
-    expect(await r.text()).toContain("<svg");
+    expect(await r.text()).toContain("Сессии: задачи в работе");
   });
 
   it("запрос с чужим Host — отказ: сайт, навёдший своё имя на 127.0.0.1, страницу не прочтёт", async () => {
     const d = await start(["--repo", "o/a", "--no-open"]);
-    const r = await fetch(d.url, { headers: { host: "evil.example" } });
+    const r = await fetch(new URL("/est", d.url), { headers: { host: "evil.example" } });
     expect(r.status).toBe(403);
     expect(await r.text()).not.toContain("Экспорт счетов");
     expect((await fetch(d.url.replace("127.0.0.1", "localhost"))).status).toBe(200);
@@ -270,13 +286,14 @@ describe("Команда dashboard сервит страницу сама и о�
 
   it("страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Обновить» — перечитывает", async () => {
     const d = await start(["--repo", "o/a", "--no-open"]);
-    const html = await (await fetch(d.url)).text();
+    const est = new URL("/est", d.url);
+    const html = await (await fetch(est)).text();
     for (const title of ["#1 Экспорт счетов", "#2 Импорт выписок", "#3 Сверка платежей"]) expect(html).toContain(title);
     // эпик по типу issue в график не входит
     expect(html).not.toContain("Биллинг · эпик");
     expect(itemsReads()).toBe(1);
     world({ repos: { "o/a": { project: 1, items: [...ONE.repos["o/a"].items, item(4, "Возврат платежа", 4)] } } });
-    expect(await (await fetch(d.url)).text()).not.toContain("Возврат платежа");
+    expect(await (await fetch(est)).text()).not.toContain("Возврат платежа");
     expect(itemsReads()).toBe(1);
     const refresh = /href="([^"]*refresh=1[^"]*)"/.exec(html)?.[1];
     expect(refresh).toBeDefined();
@@ -291,7 +308,7 @@ describe("Команда dashboard сервит страницу сама и о�
     world({ repos: { "o/a": { project: 1, items: [item(1, "Экспорт счетов", 1)] }, "o/b": { project: 2, items: [item(1, "Поиск по каталогу", 2)] } } });
     writeFileSync(path.join(dir, "ai-dev", "repos.json"), JSON.stringify({ "o/a": {}, "o/b": {} }));
     const d = await start(["--all-repos", "--no-open"]);
-    const html = await (await fetch(d.url)).text();
+    const html = await (await fetch(new URL("/est", d.url))).text();
     expect(html).toContain('data-task="o/a#1"');
     expect(html).toContain('data-task="o/b#1"');
     expect(html).toContain("o/b#1 Поиск по каталогу");
@@ -300,13 +317,76 @@ describe("Команда dashboard сервит страницу сама и о�
   it("ошибка GitHub — на странице, сервер живёт дальше", async () => {
     world({ ...ONE, fail: "HTTP 502: Bad Gateway" });
     const d = await start(["--repo", "o/a", "--no-open"]);
-    const bad = await fetch(d.url);
+    const bad = await fetch(new URL("/est", d.url));
     expect(bad.status).toBe(502);
     expect(await bad.text()).toContain("HTTP 502: Bad Gateway");
+    // «Сессии» — страница с ошибкой репозитория плашкой
+    const sessions = await fetch(d.url);
+    expect(sessions.status).toBe(200);
+    expect(await sessions.text()).toContain("HTTP 502: Bad Gateway");
     world(ONE);
-    const ok = await fetch(d.url);
+    const ok = await fetch(new URL("/est", d.url));
     expect(ok.status).toBe(200);
     expect(await ok.text()).toContain("#1 Экспорт счетов");
+    expect(await (await fetch(new URL("/?refresh=1", d.url))).text()).not.toContain("HTTP 502");
+  });
+
+  it("вкладка «Сессии» открыта по умолчанию, «Оценка и факт» — второй вкладкой", async () => {
+    const d = await start(["--repo", "o/a", "--no-open"]);
+    const main = await (await fetch(d.url)).text();
+    expect(main).toContain('<nav class="tabs" aria-label="Вкладки"><a href="/" aria-current="page">Сессии</a><a href="/est">Оценка и факт</a></nav>');
+    expect(main).toContain("Ждут владельца");
+    expect(main).not.toContain("<svg");
+    const est = await (await fetch(new URL("/est", d.url))).text();
+    expect(est).toContain('<a href="/">Сессии</a>');
+    expect(est).toContain('<a href="/est" aria-current="page">Оценка и факт</a>');
+    expect(est).toContain("<svg");
+    expect((await fetch(new URL("/other", d.url))).status).toBe(404);
+  });
+
+  it("«Сессии» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама", async () => {
+    const now = Date.now() / 1000;
+    const rec = (ago: number, text: string) => JSON.stringify({ type: "assistant", timestamp: new Date((now - ago) * 1000).toISOString(), message: { id: `m${ago}`, role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text }] } });
+    const projects = path.join(dir, ".claude", "projects");
+    const write = (sub: string, id: string, title: string, ...lines: string[]) => {
+      mkdirSync(path.join(projects, sub), { recursive: true });
+      writeFileSync(path.join(projects, sub, `${id}.jsonl`), [JSON.stringify({ type: "custom-title", customTitle: title }), ...lines].join("\n") + "\n");
+    };
+    // сессия задачи #5 работает из чужого каталога; сессия эпика — из каталога репозитория, без закрепления
+    write("-tmp-scratch", "s5", "#5 Импорт банков", rec(120, "CI зелёный.\n\nОсталось: мерж — от владельца."));
+    write("-work-a--claude-worktrees-x", "e1", "Биллинг · планирование", rec(600, "Всё сделано, но есть вопросы:\n1. Делить импорт?"));
+    mkdirSync(path.join(dir, "ai-dev", "sessions"), { recursive: true });
+    writeFileSync(path.join(dir, "ai-dev", "sessions", "s5"), "o/a#5\n");
+    writeFileSync(path.join(dir, "ai-dev", "repos.json"), JSON.stringify({ "o/a": { paths: ["/work/a"] } }));
+    const commit = (state: string) => ({ nodes: [{ commit: { messageBody: "", statusCheckRollup: { state } } }] });
+    world({
+      repos: {
+        "o/a": {
+          project: 1,
+          items: [...ONE.repos["o/a"].items, openItem(5, "Импорт банков", "В работе"), openItem(6, "Отчёт по ROI", "В работе"), openItem(10, "Банки · эпик", "В работе", "Эпик"), openItem(11, "Поиск", "Бэклог")],
+          live: {
+            open: [{ number: 50, url: "https://github.com/o/a/pull/50", headRefName: "feat/5-bank-import", mergeable: "MERGEABLE", closingIssuesReferences: { nodes: [{ number: 5 }] }, commits: commit("SUCCESS") }],
+            parents: { 5: { number: 10, title: "Банки · эпик" } },
+            questions: [{ number: 6, title: "Отчёт по ROI", body: "## Вопросы\n1. Валюта отчёта?\n" }],
+          },
+        },
+      },
+    });
+    const d = await start(["--repo", "o/a", "--no-open"]);
+    const html = await (await fetch(d.url)).text();
+    const row = (n: number) => (new RegExp(`<tr[^>]*data-task="o/a#${n}"[\\s\\S]*?</tr>`).exec(html)?.[0] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(row(5)).toContain("эпик #10 Банки · эпик");
+    expect(row(5)).toContain("2 мин назад");
+    expect(row(5)).toContain("мерж");
+    expect(row(5)).toContain("#50 чеки зелёные");
+    expect(row(6)).toContain("сессии нет");
+    // эпик и задача не «В работе» — не строки
+    expect(html).not.toContain('data-task="o/a#10"');
+    expect(html).not.toContain('data-task="o/a#11"');
+    const asks = /<section class="asks[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+    for (const q of ["Осталось: мерж — от владельца.", "1. Делить импорт?", "1. Валюта отчёта?"]) expect(asks).toContain(q);
+    // обновляется сама: раз в 30 с страница заново, подменой <main> — раскрытое остаётся раскрытым
+    expect(html).toMatch(/<\/main><script>[\s\S]*replaceWith[\s\S]*setInterval\([^\n]*, 30000\);[\s\S]*<\/script>/);
   });
 
   it("в облачной сессии — ошибка с объяснением, а не сбой gh", () => {
