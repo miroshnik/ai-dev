@@ -30,18 +30,22 @@
   это редкость, а `describe`/`it` со строковыми литералами разбираются
   надёжно.
 - Исходник разбирает парсер — `@babel/parser` файлом в скилле
-  (`scripts/vendor/babel-parser.cjs` — `lib/index.js` пакета как есть: один
-  файл без `require`, лицензия MIT рядом). Свой лексер угадывал, где
-  регулярка, а где деление, где шаблон, комментарий и аргумент типа, и при
-  ошибке терял тесты файла молча (#267, #269, #271, #275): синтаксис
+  (`scripts/vendor/babel-parser.cjs` — `lib/index.js` пакета: один файл без
+  `require`, лицензия MIT рядом, типы — `babel-parser.d.cts`). `speclib.ts`
+  берёт его статическим `import`, без `import.meta`: Playwright и Jest в
+  проекте без `"type": "module"` грузят харнесс как CommonJS (#303). Свой
+  лексер угадывал, где регулярка, а где деление, где шаблон, комментарий и
+  аргумент типа, и при ошибке терял тесты файла молча (#267, #269, #271,
+  #275): синтаксис
   TypeScript шире любой догадки (#277). Отвергнуто: TypeScript проекта — у
   7.x (порт на Go) нет `createSourceFile` в процессе, только нестабильный
   API через процесс tsgo, синхронный вариант под Bun не работает;
   `oxc-parser` — нативный бинарник платформы; парсер devDependency проекта —
   job `spec-diff` в CI проекта ставила бы зависимости, а смысл её — в
-  лёгкости. Обновить — `npm pack @babel/parser`: `lib/index.js` →
-  `vendor/babel-parser.cjs`, `LICENSE` → `vendor/babel-parser.LICENSE`,
-  версия — в комментарии `speclib.ts`.
+  лёгкости. Обновить — `npm pack @babel/parser`: `lib/index.js` без
+  последней строки `//# sourceMappingURL` (карты рядом нет — Vitest ищет её
+  и печатает ошибку) → `vendor/babel-parser.cjs`, `LICENSE` →
+  `vendor/babel-parser.LICENSE`, версия — в комментарии `speclib.ts`.
 - Плагины — по расширению: `.ts` без JSX (`<T>x` — приведение типа),
   `.tsx` и JS — с JSX, файл неизвестен (`codeOnly(text)`) — TypeScript, затем
   TSX; декораторы — и после `export`, и у параметров. Телом `describe`

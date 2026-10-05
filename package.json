@@ -26,6 +26,7 @@
     "spec:publish": "bun skills/spec/scripts/spec-publish.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/bun": "^1.4.2",
     "@types/node": "^26.6.2",
     "eslint": "^10.11.0",

@@ -11,8 +11,9 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
+
+import * as babel from "./vendor/babel-parser.cjs";
 
 const posix = path.posix;
 
@@ -415,14 +416,18 @@ interface Parsed {
   comments: AstComment[];
 }
 
-/**
- * Парсер — `@babel/parser` 7.29.9 файлом в скилле: `vendor/babel-parser.cjs` — `lib/index.js` пакета как есть (один
- * файл без `require`), лицензия рядом; скрипты скилла — без зависимостей, job `spec-diff` в CI проекта — без установки
- * пакетов. Обновить — `npm pack @babel/parser`: его `lib/index.js` и `LICENSE` — сюда, версию — в этот комментарий.
- * Свой лексер угадывал, где регулярка, шаблон, комментарий и аргумент типа, и терял тесты молча (#267, #269, #271,
- * #275); синтаксис TypeScript шире любой догадки (#277).
+/*
+ * Парсер — `@babel/parser` 7.29.9 файлом в скилле: `vendor/babel-parser.cjs` — `lib/index.js` пакета (один файл без
+ * `require`) без последней строки `//# sourceMappingURL` — карты рядом нет, Vitest ищет её и печатает ошибку; типы —
+ * `vendor/babel-parser.d.cts`, лицензия рядом. Скрипты скилла — без зависимостей, job `spec-diff` в CI проекта — без
+ * установки пакетов. Обновить — `npm pack @babel/parser`: его `lib/index.js` и `LICENSE` — сюда, версию — в этот
+ * комментарий. Свой лексер угадывал, где регулярка, шаблон, комментарий и аргумент типа, и терял тесты молча (#267,
+ * #269, #271, #275); синтаксис TypeScript шире любой догадки (#277).
+ *
+ * Импорт статический, вверху файла: `createRequire(import.meta.url)` ломал Playwright и Jest в проекте без
+ * `"type": "module"` — они грузят TS как CommonJS, где `import.meta` — синтаксическая ошибка (#303,
+ * tests/standards/harness-load).
  */
-const babel = createRequire(import.meta.url)("./vendor/babel-parser.cjs") as { parse(source: string, options: object): Parsed };
 
 const OPTIONS = {
   sourceType: "module",
@@ -456,7 +461,7 @@ function parseCode(source: string, file?: string): Parsed {
   let first: Error | undefined;
   for (const plugins of pluginSets(file)) {
     try {
-      return babel.parse(source, { ...OPTIONS, plugins });
+      return babel.parse(source, { ...OPTIONS, plugins }) as Parsed;
     } catch (e) {
       first ??= e as Error;
     }
