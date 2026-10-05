@@ -473,7 +473,8 @@ bun <каталог скилла>/scripts/spec-exceptions.ts [--root DIR]
    ```
    Быстрые проверки — скрипт `test:spec` раннера проекта, стандарты и
    архитектура (`"test:spec": "vitest run tests/standards tests/architecture"`):
-   его гоняет `github pr premerge` перед мержем на слиянии со свежим `main`.
+   его гоняет `github pr premerge` перед мержем на слиянии со свежим `main`
+   (после `typecheck`, если он есть).
    Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
    spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
    `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,
