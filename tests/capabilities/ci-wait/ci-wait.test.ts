@@ -25,6 +25,7 @@ case "$1 $2" in
       */pulls/*) kind=pull ;;
       */rules/branches/*) kind=rules ;;
       */branches/*) kind=branch ;;
+      */issues/*) kind=issue ;;
       *) exit 0 ;;
     esac ;;
   *) echo "fake gh: $*" >&2; exit 1 ;;
@@ -203,5 +204,25 @@ describe("PR с конфликтом с базой не ждут — CI на н�
   it("mergeable ещё не вычислен — ожидание, а не ERROR", () => {
     const r = waitPr([{ mergeable: null }, { mergeable: null, runs: [ok("tests")] }]);
     expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+  });
+});
+
+/**
+ * Красный `main` чинит одна сессия по багу «main красный…», остальные ждут его закрытия (`github pr premerge`, код 3,
+ * #282): фоновой командой, чьё завершение будит сессию, а не опросом руками.
+ */
+describe("Issue ждут до закрытия — баг на красный main будит сессию, когда его закрыли", () => {
+  it("открытый issue — ожидание, закрытый — PASS с причиной закрытия", () => {
+    write("issue", [{ state: "open" }, { state: "open" }, { state: "closed", state_reason: "completed" }]);
+    const r = ciWait(["issue", "41", "--timeout", "5"]);
+    expect([r.code, r.result]).toEqual([0, "PASS issue #41 closed (completed)"]);
+    expect(calls().filter((c) => c === "repos/{owner}/{repo}/issues/41")).toHaveLength(3);
+  });
+
+  it("issue нет — ERROR сразу, а не ожидание до таймаута", () => {
+    write("issue", ["gh: Not Found (HTTP 404)"]);
+    const r = ciWait(["issue", "41", "--timeout", "5"]);
+    expect(r.code).toBe(3);
+    expect(r.result).toStartWith("ERROR issue #41 not found");
   });
 });
