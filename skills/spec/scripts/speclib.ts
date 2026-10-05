@@ -512,22 +512,44 @@ export function callOptions(source: string, want: Record<string, string>, file?:
   const out: [string, string][] = [];
   walkAst(parseCode(source, file).program, (n) => {
     if (n.type !== "CallExpression") return;
-    const callee = n.callee as AstNode;
-    const id = callee.type === "MemberExpression" && !callee.computed ? (callee.property as AstNode) : callee;
-    const name = id.type === "Identifier" ? (id.name as string) : null;
+    const name = calleeName(n);
     if (name === null || !Object.hasOwn(want, name)) return;
-    for (const a of n.arguments as AstNode[]) {
-      if (a.type !== "ObjectExpression") continue;
-      for (const p of a.properties as AstNode[]) {
-        if (p.type !== "ObjectProperty" || p.computed) continue;
-        const key = p.key as AstNode;
-        if ((key.type === "Identifier" ? key.name : key.type === "StringLiteral" ? key.value : null) !== want[name]) continue;
-        const value = staticString(p.value as AstNode);
-        if (value !== null) out.push([name, value]);
-      }
-    }
+    for (const value of optionsOf(n, want[name]!)) out.push([name, value]);
   });
   return out;
+}
+
+/** Имя вызываемого: `f(…)` и `x.f(…)` — `f`; вычисляемое — null. */
+function calleeName(call: AstNode): string | null {
+  const callee = call.callee as AstNode;
+  const id = callee.type === "MemberExpression" && !callee.computed ? (callee.property as AstNode) : callee;
+  return id.type === "Identifier" ? (id.name as string) : null;
+}
+
+/** Значения опции `key` объектов литералом в аргументах вызова — строки, известные без прогона. */
+function optionsOf(call: AstNode, key: string): string[] {
+  const out: string[] = [];
+  for (const a of call.arguments as AstNode[]) {
+    if (a.type !== "ObjectExpression") continue;
+    for (const p of a.properties as AstNode[]) {
+      if (p.type !== "ObjectProperty" || p.computed) continue;
+      const k = p.key as AstNode;
+      if ((k.type === "Identifier" ? k.name : k.type === "StringLiteral" ? k.value : null) !== key) continue;
+      const value = staticString(p.value as AstNode);
+      if (value !== null) out.push(value);
+    }
+  }
+  return out;
+}
+
+/** Вызовы харнесса и опция, которая называет проверку: у invariant `rule` — соглашение папки, проверка — его реестр. */
+export const HARNESS_CALLS: Record<string, string> = { invariant: "registry", examples: "rule" };
+
+/** Проверка харнесса в исходнике: вызов, цепочка describe на его месте и реестр или правило (null — не вычислить без прогона). */
+export interface HarnessCall {
+  call: string;
+  describes: string[];
+  value: string | null;
 }
 
 /** Строка, известная без прогона: литерал, шаблон без подстановок или их сложение через `+`; иначе null. */
@@ -661,13 +683,15 @@ export function parseJs(file: string, source: string): Test[] {
  * аргументом вызова (у .each / .for / .runIf / .skipIf — второго), аргумент типа `<…>` в любом месте; describe
  * открывает вложенность для всех своих аргументов. Название, которое не вычислить, — в `unnamed`, вызов не
  * разбирается дальше: цепочка его тестов неизвестна. JSDoc вплотную перед вызовом — его проза; первый JSDoc файла, за
- * которым идёт не вызов (обычно импорты), — проза файла. Не разобрать — ошибка.
+ * которым идёт не вызов (обычно импорты), — проза файла. Вызовы харнесса (`HARNESS_CALLS`) — в `checks` с цепочкой
+ * describe: их тесты в исходнике не названы. Не разобрать — ошибка.
  */
-export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs; unnamed: Unnamed[] } {
+export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs; unnamed: Unnamed[]; checks: HarnessCall[] } {
   const ast = parseCode(source, file);
   const doc = jsdocs(source, ast);
   const out: Test[] = [];
   const unnamed: Unnamed[] = [];
+  const checks: HarnessCall[] = [];
   const docs: Docs = { file: "", describes: new Map(), tests: new Map() };
   const calls = new Set<number>(); // начала вызовов тестов: JSDoc перед ними — не проза файла
 
@@ -681,7 +705,11 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   const visit = (chain: string[]) => (n: AstNode): boolean => {
     if (n.type !== "CallExpression") return true;
     const call = testCall(n);
-    if (!call) return true;
+    if (!call) {
+      const name = calleeName(n);
+      if (name !== null && Object.hasOwn(HARNESS_CALLS, name)) checks.push({ call: name, describes: chain, value: optionsOf(n, HARNESS_CALLS[name]!)[0] ?? null });
+      return true;
+    }
     calls.add(n.start);
     const [first, ...rest] = call.args;
     const name = staticString(first);
@@ -707,5 +735,5 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   };
   walkAst(ast.program, visit([]));
   if (doc.head && !calls.has(doc.head.at)) docs.file = doc.head.text;
-  return { tests: out, docs, unnamed };
+  return { tests: out, docs, unnamed, checks };
 }
