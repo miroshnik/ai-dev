@@ -23,6 +23,16 @@ function diffFrom(base: string, ...args: string[]) {
   return runScript("spec-diff", ["--base", base, ...args], dir);
 }
 
+// ветка spec как её пишет spec-publish: корень — docs/spec, в сообщении — Source: <sha исходника>
+function publishSpec(source: string, tests: object[]) {
+  repo.git("checkout", "-q", "--orphan", "spec");
+  repo.git("rm", "-rq", "--cached", ".");
+  writeTree(dir, { "tests.json": JSON.stringify(tests) });
+  repo.git("add", "tests.json");
+  repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "-c", "commit.gpgsign=false", "commit", "-q", "-m", `spec: ${source.slice(0, 12)}\n\nSource: ${source}\n`);
+  repo.git("checkout", "-q", "-f", "main");
+}
+
 describe("Снятые требования — первыми, потом изменённые и добавленные", () => {
   it("удалённые идут первыми, потом изменённые, потом добавленные", () => {
     const base = repo.commit({
@@ -385,6 +395,83 @@ describe("Сценарии задачи сверяются с тестами PR"
 });
 
 /**
+ * Стандарт «реестр + инвариант» называет соглашение в `describe` («каждая мутация пишет аудит»), а тесты внутри
+ * порождает харнесс по элементам реестра. Сценарий такого стандарта — название `describe`: он сверяется с ним по
+ * исходникам, без прогона, и держится проверкой харнесса, а не одним тестом.
+ */
+describe("Сценарий стандарта «реестр + инвариант» — describe проверки харнесса", () => {
+  const STD = "tests/standards/audit/audit.test.ts";
+  const audit = (registry: string) =>
+    ts(
+      `import { examples, invariant } from "../../../harness.ts";\n` +
+        `describe("каждая мутация пишет аудит", () => { invariant(it, { registry: "${registry}", items, name: (m) => m + " пишет аудит" }); });\n` +
+        `describe("Логи", () => { describe("console запрещён", () => { examples(it, { rule: "no-console", bad: [] }); }); });`,
+    );
+  const ISSUE = "## Сценарии\n\n- Каждая мутация пишет аудит.\n- Логи › console запрещён\n";
+  const AUDIT_LINE = "- ✅ Каждая мутация пишет аудит. — `tests/standards/audit` · каждая мутация пишет аудит — проверка харнесса: реестр «мутации»";
+
+  it("сценарий совпадает с describe, в котором вызван invariant", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [STD]: audit("мутации"), "issue.md": ISSUE });
+    const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain(
+      [
+        "### Сценарии задачи (2)",
+        "",
+        AUDIT_LINE,
+        "- ✅ Логи › console запрещён — `tests/standards/audit` · Логи › console запрещён — проверка харнесса: правило no-console",
+      ].join("\n"),
+    );
+    expect(out).not.toContain("Тесты сверх сценариев");
+    const j = JSON.parse(diffFrom(base, "--scenarios", "issue.md", "--json").stdout);
+    expect(j.scenarios[0]).toEqual({
+      scenario: "Каждая мутация пишет аудит.",
+      test: null,
+      harness: { folder: "tests/standards/audit", describes: ["каждая мутация пишет аудит"], checks: ["реестр «мутации»"] },
+    });
+  });
+
+  // CI передаёт отчёт всегда, а ветки spec в новом проекте ещё нет: тестов харнесса дифф не видит, сценарий — видит
+  it("сценарий стандарта сверяется без отчёта раннера", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [STD]: audit("мутации"), "issue.md": ISSUE });
+    writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [STD]: [[["каждая мутация пишет аудит"], "a пишет аудит"]] }));
+    for (const args of [[], ["--report", "r.json", "--spec-branch", "spec"]]) {
+      const out = diffFrom(base, ...args, "--scenarios", "issue.md").stdout;
+      expect(out).toContain(AUDIT_LINE);
+      expect(out).not.toContain("❌");
+    }
+  });
+
+  it("тесты, порождённые проверкой харнесса, — тесты её сценария, а не сверх сценариев", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    publishSpec(base, [{ path: BILLING, describes: [], name: "x" }]);
+    repo.commit({ [STD]: audit("мутации") + `describe("каждая мутация пишет аудит", () => { it("журнал хранится год", () => {}); });\n`, "issue.md": ISSUE });
+    const names: [string[], string][] = [
+      [["каждая мутация пишет аудит"], "a пишет аудит"],
+      [["каждая мутация пишет аудит"], "реестр «мутации» не пуст"],
+      [["каждая мутация пишет аудит"], "журнал хранится год"],
+      [["Логи", "console запрещён"], "нельзя: console.log"],
+    ];
+    writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [STD]: names }));
+    const out = diffFrom(base, "--report", "r.json", "--spec-branch", "spec", "--scenarios", "issue.md").stdout;
+    expect(out).toContain("**Добавлены (4):**");
+    expect(out).toContain(AUDIT_LINE);
+    // тест, написанный руками, — своё требование, даже внутри describe проверки
+    expect(out).toContain("**Тесты сверх сценариев (1):**\n\n- `tests/standards/audit` · каждая мутация пишет аудит › журнал хранится год");
+  });
+
+  // как с тестами: сценарий закрывает то, что PR добавил или переименовал, а не то, что уже было
+  it("describe проверки харнесса, которого PR не менял, сценария не закрывает; сменился реестр — закрывает", () => {
+    const base = repo.commit({ [STD]: audit("мутации") });
+    repo.commit({ [STD]: audit("мутации") + "// проверка элемента строже\n", "issue.md": ISSUE });
+    expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ❌ Каждая мутация пишет аудит. — теста нет");
+    repo.commit({ [STD]: audit("мутации и команды") });
+    expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ✅ Каждая мутация пишет аудит. — `tests/standards/audit` · каждая мутация пишет аудит — проверка харнесса: реестр «мутации и команды»");
+  });
+});
+
+/**
  * Не каждое решение — название теста: модель архитектуры, исключения и реестры проверок живут в данных и в вызовах
  * харнесса. Их изменение — тоже изменение спеки, и ревьюер видит его в том же разделе PR.
  */
@@ -588,16 +675,6 @@ describe("Тесты харнесса — в диффе спеки: назван
   const STD = "tests/standards/audit/audit.test.ts";
   const registry = ts(`import { invariant } from "../../../harness.ts";\ninvariant(it, { registry: "мутации", items, name: (m) => m + " пишет аудит" });`);
   const t = (name: string) => ({ path: STD, describes: [] as string[], name });
-
-  // ветка spec как её пишет spec-publish: корень — docs/spec, в сообщении — Source: <sha исходника>
-  function publishSpec(source: string, tests: object[]) {
-    repo.git("checkout", "-q", "--orphan", "spec");
-    repo.git("rm", "-rq", "--cached", ".");
-    writeTree(dir, { "tests.json": JSON.stringify(tests) });
-    repo.git("add", "tests.json");
-    repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "-c", "commit.gpgsign=false", "commit", "-q", "-m", `spec: ${source.slice(0, 12)}\n\nSource: ${source}\n`);
-    repo.git("checkout", "-q", "-f", "main");
-  }
   const report = (names: string[]) => writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [STD]: names.map((n) => [[], n] as [string[], string]) }));
 
   it("тесты, которые порождает харнесс, видны в диффе спеки — новый элемент реестра добавлен, снятый удалён", () => {

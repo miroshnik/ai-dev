@@ -10,7 +10,8 @@
  *                    [--scenarios issue.md | -]
  *
  * --scenarios — тело задачи (markdown, `-` — stdin): раздел «## Сценарии» сверяется с добавленными и изменёнными
- * тестами — сценарий, ставший тестом, несделанный сценарий и тесты сверх сценариев.
+ * тестами и с describe новых проверок харнесса — сценарий, ставший тестом или проверкой, несделанный сценарий и тесты
+ * сверх сценариев.
  *
  * База по умолчанию — merge-base базовой ветки и HEAD (как дифф PR на GitHub). Запуск — Bun; нужен git.
  */
@@ -104,13 +105,18 @@ function testsInWorktree(root: string): Map<string, string> {
 // невычислимое название — строкой в stderr один раз: тот же тест есть и в базе, и в голове
 const unnamedSeen = new Set<string>();
 
-/** Тесты файлов; файл, который не разобрать, и тест, чьё название не вычислить статически, — строкой в stderr. */
-function parseFiles(files: Map<string, string>, label: string): Test[] {
+/** Проверка харнесса в файле теста: вызов по разбору и путь файла. */
+export type Check = L.HarnessCall & { path: string };
+
+/** Тесты и проверки харнесса файлов; файл, который не разобрать, и тест, чьё название не вычислить статически, — строкой в stderr. */
+function parseFiles(files: Map<string, string>, label: string): { tests: Test[]; checks: Check[] } {
   const tests: Test[] = [];
+  const checks: Check[] = [];
   for (const file of [...files.keys()].sort()) {
     try {
       const scan = L.scanJs(file, files.get(file)!);
       tests.push(...scan.tests);
+      checks.push(...scan.checks.map((c) => ({ ...c, path: file })));
       for (const u of scan.unnamed) {
         const key = JSON.stringify([file, u.kind, u.name]);
         if (unnamedSeen.has(key)) continue;
@@ -121,7 +127,7 @@ function parseFiles(files: Map<string, string>, label: string): Test[] {
       console.error(`spec-diff: ${label}: ${file}: ${(e as Error).message}`);
     }
   }
-  return tests;
+  return { tests, checks };
 }
 
 /** Файлы тестов, изменённые вне tests/ (в том числе неотслеживаемые при --worktree). */
@@ -176,11 +182,11 @@ function outOfTreePool(
   for (const f of outFiles) {
     const src = baseFiles.get(f);
     if (src === undefined) continue;
-    const baseTests = parseFiles(new Map([[f, src]]), "база");
+    const baseTests = parseFiles(new Map([[f, src]]), "база").tests;
     count.set(f, baseTests.length);
     if (!headFiles.has(f)) gone.add(f);
     const left = new Map<string, number>();
-    for (const t of parseFiles(new Map([[f, headFiles.get(f) ?? ""]]), "HEAD")) left.set(nameKey(t), (left.get(nameKey(t)) ?? 0) + 1);
+    for (const t of parseFiles(new Map([[f, headFiles.get(f) ?? ""]]), "HEAD").tests) left.set(nameKey(t), (left.get(nameKey(t)) ?? 0) + 1);
     for (const t of baseTests) {
       const k = nameKey(t);
       const n = left.get(k) ?? 0;
@@ -395,8 +401,9 @@ export function modelFacts(m: ModelData | undefined): string[] {
   ];
 }
 
-// у invariant `rule` — соглашение папки, а не правило линтера: проверка — его реестр
-const HARNESS_CALLS = { invariant: "registry", examples: "rule" };
+/** Что проверяет вызов харнесса: «реестр «мутации»», «правило no-console»; имя не вычислить без прогона — только вид. */
+const checkLabel = (call: string, value: string | null): string =>
+  call === "invariant" ? (value === null ? "реестр" : `реестр «${value}»`) : value === null ? "правило" : `правило ${value}`;
 
 /** Проверки харнесса в исходниках тестов: реестры invariant и правила examples — опции вызова по AST. */
 export function checkFacts(files: Map<string, string>): string[] {
@@ -406,13 +413,41 @@ export function checkFacts(files: Map<string, string>): string[] {
     const folder = path.posix.dirname(file);
     let options: [string, string][];
     try {
-      options = L.callOptions(text, HARNESS_CALLS, file);
+      options = L.callOptions(text, L.HARNESS_CALLS, file);
     } catch {
       continue; // файл не разобран — об этом уже сказал разбор названий (parseFiles)
     }
-    for (const [call, value] of options) out.add(`\`${folder}\` · ${call === "invariant" ? `реестр «${value}»` : `правило ${value}`}`);
+    for (const [call, value] of options) out.add(`\`${folder}\` · ${checkLabel(call, value)}`);
   }
   return [...out].sort();
+}
+
+/** describe с проверками харнесса — сценарий стандарта «реестр + инвариант»: папка, цепочка describe и что проверяют. */
+export interface HarnessDescribe {
+  folder: string;
+  describes: string[];
+  checks: string[];
+}
+
+/**
+ * describe с проверкой харнесса, которой на базе в нём не было (describe новый или переименован, сменился реестр или
+ * правило): как новые и переименованные тесты, только он закрывает сценарий. Вызов вне describe назвать нечем — мимо.
+ */
+export function freshChecks(base: Check[], head: Check[]): HarnessDescribe[] {
+  const group = (checks: Check[]) => {
+    const out = new Map<string, HarnessDescribe>();
+    for (const c of checks) {
+      if (!c.describes.length) continue;
+      const folder = path.posix.dirname(c.path);
+      const k = JSON.stringify([folder, c.describes]);
+      const g = out.get(k) ?? { folder, describes: c.describes, checks: [] };
+      if (!g.checks.includes(checkLabel(c.call, c.value))) g.checks.push(checkLabel(c.call, c.value));
+      out.set(k, g);
+    }
+    return out;
+  };
+  const was = group(base);
+  return [...group(head)].filter(([k, g]) => g.checks.some((c) => !was.get(k)?.checks.includes(c))).map(([, g]) => ({ ...g, checks: g.checks.sort() }));
 }
 
 // файл исключений — по правилу exceptionFile (speclib), как его читают харнесс и spec-doc: exceptions/<элемент>.json —
@@ -650,23 +685,52 @@ const norm = (s: string): string => {
   return t.toLowerCase();
 };
 
-/** Сценарий ↔ новый тест: совпадает с названием it или с цепочкой «describe › it» (без регистра, внешних кавычек и знака в конце). */
-export function matchScenarios(scenarios: string[], fresh: Test[]): { found: [string, Test | null][]; extra: Test[] } {
-  const used = new Set<Test>();
-  const found = scenarios.map((sc): [string, Test | null] => {
-    const want = norm(sc);
-    const t = fresh.find((x) => !used.has(x) && (norm(x.name) === want || norm([...x.describes, x.name].join(" › ")) === want)) ?? null;
-    if (t) used.add(t);
-    return [sc, t];
-  });
-  return { found, extra: fresh.filter((t) => !used.has(t)) };
+/** Сценарий и чем он стал: новым тестом, describe проверки харнесса или ничем. */
+export interface Found {
+  scenario: string;
+  test: Test | null;
+  harness: HarnessDescribe | null;
 }
 
-function scenarioLines(scenarios: string[] | null, fresh: Test[], limit = Infinity): string[] {
+/**
+ * Сценарий ↔ новый тест: совпадает с названием it или с цепочкой «describe › it» (без регистра, внешних кавычек и знака
+ * в конце); теста нет — с describe новой проверки харнесса, его названием или цепочкой. Тесты, которые эта проверка
+ * породила (`generated` — только из отчёта), — тесты её сценария, а не сверх сценариев.
+ */
+export function matchScenarios(
+  scenarios: string[],
+  fresh: Test[],
+  checks: HarnessDescribe[] = [],
+  generated: Set<Test> = new Set(),
+): { found: Found[]; extra: Test[] } {
+  const used = new Set<Test>();
+  const usedChecks = new Set<HarnessDescribe>();
+  const found = scenarios.map((scenario): Found => {
+    const want = norm(scenario);
+    const test = fresh.find((x) => !used.has(x) && (norm(x.name) === want || norm([...x.describes, x.name].join(" › ")) === want)) ?? null;
+    if (test) {
+      used.add(test);
+      return { scenario, test, harness: null };
+    }
+    const harness = checks.find((c) => !usedChecks.has(c) && (norm(c.describes.at(-1)!) === want || norm(c.describes.join(" › ")) === want)) ?? null;
+    if (harness) usedChecks.add(harness);
+    return { scenario, test: null, harness };
+  });
+  const covered = (t: Test) =>
+    generated.has(t) && [...usedChecks].some((c) => c.folder === L.folderOf(t) && c.describes.length === t.describes.length && c.describes.every((d, i) => d === t.describes[i]));
+  return { found, extra: fresh.filter((t) => !used.has(t) && !covered(t)) };
+}
+
+const harnessEntry = (c: HarnessDescribe) => `\`${c.folder}\` · ${c.describes.map(L.mdText).join(" › ")} — проверка харнесса: ${c.checks.map(L.mdText).join(", ")}`;
+
+function scenarioLines(scenarios: string[] | null, fresh: Test[], checks: HarnessDescribe[], generated: Set<Test>, limit = Infinity): string[] {
   if (scenarios === null) return ["### Сценарии задачи", "", "В задаче нет раздела «## Сценарии» — сверять не с чем.", ""];
-  const { found, extra } = matchScenarios(scenarios, fresh);
+  const { found, extra } = matchScenarios(scenarios, fresh, checks, generated);
   const lines = [`### Сценарии задачи (${scenarios.length})`, ""];
-  for (const [sc, t] of found) lines.push(t ? `- ✅ ${L.mdText(sc)} — ${entry(t).slice(2)}` : `- ❌ ${L.mdText(sc)} — теста нет`);
+  for (const { scenario, test, harness } of found) {
+    const sc = L.mdText(scenario);
+    lines.push(test ? `- ✅ ${sc} — ${entry(test).slice(2)}` : harness ? `- ✅ ${sc} — ${harnessEntry(harness)}` : `- ❌ ${sc} — теста нет`);
+  }
   lines.push("");
   if (extra.length > limit) lines.push(`**Тесты сверх сценариев (${extra.length}):** списком — \`spec-diff --full\`.`, "");
   else if (extra.length) lines.push(`**Тесты сверх сценариев (${extra.length}):**`, "", ...extra.map(entry), "");
@@ -750,13 +814,18 @@ export async function main(argv: string[]): Promise<number> {
   let decisionData: { base: Decisions; head: Decisions };
   let harnessNote = "";
   const harness = new Set<Test>(); // тесты только из отчёта — порождены харнессом, в исходниках их нет
+  let checks: HarnessDescribe[];
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
     const baseFiles = testsAtRev(base, top, prefix);
-    let baseTests = parseFiles(baseFiles, v.base);
+    const baseScan = parseFiles(baseFiles, v.base);
+    let baseTests = baseScan.tests;
     const headFiles = v.worktree ? testsInWorktree(root) : testsAtRev(v.head, top, prefix);
-    let headTests = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
+    const headScan = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
+    let headTests = headScan.tests;
+    // сценарий стандарта — describe проверки харнесса: по исходникам, без отчёта и ветки spec
+    checks = freshChecks(baseScan.checks, headScan.checks);
     // тесты харнесса (реестры, примеры) в исходниках не названы: голова — по отчёту раннера, база — tests.json ветки spec
     if (v.report?.length) {
       const branch = v["spec-branch"]!;
@@ -826,12 +895,19 @@ export async function main(argv: string[]): Promise<number> {
     const fresh = [...added, ...changed.map(([, n]) => n)];
     if (v.json) {
       const j = JSON.parse(text);
-      const { found, extra } = scenarios ? matchScenarios(scenarios, fresh) : { found: [], extra: fresh };
-      j.scenarios = scenarios === null ? null : found.map(([sc, t]) => ({ scenario: sc, test: t ? { folder: L.folderOf(t), describes: t.describes, name: t.name } : null }));
+      const { found, extra } = scenarios ? matchScenarios(scenarios, fresh, checks, harness) : { found: [], extra: fresh };
+      j.scenarios =
+        scenarios === null
+          ? null
+          : found.map(({ scenario, test: t, harness: h }) => ({
+              scenario,
+              test: t ? { folder: L.folderOf(t), describes: t.describes, name: t.name } : null,
+              harness: h ? { folder: h.folder, describes: h.describes, checks: h.checks } : null,
+            }));
       j.extra_tests = extra.map((t) => ({ folder: L.folderOf(t), describes: t.describes, name: t.name }));
       text = JSON.stringify(j, null, 2) + "\n";
     } else {
-      text = text.trimEnd() + "\n\n" + scenarioLines(scenarios, fresh, limit).join("\n").trimEnd() + "\n";
+      text = text.trimEnd() + "\n\n" + scenarioLines(scenarios, fresh, checks, harness, limit).join("\n").trimEnd() + "\n";
     }
   }
   process.stdout.write(text);
