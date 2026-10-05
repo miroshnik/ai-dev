@@ -5038,6 +5038,161 @@
   "name": "реестр «файлы ядра канона с бюджетом» не пуст"
  },
  {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "concurrency в тексте скрипта и в прозе — не блок"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "github.ref своя только у pull_request: у pull_request_target это ветка базы"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "группа по PR с запасным github.ref в workflow только на pull_request — своя"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "запасное run_id — своя группа у прогона main"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "общая группа без queue: max — ошибка с файлом и строкой"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "общая группа с queue: max — блоком и строкой job — не вытесняет"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "одинаковые блоки одного файла различает номер"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max",
+   "примеры"
+  ],
+  "name": "фрагмент без on: идёт под любым событием — группа по PR без запасного run_id общая"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": ".github/workflows/ci.yml concurrency «ci-${{ github.event.pull_request.number || github.run_id }}» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": ".github/workflows/ci.yml jobs.spec-publish.concurrency «spec-publish» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "docs/ci-concurrency.md concurrency «cd-${{ github.ref }}» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "docs/ci-concurrency.md concurrency «ci-${{ github.event.pull_request.number || github.ref }}» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "docs/ci-concurrency.md jobs.deploy-dev.concurrency «deploy-dev» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "skills/spec/ci.md concurrency «ci-${{ github.event.pull_request.number || github.run_id }}» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "skills/spec/ci.md jobs.spec-publish.concurrency «spec-publish» (2) не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "skills/spec/ci.md jobs.spec-publish.concurrency «spec-publish» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "вне охвата: docs/ci-concurrency.md concurrency «${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}»"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "нарушитель не проходит: job с общей группой без queue: max"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "нарушитель не проходит: прогон main в группе по PR с запасным github.ref"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "реестр «блоки concurrency в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» находит .github/workflows/ci.yml jobs.spec-publish.concurrency «spec-publish», docs/ci-concurrency.md concurrency «cd-${{ github.ref }}», docs/ci-concurrency.md jobs.deploy-dev.concurrency «deploy-dev», skills/spec/ci.md jobs.spec-publish.concurrency «spec-publish»"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
+  "name": "реестр «блоки concurrency в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» не пуст"
+ },
+ {
   "path": "tests/standards/cloud-session/cloud-session.test.ts",
   "describes": [
    "Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть",
