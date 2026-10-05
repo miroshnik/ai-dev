@@ -212,6 +212,16 @@ describe("Изменённые тесты вне дерева видны по и
     repo.commit({ "tests/lib/factory.test.ts": ts(`it("фабрика", () => {});`) });
     expect(diffFrom(base).stdout).toContain("Тесты не менялись.");
   });
+
+  // копию флоу ставит install, а не PR проекта: её тесты — не тесты проекта
+  it("файл теста в копии флоу (`.agents/`, `.claude/`) в список вне дерева не попадает", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({
+      ".agents/skills/x/scripts/a.test.ts": ts(`it("скилл", () => {});`),
+      ".claude/skills/x/scripts/a.test.ts": ts(`it("скилл", () => {});`),
+    });
+    expect(diffFrom(base).stdout).toContain("Тесты не менялись.");
+  });
 });
 
 /**
@@ -422,6 +432,14 @@ describe("Решения вне названий тестов — модель, 
     const out = diffFrom(base).stdout;
     expect(out).toContain("**Исключения — снято (2):**\n\n- `src/a.ts` · no-console — #5 старое\n- `tests/standards/audit` · a (#1) — r1\n");
     expect(out).toContain("**Исключения — добавлено (2):**\n\n- `src/b.ts` · eqeqeq — #6 новое\n- `tests/standards/audit` · b (#2) — r2\n");
+  });
+
+  // копию флоу ставит install, руками её не правят, линтеры проекта её не видят: её отключения — не исключения проекта
+  it("отключение линта в копии флоу (`.agents/`, `.claude/`) — не исключение проекта, тот же файл вне копии — исключение", () => {
+    const off = "// eslint-disable-next-line no-console -- #5 отладка\nconsole.log(1);\n";
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ ".agents/skills/x/scripts/a.ts": off, ".claude/hooks/a.ts": off, "skills/x/scripts/a.ts": off });
+    expect(diffFrom(base).stdout).toContain("**Исключения — добавлено (1):**\n\n- `skills/x/scripts/a.ts` · no-console — #5 отладка\n");
   });
 
   it("исключение файлом в exceptions/: добавленное и снятое", () => {

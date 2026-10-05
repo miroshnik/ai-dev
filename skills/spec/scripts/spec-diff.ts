@@ -48,6 +48,12 @@ function findRoot(root?: string): { top: string; root: string; prefix: string } 
 const wanted = (rel: string) => L.isTestFile(rel) && L.classify(rel)[0] !== "lib";
 
 /**
+ * Копия флоу ai-dev (`.agents/`, `.claude/` от корня) — не код проекта: её ставит `install`, руками не правят,
+ * линтеры проекта её не видят. Её тесты и отключения линта — не решения проекта, в дифф спеки не идут.
+ */
+const FLOW_COPY = /^\.(?:agents|claude)\//;
+
+/**
  * {путь относительно корня: исходник} для файлов тестов дерева tests/ на ревизии (без lib).
  * Содержимое — одним `git cat-file --batch`, а не `git show` на каждый файл: в репозитории
  * с сотнями файлов тестов это два процесса вместо сотен.
@@ -124,7 +130,7 @@ function parseFiles(files: Map<string, string>, label: string): Test[] {
   return tests;
 }
 
-/** Файлы тестов, изменённые вне tests/ (в том числе неотслеживаемые при --worktree). */
+/** Файлы тестов, изменённые вне tests/ (в том числе неотслеживаемые при --worktree), кроме копии флоу. */
 function outOfTreeFiles(base: string, head: string, top: string, prefix: string, worktree: boolean): string[] {
   const spec = ["--", ".", `:(exclude)${prefix}${L.TESTS}`];
   const changed = worktree
@@ -132,7 +138,8 @@ function outOfTreeFiles(base: string, head: string, top: string, prefix: string,
     : gitText(["diff", "--name-only", "-z", base, head, ...spec], top);
   const out = new Set<string>();
   for (const p of changed.split("\0")) {
-    if (p && p.startsWith(prefix) && L.isTestFile(p.slice(prefix.length))) out.add(p.slice(prefix.length));
+    const rel = p.slice(prefix.length);
+    if (p && p.startsWith(prefix) && L.isTestFile(rel) && !FLOW_COPY.test(rel)) out.add(rel);
   }
   return [...out].sort();
 }
@@ -786,7 +793,7 @@ export async function main(argv: string[]): Promise<number> {
         : gitText(["diff", "--name-only", "-z", base, v.head, "--", "."], top)
     )
       .split("\0")
-      .filter((f) => f.startsWith(prefix) && CODE.test(f));
+      .filter((f) => f.startsWith(prefix) && CODE.test(f) && !FLOW_COPY.test(f.slice(prefix.length)));
     decisionData = {
       base: await decisionsAt(base, top, prefix, changedAll, baseFiles),
       head: await decisionsAt(v.worktree ? null : v.head, top, prefix, changedAll, headFiles),
