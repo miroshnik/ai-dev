@@ -1900,18 +1900,92 @@ export function projectCommands(dir: string): { install: string[] | null; run: s
 }
 
 const tail = (r: RunResult, n = 20) => `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => l.trim()).slice(-n);
+/** Строка упавшего теста без времени прогона: bun `[1.2ms]`, Vitest `12ms` — одно падение на слиянии и на main. */
+const failedTest = (l: string) => l.trim().replace(/\s*\[[\d.]+\s*m?s\]$/, "").replace(/\s+[\d.]+\s*m?s$/, "");
+
+/** Ожидание закрытия бага — скрипт ci-wait рядом (`../ci-wait`: так лежат копия в проекте, `~/.agents/skills` и клон). */
+const WAIT_CI = path.resolve(import.meta.dir, "../../ci-wait/scripts/wait-ci.sh");
+// красный исход чека: отменённый (перезапуск, новый коммит) и ждущий решения человека — не красные
+const RED_RUN = new Set(["failure", "timed_out", "startup_failure"]);
+const RED_STATUS = new Set(["failure", "error"]);
+
+/** Красные чеки последнего коммита основной ветки — check-runs (последний прогон каждого имени) и статусы хостинга. */
+function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: string[] } {
+  const ref = encodeURIComponent(base);
+  const latest = new Map<string, Any>();
+  for (const r of restCall(io, ["api", `repos/${slug}/commits/${ref}/check-runs?per_page=100`]).check_runs ?? []) {
+    if (!latest.has(r.name) || latest.get(r.name).id < r.id) latest.set(r.name, r);
+  }
+  const status = restCall(io, ["api", `repos/${slug}/commits/${ref}/status`]);
+  const names = [
+    ...[...latest.values()].filter((r) => r.status === "completed" && RED_RUN.has(r.conclusion)).map((r) => r.name as string),
+    ...(status.statuses ?? []).filter((x: Any) => RED_STATUS.has(x.state)).map((x: Any) => x.context as string),
+  ];
+  return { sha: String(status.sha ?? ""), names: [...new Set(names)].sort() };
+}
+
+/** Открытый баг на красную основную ветку — заголовок «<base> красный…»; один на всех: первый по номеру. */
+function mainBugOf(io: Io, slug: string, base: string): { number: number; title: string } | null {
+  const prefix = `${base} красный`;
+  const q = `repo:${slug} is:issue is:open in:title "${prefix}"`;
+  const items: Any[] = restCall(io, ["api", `search/issues?q=${encodeURIComponent(q)}&per_page=20`]).items ?? [];
+  return items.filter((i) => !i.pull_request && String(i.title).startsWith(prefix)).sort((a, b) => a.number - b.number)[0] ?? null;
+}
 
 /**
  * Перед мержем зелёного PR: main ушёл после его CI — слияние головы PR со свежим main во временном worktree и
  * `test:spec`; не ушёл — CI проверил ровно это слияние. Что проверил CI, GitHub не хранит (merge-ref пересобирается),
  * поэтому по времени: самый ранний check suite головы против последнего события основной ветки (REST: квота GraphQL
- * общая на все сессии). Неизвестное — проверяется. Код 0 — вливать, 1 — не вливать.
+ * общая на все сессии). Неизвестное — проверяется. Красный main — не этот PR: красный чек последнего коммита main или
+ * слияние красное тем же, что голый main. Код 0 — вливать, 1 — не вливать (PR ломает), 3 — main красный.
  */
 export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   const pr = restCall(io, ["api", `repos/${slug}/pulls/${number}`]);
   if (pr.state !== "open") throw new GhError(`PR #${number} не открыт — вливать нечего`);
   const head: string = pr.head.sha;
   const base: string = pr.base.ref;
+  const closes = closingInBody(pr.body ?? "");
+
+  /**
+   * Красный main: не вливать и в своём PR не чинить — один баг на всех, остальные ждут его закрытия. PR, который
+   * закрывает этот баг, — починка: null, проверка идёт как обычно.
+   */
+  const mainRed = (lead: string, why: string, title: string): number | null => {
+    let bug: { number: number; title: string } | null = null;
+    try {
+      bug = mainBugOf(io, slug, base);
+    } catch (e) {
+      if (!(e instanceof GhError)) throw e;
+      io.out(`○ открытый баг на красный ${base} не найден поиском: ${e.message}`);
+    }
+    if (bug && closes.includes(bug.number)) {
+      io.out(`○ ${base} красный — ${why}; PR закрывает баг #${bug.number} на него — проверяю PR как обычно`);
+      return null;
+    }
+    io.out(lead);
+    const wait = (n: string) => `ждать его закрытия — bash ${WAIT_CI} issue ${n} фоновой командой, затем снова pr premerge ${number}`;
+    if (bug) io.out(`баг на красный ${base} — #${bug.number} «${bug.title}»: ${wait(String(bug.number))}`);
+    else {
+      const priority = pr.base?.repo?.owner?.type === "Organization" ? " --priority Urgent" : "";
+      io.out(`бага на красный ${base} нет — заведи (метка — решение упавшего теста) и дай чип: bun ${import.meta.path} task new --type Баг${priority} --title ${JSON.stringify(`${base} красный: ${title}`)}; ${wait("<N>")}`);
+    }
+    io.out(`⛔ не вливать: ${base} красный, не этот PR — в своём PR не чинить`);
+    return 3;
+  };
+
+  try {
+    const red = redChecksOf(io, slug, base);
+    if (red.names.length) {
+      const what = `${red.names.length > 1 ? "чеки" : "чек"} ${red.names.join(", ")}`;
+      const why = `${what} последнего коммита ${base} (${red.sha.slice(0, 7)})`;
+      const code = mainRed(`${base} красный: ${why}`, why, what);
+      if (code !== null) return code;
+    }
+  } catch (e) {
+    if (!(e instanceof GhError)) throw e;
+    io.out(`○ чеки последнего коммита ${base} не прочитаны (${e.message}) — красный ли ${base}, по чекам неизвестно`);
+  }
+
   const suites: string[] = (restCall(io, ["api", `repos/${slug}/commits/${head}/check-suites?per_page=100`]).check_suites ?? []).map((s: Any) => s.created_at).filter(Boolean);
   const ci = suites.sort()[0];
   let moved: string | null = null;
@@ -1940,10 +2014,32 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   }
   if (git(io.cwd, "cat-file", "-e", `${head}^{commit}`).status !== 0) throw new GhError(`голова PR ${head} не получена из origin — PR обновился? Снова ci-wait`);
 
-  const dir = mkdtempSync(path.join(os.tmpdir(), "ai-dev-premerge-"));
-  try {
+  const dirs: string[] = [];
+  /** Временный worktree на origin/<base>: убирается всегда. */
+  const worktree = (): string => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "ai-dev-premerge-"));
+    dirs.push(dir);
     const add = git(io.cwd, "worktree", "add", "-q", "--detach", dir, `origin/${base}`);
     if (add.status !== 0) throw new GhError(`git worktree add: ${add.stderr.trim()}`);
+    return dir;
+  };
+  /** `test:spec` дерева с зависимостями по его lockfile; скрипта нет — null. */
+  const spec = (dir: string, where: string): { cmd: string; result: RunResult; failed: string[] } | null => {
+    const pkg = path.join(dir, "package.json");
+    if (!existsSync(pkg) || !JSON.parse(readFileSync(pkg, "utf8")).scripts?.[PREMERGE_SCRIPT]) return null;
+    const cmds = projectCommands(dir);
+    if (cmds.install) {
+      const r = run(cmds.install[0]!, cmds.install.slice(1), dir);
+      if (r.status !== 0) throw new GhError(`установка зависимостей ${where} упала (${cmds.install.join(" ")}): ${tail(r, 5).join(" / ")}`);
+      io.out(`+ зависимости${where === "на слиянии" ? "" : ` ${where}`}: ${cmds.install.join(" ")}`);
+    }
+    const result = run(cmds.run[0]!, cmds.run.slice(1), dir);
+    const failed = [...new Set(`${result.stdout}\n${result.stderr}`.split("\n").filter((l) => FAILED_LINE.test(l)).map((l) => l.trim()))];
+    return { cmd: cmds.run.join(" "), result, failed };
+  };
+  const breaks = `❌ не вливать: ${PREMERGE_SCRIPT} красный на слиянии с origin/${base} — чинить корень в PR: rebase на origin/${base}, правка, push --force-with-lease, снова ci-wait`;
+  try {
+    const dir = worktree();
     const short = (ref: string) => git(dir, "rev-parse", "--short=7", ref).stdout.trim();
     // как merge-ref GitHub; rebase-мерж без конфликтов даёт то же дерево. Хуки проекта временному слиянию не нужны
     const merge = git(dir, "-c", "user.name=ai-dev", "-c", "user.email=ai-dev@localhost", "-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "--no-verify", "--no-edit", head);
@@ -1954,31 +2050,45 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       return 1;
     }
     io.out(`+ слияние ${head.slice(0, 7)} с origin/${base} ${short("HEAD^1")} — без конфликтов`);
-    const pkg = path.join(dir, "package.json");
-    if (!existsSync(pkg) || !JSON.parse(readFileSync(pkg, "utf8")).scripts?.[PREMERGE_SCRIPT]) {
+    const merged = spec(dir, "на слиянии");
+    if (!merged) {
       io.out(`○ быстрых проверок нет: в package.json слияния нет скрипта ${PREMERGE_SCRIPT} — шаг пропущен`);
       io.out(`✅ вливать: слияние с origin/${base} без конфликтов`);
       return 0;
     }
-    const cmds = projectCommands(dir);
-    if (cmds.install) {
-      const r = run(cmds.install[0]!, cmds.install.slice(1), dir);
-      if (r.status !== 0) throw new GhError(`установка зависимостей на слиянии упала (${cmds.install.join(" ")}): ${tail(r, 5).join(" / ")}`);
-      io.out(`+ зависимости: ${cmds.install.join(" ")}`);
-    }
-    const r = run(cmds.run[0]!, cmds.run.slice(1), dir);
-    if (r.status === 0) {
+    if (merged.result.status === 0) {
       io.out(`✅ вливать: ${PREMERGE_SCRIPT} зелёный на слиянии с origin/${base}`);
       return 0;
     }
-    const lines = `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => FAILED_LINE.test(l));
-    io.out(`${cmds.run.join(" ")} упал:`);
-    for (const l of (lines.length ? [...new Set(lines)].slice(0, 20) : tail(r))) io.out(`  ${l.trim()}`);
-    io.out(`❌ не вливать: ${PREMERGE_SCRIPT} красный на слиянии с origin/${base} — чинить корень в PR: rebase на origin/${base}, правка, push --force-with-lease, снова ci-wait`);
+    io.out(`${merged.cmd} упал:`);
+    for (const l of (merged.failed.length ? merged.failed.slice(0, 20) : tail(merged.result))) io.out(`  ${l.trim()}`);
+
+    // красное слияние — красный ли голый main: тогда ломает не этот PR
+    io.out(`проверяю голый origin/${base}: красный ли он сам`);
+    const bare = spec(worktree(), `на origin/${base}`);
+    if (!bare || bare.result.status === 0) {
+      io.out(breaks);
+      return 1;
+    }
+    const onMain = new Set(bare.failed.map(failedTest));
+    const own = merged.failed.filter((l) => !onMain.has(failedTest(l)));
+    // не разобрать, что упало, — не отличить: main красный, после его починки premerge проверит PR снова
+    if (own.length && bare.failed.length) {
+      io.out(`${base} красный и сам, PR ломает сверх него:`);
+      for (const l of own.slice(0, 20)) io.out(`  ${l}`);
+      io.out(breaks);
+      return 1;
+    }
+    const why = `${PREMERGE_SCRIPT} красный и на голом origin/${base} тем же`;
+    const code = mainRed(`${base} красный и сам: ${why}`, why, PREMERGE_SCRIPT);
+    if (code !== null) return code;
+    io.out(breaks);
     return 1;
   } finally {
-    git(io.cwd, "worktree", "remove", "--force", dir);
-    rmSync(dir, { recursive: true, force: true });
+    for (const dir of dirs) {
+      git(io.cwd, "worktree", "remove", "--force", dir);
+      rmSync(dir, { recursive: true, force: true });
+    }
     git(io.cwd, "worktree", "prune");
   }
 }
