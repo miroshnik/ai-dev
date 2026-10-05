@@ -113,7 +113,7 @@ function markOf(file: string, line: number, text: string): Mark | null {
 }
 
 /**
- * Отметки в файле: в коде JS/TS — только в комментариях (строки, шаблоны, регулярки — мимо, обход `JsWalk`), в
+ * Отметки в файле: в коде JS/TS — только в комментариях (строки, шаблоны, регулярки — мимо, разбор парсером), в
  * остальных файлах (SQL, shell, HTML) — сразу после начала комментария. Отметка — с начала текста комментария:
  * упоминание формата посреди прозы — не отметка.
  */
@@ -127,7 +127,7 @@ export function marksIn(file: string, text: string): Mark[] {
     });
     return out;
   }
-  for (const [at, comment] of commentsIn(text)) {
+  for (const [at, comment] of commentsOf(text, file)) {
     if (!comment.includes("spec-")) continue;
     const first = text.slice(0, at).split("\n").length;
     comment.split("\n").forEach((l, i) => {
