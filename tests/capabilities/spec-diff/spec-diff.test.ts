@@ -538,6 +538,38 @@ describe("Решения вне названий тестов — модель, 
     expect(out).toContain("**Проверки харнесса — добавлено (2):**\n\n- `tests/standards/audit` · правило eqeqeq\n- `tests/standards/audit` · реестр «мутации и команды»\n");
   });
 
+  it("реестр и правило в комментарии или строке spec-diff проверкой не считает", () => {
+    const STD = "tests/standards/audit/audit.test.ts";
+    const base = repo.commit({ [STD]: ts(`it("x", () => {});`) });
+    repo.commit({
+      [STD]: ts(
+        `it("x", () => {});\n// invariant(it, { registry: "мутации" })\n/* examples(it, { rule: "no-console" }) */\n` +
+          `const fixture = 'invariant(it, { registry: "мутации" }); examples(it, { rule: "no-console" });';\n` +
+          "const tpl = `examples(it, { rule: \"eqeqeq\" })`;",
+      ),
+    });
+    expect(diffFrom(base).stdout).not.toContain("Проверки харнесса");
+  });
+
+  it("значение с подстановкой `${…}` — не литерал: реестр не назван, как сейчас", () => {
+    const STD = "tests/standards/audit/audit.test.ts";
+    const base = repo.commit({ [STD]: ts(`it("x", () => {});`) });
+    repo.commit({ [STD]: ts('it("x", () => {});\ninvariant(it, { registry: `мутации ${kind}`, items: [] });\nh.examples(it, { "rule": "no-" + "console", bad: [] });') });
+    const out = diffFrom(base).stdout;
+    expect(out).not.toContain("мутации");
+    // сложение строк известно без прогона, ключ в кавычках и вызов через объект — те же опции
+    expect(out).toContain("**Проверки харнесса — добавлено (1):**\n\n- `tests/standards/audit` · правило no-console\n");
+  });
+
+  it("`rule` инварианта (соглашение папки) правилом линтера не считается", () => {
+    const STD = "tests/standards/audit/audit.test.ts";
+    const base = repo.commit({ [STD]: ts(`it("x", () => {});`) });
+    repo.commit({ [STD]: ts(`it("x", () => {});\ninvariant(it, { rule: "audit", registry: "формы", items: [] });`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Проверки харнесса — добавлено (1):**\n\n- `tests/standards/audit` · реестр «формы»\n");
+    expect(out).not.toContain("правило audit");
+  });
+
   it("без изменений модели, исключений и проверок — разделов нет", () => {
     const base = repo.commit({ [MODEL]: model({ domain: { path: "src/domain", purpose: "x" } }), [BILLING]: ts(`it("x", () => {});`) });
     repo.commit({ [BILLING]: ts(`it("x", () => {}); it("y", () => {});`) });

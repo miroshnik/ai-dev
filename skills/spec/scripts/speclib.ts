@@ -502,6 +502,34 @@ export function stringsOf(source: string, file?: string): string[] {
   return out;
 }
 
+/**
+ * Опции вызовов по имени, известные без прогона: `want` — {имя вызова: ключ опции}, `{ invariant: "registry" }` →
+ * [["invariant", "мутации"]] из `invariant(it, { registry: "мутации" })` и `h.invariant(…)`. Опция — свойство объекта
+ * литералом в аргументах вызова (ключ — имя или строка), значение — строка, известная без прогона; комментарий,
+ * строка и шаблон — не вызов, объект переменной или `...spec()` не вычислить.
+ */
+export function callOptions(source: string, want: Record<string, string>, file?: string): [string, string][] {
+  const out: [string, string][] = [];
+  walkAst(parseCode(source, file).program, (n) => {
+    if (n.type !== "CallExpression") return;
+    const callee = n.callee as AstNode;
+    const id = callee.type === "MemberExpression" && !callee.computed ? (callee.property as AstNode) : callee;
+    const name = id.type === "Identifier" ? (id.name as string) : null;
+    if (name === null || !Object.hasOwn(want, name)) return;
+    for (const a of n.arguments as AstNode[]) {
+      if (a.type !== "ObjectExpression") continue;
+      for (const p of a.properties as AstNode[]) {
+        if (p.type !== "ObjectProperty" || p.computed) continue;
+        const key = p.key as AstNode;
+        if ((key.type === "Identifier" ? key.name : key.type === "StringLiteral" ? key.value : null) !== want[name]) continue;
+        const value = staticString(p.value as AstNode);
+        if (value !== null) out.push([name, value]);
+      }
+    }
+  });
+  return out;
+}
+
 /** Строка, известная без прогона: литерал, шаблон без подстановок или их сложение через `+`; иначе null. */
 function staticString(n: AstNode | undefined): string | null {
   if (!n) return null;
