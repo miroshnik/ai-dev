@@ -35,6 +35,16 @@ echo "(pass) реестр"
 exit $fail
 `;
 const PKG = (scripts: Record<string, string> = { "test:spec": "sh check.sh" }) => JSON.stringify({ name: "x", private: true, scripts }, null, 2) + "\n";
+// typecheck проекта — как tsc без TTY: каждый вызов из calls.txt объявлен в exports.txt, иначе ошибка компилятора с
+// позицией вызова; стандарты (test:spec) о вызовах не знают
+const TSC = `n=0; fail=0
+while read c; do
+  n=$((n+1))
+  grep -qx "$c" exports.txt || { echo "src/calls.ts($n,1): error TS2304: Cannot find name '$c'."; fail=1; }
+done < calls.txt
+exit $fail
+`;
+const TYPED = { "package.json": PKG({ typecheck: "sh tc.sh", "test:spec": "sh check.sh" }), "tc.sh": TSC, "exports.txt": "commentsIn\nother\n", "calls.txt": "other\n" };
 
 /**
  * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/ai-dev.git. Голова PR лежит в
@@ -214,12 +224,12 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     expect(worktrees(p.work)).toHaveLength(1);
   });
 
-  it("скрипта test:spec нет — строка ○, вливать можно", () => {
+  it("скриптов typecheck и test:spec нет — строка ○, вливать можно", () => {
     const p = project({ pr: { "uses.txt": "a\n" }, mainAfter: { "items.txt": "a\nb\nc\n" }, files: { "package.json": PKG({ test: "sh check.sh" }) } });
     const proc = processes();
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
     expect(r.code).toBe(0);
-    expect(r.out).toContain("○ быстрых проверок нет: в package.json слияния нет скрипта test:spec — шаг пропущен");
+    expect(r.out).toContain("○ быстрых проверок нет: в package.json слияния нет скриптов typecheck и test:spec — шаг пропущен");
     expect(r.last).toBe("✅ вливать: слияние с origin/main без конфликтов");
     expect(proc.calls.filter((c) => c.cmd !== "git")).toEqual([]);
   });
@@ -238,8 +248,50 @@ describe("pr premerge: main ушёл — быстрые проверки на с
       writeFileSync(path.join(dir, "package.json"), "{}");
       for (const [f, c] of Object.entries(files)) writeFileSync(path.join(dir, f), c);
       const cmds = projectCommands(dir);
-      expect([cmds.install?.join(" ") ?? null, cmds.run.join(" ")]).toEqual([install, run]);
+      expect([cmds.install?.join(" ") ?? null, cmds.run("test:spec").join(" ")]).toEqual([install, run]);
     }
+  });
+});
+
+/**
+ * Семантический конфликт двух PR, влитых почти одновременно, ловит typecheck за секунды, а стандарты — нет (#292):
+ * PR убрал функцию, а влитый после его CI коммит `main` её позвал — `test:spec` на слиянии зелёный, `main` упал на
+ * typecheck. Поэтому на слиянии — быстрые проверки по порядку CI: `typecheck`, затем `test:spec`, какие есть в
+ * `package.json`; до первой красной.
+ */
+describe("pr premerge: typecheck на слиянии со свежим main — до test:spec, как в CI", () => {
+  const AFTER = "2026-10-02T10:20:00Z";
+  const steps = (proc: ReturnType<typeof processes>) => proc.calls.filter((c) => c.cmd !== "git").map((c) => [c.cmd, ...c.args].join(" "));
+
+  it("слияние с красным typecheck premerge не вливает и называет ошибку компилятора", () => {
+    // PR убрал commentsIn, main после CI PR его позвал; test:spec слияния зелёный — реестр не тронут
+    const p = project({ files: TYPED, pr: { "exports.txt": "other\n" }, mainAfter: { "calls.txt": "other\ncommentsIn\n" } });
+    const proc = processes();
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("bun run typecheck упал:\n  src/calls.ts(2,1): error TS2304: Cannot find name 'commentsIn'.");
+    expect(r.last).toBe("❌ не вливать: typecheck красный на слиянии с origin/main — чинить корень в PR: rebase на origin/main, правка, push --force-with-lease, снова ci-wait");
+    // test:spec после красного typecheck не идёт, голый main проверяется тем, что упало
+    expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run typecheck", "bun install --frozen-lockfile", "bun run typecheck"]);
+    expect(worktrees(p.work)).toHaveLength(1);
+  });
+
+  it("typecheck идёт на слиянии до test:spec, оба зелёные — вливать можно", () => {
+    const p = project({ files: TYPED, pr: { "calls.txt": "other\ncommentsIn\n" }, mainAfter: { "uses.txt": "a\n" } });
+    const proc = processes();
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
+    expect(r.code).toBe(0);
+    expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run typecheck", "bun run test:spec"]);
+    expect(r.last).toBe("✅ вливать: typecheck и test:spec зелёные на слиянии с origin/main");
+  });
+
+  it("без скрипта typecheck в package.json premerge проверяет одним test:spec", () => {
+    const p = project({ pr: { "uses.txt": "a\n" }, mainAfter: { "items.txt": "a\nb\nc\n" } });
+    const proc = processes();
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
+    expect(r.code).toBe(0);
+    expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run test:spec"]);
+    expect(r.last).toBe("✅ вливать: test:spec зелёный на слиянии с origin/main");
   });
 });
 
@@ -250,7 +302,7 @@ const MAIN_RED = "⛔ не вливать: main красный, не этот PR
 /**
  * Красный `main` видели только следующие PR: каждая сессия чинила его в своём PR или ждала вслепую, а владелец
  * рассылал «не пушить» (#282). `premerge` отличает «мой PR ломает» от «`main` уже красный»: слияние красное —
- * `test:spec` ещё и на голом `main`; красный там тем же — отдельный исход, код 3. Красный чек последнего коммита
+ * упавшая проверка ещё и на голом `main`; красная там тем же — отдельный исход, код 3. Красный чек последнего коммита
  * `main` (деплой, смоук) — тот же исход. Сессия не вливает и в своём PR не чинит: один баг «main красный…» на всех,
  * `premerge` называет открытый или команду завести, остальные ждут его закрытия. PR, который этот баг закрывает, — починка:
  * красный `main` его не останавливает.
@@ -271,6 +323,24 @@ describe("pr premerge: main красный — не этот PR: не влива
     expect(r.out).toContain("main красный и сам: test:spec красный и на голом origin/main тем же");
     expect(r.last).toBe(MAIN_RED);
     expect(worktrees(p.work)).toHaveLength(1);
+  });
+
+  it("красный typecheck и на слиянии, и на голом main тем же — код 3; ошибки компилятора сверяются без позиции", () => {
+    // после CI PR main сам позвал необъявленное; PR дописал вызов выше — на слиянии та же ошибка строкой ниже
+    const p = project({ files: { ...TYPED, "calls.txt": "other\nother\nother\n" }, pr: { "calls.txt": "commentsIn\nother\nother\nother\n" }, mainAfter: { "calls.txt": "other\nother\nother\nmissing\n" } });
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
+    expect(r.out).toContain("  src/calls.ts(5,1): error TS2304: Cannot find name 'missing'.");
+    expect(r.code).toBe(3);
+    expect(r.out).toContain("main красный и сам: typecheck красный и на голом origin/main тем же");
+    expect(r.out).toContain(`--title "main красный: typecheck"`);
+    expect(r.last).toBe(MAIN_RED);
+  });
+
+  it("main красный на typecheck, а PR ломает ещё своё — код 1, вывод называет ошибки компилятора PR", () => {
+    const p = project({ files: { ...TYPED, "calls.txt": "other\nother\nother\n" }, pr: { "calls.txt": "gone\nother\nother\nother\n" }, mainAfter: { "calls.txt": "other\nother\nother\nmissing\n" } });
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("main красный и сам, PR ломает сверх него:\n  src/calls.ts(1,1): error TS2304: Cannot find name 'gone'.\n❌ не вливать: typecheck красный");
   });
 
   it("main красный, а PR ломает ещё своё — код 1, вывод называет тесты, которые ломает PR", () => {
