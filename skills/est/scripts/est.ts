@@ -3413,6 +3413,91 @@ function cmdEstimate(args: EstimateArgs): void {
 }
 
 // ----------------------------------------------------------------------------
+// Команда backtest
+// ----------------------------------------------------------------------------
+
+/** Точность оценок на выборке: доля факт/оценка в допуске ×0,5…×2 и k — медиана факт/оценка. */
+export interface BacktestLine {
+  n: number;
+  share: number | null;
+  k: number | null;
+}
+
+export interface Backtest {
+  tasks: number; // закрытых задач с фактом full, не эпиков
+  mech: BacktestLine; // механика по всем, кому хватило аналогов
+  same: number; // из них с ручной оценкой — общая выборка трёх строк ниже
+  mechSame: BacktestLine;
+  manual: BacktestLine;
+  mechMult: BacktestLine; // механика × поправка, которую дал агент в ручной оценке
+}
+
+/** pairs — [факт, оценка]. */
+function backtestLine(pairs: [number, number][]): BacktestLine {
+  const ratios = pairs.map(([f, e]) => f / e).sort((a, b) => a - b);
+  if (!ratios.length) return { n: 0, share: null, k: null };
+  return { n: ratios.length, share: ratios.filter((x) => x >= 0.5 && x <= 2).length / ratios.length, k: round2(median(ratios)) };
+}
+
+/**
+ * Каждая закрытая задача с фактом оценивается механикой так, как её оценил бы `est estimate` без --analogs в день
+ * создания (pickAnalogs берёт только закрытые раньше); ручная оценка — маркер est без `auto`. Сравнение — на задачах,
+ * где есть обе: иначе выборки разные, и доли несравнимы.
+ */
+export function backtest(rows: Row[]): Backtest {
+  const pool = rows.filter((r) => factRow(r) && r.createdAt !== null);
+  const mech: [number, number][] = [];
+  const mechSame: [number, number][] = [];
+  const manual: [number, number][] = [];
+  const mechMult: [number, number][] = [];
+  for (const t of pool) {
+    const em = t.est_marker;
+    const type = em?.type || rowType(t);
+    const picked = pickAnalogs({ number: t.number, title: t.title, labels: t.labels, createdAt: t.createdAt, size: t.size ?? 0 }, type, rows);
+    if (picked.length < 2) continue;
+    const raw = median(picked.map((a) => a.row.fact!));
+    const h = roundScale(raw);
+    mech.push([t.fact!, h]);
+    const hand = em && !em.auto ? Number(em.h || t.est) : 0;
+    if (!(hand > 0)) continue;
+    mechSame.push([t.fact!, h]);
+    manual.push([t.fact!, hand]);
+    mechMult.push([t.fact!, roundScale(raw * (Number(em.mult) || 1))]);
+  }
+  return { tasks: pool.length, mech: backtestLine(mech), same: manual.length, mechSame: backtestLine(mechSame), manual: backtestLine(manual), mechMult: backtestLine(mechMult) };
+}
+
+function cmdBacktest(args: { repo?: string; allRepos: boolean }): void {
+  if (isCloud()) throw new EstError(CLOUD_ERR);
+  const registry = loadRegistry();
+  const repos = args.allRepos ? Object.keys(registry) : [resolveRepo(args.repo)];
+  const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)} %`);
+  const line = (name: string, l: BacktestLine) => `  ${pad(name, 28)} в допуске ${pct(l.share)}, k=${l.k ?? "—"}`;
+  for (const full of repos) {
+    let rows: Row[];
+    try {
+      rows = new Repo(full, registry).projectRows();
+    } catch (e) {
+      if (!(e instanceof EstError) || !args.allRepos) throw e;
+      console.error(`предупреждение: ${full}: ${e.message}`);
+      continue;
+    }
+    const b = backtest(rows);
+    console.log(`== ${full}: бэктест оценки — аналоги только из задач, закрытых до создания оцениваемой`);
+    console.log(`задач с фактом (покрытие full, без эпиков): ${b.tasks}; механике хватило аналогов (≥ 2): ${b.mech.n}, в допуске ×0.5…×2 — ${pct(b.mech.share)}, k=${b.mech.k ?? "—"}`);
+    if (b.same) {
+      console.log(`на одной выборке с ручной оценкой, n=${b.same}:`);
+      console.log(line("механика", b.mechSame));
+      console.log(line("ручная", b.manual));
+      console.log(line("механика × поправка ручной", b.mechMult));
+    } else {
+      console.log("ручных оценок с фактом нет — сравнивать механику не с чем");
+    }
+    console.log();
+  }
+}
+
+// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
@@ -3424,6 +3509,7 @@ const USAGE = `est — оценка задач по истории проект�
   est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "причина"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]   — аналоги подбирает скрипт
   est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — аналоги вручную
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
+  est backtest [--repo o/r] [--all-repos]   — механика против ручных оценок по закрытым задачам
   est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Облачная сессия») в источники факта
   <type> — ${EST_TYPES.join(" ")}`;
 
@@ -3490,6 +3576,11 @@ export function main(argv: string[]): number {
       cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since });
       return 0;
     }
+    if (cmd === "backtest") {
+      const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, "all-repos": { type: "boolean", default: false } } });
+      cmdBacktest({ repo: values.repo, allRepos: values["all-repos"] });
+      return 0;
+    }
     if (cmd === "estimate") {
       const { values, positionals } = parseArgs({
         args: rest,
@@ -3502,7 +3593,7 @@ export function main(argv: string[]): number {
       cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, tokMult: floatArg(values["tok-mult"], "--tok-mult"), tokNote: values["tok-note"], note: values.note, write: values.write });
       return 0;
     }
-    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact, estimate или cloud-import`);
+    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact, estimate, backtest или cloud-import`);
   } catch (e) {
     if (e instanceof EstError) die(e.message);
     if (e && typeof e === "object" && (e as Any).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") die((e as Error).message, 2);

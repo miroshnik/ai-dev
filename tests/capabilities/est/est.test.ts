@@ -1154,6 +1154,44 @@ describe("Оценка — один вызов: est estimate без --analogs", 
   });
 });
 
+/**
+ * Бэктест: каждая закрытая задача с фактом оценивается механикой так, как её оценил бы скрипт в день создания, — по
+ * задачам, закрытым раньше; доля в допуске ×0,5…×2 и k (медиана факт/оценка) механики и ручных оценок — на одной
+ * выборке, иначе сравнение нечестно. Третья строка — механика с поправкой, которую дал агент: видно, добавляет ли
+ * поправка точности.
+ */
+describe("Бэктест сравнивает механическую оценку с ручной", () => {
+  const task = (number: number, created: number, d: number, fact: number, extra: Record<string, unknown> = {}) =>
+    ({ number, title: ["Альфа", "Бета", "Гамма", "Дельта", "Эпсилон", "Дзета", "Эта", "Тета"][number - 1], state: "CLOSED", createdAt: day(created), closedAt: day(d), fact, ...extra });
+  const WORLD = {
+    "o/b": {
+      visibility: "private", project: 2,
+      issues: [
+        task(1, 1, 2, 1),
+        task(2, 1, 3, 1),
+        task(3, 4, 5, 1, { est: 4, mult: 2 }),
+        task(4, 6, 8, 2, { est: 2 }),
+        task(5, 7, 9, 4, { est: 1, mult: 2 }),
+        task(6, 10, 11, 1),
+        task(7, 1, 12, 9, { est: 9, labels: ["epic"] }),
+        task(8, 10, 11, 3, { est: 3, cov: "partial" }),
+      ],
+    },
+  };
+
+  it("бэктест печатает долю в допуске ×0,5…×2 и k механики и ручных оценок на одной выборке", () => {
+    const r = withFakeGh(WORLD, ["backtest", "--repo", "o/b"]);
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("задач с фактом (покрытие full, без эпиков): 6; механике хватило аналогов (≥ 2): 4, в допуске ×0.5…×2 — 75 %, k=1.5");
+    expect(r.stdout).toContain("на одной выборке с ручной оценкой, n=3:");
+    expect(r.stdout).toMatch(/ {2}механика {2,}в допуске 67 %, k=2\n/);
+    expect(r.stdout).toMatch(/ {2}ручная {2,}в допуске 33 %, k=1\n/);
+    expect(r.stdout).toMatch(/ {2}механика × поправка ручной {2,}в допуске 100 %, k=2\n/);
+    expect(r.writes).toEqual([]);
+  });
+});
+
 /** k — отношение факт/оценка по истории; справочное — к прогнозу по аналогам не применяется. */
 describe("Калибровка k показывает, сходятся ли оценки с фактами", () => {
   const row = (n: number, est: number, fact: number | null, cov = "full", closedAt = 1000 + n): Row => ({
