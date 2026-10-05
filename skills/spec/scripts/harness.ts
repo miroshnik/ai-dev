@@ -896,10 +896,16 @@ export function deadCode(it: It, opts: { root: string; report?: string; args?: r
 const ENV_READ = /\bprocess\.env\.([A-Z_][A-Z0-9_]*)|\bprocess\.env\[\s*["']([A-Z_][A-Z0-9_]*)["']\s*\]|\bimport\.meta\.env\.([A-Z_][A-Z0-9_]*)|\{([^{}]*)\}\s*=\s*process\.env\b/g;
 const ENV_SERVICE = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV", "PROD", "MODE", "SSR", "BASE_URL"];
 
-/** Переменные окружения, которые читает код: имя → файлы. */
-/** Имена переменных окружения, которые читает исходник. */
-export function envNamesIn(source: string, file?: string): string[] {
-  const text = codeOnly(source, file);
+/**
+ * Имена переменных окружения, которые читает исходник. Параметр один: проект зовёт `sources.flatMap(envNamesIn)`, а
+ * второй необязательный получил бы индекс `flatMap` — ошибка типов (#303). Файл известен — `envNamesInCode`.
+ */
+export function envNamesIn(source: string): string[] {
+  return envNamesInCode(codeOnly(source));
+}
+
+/** То же по коду без комментариев — `codeOnly(text, file)`: набор плагинов разбора по расширению файла. */
+export function envNamesInCode(text: string): string[] {
   const out = new Set<string>();
   // process.env под другим именем: параметр по умолчанию `(env = process.env)` или `const e = process.env`
   for (const [, alias] of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=\s*process\.env\b(?!\s*[.[])/g)) {
@@ -914,10 +920,11 @@ export function envNamesIn(source: string, file?: string): string[] {
   return [...out];
 }
 
+/** Переменные окружения, которые читает код: имя → файлы. */
 function envReads(root: string, dirs: string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const file of codeFiles(root, dirs)) {
-    for (const n of envNamesIn(readFileSync(path.join(root, file), "utf8"), file)) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
+    for (const n of envNamesInCode(codeOnly(readFileSync(path.join(root, file), "utf8"), file))) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
   }
   return out;
 }
