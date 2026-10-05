@@ -268,6 +268,13 @@ function pair(
 /** Тело без проверки: `() => {}`, `async () => {}`, `function () {}` — без пробелов, как в `Test.body`. */
 const EMPTY_BODY = /^,(?:async)?(?:\([^)]*\)=>|function\w*\([^)]*\))\{\}$/;
 
+/**
+ * Тело для сопоставления — без завершающих запятых перед `)`, `]`, `}` и после последнего аргумента: их ставит
+ * prettier, когда переносит вызов с длинным названием, и в теле, которое перенос сдвинул вправо (#324). Проверка
+ * от них не меняется, а точное тело развело бы переименование на «удалён» и «добавлен».
+ */
+const plainBody = (body: string) => body.replace(/,(?=[)\]}]|$)/g, "");
+
 const sameDescribes = (r: Test, a: Test) => r.describes.length === a.describes.length && r.describes.every((d, i) => d === a.describes[i]);
 
 export function diff(
@@ -302,7 +309,10 @@ export function diff(
   added = added.filter((a) => !movedKeys.has(L.keyOf(a)));
   // 1) тот же файл и то же тело, единственное в файле среди снятых и среди новых, — переименован тест, даже если
   // сменились и describe, и имя (перевод названий в утверждения). Пустое тело — не признак: проверки в нём нет
-  const bodyKey = (t: Test) => (t.body && !EMPTY_BODY.test(t.body) ? JSON.stringify([t.path, t.body]) : "");
+  const bodyKey = (t: Test) => {
+    const body = t.body && plainBody(t.body);
+    return body && !EMPTY_BODY.test(body) ? JSON.stringify([t.path, body]) : "";
+  };
   const once = (list: Test[]) => {
     const n = new Map<string, number>();
     for (const t of list) if (bodyKey(t)) n.set(bodyKey(t), (n.get(bodyKey(t)) ?? 0) + 1);
