@@ -214,7 +214,7 @@ node bin/ai-dev.mjs release --dry-run   # что войдёт в релиз; б�
 
 ### [`ci-wait`](skills/ci-wait/SKILL.md) — дождаться чеков, а не угадать
 
-Ждёт все чеки PR или коммита — CI, деплой, внешний чек — с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch` и `sleep` в цикле; ждёт и закрытия бага на красный `main`.
+Ждёт все чеки PR или коммита (коммит мержа — по номеру PR) — CI, деплой, внешний чек — с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR вместо `gh pr checks --watch` и `sleep` в цикле; ждёт и закрытия бага на красный `main`.
 
 `wait-ci.sh`
 

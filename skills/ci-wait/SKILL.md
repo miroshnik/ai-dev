@@ -1,6 +1,6 @@
 ---
 name: ci-wait
-description: Ожидание всех чеков PR или коммита (CI в GitHub Actions, деплой хостинга, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой; всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса; `issue <N>` — закрытия бага на красный main (`github pr premerge`, код 3).
+description: Ожидание всех чеков PR или коммита (CI в GitHub Actions, деплой хостинга, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой (`merged <N>` — SHA мержа скрипт берёт сам); всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса; `issue <N>` — закрытия бага на красный main (`github pr premerge`, код 3).
 allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks *) Bash(gh pr view *) Bash(git rev-parse *)
 ---
 
@@ -22,6 +22,7 @@ allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks
 ```bash
 bash <каталог скилла>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
 bash <каталог скилла>/scripts/wait-ci.sh status <sha> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+bash <каталог скилла>/scripts/wait-ci.sh merged <N> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
 bash <каталог скилла>/scripts/wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
 ```
 
@@ -30,15 +31,17 @@ bash <каталог скилла>/scripts/wait-ci.sh issue <N> [--interval 60] 
 | Момент | Команда |
 |---|---|
 | Запушил ветку PR, перед мержем | `pr <N>` — ждёт чеки головы PR и обязательные чеки базовой ветки; конфликт с базой — сразу ERROR |
-| Смёржил, мерж запускает деплой или CI на `main` | `status <sha>` — ждёт все чеки коммита: check-runs GitHub Actions и статусы хостинга и внешних сервисов |
-| Нужен один чек коммита (деплой среди прочих) | `status <sha> --context <имя>` |
+| Смёржил, мерж запускает деплой или CI на `main` | `merged <N>` фоновой командой тем же ходом, что `github task actualize` — ждёт все чеки коммита мержа PR: check-runs GitHub Actions и статусы хостинга и внешних сервисов; SHA берёт из PR сам, невлитый PR — ERROR |
+| Чеки коммита по SHA (свой коммит без PR) | `status <sha>` — то же, что `merged`, по полному SHA |
+| Нужен один чек коммита (деплой среди прочих) | `merged <N> --context <имя>` или `status <sha> --context <имя>` |
 | `github pr premerge` — код 3, `main` красный | `issue <N>` фоновой командой — ждёт закрытия бага на красный `main`: PASS, когда закрыт (с причиной: `completed`, `not_planned`); нет issue — ERROR; затем снова `premerge` |
 
-`<sha>` — полный; SHA своего мержа —
-`gh pr view <N> --json mergeCommit --jq .mergeCommit.oid`:
-`git rev-parse origin/main` при параллельных мержах отдаёт чужой, более
-поздний коммит. Короткий не достраивать: по несуществующему SHA API молча
-отдаёт пустой статус, и ожидание висит до таймаута с ложным «не готово».
+SHA своего мержа не добывать — `merged <N>` берёт его из PR сам: отдельные
+ходы `gh pr view` за ним были главным источником лишних ходов после мержа
+(#285), а `git rev-parse origin/main` при параллельных мержах отдаёт чужой,
+более поздний коммит. `<sha>` у `status` — полный; короткий не достраивать:
+по несуществующему SHA API молча отдаёт пустой статус, и ожидание висит до
+таймаута с ложным «не готово».
 
 Имя для `--context` — контекст статуса или имя check-run (job Actions), их
 печатают строки `CHECK` запуска без `--context`.
@@ -59,7 +62,9 @@ bash <каталог скилла>/scripts/wait-ci.sh issue <N> [--interval 60] 
 - **PASS** — перед мержем PR `github pr premerge <N>` (`main` ушёл после
   CI — проверка слияния со свежим), код `0` — мерж; после мержа —
   `github task close` (актуализация блока шла параллельно с ожиданием —
-  скилл `github`, `task actualize`) и доклад «готово».
+  скилл `github`, `task actualize`) и доклад «готово». Фоновое ожидание
+  завершилось с кодом `0` — это и есть PASS: следующий шаг сразу, файл
+  вывода отдельным ходом не читать.
 - **FAIL** — пришёл на первом упавшем чеке, остальные могли ещё идти (полный
   снимок — `--wait-all`). Читать логи упавшего чека
   (`gh run view <id> --log-failed`), чинить причину; «известный красный
