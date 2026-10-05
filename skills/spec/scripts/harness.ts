@@ -43,6 +43,12 @@ export interface Invariant<T> {
   /** Ключ элемента для исключений, охвата и `includes` — стабильный идентификатор (имя, путь); по умолчанию — название теста. */
   key?: (item: T) => string;
   /**
+   * Файл элемента от корня проекта (маршрут, скрипт, миграция): «вне охвата» и исключение элемента — отметкой в нём
+   * (`marksIn`), а не записью в тесте. Удалили элемент — ушла и отметка; два PR не правят общий файл. `null` — своего
+   * файла нет (строка схемы, запись роутера): `outside` и `exceptions/`.
+   */
+  fileOf?: (item: T) => string | null | undefined;
+  /**
    * Идентификатор соглашения, когда в папке их несколько над одним реестром: исключения — только с этим `rule`,
    * служебные тесты называют его («реестр «формы» не пуст (audit)»).
    */
@@ -65,8 +71,71 @@ export interface Exception {
    * ни у одного инварианта папки — упавший тест «исключения с rule — к правилам инвариантов папки» с путём файла.
    */
   rule?: string;
-  /** Файл исключения — его ставит `exceptionsIn`: храповик называет, какой файл удалить. */
+  /** Файл исключения — его ставит `exceptionsIn` или отметка: храповик называет, какой файл удалить или где отметка. */
   file?: string;
+  /** Строка отметки в файле элемента — исключение отметкой, а не файлом в `exceptions/`. */
+  line?: number;
+}
+
+/** «Вне охвата» элемента: ключ и причина; у отметки — её место. */
+interface Outside {
+  item: string;
+  reason: string;
+  file?: string;
+  line?: number;
+}
+
+/**
+ * Отметка в файле элемента — комментарий, как `eslint-disable` у линта: `spec-outside(<решение>[/<rule>]): причина`
+ * или `spec-exception(<решение>[/<rule>]) #N: причина`. Решение — имя папки решения (`audit` — `tests/standards/audit`):
+ * файл бывает элементом реестров разных папок, отметка называет свою; `rule` — инвариант папки, без него — ко всем.
+ */
+export interface Mark {
+  kind: "outside" | "exception";
+  decision: string;
+  rule?: string;
+  issue?: number;
+  reason: string;
+  file: string;
+  line: number;
+}
+
+// отметка — с начала текста комментария; причина — до конца строки, без закрытия блочного комментария
+const MARK = /^spec-(outside|exception)\(([^()\s]*)\)\s*(?:#(\d+))?\s*:?\s*(.*?)\s*(?:\*\/|-->)?\s*$/;
+// файл не JS: отметка сразу после начала комментария — //, /*, * блока, #, --, <!--, ;
+const MARK_LINE = /(?:^|\s)(?:\/\/|\/\*+|\*|#|--|<!--|;)\s*(spec-(?:outside|exception)\(.*)$/;
+
+function markOf(file: string, line: number, text: string): Mark | null {
+  const m = MARK.exec(text);
+  if (!m) return null;
+  const [decision, ...rule] = m[2]!.split("/");
+  return { kind: m[1] as Mark["kind"], decision: decision!, ...(rule.length ? { rule: rule.join("/") } : {}), ...(m[3] ? { issue: Number(m[3]) } : {}), reason: m[4]!, file, line };
+}
+
+/**
+ * Отметки в файле: в коде JS/TS — только в комментариях (строки, шаблоны, регулярки — мимо, обход `JsWalk`), в
+ * остальных файлах (SQL, shell, HTML) — сразу после начала комментария. Отметка — с начала текста комментария:
+ * упоминание формата посреди прозы — не отметка.
+ */
+export function marksIn(file: string, text: string): Mark[] {
+  const out: Mark[] = [];
+  if (!CODE.test(file)) {
+    text.split("\n").forEach((l, i) => {
+      const m = MARK_LINE.exec(l);
+      const mark = m && markOf(file, i + 1, m[1]!);
+      if (mark) out.push(mark);
+    });
+    return out;
+  }
+  for (const [at, comment] of commentsIn(text)) {
+    if (!comment.includes("spec-")) continue;
+    const first = text.slice(0, at).split("\n").length;
+    comment.split("\n").forEach((l, i) => {
+      const mark = markOf(file, first + i, l.replace(/^\s*(?:\/\/+|\/\*+|\*+)?\s*/, ""));
+      if (mark) out.push(mark);
+    });
+  }
+  return out;
 }
 
 const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
@@ -169,51 +238,58 @@ function legacyExceptions(it: It): void {
   }
 }
 
-/** Правила инвариантов файла теста за прогон и исключения, которые инвариант не взял: у них `rule` другого правила. */
+/** Правила инвариантов файла теста за прогон, исключения и отметки, которые инвариант не взял: у них `rule` другого правила. */
 interface RuleLedger {
   rules: Set<string>;
   skipped: Exception[];
+  marks: Mark[];
 }
 
 // по `it` и файлу теста: сборщик тестов в тесте харнесса — свой `it`, и его сверка не смешивается с чужой
 const ledgers = new WeakMap<It, Map<string, RuleLedger>>();
 
 /**
- * Исключение с `rule`, которого нет ни у одного инварианта папки (опечатка, правило переименовали или удалили), не
- * берёт ни один инвариант: храповик его не видит, долг молча выпадает из спеки. Инвариант отложил исключение с чужим
- * `rule` — регистрируется тест сверки, один на файл; он идёт после сбора файла и знает правила всех его инвариантов.
+ * Исключение или отметка с `rule`, которого нет ни у одного инварианта папки (опечатка, правило переименовали или
+ * удалили), не берёт ни один инвариант: храповик их не видит, долг молча выпадает из спеки. Инвариант отложил
+ * исключение или отметку с чужим `rule` — регистрируется тест сверки, свой на исключения и на отметки, один на файл; он
+ * идёт после сбора файла и знает правила всех его инвариантов.
  * Правила других файлов папки (подпапки с общим `exceptions/`) идут в другом процессе или позже — их сверка ищет
  * строкой в коде этих файлов.
  */
-function unknownRules(it: It, spec: { rule?: string; exceptions?: readonly Exception[] }): void {
+function unknownRules(it: It, rule: string | undefined, exceptions: readonly Exception[], marks: readonly Mark[]): void {
   const file = callerTest(process.cwd()) ?? "";
   const byFile = ledgers.get(it) ?? new Map<string, RuleLedger>();
   ledgers.set(it, byFile);
-  const ledger = byFile.get(file) ?? { rules: new Set<string>(), skipped: [] };
+  const ledger = byFile.get(file) ?? { rules: new Set<string>(), skipped: [], marks: [] };
   byFile.set(file, ledger);
-  if (spec.rule) ledger.rules.add(spec.rule);
-  const skipped = (spec.exceptions ?? []).filter((e) => e.rule && e.rule !== spec.rule);
-  if (!skipped.length) return;
-  const first = !ledger.skipped.length;
-  ledger.skipped.push(...skipped);
-  if (!first) return;
-  it("исключения с rule — к правилам инвариантов папки", () => {
-    const lost = new Map<string, Exception>();
-    let elsewhere: Set<string> | null = null;
-    for (const e of ledger.skipped) {
-      if (ledger.rules.has(e.rule!)) continue;
-      elsewhere ??= file ? stringsBeside(file) : new Set();
-      if (!elsewhere.has(e.rule!)) lost.set(e.file ?? `${e.rule}\0${e.item}`, e);
-    }
-    if (!lost.size) return;
-    const rules = [...ledger.rules].sort();
-    const have = rules.length ? `у инвариантов файла: ${rules.join(", ")}` : "инварианты файла — без rule";
-    throw new Error(
-      [...lost.values()]
-        .map((e) => `${e.file ?? `исключение ${e.item}`}: правила «${e.rule}» нет ни у одного инварианта папки (${have}) — поправь rule или ${e.file ? "удали файл" : "убери исключение"}`)
-        .join("\n"),
-    );
-  });
+  if (rule) ledger.rules.add(rule);
+  const reconcile = <X extends { rule?: string }>(list: X[], add: readonly X[], name: string, id: (x: X) => string, line: (x: X, have: string) => string): void => {
+    if (!add.length) return;
+    const first = !list.length;
+    list.push(...add);
+    if (!first) return;
+    it(name, () => {
+      const lost = new Map<string, X>();
+      let elsewhere: Set<string> | null = null;
+      for (const x of list) {
+        if (ledger.rules.has(x.rule!)) continue;
+        elsewhere ??= file ? stringsBeside(file) : new Set();
+        if (!elsewhere.has(x.rule!)) lost.set(id(x), x);
+      }
+      if (!lost.size) return;
+      const rules = [...ledger.rules].sort();
+      const have = rules.length ? `у инвариантов файла: ${rules.join(", ")}` : "инварианты файла — без rule";
+      throw new Error([...lost.values()].map((x) => line(x, have)).join("\n"));
+    });
+  };
+  reconcile(
+    ledger.skipped,
+    exceptions.filter((e) => e.rule && e.rule !== rule),
+    "исключения с rule — к правилам инвариантов папки",
+    (e) => e.file ?? `${e.rule}\0${e.item}`,
+    (e, have) => `${e.file ?? `исключение ${e.item}`}: правила «${e.rule}» нет ни у одного инварианта папки (${have}) — поправь rule или ${e.file ? "удали файл" : "убери исключение"}`,
+  );
+  reconcile(ledger.marks, marks, "отметки с rule — к правилам инвариантов папки", (m) => `${m.file}:${m.line}`, (m, have) => `${m.file}:${m.line}: правила «${m.rule}» нет ни у одного инварианта папки (${have}) — поправь отметку или убери её`);
 }
 
 /** Строки в коде других файлов папки решения теста: правила их инвариантов, которых этот прогон не видит. */
@@ -227,8 +303,52 @@ function stringsBeside(file: string): Set<string> {
   return out;
 }
 
-/** Что сделать с ненужным исключением: удалить его файл, а исключение без файла — убрать из списка. */
-const dropHint = (e: Exception): string => (e.file ? `убери исключение: удали ${e.file}` : "убери исключение");
+/** Что сделать с ненужным исключением: убрать отметку, удалить файл исключения, а исключение без файла — убрать из списка. */
+const dropHint = (e: Exception): string => (e.line ? `убери отметку в ${e.file}:${e.line}` : e.file ? `убери исключение: удали ${e.file}` : "убери исключение");
+
+/**
+ * Отметки папки в файлах элементов (`fileOf`): «вне охвата» и исключения по ключу элемента; отметки с `rule` другого
+ * инварианта — сверке правил. Отметку в файле двух элементов не берёт ни один — упавший тест: к какому, неизвестно.
+ */
+function elementMarks<T>(it: It, spec: Invariant<T>, key: (item: T) => string, tag: string): { outside: Outside[]; exceptions: Exception[]; skipped: Mark[] } {
+  const out = { outside: [] as Outside[], exceptions: [] as Exception[], skipped: [] as Mark[] };
+  const folder = spec.fileOf && callerFolder();
+  if (!folder) return out;
+  const decision = path.posix.basename(folder);
+  const byFile = new Map<string, string[]>();
+  for (const item of spec.items) {
+    const f = spec.fileOf!(item);
+    if (f) byFile.set(f, [...(byFile.get(f) ?? []), key(item)]);
+  }
+  const shared: string[] = [];
+  for (const [file, keys] of byFile) {
+    let text: string;
+    try {
+      text = readFileSync(path.resolve(process.cwd(), file), "utf8");
+    } catch {
+      continue; // файла нет — нет и отметок
+    }
+    if (!text.includes("spec-")) continue;
+    const mine = marksIn(file, text).filter((m) => m.decision === decision);
+    out.skipped.push(...mine.filter((m) => m.rule && m.rule !== spec.rule));
+    const marks = mine.filter((m) => !m.rule || m.rule === spec.rule);
+    if (!marks.length) continue;
+    if (keys.length > 1) {
+      shared.push(`${file}:${marks[0]!.line}: отметку читают элементы ${keys.join(", ")} — к какому, неизвестно: элементу без своего файла — outside и exceptions/`);
+      continue;
+    }
+    for (const m of marks) {
+      if (m.kind === "outside") out.outside.push({ item: keys[0]!, reason: m.reason, file, line: m.line });
+      else out.exceptions.push({ item: keys[0]!, issue: m.issue ?? 0, reason: m.reason, ...(m.rule ? { rule: m.rule } : {}), file, line: m.line });
+    }
+  }
+  if (shared.length) {
+    it(`отметка — в файле одного элемента${tag}`, () => {
+      throw new Error(shared.join("\n"));
+    });
+  }
+  return out;
+}
 
 /**
  * Тесты соглашения: «реестр не пуст» (опечатка в пути не проходит молча), «нарушитель не проходит» (проверка умеет
@@ -260,9 +380,26 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
       throw new Error(`проверка прошла на нарушителе «${v.name}» — она ничего не проверяет`);
     });
   }
+  // отметка в файле элемента — его запись; та же запись ещё и в тесте или exceptions/ — упавший тест, действует отметка
+  const marks = elementMarks(it, spec, key, tag);
+  const marked = new Map<string, string>();
+  const twice: string[] = [];
+  for (const m of [...marks.outside, ...marks.exceptions]) {
+    const at = `${m.file}:${m.line}`;
+    if (marked.has(m.item)) twice.push(`${m.item}: отметки ${marked.get(m.item)} и ${at} — оставь одну`);
+    else marked.set(m.item, at);
+  }
   // исключение без правила — ко всем соглашениям папки, с правилом — только к своему
-  const excepted = new Map((spec.exceptions ?? []).filter((e) => !e.rule || e.rule === spec.rule).map((e) => [e.item, e]));
-  const outside = new Map((spec.outside ?? []).map((o) => [o.item, o]));
+  const listed = [...(spec.exceptions ?? []).filter((e) => !e.rule || e.rule === spec.rule), ...(spec.outside ?? [])] as (Exception | Outside)[];
+  for (const x of listed.filter((x) => marked.has(x.item))) twice.push(`${x.item}: отметка ${marked.get(x.item)} и ${x.file ?? "outside в тесте"} — оставь одно`);
+  if (twice.length) {
+    it(`у элемента одна запись — отметка или exceptions/ и outside${tag}`, () => {
+      throw new Error(twice.join("\n"));
+    });
+  }
+  const unmarked = <X extends { item: string }>(xs: readonly X[] | undefined): X[] => (xs ?? []).filter((x) => !marked.has(x.item));
+  const excepted = new Map([...unmarked(spec.exceptions).filter((e) => !e.rule || e.rule === spec.rule), ...marks.exceptions].map((e) => [e.item, e]));
+  const outside = new Map<string, Outside>([...unmarked(spec.outside), ...marks.outside].map((o) => [o.item, o]));
   // по названию, а не в порядке реестра: порядок файлов и запросов зависит от машины, а спека — нет
   const named = spec.items.filter((item) => !excepted.has(key(item)) && !outside.has(key(item))).map((item) => ({ name: spec.name(item), item }));
   named.sort(byName);
@@ -276,7 +413,7 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
     const name = `вне охвата${tag}: ${o.item}`;
     meta(name, { reason: o.reason });
     it(name, () => {
-      if (!o.reason.trim()) throw new Error(`у элемента вне охвата ${o.item} нет причины`);
+      if (!o.reason.trim()) throw new Error(`у элемента вне охвата ${o.item} нет причины${o.line ? ` — допиши причину в отметку ${o.file}:${o.line}` : ""}`);
       if (!byKey.has(o.item)) throw new Error(`элемента ${o.item} в реестре «${spec.registry}» нет — убери из охвата`);
     });
   }
@@ -285,8 +422,8 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
   for (const e of exceptions) {
     meta(`исключение${tag}: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
     it(`исключение${tag}: ${e.item} (#${e.issue})`, async () => {
-      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи — issue: номер задачи, которая снимет долг`);
-      if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
+      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи — ${e.line ? `допиши #N в отметку ${e.file}:${e.line}` : "issue: номер задачи, которая снимет долг"}`);
+      if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины${e.line ? ` — допиши причину в отметку ${e.file}:${e.line}` : ""}`);
       if (!byKey.has(e.item)) throw new Error(`элемента ${e.item} в реестре «${spec.registry}» нет — ${dropHint(e)}`);
       try {
         await spec.check(byKey.get(e.item)!);
@@ -296,7 +433,7 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
       throw new Error(`${e.item} уже соблюдает соглашение — ${dropHint(e)} (#${e.issue})`);
     });
   }
-  unknownRules(it, spec);
+  unknownRules(it, spec.rule, spec.exceptions ?? [], marks.skipped);
 }
 
 const byName = (a: { name: string }, b: { name: string }): number => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);

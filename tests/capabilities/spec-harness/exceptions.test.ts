@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { eslintLinter, exceptionsIn, invariant, lintExceptions } from "../../../skills/spec/scripts/harness.ts";
+import { eslintLinter, exceptionsIn, invariant, lintExceptions, marksIn } from "../../../skills/spec/scripts/harness.ts";
 import type { Exception, It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -285,6 +285,145 @@ describe("Исключение с rule — к правилу инвариант�
     const single = bunTest("tests/standards/single/single.test.ts");
     expect(single["исключение (audit): importLegacy (#14)"]).toBe("✓");
     expect(single[RULES]).toBeUndefined();
+  });
+});
+
+/**
+ * Тест папки audit над элементами со своим файлом (`fileOf` — `src/<элемент>.ts`): инвариант на каждое правило,
+ * соглашение — вызов `audit(` в файле элемента.
+ */
+const markedTest = ({ rules = [undefined], items = ["createInvoice", "importLegacy", "login"], fileOf = '(m) => "src/" + m + ".ts"' }: { rules?: (string | undefined)[]; items?: string[]; fileOf?: string } = {}) => `import { it } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { exceptionsIn, invariant } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};
+const exceptions = exceptionsIn();
+const fileOf = ${fileOf};
+${rules
+  .map(
+    (rule) => `invariant(it, {${rule ? `\n  rule: ${JSON.stringify(rule)},` : ""}
+  registry: "мутации",
+  items: ${JSON.stringify(items)},
+  name: (m) => m + " пишет аудит${rule ? ` (${rule})` : ""}",
+  key: (m) => m,
+  fileOf,
+  check: (m) => { if (!readFileSync(fileOf(m), "utf8").includes("audit(")) throw new Error(m + " не пишет аудит"); },
+  violator: { name: "без аудита", item: "fake" },
+  exceptions,
+});`,
+  )
+  .join("\n")}
+`;
+const MARK_RULES = "отметки с rule — к правилам инвариантов папки";
+
+/** Метаданные прогона в проекте: название теста → то, что харнесс записал для spec-doc. */
+function metaOf(test: string): Record<string, unknown> | undefined {
+  const at = path.join(dir, ".spec-meta");
+  const rows = readdirSync(at).flatMap((f) => readFileSync(path.join(at, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>));
+  return rows.find((x) => x.test === test);
+}
+
+/**
+ * «Вне охвата» и исключение элемента со своим файлом — отметка в этом файле, как `eslint-disable` у линта. Замер #211:
+ * три из пяти поломок `main` от двух зелёных PR — запись об элементе отдельно от элемента: один PR удалил маршрут,
+ * другой внёс его в `outside` теста. Отметку удаляют вместе с элементом, и два PR не правят общий файл.
+ */
+describe("Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка", () => {
+  it("отметка «вне охвата» в файле элемента выводит элемент из охвата правила с причиной на странице", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest(),
+      "src/createInvoice.ts": "export const createInvoice = () => audit();\n",
+      "src/importLegacy.ts": "// spec-exception(audit) #12: импорт старых данных — аудит в #12\nexport const importLegacy = () => load();\n",
+      "src/login.ts": "// spec-outside(audit): вход — пользователя ещё нет, аудиту некого записать\nexport const login = () => check();\n",
+    });
+    const r = bunTest();
+    expect(r["вне охвата: login"]).toBe("✓");
+    expect(r["login пишет аудит"]).toBeUndefined();
+    expect(r["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(r["importLegacy пишет аудит"]).toBeUndefined();
+    expect(r["createInvoice пишет аудит"]).toBe("✓");
+    expect(metaOf("вне охвата: login")).toMatchObject({ file: `${AUDIT}/audit.test.ts`, reason: "вход — пользователя ещё нет, аудиту некого записать" });
+    expect(metaOf("исключение: importLegacy (#12)")).toMatchObject({ issue: 12, reason: "импорт старых данных — аудит в #12" });
+  });
+
+  it("исключение отметкой в файле элемента без задачи или без причины — красный тест с путём файла", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest(),
+      "src/createInvoice.ts": "export const createInvoice = () => audit();\n",
+      "src/importLegacy.ts": "// spec-exception(audit): потом\nexport const importLegacy = () => load();\n",
+      "src/login.ts": "export const x = 1;\n/* spec-exception(audit) #13 */\nexport const login = () => check();\n",
+    });
+    const r = bunTest();
+    expect(r["исключение: importLegacy (#0)"]).toBe("✗ у исключения importLegacy нет задачи — допиши #N в отметку src/importLegacy.ts:1");
+    expect(r["исключение: login (#13)"]).toBe("✗ у исключения login нет причины — допиши причину в отметку src/login.ts:2");
+  });
+
+  it("элемент с отметкой-исключением начал соблюдать соглашение — красный «убери отметку» с путём файла", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["createInvoice", "importLegacy"] }),
+      "src/createInvoice.ts": "export const createInvoice = () => audit();\n",
+      "src/importLegacy.ts": "// spec-exception(audit) #12: аудит в #12\nexport const importLegacy = () => audit();\n",
+    });
+    const r = bunTest();
+    expect(r["исключение: importLegacy (#12)"]).toBe("✗ importLegacy уже соблюдает соглашение — убери отметку в src/importLegacy.ts:1 (#12)");
+  });
+
+  it("отметка с правилом, которого нет ни у одного инварианта папки, — красный тест", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest({ rules: ["audit", "cancel"] }),
+      "src/createInvoice.ts": "export const createInvoice = () => audit();\n",
+      "src/importLegacy.ts": "// spec-exception(audit/audit) #12: аудит в #12\nexport const importLegacy = () => load();\n",
+      "src/login.ts": "// spec-outside(audit/cancle): опечатка в правиле\nexport const login = () => check();\n",
+      "tests/standards/plain/plain.test.ts": markedTest().replace("/audit.test", "/plain.test"),
+    });
+    const r = bunTest(`${AUDIT}/audit.test.ts`);
+    expect(r["исключение (audit): importLegacy (#12)"]).toBe("✓");
+    expect(r["importLegacy пишет аудит (cancel)"]).toBe("✗ importLegacy не пишет аудит");
+    expect(r["login пишет аудит (audit)"]).toBe("✗ login не пишет аудит");
+    expect(r[MARK_RULES]).toBe("✗ src/login.ts:1: правила «cancle» нет ни у одного инварианта папки (у инвариантов файла: audit, cancel) — поправь отметку или убери её");
+    // у отметок папки plain — своё решение: отметки audit ей чужие
+    writeTree(dir, { "src/login.ts": "// spec-outside(plain/audit): у инварианта нет rule\nexport const login = () => check();\n" });
+    expect(bunTest("tests/standards/plain/plain.test.ts")[MARK_RULES]).toBe("✗ src/login.ts:1: правила «audit» нет ни у одного инварианта папки (инварианты файла — без rule) — поправь отметку или убери её");
+  });
+
+  // сторож от перекоррекции: чужая отметка и отметка в строке кода охват этой папки не меняют
+  it("отметка другого решения и текст отметки в строке кода — не отметки папки", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["login"] }),
+      "src/login.ts": '// spec-outside(auth): вход — до проверки права\nexport const hint = "// spec-outside(audit): в строке — не отметка";\nexport const login = () => audit();\n',
+    });
+    const r = bunTest();
+    expect(r["login пишет аудит"]).toBe("✓");
+    expect(Object.keys(r).filter((n) => n.startsWith("вне охвата") || n === MARK_RULES)).toEqual([]);
+  });
+
+  it("отметка — в начале комментария любого файла: SQL, shell, HTML, JSDoc; в строке JS и посреди текста — не отметка", () => {
+    expect(marksIn("db/invoice.sql", "create table rate (id int); -- spec-outside(audit): справочник без аудита\n")).toEqual([{ kind: "outside", decision: "audit", reason: "справочник без аудита", file: "db/invoice.sql", line: 1 }]);
+    expect(marksIn("scripts/load.sh", "#!/bin/sh\n# spec-exception(audit/cancel) #7: разовая загрузка\n")).toEqual([
+      { kind: "exception", decision: "audit", rule: "cancel", issue: 7, reason: "разовая загрузка", file: "scripts/load.sh", line: 2 },
+    ]);
+    expect(marksIn("app/page.html", "<main>\n<!-- spec-outside(a11y): заглушка до редизайна -->\n").map((m) => [m.reason, m.line])).toEqual([["заглушка до редизайна", 2]]);
+    expect(marksIn("src/x.ts", "/**\n * spec-outside(audit): в JSDoc\n */\nconst s = '// spec-outside(audit): строка';\n").map((m) => [m.reason, m.line])).toEqual([["в JSDoc", 2]]);
+    expect(marksIn("src/y.ts", "// формат: `// spec-outside(audit): причина` — в начале комментария\n")).toEqual([]);
+  });
+
+  it("отметка в файле двух элементов — красный тест: к какому элементу, неизвестно", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["login", "logout"], fileOf: '(m) => "src/session.ts"' }),
+      "src/session.ts": "// spec-outside(audit): сессия — не мутация данных\nexport const login = () => 1, logout = () => 2;\n",
+    });
+    const r = bunTest();
+    expect(r["отметка — в файле одного элемента"]).toBe("✗ src/session.ts:1: отметку читают элементы login, logout — к какому, неизвестно: элементу без своего файла — outside и exceptions/");
+    expect(r["login пишет аудит"]).toBe("✗ login не пишет аудит");
+  });
+
+  it("элемент с отметкой и записью в exceptions/ — красный тест «оставь одно»", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["importLegacy"] }),
+      "src/importLegacy.ts": "// spec-exception(audit) #12: аудит в #12\nexport const importLegacy = () => load();\n",
+      [`${AUDIT}/exceptions/importLegacy.json`]: exception("importLegacy", 12, "аудит в #12"),
+    });
+    const r = bunTest();
+    expect(r["у элемента одна запись — отметка или exceptions/ и outside"]).toBe(`✗ importLegacy: отметка src/importLegacy.ts:1 и ${AUDIT}/exceptions/importLegacy.json — оставь одно`);
+    expect(r["исключение: importLegacy (#12)"]).toBe("✓");
   });
 });
 
