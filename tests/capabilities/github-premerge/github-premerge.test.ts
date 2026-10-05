@@ -314,7 +314,11 @@ describe("pr premerge: main красный — не этот PR: не влива
   });
 
   it("PR закрывает открытый баг «main красный…» — красный main его не останавливает: это починка", () => {
-    const bugs = [{ number: 41, title: "main красный: test:spec" }];
+    // поиск отстаёт — бывает и дубль: починка закрывает не обязательно первый
+    const bugs = [
+      { number: 40, title: "main красный: чек deploy" },
+      { number: 41, title: "main красный: test:spec" },
+    ];
     const fix = project({ pr: { "uses.txt": "a\n" } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }] };
     const r = premerge(fakeGh(fix.head, { main, bugs, body: "Чиню деплой.\n\nCloses #41" }).gh, fix.work);
