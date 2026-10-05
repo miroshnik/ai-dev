@@ -1080,6 +1080,13 @@
   "describes": [
    "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
   ],
+  "name": "main красный на typecheck, а PR ломает ещё своё — код 1, вывод называет ошибки компилятора PR"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
   "name": "main красный, а PR ломает ещё своё — код 1, вывод называет тесты, которые ломает PR"
  },
  {
@@ -1088,6 +1095,13 @@
    "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
   ],
   "name": "красный test:spec и на слиянии PR, и на голом main — premerge выходит отдельным кодом «main красный», а не «PR ломает»"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "красный typecheck и на слиянии, и на голом main тем же — код 3; ошибки компилятора сверяются без позиции"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
@@ -1171,7 +1185,7 @@
   "describes": [
    "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
   ],
-  "name": "скрипта test:spec нет — строка ○, вливать можно"
+  "name": "скриптов typecheck и test:spec нет — строка ○, вливать можно"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
@@ -1179,6 +1193,27 @@
    "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
   ],
   "name": "слияние с текстовым конфликтом — не вливать (код 1), конфликтные файлы и подсказка rebase"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: typecheck на слиянии со свежим main — до test:spec, как в CI"
+  ],
+  "name": "typecheck идёт на слиянии до test:spec, оба зелёные — вливать можно"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: typecheck на слиянии со свежим main — до test:spec, как в CI"
+  ],
+  "name": "без скрипта typecheck в package.json premerge проверяет одним test:spec"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: typecheck на слиянии со свежим main — до test:spec, как в CI"
+  ],
+  "name": "слияние с красным typecheck premerge не вливает и называет ошибку компилятора"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
