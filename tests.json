@@ -114,6 +114,20 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
+   "Коммит мержа ждут по номеру PR — SHA мержа скрипт берёт сам"
+  ],
+  "name": "влитый PR — ждут чеки коммита мержа: SHA скрипт берёт из PR сам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Коммит мержа ждут по номеру PR — SHA мержа скрипт берёт сам"
+  ],
+  "name": "невлитый PR — ERROR сразу, а не ожидание чеков"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
    "Упавший чек завершает ожидание сразу — о красном CI сессия узнаёт, не дожидаясь долгих чеков"
   ],
   "name": "с --wait-all упавший чек — FAIL, только когда завершились все"
