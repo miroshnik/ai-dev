@@ -26,7 +26,8 @@
  * Копия в проекте коммитится — файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`),
  * установка снимает исключениями блоком ai-dev в конце `.gitignore`, `check` называет их несоответствием
  * (`gitignoreFlow`). Проверки проекта — скрипты `package.json` `lint`, `typecheck`, `test`, `test:*` — установка
- * оборачивает в очередь машины, скилл slot (`slotScripts`).
+ * оборачивает в очередь машины, скилл slot (`slotScripts`); зовёт такой скрипт turbo, а turbo.json не пропускает
+ * задачам переменные очереди, — предупреждает готовой строкой (`turboEnv`).
  *
  * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
  * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
@@ -86,7 +87,8 @@ const USAGE = `Использование: ai-dev <команда> [-g]
   install -g --link  из клона ai-dev: симлинки на клон вместо копий, правки видны сразу
   check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт или файлы флоу игнорирует
                      git проекта, 2 — проверка недоступна; копию сверяет последний релиз, клон --link — origin/main;
-                     у проекта называет режим (auto)
+                     у проекта называет режим (auto) и предупреждает (!), если скрипт в slot зовёт turbo, а
+                     turbo.json не пропускает задачам переменные очереди (код не меняет)
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
   update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
                      (режим проекта — auto — сохраняется); в проекте install и update снимают с файлов флоу шаблоны
@@ -99,9 +101,10 @@ const USAGE = `Использование: ai-dev <команда> [-g]
 `;
 
 /**
- * Холостой прогон (`check`): вместо записи на диск установка складывает сюда, что бы она изменила, и файлы флоу,
- * которые игнорирует git проекта (`❌`, в note — правило, manual — исключением не снять); null — пишет.
- * @typedef {{ op: "+" | "-" | "~" | "❌", path: string, note?: string, manual?: boolean }} Change
+ * Холостой прогон (`check`): вместо записи на диск установка складывает сюда, что бы она изменила, файлы флоу,
+ * которые игнорирует git проекта (`❌`, в note — правило, manual — исключением не снять), и предупреждения о
+ * настройке проекта, которую установка не правит (`!`, в note — что поправить); null — пишет.
+ * @typedef {{ op: "+" | "-" | "~" | "❌" | "!", path: string, note?: string, manual?: boolean }} Change
  * @type {Change[] | null}
  */
 let dry = null;
@@ -117,8 +120,8 @@ const warn = (s) => dry || process.stderr.write("!! " + s + "\n");
 const fail = (s) => dry || process.stderr.write("❌ " + s + "\n");
 
 /**
- * Что изменила бы установка: `+` появится, `-` уберётся, `~` изменится, `❌` — файл флоу игнорирует git; каталог — с `/`
- * в конце.
+ * Что изменила бы установка: `+` появится, `-` уберётся, `~` изменится, `❌` — файл флоу игнорирует git, `!` —
+ * предупреждение (не отставание: update его не исправит); каталог — с `/` в конце.
  * @param {Change["op"]} op @param {string} p @param {{ note?: string, manual?: boolean }} [extra]
  */
 const change = (op, p, extra = {}) => dry?.push({ op, path: p, ...extra });
@@ -452,6 +455,66 @@ function slotScripts(root, skills) {
   return true;
 }
 
+/** Переменные очереди, нужные команде в слоте: доля ядер раннеру и «уже в слоте» — вложенному скрипту в slot. */
+const SLOT_ENV = ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"];
+/** Команда зовёт turbo — `turbo run test`, `turbo test`, `npx turbo …`, — но не флаг `--turbo` и не путь `turbo.json`. */
+const TURBO = /(?:^|[\s;&|(])turbo(?=\s|$)/;
+/** Строка JSON идёт как есть; вне строк — комментарий JSONC, затем висячая запятая. */
+const JSON_STRING = String.raw`("(?:[^"\\]|\\.)*")`;
+const JSONC_COMMENT = new RegExp(`${JSON_STRING}|//[^\\n]*|/\\*[^]*?\\*/`, "g");
+const TRAILING_COMMA = new RegExp(`${JSON_STRING}|,(?=\\s*[}\\]])`, "g");
+
+/** turbo.json — JSONC: комментарии и висячие запятые долой, строки как были. @param {string} text */
+const parseJsonc = (text) => JSON.parse(text.replace(JSONC_COMMENT, (_, s) => s ?? "").replace(TRAILING_COMMA, (_, s) => s ?? ""));
+
+/** Маска переменных turbo: `*` — любые символы, остальное — буквально. @param {string} mask @param {string} name */
+function envMatch(mask, name) {
+  const literal = mask.split("*").map((s) => s.replace(/[.+?^$|()[\]{}\\]/g, "\\$&"));
+  return new RegExp(`^${literal.join(".*")}$`).test(name);
+}
+
+/**
+ * turbo 2 в strict env mode (по умолчанию) пропускает задачам только переменные, названные в turbo.json: скрипт в slot,
+ * который зовёт turbo, теряет по дороге `AI_DEV_SLOT_CPUS` — раннер берёт машину целиком — и `AI_DEV_SLOT` — вложенный
+ * скрипт в slot ждёт собственный слот. Проброс — `globalPassThroughEnv`, а не `globalEnv`: в хэш кэша он не входит, а
+ * `AI_DEV_SLOT` у каждого прогона свой. turbo.json ведёт проект, в нём бывают комментарии (JSONC) — не правим, а
+ * предупреждаем готовой строкой; в `check` — строка `!`, не отставание. Не разобрать turbo.json — молчим: его разберёт
+ * сам turbo.
+ * @param {string} root
+ */
+function turboEnv(root) {
+  /** @type {unknown} */
+  let scripts;
+  try {
+    scripts = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).scripts;
+  } catch {
+    return;
+  }
+  if (!scripts || typeof scripts !== "object") return;
+  const cmds = Object.entries(scripts).flatMap(([name, cmd]) => (slotted(name) && typeof cmd === "string" ? [SLOT_WRAPPED.exec(cmd)?.[1] ?? cmd] : []));
+  if (!cmds.some((cmd) => TURBO.test(cmd) && !/--env-mode[= ]loose\b/.test(cmd))) return;
+  const name = ["turbo.json", "turbo.jsonc"].find((f) => existsSync(path.join(root, f)));
+  if (!name) return;
+  let cfg;
+  try {
+    cfg = parseJsonc(readFileSync(path.join(root, name), "utf8"));
+  } catch {
+    return;
+  }
+  if (cfg?.envMode === "loose") return;
+  const list = (/** @type {unknown} */ v) => (Array.isArray(v) ? v.filter((m) => typeof m === "string") : []);
+  const masks = [...list(cfg?.globalPassThroughEnv), ...list(cfg?.globalEnv)];
+  const negated = (/** @type {string} */ m, /** @type {string} */ v) => m.startsWith("!") && envMatch(m.slice(1), v);
+  const reaches = (/** @type {string} */ v) => masks.some((m) => !m.startsWith("!") && envMatch(m, v)) && !masks.some((m) => negated(m, v));
+  const missing = SLOT_ENV.filter((v) => !reaches(v));
+  if (!missing.length) return;
+  const keep = list(cfg?.globalPassThroughEnv).filter((m) => !SLOT_ENV.some((v) => negated(m, v)));
+  const line = `"globalPassThroughEnv": [${[...keep, ...missing.filter((v) => !keep.includes(v))].map((m) => JSON.stringify(m)).join(", ")}]`;
+  const text = `${missing.join(", ")} ${missing.length > 1 ? "не доходят" : "не доходит"} до раннера: turbo в strict env mode пропускает задачам только переменные из ${name} — поставь в его корень ${line}`;
+  if (dry) change("!", path.join(root, name), { note: text });
+  else warn(`${name} — ${text}`);
+}
+
 /** Claude Code: правила из `.claude/rules` грузятся сами, при любом CLAUDE.md. @param {string} root */
 function claudeRules(root) {
   link(path.join(root, ".agents/ai-dev/AGENTS.md"), path.join(root, ".claude/rules/ai-dev.md"), root);
@@ -728,6 +791,7 @@ function installProject(src, root, auto = autoOf(root)) {
   claudeRules(root);
   agentsBlock(root);
   const pkg = slotScripts(root, skills);
+  if (skills.includes("slot")) turboEnv(root);
   return [...(gitignoreFlow(root) ? [".gitignore"] : []), ...(pkg ? ["package.json"] : [])];
 }
 
@@ -867,10 +931,12 @@ function check(global) {
   const fresh = release ?? short(sourceSha(SRC)) ?? "SHA неизвестен";
   // режим — настройка проекта: последней строкой, её видит и начало сессии (хук)
   const mode = global ? [] : [modeLine(root)];
-  if (!changes.length) return { code: 0, text: [`ai-dev ${where}: актуально (${fresh})`, ...mode].join("\n") };
-  const m = readManifest(root);
-  const stale = changes.filter((c) => c.op !== "❌");
+  // предупреждения — настройка проекта, которую update не правит: строки `!`, код не меняют
+  const warnings = changeLines(changes.filter((c) => c.op === "!"), root, global);
+  const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
   const ignored = changes.filter((c) => c.op === "❌");
+  if (!stale.length && !ignored.length) return { code: 0, text: [`ai-dev ${where}: актуально (${fresh})`, ...warnings, ...mode].join("\n") };
+  const m = readManifest(root);
   const fixable = ignored.some((c) => !c.manual);
   const lost = "игнорирует файлы флоу — их нет в коммите, чужом чекауте и облачной сессии:";
   return {
@@ -884,6 +950,7 @@ function check(global) {
       ...capped(changeLines(ignored, root, global)),
       // личное правило update не исправит — что делать, сказано в строке ❌
       ...(stale.length || fixable ? [`${stale.length ? "Обновить" : "Исправить"}: npx -y github:${SOURCE} update${global ? " -g" : ""}${fixable ? " — допишет исключения в .gitignore" : ""}`] : []),
+      ...warnings,
       ...mode,
     ].join("\n"),
   };
