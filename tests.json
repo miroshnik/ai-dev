@@ -3395,6 +3395,27 @@
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
   "describes": [
+   "В монорепо подпапка пакета — часть папки решения"
+  ],
+  "name": "главные файлы двух пакетов идут по имени пакета"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В монорепо подпапка пакета — часть папки решения"
+  ],
+  "name": "главный файл в корне папки решения идёт раньше главных файлов подпапок"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "В монорепо подпапка пакета — часть папки решения"
+  ],
+  "name": "главный файл в подпапке пакета открывает страницу решения"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
    "Названия — текст, а не разметка"
   ],
   "name": "`<` вне code span экранируется — `<type>` и `<!-- … -->` не пропадают как HTML, в code span — как есть"
@@ -3412,6 +3433,13 @@
    "Нарушение структуры спеки видно при сборке, --strict — код 1"
   ],
   "name": "папка без главного файла `<папка>.test.ts` — spec-doc называет, где его ждёт"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Нарушение структуры спеки видно при сборке, --strict — код 1"
+  ],
+  "name": "папка без главного файла ни в корне, ни в подпапках — «нет главного файла»"
  },
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
