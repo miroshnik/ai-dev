@@ -3992,6 +3992,13 @@
   "describes": [
    "Каждая переменная окружения объявлена и читается в коде"
   ],
+  "name": "envNamesIn вызывается ссылкой в flatMap без ошибки типов: параметр у неё один"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
   "name": "ignore без причины — упавший тест: перенести в outside"
  },
  {
@@ -5242,6 +5249,20 @@
   "name": "таблица ловит расхождения pr labels до стандарта: не JSON, прежний файл не .ts, подпапка, скрытый файл"
  },
  {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
+   "Тест проекта импортирует харнесс и модель любым раннером"
+  ],
+  "name": "Playwright в проекте без \"type\": \"module\" (загрузка CommonJS) импортирует харнесс и модель и проходит тест"
+ },
+ {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
+   "Тест проекта импортирует харнесс и модель любым раннером"
+  ],
+  "name": "Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует харнесс и модель и проходит тест"
+ },
+ {
   "path": "tests/standards/node-runtime/node-runtime.test.ts",
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
@@ -5894,6 +5915,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/update/update.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/harness-load/harness-load.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
