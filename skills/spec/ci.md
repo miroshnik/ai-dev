@@ -87,7 +87,7 @@ jobs:
         with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
-        with: { name: spec-reports, path: ".spec-*.json", retention-days: 1 }
+        with: { name: spec-reports, path: ".spec-*.json", retention-days: 1, include-hidden-files: true }
 
   spec-publish:
     if: github.event_name == 'push'
@@ -117,6 +117,9 @@ jobs:
         with: { name: spec-reports }
       - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --full >> "$GITHUB_STEP_SUMMARY"
 ```
+
+Отчёты и журналы `.spec-*` — скрытые файлы: `upload-artifact` их пропускает
+без `include-hidden-files: true`, и артефакт выходит пустым.
 
 Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
 `spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами,
