@@ -608,6 +608,12 @@ function summaryLines(removed: Test[], changed: [Test, Test][], added: Test[], l
   ];
 }
 
+/** Тестов в списках больше порога — вместо списков сводка по папкам. */
+const summarized = (removed: Test[], changed: [Test, Test][], added: Test[], limit: number) => removed.length + changed.length + added.length > limit;
+
+/** Пометка теста, которого нет среди сценариев задачи: сам тест — в списке, второй раз его не печатаем. */
+const EXTRA = " — сверх сценариев";
+
 export function render(
   baseLabel: string,
   removed: Test[],
@@ -615,7 +621,7 @@ export function render(
   added: Test[],
   outFiles: string[],
   moved: Moved[] = [],
-  opts: { limit?: number; harness?: Set<Test> } = {},
+  opts: { limit?: number; harness?: Set<Test>; extra?: Set<Test> } = {},
 ): string {
   const lines = ["## Спека (тесты)", "", `_База: \`${baseLabel}\`._`, ""];
   if (!removed.length && !changed.length && !added.length && !outFiles.length && !moved.length) {
@@ -623,7 +629,7 @@ export function render(
     return lines.join("\n") + "\n";
   }
   const limit = opts.limit ?? SUMMARY_LIMIT;
-  if (removed.length + changed.length + added.length > limit) {
+  if (summarized(removed, changed, added, limit)) {
     // удалённый тест — снятое требование: в теле PR поимённо, пока их самих не больше порога
     if (removed.length && removed.length <= limit) lines.push(`**Удалены (${removed.length}):**`, "", ...removed.map(entry), "");
     lines.push(...summaryLines(removed, changed, added, limit, opts.harness));
@@ -631,10 +637,11 @@ export function render(
     if (outFiles.length) lines.push(`**Вне дерева \`${L.TESTS}/\`** изменены файлы тестов: ${outFiles.map((p) => `\`${p}\``).join(", ")}.`, "");
     return lines.join("\n").trimEnd() + "\n";
   }
+  const mark = (t: Test) => (opts.extra?.has(t) ? EXTRA : "");
   const sections: [string, string[]][] = [
     ["Удалены", removed.map(entry)],
-    ["Изменены", changed.map(changedEntry)],
-    ["Добавлены", added.map(entry)],
+    ["Изменены", changed.map((p) => changedEntry(p) + mark(p[1]))],
+    ["Добавлены", added.map((t) => entry(t) + mark(t))],
   ];
   for (const [title, items] of sections) {
     if (items.length) lines.push(`**${title} (${items.length}):**`, "", ...items, "");
@@ -692,17 +699,18 @@ const norm = (s: string): string => {
   return t.toLowerCase();
 };
 
-/** Сценарий и чем он стал: новым тестом, describe проверки харнесса или ничем. */
+/** Сценарий и чем он стал: новыми тестами, describe проверки харнесса или ничем. */
 export interface Found {
   scenario: string;
-  test: Test | null;
+  tests: Test[];
   harness: HarnessDescribe | null;
 }
 
 /**
- * Сценарий ↔ новый тест: совпадает с названием it или с цепочкой «describe › it» (без регистра, внешних кавычек и знака
- * в конце); теста нет — с describe новой проверки харнесса, его названием или цепочкой. Тесты, которые эта проверка
- * породила (`generated` — только из отчёта), — тесты её сценария, а не сверх сценариев.
+ * Сценарий ↔ новые тесты: каждый, чьё название it или цепочка «describe › it» совпадает с ним (без регистра, внешних
+ * кавычек и знака в конце), — один сценарий проверяют и на сервере, и в интерфейсе; теста нет — describe новой
+ * проверки харнесса, его название или цепочка. Тесты, которые эта проверка породила (`generated` — только из отчёта),
+ * — тесты её сценария, а не сверх сценариев.
  */
 export function matchScenarios(
   scenarios: string[],
@@ -714,14 +722,14 @@ export function matchScenarios(
   const usedChecks = new Set<HarnessDescribe>();
   const found = scenarios.map((scenario): Found => {
     const want = norm(scenario);
-    const test = fresh.find((x) => !used.has(x) && (norm(x.name) === want || norm([...x.describes, x.name].join(" › ")) === want)) ?? null;
-    if (test) {
-      used.add(test);
-      return { scenario, test, harness: null };
+    const tests = fresh.filter((x) => norm(x.name) === want || norm([...x.describes, x.name].join(" › ")) === want);
+    if (tests.length) {
+      for (const t of tests) used.add(t);
+      return { scenario, tests, harness: null };
     }
     const harness = checks.find((c) => !usedChecks.has(c) && (norm(c.describes.at(-1)!) === want || norm(c.describes.join(" › ")) === want)) ?? null;
     if (harness) usedChecks.add(harness);
-    return { scenario, test: null, harness };
+    return { scenario, tests, harness };
   });
   const covered = (t: Test) =>
     generated.has(t) && [...usedChecks].some((c) => c.folder === L.folderOf(t) && c.describes.length === t.describes.length && c.describes.every((d, i) => d === t.describes[i]));
@@ -730,17 +738,25 @@ export function matchScenarios(
 
 const harnessEntry = (c: HarnessDescribe) => `\`${c.folder}\` · ${c.describes.map(L.mdText).join(" › ")} — проверка харнесса: ${c.checks.map(L.mdText).join(", ")}`;
 
-function scenarioLines(scenarios: string[] | null, fresh: Test[], checks: HarnessDescribe[], generated: Set<Test>, limit = Infinity): string[] {
+/**
+ * Сверка сценариев без повторов: сценарий, ставший тестом, назван так же, как тест, — пока тесты в списках выше
+ * (`listed`), он только в счёте, а тест сверх сценариев — пометкой там же; в сводке по папкам списков нет — тогда
+ * строкой теста. Сценарий проверки харнесса — строкой проверки, несделанный — своим текстом.
+ */
+function scenarioLines(scenarios: string[] | null, match: { found: Found[]; extra: Test[] }, listed: boolean, limit = Infinity): string[] {
   if (scenarios === null) return ["### Сценарии задачи", "", "В задаче нет раздела «## Сценарии» — сверять не с чем.", ""];
-  const { found, extra } = matchScenarios(scenarios, fresh, checks, generated);
+  const { found, extra } = match;
   const lines = [`### Сценарии задачи (${scenarios.length})`, ""];
-  for (const { scenario, test, harness } of found) {
-    const sc = L.mdText(scenario);
-    lines.push(test ? `- ✅ ${sc} — ${entry(test).slice(2)}` : harness ? `- ✅ ${sc} — ${harnessEntry(harness)}` : `- ❌ ${sc} — теста нет`);
-  }
-  lines.push("");
-  if (extra.length > limit) lines.push(`**Тесты сверх сценариев (${extra.length}):** списком — \`spec-diff --full\`.`, "");
-  else if (extra.length) lines.push(`**Тесты сверх сценариев (${extra.length}):**`, "", ...extra.map(entry), "");
+  const done = found.filter((f) => f.tests.length).length;
+  if (listed && done) lines.push(`**Стали тестами (${done}):** в списках выше.`, "");
+  const items = found.flatMap(({ scenario, tests, harness }) =>
+    tests.length ? (listed ? [] : tests.map((t) => `- ✅ ${entry(t).slice(2)}`)) : [harness ? `- ✅ ${harnessEntry(harness)}` : `- ❌ ${L.mdText(scenario)} — теста нет`],
+  );
+  if (items.length) lines.push(...items, "");
+  if (!extra.length) return lines;
+  if (listed) lines.push(`**Тесты сверх сценариев (${extra.length}):** в списках выше, с пометкой «сверх сценариев».`, "");
+  else if (extra.length > limit) lines.push(`**Тесты сверх сценариев (${extra.length}):** списком — \`spec-diff --full\`.`, "");
+  else lines.push(`**Тесты сверх сценариев (${extra.length}):**`, "", ...extra.map(entry), "");
   return lines;
 }
 
@@ -877,8 +893,21 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
 
+  // сценарии — до списков: тест сверх сценариев помечается прямо в них
+  let scenarios: string[] | null = null;
+  if (v.scenarios !== undefined) {
+    try {
+      scenarios = parseScenarios(readFileSync(v.scenarios === "-" ? 0 : v.scenarios, "utf8"));
+    } catch (e) {
+      console.error(`spec-diff: --scenarios: ${(e as Error).message}`);
+      return 2;
+    }
+  }
+  const fresh = [...added, ...changed.map(([, n]) => n)];
+  const match = scenarios ? matchScenarios(scenarios, fresh, checks, harness) : { found: [], extra: fresh };
+
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
-  const shown = { limit, harness: v.report?.length ? harness : undefined };
+  const shown = { limit, harness: v.report?.length ? harness : undefined, extra: scenarios ? new Set(match.extra) : undefined };
   let text = v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved, shown);
   if (harnessNote && !v.json) text = text.replace(/^(_База: .*_)$/m, (m) => `${m}\n\n${harnessNote}`);
   if (v.json) {
@@ -891,30 +920,22 @@ export async function main(argv: string[]): Promise<number> {
     text = text.trimEnd() + "\n\n" + decisions.join("\n").trimEnd() + "\n";
   }
   if (v.scenarios !== undefined) {
-    let md: string;
-    try {
-      md = readFileSync(v.scenarios === "-" ? 0 : v.scenarios, "utf8");
-    } catch (e) {
-      console.error(`spec-diff: --scenarios: ${(e as Error).message}`);
-      return 2;
-    }
-    const scenarios = parseScenarios(md);
-    const fresh = [...added, ...changed.map(([, n]) => n)];
     if (v.json) {
       const j = JSON.parse(text);
-      const { found, extra } = scenarios ? matchScenarios(scenarios, fresh, checks, harness) : { found: [], extra: fresh };
+      const d = (t: Test) => ({ folder: L.folderOf(t), describes: t.describes, name: t.name });
       j.scenarios =
         scenarios === null
           ? null
-          : found.map(({ scenario, test: t, harness: h }) => ({
+          : match.found.map(({ scenario, tests, harness: h }) => ({
               scenario,
-              test: t ? { folder: L.folderOf(t), describes: t.describes, name: t.name } : null,
+              tests: tests.map(d),
               harness: h ? { folder: h.folder, describes: h.describes, checks: h.checks } : null,
             }));
-      j.extra_tests = extra.map((t) => ({ folder: L.folderOf(t), describes: t.describes, name: t.name }));
+      j.extra_tests = match.extra.map(d);
       text = JSON.stringify(j, null, 2) + "\n";
     } else {
-      text = text.trimEnd() + "\n\n" + scenarioLines(scenarios, fresh, checks, harness, limit).join("\n").trimEnd() + "\n";
+      const listed = !summarized(removed, changed, added, limit);
+      text = text.trimEnd() + "\n\n" + scenarioLines(scenarios, match, listed, limit).join("\n").trimEnd() + "\n";
     }
   }
   process.stdout.write(text);

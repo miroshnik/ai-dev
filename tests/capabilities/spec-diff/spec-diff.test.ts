@@ -352,19 +352,63 @@ describe("Сценарии задачи сверяются с тестами PR"
     "",
   ].join("\n");
 
-  it("сценарий, ставший тестом, — ✅ с папкой и названием; без теста — ❌; тест сверх сценариев — отдельным списком", () => {
+  const THREE = ts(`it("x", () => {}); describe("Счета", () => { it("выставляется за месяц", () => {}); it("черновик удаляется", () => {}); it("в валюте", () => {}); });`);
+  const times = (s: string, sub: string) => s.split(sub).length - 1;
+
+  // сценарий и его тест — одно название (так их и сверяют): тест уже в списках, вторая и третья строка — шум
+  it("сценарий, ставший тестом, — числом под списками; без теста — ❌ с текстом сценария; тест сверх сценариев — пометкой в списке", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
-    repo.commit({
-      [BILLING]: ts(`it("x", () => {}); describe("Счета", () => { it("выставляется за месяц", () => {}); it("черновик удаляется", () => {}); it("в валюте", () => {}); });`),
-      "issue.md": ISSUE,
-    });
+    repo.commit({ [BILLING]: THREE, "issue.md": ISSUE });
     const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain(
+      [
+        "**Добавлены (3):**",
+        "",
+        "- `tests/capabilities/billing` · Счета › выставляется за месяц",
+        "- `tests/capabilities/billing` · Счета › черновик удаляется",
+        "- `tests/capabilities/billing` · Счета › в валюте — сверх сценариев",
+      ].join("\n"),
+    );
     expect(out).toContain(
       [
         "### Сценарии задачи (3)",
         "",
-        "- ✅ выставляется за месяц — `tests/capabilities/billing` · Счета › выставляется за месяц",
-        "- ✅ Счета › черновик удаляется. — `tests/capabilities/billing` · Счета › черновик удаляется",
+        "**Стали тестами (2):** в списках выше.",
+        "",
+        "- ❌ оплата картой — теста нет",
+        "",
+        "**Тесты сверх сценариев (1):** в списках выше, с пометкой «сверх сценариев».",
+      ].join("\n"),
+    );
+    for (const name of ["выставляется за месяц", "черновик удаляется", "в валюте"]) expect(times(out, name)).toBe(1);
+    expect(out).not.toContain("не сценарий");
+  });
+
+  // один сценарий проверяют на двух уровнях (сервер и интерфейс) — второй тест не лишний, он того же сценария
+  it("тест с названием сценария в нескольких папках — тесты этого сценария, а не сверх сценариев", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    const UI = "tests/capabilities/cabinet/invoice.test.ts";
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); it("выставляется за месяц", () => {});`), [UI]: ts(`it("выставляется за месяц", () => {});`), "issue.md": "## Сценарии\n\n- выставляется за месяц\n" });
+    const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain("**Стали тестами (1):** в списках выше.");
+    expect(out).not.toContain("сверх сценариев");
+    const j = JSON.parse(diffFrom(base, "--scenarios", "issue.md", "--json").stdout);
+    expect(j.scenarios[0].tests.map((t: { folder: string }) => t.folder)).toEqual(["tests/capabilities/billing", "tests/capabilities/cabinet"]);
+    expect(j.extra_tests).toEqual([]);
+  });
+
+  // в большом PR вместо списков — сводка по папкам: названия тестов сценариев больше нигде не видны
+  it("в большом PR списков тестов нет — сценарий, ставший тестом, — ✅ с папкой и названием теста", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [BILLING]: THREE, "issue.md": ISSUE });
+    const out = diffFrom(base, "--scenarios", "issue.md", "--limit", "2").stdout;
+    expect(out).toContain("**Сводка по папкам**");
+    expect(out).toContain(
+      [
+        "### Сценарии задачи (3)",
+        "",
+        "- ✅ `tests/capabilities/billing` · Счета › выставляется за месяц",
+        "- ✅ `tests/capabilities/billing` · Счета › черновик удаляется",
         "- ❌ оплата картой — теста нет",
         "",
         "**Тесты сверх сценариев (1):**",
@@ -372,14 +416,15 @@ describe("Сценарии задачи сверяются с тестами PR"
         "- `tests/capabilities/billing` · Счета › в валюте",
       ].join("\n"),
     );
-    expect(out).not.toContain("не сценарий");
   });
 
   // Сценарий пишут при создании задачи, тест — позже: регистр и точка в конце не должны ломать сверку
   it("сценарий совпадает с названием it или цепочкой «describe › it» — без учёта регистра и точки в конце", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
     repo.commit({ [BILLING]: ts(`it("x", () => {}); describe("Счета", () => { it("Выставляется за месяц", () => {}); });`), "issue.md": "## Сценарии\n\n- выставляется за месяц.\n" });
-    expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ✅ выставляется за месяц. — `tests/capabilities/billing` · Счета › Выставляется за месяц");
+    const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain("**Стали тестами (1):** в списках выше.");
+    expect(out).not.toContain("сверх сценариев");
   });
 
   // сценарии в задачах пишут цитатой со знаком после неё — «…»; — и тест того же названия не находился (#196)
@@ -389,12 +434,8 @@ describe("Сценарии задачи сверяются с тестами PR"
     const issue = "## Сценарии\n\n- «выставляется за месяц»;\n- «черновик удаляется».\n- \"оплата картой\",\n- `в валюте`\n- «метка `billing` ставится»\n";
     repo.commit({ [BILLING]: ts(`it("x", () => {}); ${tests}`), "issue.md": issue });
     const out = diffFrom(base, "--scenarios", "issue.md").stdout;
-    expect(out).toContain("- ✅ «выставляется за месяц»; — `tests/capabilities/billing` · выставляется за месяц");
-    expect(out).toContain("- ✅ «черновик удаляется». — `tests/capabilities/billing` · черновик удаляется");
-    expect(out).toContain('- ✅ "оплата картой", — `tests/capabilities/billing` · оплата картой');
-    expect(out).toContain("- ✅ `в валюте` — `tests/capabilities/billing` · в валюте");
-    expect(out).toContain("- ✅ «метка `billing` ставится» — `tests/capabilities/billing` · метка `billing` ставится");
-    expect(out).not.toContain("Тесты сверх сценариев");
+    expect(out).toContain("**Стали тестами (5):** в списках выше.");
+    expect(out).not.toContain("сверх сценариев");
   });
 
   it("в задаче нет раздела «## Сценарии» — сверка говорит об этом, а не молчит", () => {
@@ -418,7 +459,7 @@ describe("Сценарий стандарта «реестр + инвариан�
         `describe("Логи", () => { describe("console запрещён", () => { examples(it, { rule: "no-console", bad: [] }); }); });`,
     );
   const ISSUE = "## Сценарии\n\n- Каждая мутация пишет аудит.\n- Логи › console запрещён\n";
-  const AUDIT_LINE = "- ✅ Каждая мутация пишет аудит. — `tests/standards/audit` · каждая мутация пишет аудит — проверка харнесса: реестр «мутации»";
+  const AUDIT_LINE = "- ✅ `tests/standards/audit` · каждая мутация пишет аудит — проверка харнесса: реестр «мутации»";
 
   it("сценарий совпадает с describe, в котором вызван invariant", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
@@ -429,14 +470,14 @@ describe("Сценарий стандарта «реестр + инвариан�
         "### Сценарии задачи (2)",
         "",
         AUDIT_LINE,
-        "- ✅ Логи › console запрещён — `tests/standards/audit` · Логи › console запрещён — проверка харнесса: правило no-console",
+        "- ✅ `tests/standards/audit` · Логи › console запрещён — проверка харнесса: правило no-console",
       ].join("\n"),
     );
     expect(out).not.toContain("Тесты сверх сценариев");
     const j = JSON.parse(diffFrom(base, "--scenarios", "issue.md", "--json").stdout);
     expect(j.scenarios[0]).toEqual({
       scenario: "Каждая мутация пишет аудит.",
-      test: null,
+      tests: [],
       harness: { folder: "tests/standards/audit", describes: ["каждая мутация пишет аудит"], checks: ["реестр «мутации»"] },
     });
   });
@@ -468,7 +509,8 @@ describe("Сценарий стандарта «реестр + инвариан�
     expect(out).toContain("**Добавлены (4):**");
     expect(out).toContain(AUDIT_LINE);
     // тест, написанный руками, — своё требование, даже внутри describe проверки
-    expect(out).toContain("**Тесты сверх сценариев (1):**\n\n- `tests/standards/audit` · каждая мутация пишет аудит › журнал хранится год");
+    expect(out).toContain("- `tests/standards/audit` · каждая мутация пишет аудит › журнал хранится год — сверх сценариев");
+    expect(out).toContain("**Тесты сверх сценариев (1):** в списках выше, с пометкой «сверх сценариев».");
   });
 
   // как с тестами: сценарий закрывает то, что PR добавил или переименовал, а не то, что уже было
@@ -477,7 +519,7 @@ describe("Сценарий стандарта «реестр + инвариан�
     repo.commit({ [STD]: audit("мутации") + "// проверка элемента строже\n", "issue.md": ISSUE });
     expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ❌ Каждая мутация пишет аудит. — теста нет");
     repo.commit({ [STD]: audit("мутации и команды") });
-    expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ✅ Каждая мутация пишет аудит. — `tests/standards/audit` · каждая мутация пишет аудит — проверка харнесса: реестр «мутации и команды»");
+    expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain("- ✅ `tests/standards/audit` · каждая мутация пишет аудит — проверка харнесса: реестр «мутации и команды»");
   });
 });
 
