@@ -5,9 +5,9 @@
  * tests/architecture/<name> («Из чего состоит») и tests/standards/<name> («Каким правилам подчиняется
  * код»). Страница — рассказ: описание <папка>.md рядом с тестами под заголовком (первый абзац — в индексе,
  * заголовки md — под заголовком папки), главный файл <name>.test.ts у всех видов (рядом <name>.e2e.ts — следом;
- * rule.test.ts — подсказка переименовать), describe →
+ * в монорепо — и <name>/<пакет>/<name>.test.ts; rule.test.ts — подсказка переименовать), describe →
  * раздел с прозой из своего JSDoc, тесты раздела свёрнуты в <details> со счётчиком. Разделы идут в
- * порядке главного файла, остальные файлы — следом по пути. Шапка другого файла папки в документацию
+ * порядке главного файла, затем главных файлов пакетов по имени пакета, остальные файлы — следом по пути. Шапка другого файла папки в документацию
  * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
  * tests/lib пропускается; тесты вне дерева попадают в раздел «Вне дерева» — это сигнал.
  *
@@ -85,24 +85,29 @@ const testKey = (t: Test): string => JSON.stringify([...t.describes, t.name]);
 
 /**
  * Главный файл папки (`<name>.test.ts`, `<name>.e2e.ts`…) — в нём рассказ, с него начинается страница. Имя —
- * имя папки у всех видов: одно правило вместо особого `rule.test.ts` у стандарта.
+ * имя папки у всех видов: одно правило вместо особого `rule.test.ts` у стандарта. Лежит в корне папки или в
+ * подпапке пакета монорепо (`<name>/<пакет>/<name>.test.ts`: у пакета свой раннер, а решение одно); глубже — нет.
+ * → пакет ("" — корень папки) и утверждения ли это юнитов (`.test.*`); не главный — null.
  */
-function isMain(file: string): boolean {
-  return mainRank(file) < 2;
+function mainOf(file: string): { pkg: string; unit: boolean } | null {
+  const [kind, name] = L.classify(file);
+  if (!KINDS.includes(kind) || name === null) return null;
+  const inner = file.split("/").slice(3);
+  const base = inner.at(-1)!.split(".");
+  if (inner.length > 2 || base[0] !== name) return null;
+  return { pkg: inner.length === 2 ? inner[0]! : "", unit: base[1] === "test" };
 }
 
+const isMain = (file: string): boolean => mainOf(file) !== null;
+
 /**
- * Место файла в рассказе папки: 0 — `<name>.test.*` (утверждения юнитов), 1 — другой `<name>.*` (`.e2e.ts`),
- * 2 — остальные. Рядом `<name>.e2e.ts` и `<name>.test.ts` — страницу открывают юниты, e2e следом: по алфавиту
- * e2e шёл бы первым.
+ * Место файла в рассказе папки — ключ сортировки: главный файл в корне папки, затем главные файлы подпапок по
+ * имени пакета, затем остальные; у главного — сначала `<name>.test.*` (утверждения юнитов), затем другой `<name>.*`
+ * (`.e2e.ts`): по алфавиту e2e шёл бы первым. Внутри места — по пути.
  */
-function mainRank(file: string): number {
-  const [kind, name] = L.classify(file);
-  if (!KINDS.includes(kind) || name === null) return 2;
-  const parts = file.split("/");
-  const base = parts[3]?.split(".") ?? [];
-  if (parts.length !== 4 || base[0] !== name) return 2;
-  return base[1] === "test" ? 0 : 1;
+function mainRank(file: string): string {
+  const m = mainOf(file);
+  return (m ? "0" + m.pkg + "\0" + (m.unit ? "0" : "1") : "1") + "\0" + file;
 }
 
 /** Прежний главный файл стандарта `rule.*` прямо в папке: теперь не главный — его надо переименовать. */
@@ -117,9 +122,9 @@ export function build(tests: Test[]): { groups: Map<string, Group>; out: Map<str
   const groups = new Map<string, Group>();
   const out = new Map<string, Test[]>();
   const libFiles = new Set<string>();
-  // главный файл папки первым — порядок его describe и есть порядок рассказа; дальше файлы по пути;
-  // внутри файла — порядок отчёта (порядок объявления)
-  const rank = (t: Test): string => mainRank(t.path) + t.path;
+  // главный файл папки первым — порядок его describe и есть порядок рассказа; дальше главные файлы пакетов, затем
+  // файлы по пути; внутри файла — порядок отчёта (порядок объявления)
+  const rank = (t: Test): string => mainRank(t.path);
   const sorted = [...tests].sort((a, b) => (rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0));
   for (const t of sorted) {
     const [kind, name] = L.classify(t.path);
@@ -150,17 +155,30 @@ const addOnce = (list: string[], text: string): void => {
   if (text && !list.includes(text)) list.push(text);
 };
 
-/** Главный файл папки, которого ждём, если в отчёте его нет: `<папка>.test.ts`. */
-const mainPath = (g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.test.ts`;
+/**
+ * Главный файл папки, которого ждём, если в отчёте его нет: `<папка>.test.ts`; у папки с подпапками пакетов — или
+ * `<пакет>/<папка>.test.ts`.
+ */
+function mainPath(g: Group): string {
+  const folder = `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}`;
+  const packages = g.tests.some((t) => t.path.split("/").length > 4);
+  return `${folder}/${g.name}.test.ts` + (packages ? ` или ${folder}/<пакет>/${g.name}.test.ts` : "");
+}
 
-/** У группы есть главный файл: в отчёте или на диске (`<папка>.<что угодно>` с тестовым суффиксом). */
+/** У группы есть главный файл: в отчёте или на диске — в корне папки или в подпапке пакета. */
 function hasMain(g: Group, root: string): boolean {
   if (g.tests.some((t) => isMain(t.path))) return true;
-  try {
-    return readdirSync(path.join(root, L.TESTS, SUBDIR[g.kind]!, g.name)).some((f) => L.isTestFile(f) && f.split(".")[0] === g.name);
-  } catch {
-    return false;
-  }
+  const folder = `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}`;
+  const files = (rel: string) => {
+    try {
+      return readdirSync(path.join(root, rel), { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  };
+  return files(folder).some((e) =>
+    e.isDirectory() ? files(`${folder}/${e.name}`).some((f) => L.isTestFile(f.name) && isMain(`${folder}/${e.name}/${f.name}`)) : L.isTestFile(e.name) && isMain(`${folder}/${e.name}`),
+  );
 }
 
 /**
