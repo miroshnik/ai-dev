@@ -33,7 +33,7 @@ export const REGISTRY_PATH = path.join(EST_DIR, "repos.json");
 const CACHE_DIR = path.join(EST_DIR, "cache");
 // Источники факта: транскрипты Claude Code (~/.claude/projects), сессии Codex (~/.codex/sessions) и выгрузки
 // событий облачных сессий Claude Code (<каталог состояния>/cloud/<owner>/<repo>/<session>.json, est cloud-import).
-const PROJECTS_DIR = path.join(HOME, ".claude", "projects");
+export const PROJECTS_DIR = path.join(HOME, ".claude", "projects");
 const CODEX_DIRS = [path.join(HOME, ".codex", "sessions"), path.join(HOME, ".codex", "archived_sessions")];
 export const CLOUD_DIR = path.join(EST_DIR, "cloud");
 // Закрепления сессий за задачами: `github task status` «В работе» пишет <каталог состояния>/sessions/<id сессии> со
@@ -914,7 +914,7 @@ export function parseMarker(body: string | null | undefined, kind: string): Any 
 // Транскрипты Claude Code
 // ----------------------------------------------------------------------------
 
-const encodePath = (p: string) => p.replace(/[^A-Za-z0-9]/g, "-");
+export const encodePath = (p: string) => p.replace(/[^A-Za-z0-9]/g, "-");
 
 const HASH_RE = /(?<![0-9a-zA-Z])[0-9a-f]{7,40}(?![0-9a-zA-Z])/g;
 // «#N» — границы как у \w в Python (буквы и цифры любого алфавита)

@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 /**
- * dashboard — страница с графиком задач: оценка, факт, токены и стоимость по времени закрытия.
+ * dashboard — страница задач в две вкладки: «Сессии» (главная) — задачи «В работе», их сессии и чего они ждут;
+ * «Оценка и факт» — график оценки, факта, токенов и стоимости по времени закрытия.
  *
  *   dashboard [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
  *
  * Сервит страницу сам (Bun.serve, только 127.0.0.1), печатает адрес и открывает его в браузере. Данные — строки
- * проекта GitHub (поля и маркеры комментариев «Оценка» и «Факт») через скрипт est рядом; в GitHub ничего не пишет.
- * Страница собирается на сервере: SVG строкой, без зависимостей; в браузере — только подсказка при наведении.
+ * проекта GitHub (поля и маркеры комментариев «Оценка» и «Факт») через скрипт est рядом, закрепления и транскрипты
+ * сессий (sessions.ts); в GitHub ничего не пишет. Страница собирается на сервере: SVG строкой, без зависимостей; в
+ * браузере — только подсказка при наведении.
  */
 
 import { spawn } from "node:child_process";
@@ -14,6 +16,8 @@ import { parseArgs } from "node:util";
 
 import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo } from "../../est/scripts/est.ts";
 import type { Registry, Row } from "../../est/scripts/est.ts";
+import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, repoTranscripts, SESSIONS_CSS, sessionsBody, sessionsView } from "./sessions.ts";
+import type { Live, SessionsInput, SessionsView } from "./sessions.ts";
 
 const DAY = 86400;
 /** Окно тренда и сводки: последние 10 закрытых задач; медиана меньше чем по трём — шум, её нет. */
@@ -280,12 +284,15 @@ const PRESETS: [string, string][] = [["30d", "30 дней"], ["90d", "90 дне�
 
 // Палитра — проверенная пара «синий / оранжевый» и служебные тона для светлой и тёмной темы.
 const CSS = `
-:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--fact:#2a78d6;--trend:#eb6834;--good:#006300;--bad:#b42c2c}
-@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--fact:#3987e5;--trend:#d95926;--good:#0ca30c;--bad:#e66767}}
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--fact:#2a78d6;--trend:#eb6834;--good:#006300;--bad:#b42c2c;--warn:#f2b53a}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--fact:#3987e5;--trend:#d95926;--good:#0ca30c;--bad:#e66767;--warn:#e0a52c}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1180px;margin:0 auto;padding:24px 16px 48px}
 h1{font-size:20px;margin:0 0 4px}
+.tabs{display:flex;gap:4px;margin:0 0 16px;border-bottom:1px solid var(--border)}
+.tabs a{padding:6px 12px;margin-bottom:-1px;text-decoration:none;color:var(--ink2);border-bottom:2px solid transparent}
+.tabs a[aria-current=page]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
 a{color:inherit}
 .sub,.filters,figcaption,.note{color:var(--ink2)}
 .filters{margin:16px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -327,7 +334,7 @@ th{color:var(--ink2);font-weight:500;font-size:13px;white-space:normal;vertical-
 th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
 td:nth-child(2){white-space:normal;min-width:220px}
 tr.hl td{background:var(--page)}
-`;
+${SESSIONS_CSS}`;
 
 // Подсказка: ближайшая к курсору задача (по горизонтали — вчетверо строже, чем по вертикали), перекрестие и её строка в таблице.
 const SCRIPT = `
@@ -413,7 +420,29 @@ function table(pts: Point[], many: boolean): string {
   return `<section class="card scroll"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${body.join("")}</tbody></table></section>`;
 }
 
-/** Страница целиком: сводка, график, таблица; ошибки чтения GitHub — плашкой сверху. */
+type Tab = "sessions" | "est";
+// «Сессии» — главная: на ней видно, чего ждут задачи в работе; график — вторая вкладка
+const TABS: [Tab, string, string][] = [["sessions", "/", "Сессии"], ["est", "/est", "Оценка и факт"]];
+const EST_TITLE = "Задачи: оценка, факт и цена";
+const SESSIONS_TITLE = "Сессии: задачи в работе";
+
+/** Каркас страницы: вкладки, заголовок, строка под ним (HTML), ошибки чтения GitHub — плашкой, содержимое вкладки; `tail` — после `<main>`. */
+function shell(o: { tab: Tab; title: string; repos: string[]; sub: string; errors: string[]; body: string; tail?: string }): string {
+  const tabs = TABS.map(([k, href, label]) => `<a href="${href}"${k === o.tab ? ' aria-current="page"' : ""}>${label}</a>`).join("");
+  return [
+    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`,
+    `<title>${esc(o.title)} — ${esc(o.repos.join(", "))}</title><style>${CSS}</style></head><body><main>`,
+    `<nav class="tabs" aria-label="Вкладки">${tabs}</nav>`,
+    `<h1>${esc(o.title)}</h1>`,
+    `<div class="sub">${o.sub}</div>`,
+    o.errors.length ? `<div class="card errors">${o.errors.map((e) => `<div>${esc(e)}</div>`).join("")}</div>` : "",
+    o.body,
+    // скрипт — вне <main>: самообновление подменяет <main> и не должно подменять себя
+    `</main>${o.tail ?? ""}</body></html>`,
+  ].join("");
+}
+
+/** Вкладка «Оценка и факт»: сводка, график, таблица. */
 export function page(m: Model): string {
   const pts = m.view.points;
   const many = m.repos.length > 1;
@@ -431,29 +460,52 @@ export function page(m: Model): string {
     ? `${tiles(m.view)}<figure class="card"><figcaption>${LEGEND}</figcaption>${c.svg}<div id="tip" hidden></div></figure>${table(pts, many)}` +
       `<script id="pts" type="application/json">${JSON.stringify(hover).replace(/</g, "\\u003c")}</script><script>${SCRIPT}</script>`
     : `<p class="card">Закрытых задач с фактом нет${since === "all" ? "" : " за этот период"} — факт пишет <code>est fact --write</code> при закрытии задачи.</p>`;
-  return [
-    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`,
-    `<title>Задачи: оценка, факт и цена — ${esc(m.repos.join(", "))}</title><style>${CSS}</style></head><body><main>`,
-    `<h1>Задачи: оценка, факт и цена</h1>`,
-    `<div class="sub">${esc(m.repos.join(", "))} · закрытые задачи с фактом по дате закрытия · GitHub прочитан ${esc(fmtLocal(m.at))} · <a href="?since=${esc(since)}&amp;refresh=1">Обновить</a></div>`,
-    `<nav class="filters"><span>Период:</span>${presets.map(([k, label]) => `<a${k === since ? ' class="cur"' : ""} href="?since=${esc(k)}">${esc(label)}</a>`).join("")}</nav>`,
-    m.errors.length ? `<div class="card errors">${m.errors.map((e) => `<div>${esc(e)}</div>`).join("")}</div>` : "",
-    body,
-    `</main></body></html>`,
-  ].join("");
+  return shell({
+    tab: "est", title: EST_TITLE, repos: m.repos, errors: m.errors,
+    sub: `${esc(m.repos.join(", "))} · закрытые задачи с фактом по дате закрытия · GitHub прочитан ${esc(fmtLocal(m.at))} · <a href="/est?since=${esc(since)}&amp;refresh=1">Обновить</a>`,
+    body: `<nav class="filters"><span>Период:</span>${presets.map(([k, label]) => `<a${k === since ? ' class="cur"' : ""} href="/est?since=${esc(k)}">${esc(label)}</a>`).join("")}</nav>${body}`,
+  });
+}
+
+interface SessionsModel {
+  repos: string[];
+  view: SessionsView;
+  /** Когда прочитан GitHub, epoch-секунды. */
+  at: number;
+  /** Когда прочитаны закрепления и транскрипты: от него — возраст записей сессий. */
+  now: number;
+  errors: string[];
+}
+
+/** Вкладка «Сессии»: «Ждут владельца» и строка на задачу «В работе»; обновляется сама. */
+function sessionsPage(m: SessionsModel): string {
+  return shell({
+    tab: "sessions", title: SESSIONS_TITLE, repos: m.repos, errors: m.errors,
+    sub: `${esc(m.repos.join(", "))} · задачи «В работе», их сессии и чего они ждут · обновляется каждые ${REFRESH} с · GitHub прочитан ${esc(fmtLocal(m.at))} · <a href="/?refresh=1">Обновить</a>`,
+    body: sessionsBody(m.view, m.now, m.repos.length > 1),
+    tail: refreshScript(REFRESH),
+  });
+}
+
+/** Что показать на «Сессиях»: к GitHub — закрепления задач «В работе», транскрипты их сессий и недавние сессии репозиториев. */
+function sessionsInput(live: Record<string, Live>, registry: Registry, now: number): SessionsInput {
+  const pins = readPins();
+  const ids = Object.entries(live).flatMap(([repo, l]) => l.tasks.flatMap((t) => pins[`${repo}#${t.number}`] ?? []));
+  const others = Object.fromEntries(Object.keys(live).map((repo) => [repo, repoTranscripts(registry[repo]?.paths ?? [], now - RECENT)]));
+  return { pins, transcripts: findTranscripts(ids), live, others };
 }
 
 // ----------------------------------------------------------------------------
 // Сервер и CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `dashboard — страница с графиком задач: оценка, факт, токены и стоимость по времени закрытия.
+const USAGE = `dashboard — страница задач: «Сессии» (задачи в работе и чего они ждут) и «Оценка и факт» (график по времени закрытия).
 
   dashboard [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
 
   --repo o/r    репозиторий (по умолчанию — из git remote origin каталога)
   --all-repos   все репозитории личного реестра est
-  --since 90d   период страницы по умолчанию (дни d, недели w, месяцы m); без него — всё время
+  --since 90d   период вкладки «Оценка и факт» по умолчанию (дни d, недели w, месяцы m); без него — всё время
   --port N      порт (по умолчанию — свободный)
   --no-open     не открывать браузер (то же — BROWSER=none; BROWSER=<команда> — чем открыть)`;
 
@@ -492,33 +544,71 @@ function serve(o: Options) {
     if (!Object.keys(rows).length) throw new EstError(errors.join("; "));
     return (cache = { at: nowTs(), rows, errors });
   };
+  let live: { at: number; live: Record<string, Live>; errors: string[] } | null = null;
+  let pending: Promise<void> | null = null;
+  /**
+   * GitHub для «Сессий» — запросом на репозиторий, параллельно и без блокировки сервера; ошибка репозитория — строкой на
+   * странице. Не бросает: запускается и в фоне.
+   */
+  const refreshLive = () =>
+    (pending ??= (async () => {
+      const got = await Promise.all(
+        o.repos.map(async (full): Promise<[string, Live | null, string | null]> => {
+          try {
+            return [full, await liveQuery(full, new Repo(full, o.registry).projectMeta().id), null];
+          } catch (e) {
+            return [full, null, `${full}: ${e instanceof EstError ? e.message : String((e as Error)?.stack ?? e)}`];
+          }
+        }),
+      );
+      live = { at: nowTs(), live: Object.fromEntries(got.filter(([, l]) => l).map(([full, l]) => [full, l!])), errors: got.flatMap(([, , err]) => (err ? [err] : [])) };
+    })().finally(() => (pending = null)));
   const html = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
-  const failure = (msg: string, status: number) => html(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Дашборд: ошибка</title><style>${CSS}</style><main><h1>Задачи: оценка, факт и цена</h1><p class="card errors">${esc(msg)}</p><p><a href="?refresh=1">Обновить</a></p></main></html>`, status);
+  const failure = (msg: string, status: number, tab: Tab) =>
+    html(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Дашборд: ошибка</title><style>${CSS}</style><main><h1>${tab === "est" ? EST_TITLE : SESSIONS_TITLE}</h1><p class="card errors">${esc(msg)}</p><p><a href="${tab === "est" ? "/est" : "/"}?refresh=1">Обновить</a></p></main></html>`, status);
+  /** Вкладка «Оценка и факт»: период — из адреса, иначе из --since. */
+  const estTab = (url: URL) => {
+    const since = url.searchParams.get("since") ?? o.since;
+    const from = sinceTs(since);
+    const data = load();
+    return html(page({ repos: o.repos, since, view: view(data.rows, from), at: data.at, errors: data.errors }));
+  };
+  /**
+   * Вкладка «Сессии»: закрепления и транскрипты — заново на каждое открытие, GitHub — из кэша; устарел — страница из
+   * него, а свежий собирается в фоне к следующему обновлению: вкладка обновляется сама и GitHub не ждёт.
+   */
+  const sessionsTab = async () => {
+    if (!live) await refreshLive();
+    else if (nowTs() - live.at >= TTL) void refreshLive();
+    const l = live!;
+    const now = nowTs();
+    const v = sessionsView(sessionsInput(l.live, o.registry, now), now);
+    return html(sessionsPage({ repos: o.repos, view: v, at: l.at, now, errors: l.errors }));
+  };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: o.port,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
       // страница называет задачи непубличных репозиториев: чужой Host — сайт, навёдший своё имя на 127.0.0.1 (DNS rebinding)
       if (!["127.0.0.1", "localhost"].includes(url.hostname)) return new Response("чужой Host", { status: 403 });
-      if (url.pathname !== "/") return new Response("нет такой страницы", { status: 404 });
-      const since = url.searchParams.get("since") ?? o.since;
+      const tab = TABS.find(([, href]) => href === url.pathname)?.[0];
+      if (!tab) return new Response("нет такой страницы", { status: 404 });
       if (url.searchParams.has("refresh")) {
-        cache = null;
+        cache = live = null;
         // адрес без refresh: перезагрузка вкладки не перечитывает GitHub заново
-        return new Response(null, { status: 303, headers: { location: since ? `/?since=${encodeURIComponent(since)}` : "/" } });
+        const since = url.searchParams.get("since");
+        return new Response(null, { status: 303, headers: { location: tab === "est" && since ? `/est?since=${encodeURIComponent(since)}` : url.pathname } });
       }
       try {
-        const from = sinceTs(since);
-        const data = load();
-        return html(page({ repos: o.repos, since, view: view(data.rows, from), at: data.at, errors: data.errors }));
+        return tab === "est" ? estTab(url) : await sessionsTab();
       } catch (e) {
-        if (e instanceof EstError) return failure(e.message, /^неверный период/.test(e.message) ? 400 : 502);
-        return failure(String((e as Error)?.stack ?? e), 500);
+        if (e instanceof EstError) return failure(e.message, /^неверный период/.test(e.message) ? 400 : 502, tab);
+        return failure(String((e as Error)?.stack ?? e), 500, tab);
       }
     },
   });
-  return { server, load };
+  return { server, refreshLive };
 }
 
 /** Открывает адрес в браузере: команда из BROWSER, иначе системная; возвращает строку для вывода. */
@@ -558,15 +648,12 @@ export function main(argv: string[]): number | null {
       if ((e as { code?: unknown } | null)?.code !== "EADDRINUSE") throw e;
       throw new EstError(`порт ${port} занят — укажите другой --port или уберите его: возьмётся свободный`);
     }
-    const { server, load } = started;
+    const { server, refreshLive } = started;
     const url = `http://127.0.0.1:${server.port}/`;
     console.log(`дашборд: ${url} — ${repos.join(", ")}; остановить — Ctrl+C`);
-    // первое открытие страницы — без ожидания GitHub
-    try {
-      load();
-    } catch (e) {
-      console.error(`предупреждение: ${(e as Error).message}`);
-    }
+    // главная вкладка открывается без ожидания GitHub: он читается, пока браузер открывается; строки проекта для
+    // «Оценки и факта» — при её открытии: по всем репозиториям это десятки секунд, «Сессии» их не ждут
+    void refreshLive();
     console.log(`браузер: ${openBrowser(url, !values["no-open"])}`);
     return null; // сервер живёт до остановки
   } catch (e) {
