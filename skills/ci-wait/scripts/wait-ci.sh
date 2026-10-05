@@ -53,6 +53,9 @@ rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 
 # checks <sha>: чеки коммита в $out — JSON-массив {name, bucket}; bucket как у `gh pr checks`:
 # pending | pass | fail | cancel | skipping. Код 1 — ошибка gh, текст в $out.
+# Статусы API уже сводит к последнему на контекст, check-runs — нет: на SHA лежат check-runs всех
+# прогонов (отменённый новым push, когда голову вернули на прежний коммит; перезапуск job), и итог —
+# за последним check-run имени у того же приложения (id растёт с созданием).
 checks() {
   local statuses runs
   statuses=$(gh api "repos/{owner}/{repo}/commits/$1/status" 2>&1) || { out=$statuses; return 1; }
@@ -60,7 +63,7 @@ checks() {
   out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --arg ctx "$context" '
     [ $s.statuses[] | { name: .context,
         bucket: (if .state == "success" then "pass" elif .state == "pending" then "pending" else "fail" end) } ]
-    + [ $r.check_runs[] | { name,
+    + [ $r.check_runs | group_by([.name, .app.id]) | map(max_by(.id)) | .[] | { name,
         bucket: (if .status != "completed" then "pending"
                  elif .conclusion == "success" or .conclusion == "neutral" then "pass"
                  elif .conclusion == "skipped" then "skipping"

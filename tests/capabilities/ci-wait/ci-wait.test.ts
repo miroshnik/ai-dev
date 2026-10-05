@@ -46,11 +46,16 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
-interface CheckRun { name: string; status: string; conclusion: string | null; html_url: string }
+interface CheckRun { id: number; name: string; status: string; conclusion: string | null; html_url: string; app: { id: number } }
 interface Status { context: string; state: string; target_url: string }
-const run = (name: string, status: string, conclusion: string | null = null): CheckRun => ({ name, status, conclusion, html_url: "" });
+// id растёт с созданием check-run, как в GitHub; app — приложение, создавшее его (GitHub Actions — 15368)
+let lastId = 0;
+const run = (name: string, status: string, conclusion: string | null = null, app = 15368): CheckRun => ({
+  id: ++lastId, name, status, conclusion, html_url: "", app: { id: app },
+});
 const ok = (name: string) => run(name, "completed", "success");
 const failed = (name: string) => run(name, "completed", "failure");
+const cancelled = (name: string) => run(name, "completed", "cancelled");
 const status = (context: string, state: string): Status => ({ context, state, target_url: "" });
 const write = (kind: string, v: unknown[]) => writeFileSync(path.join(sb.dir, `${kind}.json`), JSON.stringify(v));
 const calls = () => readFileSync(path.join(sb.dir, "calls"), "utf8").split("\n");
@@ -126,6 +131,29 @@ describe("Коммит ждут до исхода всех его чеков —
     const r = waitCommit([{ runs: [run("tests", "in_progress")] }], ["--timeout", "0"]);
     expect(r.code).toBe(2);
     expect(r.result).toStartWith("TIMEOUT");
+  });
+});
+
+/**
+ * На одном SHA бывают check-runs нескольких прогонов (#319): прогон отменён новым push, а голову вернули на прежний
+ * коммит — проверка поломкой по канону; перезапуск упавшего job. GitHub отдаёт их все, а итог — за последним.
+ */
+describe("Одноимённые check-runs коммита сводятся к последнему — итог решает последний прогон, а не все сразу", () => {
+  it("последний check-run имени решает итог: ранний отменённый и поздний зелёный — PASS", () => {
+    const early = cancelled("tests");
+    const r = waitPr([{ runs: [ok("tests"), early] }]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+  });
+
+  // этот и следующий — сторожа от перекоррекции: сведение по порядку в ответе или по одному имени дало бы PASS
+  it("поздний отменённый после раннего зелёного — FAIL", () => {
+    const r = waitCommit([{ runs: [ok("tests"), cancelled("tests")] }]);
+    expect([r.code, r.result]).toEqual([1, "FAIL tests"]);
+  });
+
+  it("одноимённые check-runs разных приложений сводятся порознь: упавший у одного — FAIL", () => {
+    const r = waitCommit([{ runs: [failed("tests"), run("tests", "completed", "success", 9426)] }]);
+    expect([r.code, r.result]).toEqual([1, "FAIL tests"]);
   });
 });
 
