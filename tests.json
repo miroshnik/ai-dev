@@ -2,6 +2,20 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
+   "Issue ждут до закрытия — баг на красный main будит сессию, когда его закрыли"
+  ],
+  "name": "issue нет — ERROR сразу, а не ожидание до таймаута"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Issue ждут до закрытия — баг на красный main будит сессию, когда его закрыли"
+  ],
+  "name": "открытый issue — ожидание, закрытый — PASS с причиной закрытия"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
    "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
   ],
   "name": "лимит API — ожидание до сброса, а не ERROR"
@@ -885,6 +899,41 @@
    "Хеш в листинге git — якорь, только если коммит сделала сама сессия"
   ],
   "name": "цикл или условие с git commit внутри — не листинг: хеш коммита — якорь"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "PR закрывает открытый баг «main красный…» — красный main его не останавливает: это починка"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "main красный, а PR ломает ещё своё — код 1, вывод называет тесты, которые ломает PR"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "красный test:spec и на слиянии PR, и на голом main — premerge выходит отдельным кодом «main красный», а не «PR ломает»"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "красный чек последнего коммита main — premerge не вливает и называет чек"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "открытый баг «main красный…» — premerge называет его и команду ожидания; бага нет — команду завести"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
@@ -3664,6 +3713,62 @@
    "Отключение линт-правила в коде — исключение с задачей, и уходит, когда больше не нужно"
   ],
   "name": "файлов кода не нашлось — упавший тест: путь ошибочен"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "исключение отметкой в файле элемента без задачи или без причины — красный тест с путём файла"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "отметка «вне охвата» в файле элемента выводит элемент из охвата правила с причиной на странице"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "отметка в файле двух элементов — красный тест: к какому элементу, неизвестно"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "отметка другого решения и текст отметки в строке кода — не отметки папки"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "отметка с правилом, которого нет ни у одного инварианта папки, — красный тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "отметка — в начале комментария любого файла: SQL, shell, HTML, JSDoc; в строке JS и посреди текста — не отметка"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "элемент с отметкой и записью в exceptions/ — красный тест «оставь одно»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "элемент с отметкой-исключением начал соблюдать соглашение — красный «убери отметку» с путём файла"
  },
  {
   "path": "tests/capabilities/spec-harness/lint.test.ts",
