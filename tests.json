@@ -1351,6 +1351,34 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task actualize печатает задание субагенту актуализации блока"
+  ],
+  "name": "в эпике нет открытых задач, кроме этой, — скрипт пишет, что актуализация не нужна"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize печатает задание субагенту актуализации блока"
+  ],
+  "name": "новая открытая подзадача эпика попадает в задание"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize печатает задание субагенту актуализации блока"
+  ],
+  "name": "скрипт печатает готовое задание субагенту актуализации: задача, эпик, открытые задачи эпика, пять проверок"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize печатает задание субагенту актуализации блока"
+  ],
+  "name": "у задачи без эпика скрипт пишет, что актуализация не нужна"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task close закрывает задачу одной командой"
   ],
   "name": "PR задачи влит: задача закрыта, факт записан est, Status «Готово» — в выводе всё сделанное и следующий шаг"
@@ -1382,6 +1410,13 @@
    "task close закрывает задачу одной командой"
   ],
   "name": "в milestone остались открытые задачи — не закрыт"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "в эпике есть открытые задачи — последняя строка напоминает об актуализации командой task actualize"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -4714,6 +4749,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: подкоманда github project fix названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task actualize названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
