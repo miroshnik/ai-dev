@@ -1,6 +1,6 @@
 ---
 name: ci-wait
-description: Ожидание всех чеков PR или коммита (CI в GitHub Actions, деплой хостинга, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой; всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса.
+description: Ожидание всех чеков PR или коммита (CI в GitHub Actions, деплой хостинга, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой; всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса; `issue <N>` — закрытия бага на красный main (`github pr premerge`, код 3).
 allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks *) Bash(gh pr view *) Bash(git rev-parse *)
 ---
 
@@ -22,6 +22,7 @@ allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks
 ```bash
 bash <каталог скилла>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
 bash <каталог скилла>/scripts/wait-ci.sh status <sha> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+bash <каталог скилла>/scripts/wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
 ```
 
 ## Когда что
@@ -31,6 +32,7 @@ bash <каталог скилла>/scripts/wait-ci.sh status <sha> [--context <�
 | Запушил ветку PR, перед мержем | `pr <N>` — ждёт чеки головы PR и обязательные чеки базовой ветки; конфликт с базой — сразу ERROR |
 | Смёржил, мерж запускает деплой или CI на `main` | `status <sha>` — ждёт все чеки коммита: check-runs GitHub Actions и статусы хостинга и внешних сервисов |
 | Нужен один чек коммита (деплой среди прочих) | `status <sha> --context <имя>` |
+| `github pr premerge` — код 3, `main` красный | `issue <N>` фоновой командой — ждёт закрытия бага на красный `main`: PASS, когда закрыт (с причиной: `completed`, `not_planned`); нет issue — ERROR; затем снова `premerge` |
 
 `<sha>` — полный; SHA своего мержа —
 `gh pr view <N> --json mergeCommit --jq .mergeCommit.oid`:

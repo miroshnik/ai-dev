@@ -431,6 +431,7 @@ bun <каталог скилла>/scripts/spec-exceptions.ts [--root DIR]
 | Соглашение на каждом элементе реестра из кода («каждая мутация пишет аудит») | `invariant` | `standards/<name>/` |
 | Линт-правило: «нельзя», «можно», «вне охвата» | `examples`, `eslintLinter` | `standards/<name>/` + фрагмент `eslint.ts` |
 | Правило ESLint в папке стандарта | `collectEslint` в `eslint.config.*` | фрагменты `eslint.ts` дерева |
+| «Вне охвата» и исключение элемента со своим файлом | `fileOf` в `invariant`; отметка `spec-outside(<решение>)` / `spec-exception(<решение>) #N` в файле (`marksIn`) | файл элемента (маршрут, скрипт, миграция) |
 | Исключения с храповиком | `exceptionsIn()` → `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions/<элемент>.json` папки решения; перенос — `spec-exceptions` |
 | Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
 | Внешние системы (C1): хосты, пакеты и ключи — только в адаптере, сеть в тестах, CSP | `externals` в модели, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, настройка тестов |
