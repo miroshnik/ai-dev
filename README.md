@@ -25,6 +25,7 @@
 
 ## Каким правилам подчиняется код
 
+- [artifact-hidden-files](standards/artifact-hidden-files.md) — Шаг `actions/upload-artifact`, чей путь скрытый — файл или каталог с точкой в начале имени (`.spec-*.json`, `.spec-journal/`), — стоит с `include-hidden-files: true`. С v4.4 действие по умолчанию пропускает скрытые файлы: без флага артефакт выходит пустым, шаг лишь предупреждает «No files were found», а падает следующая job — на `download-artifact` — или идёт без отчёта.
 - [canon-size](standards/canon-size.md) — Ядро канона (`AGENTS.md`, у Claude Code ещё `claude/CLAUDE.md`) грузится в контекст на старте каждой сессии и каждого субагента и заново читается на каждом ходу; 99 % токенов сессии — это чтение кэша. Поэтому у ядра есть бюджет: `AGENTS.md` ≤ 32 КиБ, `claude/CLAUDE.md` ≤ 5 КиБ. Справочное — как писать спеку, как устроен проект GitHub, фрагменты CI — живёт там, где его читают по делу (скиллы, `docs/`), а ядро называет, куда идти.
 - [ci-concurrency](standards/ci-concurrency.md) — Блок `concurrency` с общей группой — не своей у PR или прогона — стоит с `queue: max`: иначе GitHub держит в группе один ожидающий прогон и вытесняет его следующим, и прогон `main` получает статус cancelled.
 - [cloud-session](standards/cloud-session.md) — Скрипты скиллов, которые ходят в GitHub Projects, в облачной сессии выходят с объяснением, а не сбоем `gh`.

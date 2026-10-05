@@ -4933,6 +4933,122 @@
   "name": "ничего не игнорируется — подсказка коммита update без .gitignore"
  },
  {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true",
+   "примеры"
+  ],
+  "name": "путь без скрытых частей не требует include-hidden-files"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true",
+   "примеры"
+  ],
+  "name": "скрытый каталог в середине пути и строка списка путей — тоже скрытые; ./ и исключение ! — нет"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true",
+   "примеры"
+  ],
+  "name": "скрытый путь без include-hidden-files — ошибка с файлом и строкой"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true",
+   "примеры"
+  ],
+  "name": "фрагмент с upload-artifact, который не разбирается, — ошибка, а не пропуск"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": ".github/workflows/ci.yml artifact «docs-spec» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «docs-spec-${{ steps.tree.outputs.tree }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «docs-spec» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «playwright-blob-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «spec-journal-e2e-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «spec-journal-unit-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «spec-meta-unit-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «spec-reports» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «vitest-blob-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "нарушитель не проходит: отчёты .spec-*.json без include-hidden-files"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "реестр «шаги actions/upload-artifact в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» находит .github/workflows/ci.yml artifact «docs-spec», skills/spec/ci.md artifact «spec-journal-unit-${{ matrix.shard }}», skills/spec/ci.md artifact «spec-reports»"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "реестр «шаги actions/upload-artifact в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» не пуст"
+ },
+ {
   "path": "tests/standards/canon-size/canon-size.test.ts",
   "describes": [
    "Ядро канона умещается в бюджет контекста"
