@@ -147,14 +147,16 @@ const MIGRATE = "перенеси командой spec-exceptions: node .agents
  * исключений нет. Файл не JSON-исключение или один элемент (с тем же `rule`) в двух файлах — ошибка с путями.
  */
 export function exceptionsIn(dir?: string): Exception[] {
-  const folder = dir ?? callerFolder();
-  if (folder === null) throw new Error("exceptionsIn: вызов не из файла теста — передай каталог папки решения");
+  // от места файла теста, а не от cwd: раннер пакета монорепо идёт из своего каталога
+  const folder = dir ?? callerFolder()?.abs;
+  if (folder === undefined) throw new Error("exceptionsIn: вызов не из файла теста — передай каталог папки решения");
   return exceptionFiles(path.join(folder, EXCEPTIONS_DIR));
 }
 
 /**
  * Исключения из каталога файлов (`<папка решения>/exceptions`): файл на исключение, по имени файла. Каталога нет —
- * исключений нет: git не хранит пустой каталог, последнее снятое исключение уносит его с собой.
+ * исключений нет: git не хранит пустой каталог, последнее снятое исключение уносит его с собой. `file` исключения —
+ * от корня репозитория (`shownPath`): подсказку «удали» читают оттуда, а не из cwd раннера.
  */
 export function exceptionFiles(at: string): Exception[] {
   let names: string[];
@@ -166,11 +168,12 @@ export function exceptionFiles(at: string): Exception[] {
   const out: Exception[] = [];
   const seen = new Map<string, string>();
   for (const name of names) {
-    const file = path.join(at, name).split(path.sep).join("/");
+    const abs = path.resolve(at, name);
+    const file = shownPath(abs);
     if (!name.endsWith(".json")) throw new Error(`${file}: исключение — файл <элемент>.json с { item, issue, reason }`);
     let data: Partial<Exception>;
     try {
-      data = JSON.parse(readFileSync(file, "utf8")) as Partial<Exception>;
+      data = JSON.parse(readFileSync(abs, "utf8")) as Partial<Exception>;
     } catch (e) {
       throw new Error(`${file}: не JSON — ${(e as Error).message}`);
     }
@@ -184,10 +187,34 @@ export function exceptionFiles(at: string): Exception[] {
   return out;
 }
 
-/** Папка решения вызывающего теста от корня проекта (cwd): `tests/<вид>/<имя>`, вне `tests/` — каталог файла. */
-function callerFolder(): string | null {
-  const file = callerTest(process.cwd());
-  return file && folderOf(file);
+/**
+ * Корень репозитория — ближайший вверх от cwd каталог с `.git` (каталог или файл worktree); нет — cwd. Пути в
+ * подсказках — от него: раннер пакета монорепо идёт из каталога пакета, а читают подсказку из корня.
+ */
+function repoRoot(): string {
+  const cwd = process.cwd();
+  for (let d = cwd; ; d = path.dirname(d)) {
+    if (existsSync(path.join(d, ".git"))) return d;
+    if (path.dirname(d) === d) return cwd;
+  }
+}
+
+/** Путь файла для подсказки: от корня репозитория; вне репозитория — абсолютный. */
+function shownPath(abs: string): string {
+  const rel = path.relative(repoRoot(), abs);
+  return (rel.startsWith("..") || path.isAbsolute(rel) ? abs : rel).split(path.sep).join("/");
+}
+
+/**
+ * Папка решения вызывающего теста: от корня проекта (`tests/<вид>/<имя>`, вне `tests/` — каталог файла), абсолютный
+ * путь к ней и корень проекта (каталог с деревом `tests/`), от которого отсчитан `rel`.
+ */
+function callerFolder(): { rel: string; abs: string; base: string } | null {
+  const t = testFileAt(new Error().stack ?? "", process.cwd());
+  if (!t) return null;
+  const rel = folderOf(t.rel);
+  const base = t.abs.slice(0, t.abs.length - t.rel.length);
+  return { rel, abs: path.join(base, rel), base };
 }
 
 /** Папка решения файла теста от корня проекта: `tests/<вид>/<имя>`, вне `tests/` — каталог файла. */
@@ -196,17 +223,17 @@ function folderOf(file: string): string {
   return parts[0] === "tests" && parts.length > 3 ? parts.slice(0, 3).join("/") : path.posix.dirname(file);
 }
 
-/** Файлы под каталогом от корня проекта, по порядку; скрытые и зависимости — мимо. */
-function filesUnder(rel: string): string[] {
+/** Файлы под каталогом от корня проекта (`base`, по умолчанию cwd), по порядку; скрытые и зависимости — мимо. */
+function filesUnder(rel: string, base = process.cwd()): string[] {
   let entries;
   try {
-    entries = readdirSync(path.resolve(process.cwd(), rel), { withFileTypes: true });
+    entries = readdirSync(path.resolve(base, rel), { withFileTypes: true });
   } catch {
     return [];
   }
   return entries
     .filter((e) => !e.name.startsWith(".") && e.name !== "node_modules")
-    .flatMap((e) => (e.isDirectory() ? filesUnder(`${rel}/${e.name}`) : [`${rel}/${e.name}`]))
+    .flatMap((e) => (e.isDirectory() ? filesUnder(`${rel}/${e.name}`, base) : [`${rel}/${e.name}`]))
     .sort();
 }
 
@@ -217,15 +244,18 @@ function filesUnder(rel: string): string[] {
  * `exceptions.ts`, `exceptionsIn` не зовёт. Исключения названий spec-doc (`names.exceptions/`) проверяет spec-doc.
  */
 function legacyExceptions(it: It): void {
-  const folder = callerFolder();
-  if (folder === null || decisionFolder(`${folder}/_`) !== folder || seen.has(`legacy\0${folder}`)) return;
+  const caller = callerFolder();
+  if (caller === null) return;
+  const { rel: folder, base } = caller;
+  if (decisionFolder(`${folder}/_`) !== folder || seen.has(`legacy\0${folder}`)) return;
   seen.add(`legacy\0${folder}`);
-  const found = filesUnder(folder).flatMap((f) => {
+  const found = filesUnder(folder, base).flatMap((f) => {
     const x = exceptionFile(f);
     return x?.dir === EXCEPTIONS_DIR ? [{ f, x }] : [];
   });
-  const legacy = found.filter(({ x }) => x.legacy).map(({ f, x }) => `${f}: исключения — файл на элемент в ${x.folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
-  const misplaced = found.filter(({ x }) => x.error).map(({ f, x }) => `${f}: ${x.error}`);
+  const at = (f: string) => shownPath(path.join(base, f));
+  const legacy = found.filter(({ x }) => x.legacy).map(({ f, x }) => `${at(f)}: исключения — файл на элемент в ${x.folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
+  const misplaced = found.filter(({ x }) => x.error).map(({ f, x }) => `${at(f)}: ${x.error}`);
   if (legacy.length) {
     it("исключения — файлом на элемент в exceptions/, а не в exceptions.ts", () => {
       throw new Error(legacy.join("\n"));
@@ -257,7 +287,8 @@ const ledgers = new WeakMap<It, Map<string, RuleLedger>>();
  * строкой в коде этих файлов.
  */
 function unknownRules(it: It, rule: string | undefined, exceptions: readonly Exception[], marks: readonly Mark[]): void {
-  const file = callerTest(process.cwd()) ?? "";
+  const caller = testFileAt(new Error().stack ?? "", process.cwd());
+  const file = caller?.rel ?? "";
   const byFile = ledgers.get(it) ?? new Map<string, RuleLedger>();
   ledgers.set(it, byFile);
   const ledger = byFile.get(file) ?? { rules: new Set<string>(), skipped: [], marks: [] };
@@ -273,7 +304,7 @@ function unknownRules(it: It, rule: string | undefined, exceptions: readonly Exc
       let elsewhere: Set<string> | null = null;
       for (const x of list) {
         if (ledger.rules.has(x.rule!)) continue;
-        elsewhere ??= file ? stringsBeside(file) : new Set();
+        elsewhere ??= caller ? stringsBeside(caller.rel, caller.abs.slice(0, caller.abs.length - caller.rel.length)) : new Set();
         if (!elsewhere.has(x.rule!)) lost.set(id(x), x);
       }
       if (!lost.size) return;
@@ -292,12 +323,12 @@ function unknownRules(it: It, rule: string | undefined, exceptions: readonly Exc
   reconcile(ledger.marks, marks, "отметки с rule — к правилам инвариантов папки", (m) => `${m.file}:${m.line}`, (m, have) => `${m.file}:${m.line}: правила «${m.rule}» нет ни у одного инварианта папки (${have}) — поправь отметку или убери её`);
 }
 
-/** Строки в коде других файлов папки решения теста: правила их инвариантов, которых этот прогон не видит. */
-function stringsBeside(file: string): Set<string> {
+/** Строки в коде других файлов папки решения теста (`base` — корень проекта): правила их инвариантов, которых этот прогон не видит. */
+function stringsBeside(file: string, base: string): Set<string> {
   const out = new Set<string>();
-  for (const f of filesUnder(folderOf(file))) {
+  for (const f of filesUnder(folderOf(file), base)) {
     if (f === file || !CODE.test(f)) continue;
-    for (const s of stringsOf(readFileSync(path.resolve(process.cwd(), f), "utf8"), f)) out.add(s);
+    for (const s of stringsOf(readFileSync(path.resolve(base, f), "utf8"), f)) out.add(s);
   }
   return out;
 }
@@ -313,7 +344,7 @@ function elementMarks<T>(it: It, spec: Invariant<T>, key: (item: T) => string, t
   const out = { outside: [] as Outside[], exceptions: [] as Exception[], skipped: [] as Mark[] };
   const folder = spec.fileOf && callerFolder();
   if (!folder) return out;
-  const decision = path.posix.basename(folder);
+  const decision = path.posix.basename(folder.rel);
   const byFile = new Map<string, string[]>();
   for (const item of spec.items) {
     const f = spec.fileOf!(item);
@@ -697,12 +728,17 @@ function callerTest(root: string): string | null {
  * JavaScriptCore, `file://` у ESM, `at async` после await); не из теста — null.
  */
 export function testFileIn(stack: string, root: string): string | null {
+  return testFileAt(stack, root)?.rel ?? null;
+}
+
+/** То же и абсолютный путь файла: `rel` — от корня проекта, `abs` кончается на `rel`. */
+function testFileAt(stack: string, root: string): { rel: string; abs: string } | null {
   for (const m of stack.matchAll(STACK_FILE)) {
     const abs = m[1]!;
     const rel = path.relative(root, abs).split(path.sep).join("/");
-    if (!rel.startsWith("..")) return rel;
+    if (!rel.startsWith("..")) return { rel, abs };
     const i = abs.indexOf("/tests/");
-    if (i >= 0) return abs.slice(i + 1);
+    if (i >= 0) return { rel: abs.slice(i + 1), abs };
   }
   return null;
 }
