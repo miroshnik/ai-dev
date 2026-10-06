@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -1449,5 +1449,64 @@ describe("Факт — ходы и контекст задачи", () => {
     expect(lines[0]).toContain(" | ходы | ");
     expect(lines[1]).toMatch(/ \|\s+250 \| /);
     expect(lines[2]).toMatch(/ \|\s+— \| /);
+  });
+});
+
+/** Процесс-писатель кэша: `ready` — запущен, ждёт файла `go`; затем `rounds` записей, после каждой — чтение. */
+const CACHE_WRITER = `import { existsSync, readFileSync } from "node:fs";
+import { saveJson } from ${JSON.stringify(EST)};
+const [file, id, go, rounds] = process.argv.slice(2);
+const pad = "x".repeat(2000 * (Number(id) + 1)); // разная длина: смешанная запись — не JSON
+console.log("ready");
+while (!existsSync(go));
+let torn = 0;
+for (let i = 0; i < Number(rounds); i++) {
+  saveJson(file, { writer: id, i, pad });
+  try { JSON.parse(readFileSync(file, "utf8")); } catch { torn++; }
+}
+console.log(JSON.stringify({ torn }));
+`;
+
+/**
+ * Кэш `est` пишут одновременные процессы: параллельные сессии закрывают задачи (`est fact --write`), свип идёт рядом
+ * с фактом, дашборд читает `est`. Общий временный файл давал ENOENT на переименовании (#347).
+ */
+describe("Кэш est переживает параллельные запуски", () => {
+  const WRITERS = 4;
+  const ROUNDS = 300;
+
+  /** Писатели стартуют разом — по файлу `go`, когда все запущены; итог — код выхода, stderr и вывод каждого. */
+  async function race(file: string) {
+    const script = path.join(dir, "writer.ts");
+    const go = path.join(dir, "go");
+    writeFileSync(script, CACHE_WRITER);
+    const procs = Array.from({ length: WRITERS }, (_, id) => {
+      const p = spawn("bun", [script, file, String(id), go, String(ROUNDS)], { stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      let err = "";
+      p.stdout!.on("data", (d) => (out += d));
+      p.stderr!.on("data", (d) => (err += d));
+      const done = new Promise<{ code: number | string; out: string; err: string }>((resolve) =>
+        p.on("close", (code, signal) => resolve({ code: code ?? `сигнал ${signal}`, out, err })));
+      const ready = Promise.race([new Promise<void>((resolve) => p.stdout!.on("data", () => out.includes("ready") && resolve())), done]);
+      return { ready, done };
+    });
+    await Promise.all(procs.map((p) => p.ready));
+    writeFileSync(go, "");
+    return Promise.all(procs.map((p) => p.done));
+  }
+
+  it("параллельные записи одного кэша не падают", async () => {
+    const res = await race(path.join(dir, "cache", "prs.json"));
+    expect(res.map((r) => (r.code === 0 ? 0 : `${r.code}: ${r.err.slice(-500)}`))).toEqual(Array(WRITERS).fill(0));
+  });
+
+  it("во время и после параллельных записей кэш — валидный JSON последней записи одного из писателей, без временных файлов", async () => {
+    const file = path.join(dir, "cache", "prs.json");
+    const res = await race(file);
+    expect(res.map((r) => r.out.trim().split("\n").at(-1))).toEqual(Array(WRITERS).fill(JSON.stringify({ torn: 0 })));
+    const last = JSON.parse(readFileSync(file, "utf8"));
+    expect(last).toEqual({ writer: last.writer, i: ROUNDS - 1, pad: "x".repeat(2000 * (Number(last.writer) + 1)) });
+    expect(readdirSync(path.dirname(file))).toEqual(["prs.json"]);
   });
 });
