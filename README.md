@@ -232,7 +232,7 @@ node bin/ai-dev.mjs release --dry-run   # что войдёт в релиз; б�
 - [`docs/ci-concurrency.md`](docs/ci-concurrency.md) — CI параллельных задач: правило целиком и фрагменты workflow — параллельные ветки, неотменяемый `main`, очередь деплоя.
 - [`docs/testing.md`](docs/testing.md) — как тестировать: итог прогона по сводке раннера, окружение, e2e без флаки.
 - [`docs/judgment.md`](docs/judgment.md) — вывод и правка: ошибка под видом исхода, подпись — утверждение, правка ровно названного, «у меня не воспроизводится».
-- [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — параллельные worktree: правило целиком, свой порт и своя база для сервера и e2e.
+- [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — параллельные worktree: правило целиком, свой порт и своя база для сервера и e2e, общий `.git/config` — без `git config` в копиях.
 - [`docs/cloud-sessions.md`](docs/cloud-sessions.md) — облачная сессия Claude Code: что ей недоступно и как закрыть задачу оттуда.
 
 ## Устройство репозитория
