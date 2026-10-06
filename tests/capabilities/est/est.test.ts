@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
   cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, loadPins, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, pinnedTranscripts, plural, resolveLinks,
-  pickAnalogs, roundScale, selectSessions, usageCost,
+  pickAnalogs, roundScale, selectSessions, sweepOverlapWarning, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
@@ -283,6 +283,32 @@ describe("Сессия, которая ведёт задачи подряд, д�
     expect(f41.h).toBe(0.25);
     expect(f41.overlap).toEqual([{ issue: 43, h: 0.05 }]);
     expect(factCommentBody(f41, null, [], 0, null)).toContain("Пересечение с фактом #43: 0.05 ч — пересчитать #43.");
+  });
+});
+
+/**
+ * `est fact --sweep` сверяет сумму часов задач с объединением их интервалов. Параллельные сессии законно идут
+ * одновременно, поэтому объединение — внутри сессии (ключ — как `iv` в маркере «Факт»), а не по всем интервалам
+ * подряд: иначе фан-аут в параллельные сессии давал бы ложный «двойной счёт» в каждом свипе.
+ */
+describe("Свип ищет двойной счёт внутри сессии, а не между параллельными сессиями", () => {
+  const iv = (a: string, b: string): [number, number][] => [[ts(a), ts(b)]];
+  type Counted = Parameters<typeof sweepOverlapWarning>[0];
+
+  it("свип не предупреждает о двойном счёте, когда пересекаются интервалы разных сессий", () => {
+    const facts: Counted = [
+      { h: 1, iv: { aaaaaaaa: iv("10:00", "11:00") } },
+      { h: 1, iv: { bbbbbbbb: iv("10:00", "11:00") } },
+    ];
+    expect(sweepOverlapWarning(facts)).toBeNull();
+  });
+
+  it("свип предупреждает о двойном счёте, когда интервалы одной сессии вошли в факты двух задач", () => {
+    const facts: Counted = [
+      { h: 1, iv: { aaaaaaaa: iv("10:00", "11:00") } },
+      { h: 1, iv: { aaaaaaaa: iv("10:30", "11:00"), bbbbbbbb: iv("12:00", "12:30") } },
+    ];
+    expect(sweepOverlapWarning(facts)).toBe("ВНИМАНИЕ: интервалы одной сессии в фактах разных задач: сумма 2 ч при объединении по сессиям 1.5 ч — двойной счёт ≈ 0.5 ч");
   });
 });
 
