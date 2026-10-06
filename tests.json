@@ -4013,6 +4013,20 @@
   "describes": [
    "Внешние системы модели (C1) проверяются кодом"
   ],
+  "name": "ключ внешней системы, прочитанный аксессором конфига вне адаптера, — упавший тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
+  "name": "ключ окружения в комментарии вне адаптера — не чтение"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Внешние системы модели (C1) проверяются кодом"
+  ],
   "name": "ключ окружения внешней системы читает только её адаптер"
  },
  {
@@ -4125,6 +4139,13 @@
   "describes": [
    "Каждая переменная окружения объявлена и читается в коде"
   ],
+  "name": ".env.example: X= и закомментированная # X= — объявления, проза в комментарии — нет"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
   "name": "envNamesIn вызывается ссылкой в flatMap без ошибки типов: параметр у неё один"
  },
  {
@@ -4139,7 +4160,21 @@
   "describes": [
    "Каждая переменная окружения объявлена и читается в коде"
   ],
+  "name": "аксессор конфига .get('X') и .getOrThrow('X') — чтение с ридером configGet, без него — нет"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
   "name": "вне охвата — с причиной; переменной нет ни в коде, ни в схеме — «убери из охвата»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
+  "name": "деструктуризация с умолчанием и из import.meta.env — тоже чтение"
  },
  {
   "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
@@ -4153,6 +4188,20 @@
   "describes": [
    "Каждая переменная окружения объявлена и читается в коде"
   ],
+  "name": "монорепо: пакеты workspace — из workspaces package.json и pnpm-workspace.yaml"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
+  "name": "монорепо: чтение пакета workspace — у каждого приложения, в чьих dependencies он есть; ключ <приложение>/<VAR>"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
   "name": "переменная в комментарии — не чтение"
  },
  {
@@ -4160,7 +4209,28 @@
   "describes": [
    "Каждая переменная окружения объявлена и читается в коде"
   ],
+  "name": "псевдоним результата loadEnv Vite — чтение"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
+  "name": "свои способы чтения — регэкспом или функцией по коду"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
   "name": "читается без объявления — упавший тест; объявлена и не читается — упавший; служебные (NODE_ENV) — вне проверки"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Каждая переменная окружения объявлена и читается в коде"
+  ],
+  "name": "чтение через ?. и в скобках у import.meta.env — тоже чтение"
  },
  {
   "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
@@ -4518,6 +4588,13 @@
    "Сценарий capability — сиквенс-схема из трассы вызовов на границах модели"
   ],
   "name": "участник не из модели — тест падает: схема говорит на языке модели"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Реестр + инвариант на реальном коде: несколько правил в папке, охват, обязательные элементы, нарушители"
+  ],
+  "name": "codeFiles и sources берут и отдельные файлы — конфиги в корне пакета"
  },
  {
   "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
