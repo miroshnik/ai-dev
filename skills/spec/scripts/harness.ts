@@ -113,13 +113,57 @@ function markOf(file: string, line: number, text: string): Mark | null {
   return { kind: m[1] as Mark["kind"], decision: decision!, ...(rule.length ? { rule: rule.join("/") } : {}), ...(m[3] ? { issue: Number(m[3]) } : {}), reason: m[4]!, file, line };
 }
 
+// строка JSON или знак структуры: значения-числа, true и null отметок не несут — мимо
+const JSON_TOKEN = /"(?:[^"\\]|\\.)*"|[{}[\]:,]/g;
+
 /**
- * Отметки в файле: в коде JS/TS — только в комментариях (строки, шаблоны, регулярки — мимо, разбор парсером), в
+ * Комментарии JSON — значения ключа `"//"` верхнего уровня (соглашение npm: `package.json` комментариев не знает),
+ * строка или список строк: место в тексте и строка.
+ */
+function jsonNotes(text: string): [number, string][] {
+  const out: [number, string][] = [];
+  const notes: boolean[] = []; // открытые контейнеры: true — список под ключом "//" верхнего уровня
+  let key = "";
+  let prev = "";
+  for (const m of text.matchAll(JSON_TOKEN)) {
+    const t = m[0];
+    const note = notes.length === 1 && prev === ":" && key === "//";
+    if (t === "{" || t === "[") notes.push(note && t === "[");
+    else if (t === "}" || t === "]") notes.pop();
+    else if (t.startsWith('"')) {
+      if (note || (notes.length === 2 && notes[1])) out.push([m.index, JSON.parse(t) as string]);
+      else if (notes.length === 1 && (prev === "{" || prev === ",")) key = JSON.parse(t) as string;
+    }
+    prev = t;
+  }
+  return out;
+}
+
+/** Строгий JSON: в нём нет комментариев. JSONC (`tsconfig.json`) не разбирается — его отметки в комментариях. */
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Отметки в файле: в коде JS/TS — только в комментариях (строки, шаблоны, регулярки — мимо, разбор парсером), в JSON —
+ * значение ключа `"//"` верхнего уровня (строка или список; JSONC с комментариями — как остальные файлы), в
  * остальных файлах (SQL, shell, HTML) — сразу после начала комментария. Отметка — с начала текста комментария:
  * упоминание формата посреди прозы — не отметка.
  */
 export function marksIn(file: string, text: string): Mark[] {
   const out: Mark[] = [];
+  if (/\.json$/i.test(file) && isJson(text)) {
+    for (const [at, note] of jsonNotes(text)) {
+      const mark = markOf(file, text.slice(0, at).split("\n").length, note);
+      if (mark) out.push(mark);
+    }
+    return out;
+  }
   if (!CODE.test(file)) {
     text.split("\n").forEach((l, i) => {
       const m = MARK_LINE.exec(l);

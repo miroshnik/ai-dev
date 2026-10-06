@@ -432,6 +432,20 @@ describe("Отметка в файле элемента — «вне охват�
     expect(marksIn("src/y.ts", "// формат: `// spec-outside(audit): причина` — в начале комментария\n")).toEqual([]);
   });
 
+  // в JSON комментариев нет: соглашение npm — ключ "//"; формат в описании пакета — не отметка
+  it('в JSON отметка — значение ключа "//" верхнего уровня, строка или список, и комментарий JSONC; формат в другом ключе — не отметка', () => {
+    const pkg = '{\n  "name": "@acme/eslint-config",\n  "//": "spec-outside(modules): общий конфиг ESLint — инструмент разработки",\n  "description": "see // spec-outside(modules): не отметка"\n}\n';
+    expect(marksIn("packages/eslint-config/package.json", pkg)).toEqual([
+      { kind: "outside", decision: "modules", reason: "общий конфиг ESLint — инструмент разработки", file: "packages/eslint-config/package.json", line: 3 },
+    ]);
+    const list = '{\n  "scripts": { "//": "spec-outside(modules): вложенный ключ — не отметка" },\n  "//": [\n    "spec-exception(modules) #9: переедут в #9",\n    "заметка без отметки",\n    "spec-outside(deps): без зависимостей"\n  ]\n}\n';
+    expect(marksIn("packages/test-helpers/package.json", list).map((m) => [m.kind, m.decision, m.issue, m.line])).toEqual([
+      ["exception", "modules", 9, 4],
+      ["outside", "deps", undefined, 6],
+    ]);
+    expect(marksIn("tsconfig.json", '{\n  // spec-outside(modules): конфиг сборки\n  "compilerOptions": {}\n}\n').map((m) => [m.reason, m.line])).toEqual([["конфиг сборки", 2]]);
+  });
+
   it("отметка в файле двух элементов — красный тест: к какому элементу, неизвестно", () => {
     writeTree(dir, {
       [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["login", "logout"], fileOf: '(m) => "src/session.ts"' }),
