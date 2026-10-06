@@ -2538,6 +2538,22 @@ function tokensTxt(res: Fact): string {
   return s + ".";
 }
 
+/**
+ * Предупреждение свипа о двойном счёте: сумма часов задач против объединения их интервалов внутри каждой сессии
+ * (ключ — как iv в маркере «Факт»), сложенного по сессиям. Параллельные сессии законно идут одновременно —
+ * пересечение между ними не двойной счёт; двойной — когда записи одной сессии вошли в факты двух задач.
+ */
+export function sweepOverlapWarning(facts: { h: number; iv?: Record<string, [number, number][]> }[]): string | null {
+  const total = facts.reduce((s, f) => s + f.h, 0);
+  const bySession = new Map<string, [number, number][]>();
+  for (const f of facts) for (const [sid, list] of Object.entries(f.iv ?? {})) bySession.set(sid, [...(bySession.get(sid) ?? []), ...list]);
+  let unionSec = 0;
+  for (const list of bySession.values()) unionSec += mergeIntervals(list).reduce((s, [a, b]) => s + (b - a), 0);
+  const unionH = unionSec / 3600;
+  if (total - unionH <= 0.05) return null;
+  return `ВНИМАНИЕ: интервалы одной сессии в фактах разных задач: сумма ${fmtH(total)} ч при объединении по сессиям ${fmtH(unionH)} ч — двойной счёт ≈ ${fmtH(total - unionH)} ч`;
+}
+
 export function mergeIntervals(iv: [number, number][]): [number, number][] {
   const sorted = [...iv].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const out: [number, number][] = [];
@@ -3094,7 +3110,7 @@ function cmdFact(args: FactArgs): void {
     const stats: Record<string, number> = { full: 0, partial: 0, none: 0 };
     let total = 0.0;
     let epicsTotal = 0.0;
-    let allIv: [number, number][] = [];
+    const counted: { h: number; iv?: Record<string, [number, number][]> }[] = [];
     for (const r of rows) {
       let issue: Any;
       let res: Fact;
@@ -3111,7 +3127,7 @@ function cmdFact(args: FactArgs): void {
         if (res.epic) epicsTotal += h; // эпик — сумма подзадач, в общий итог не входит (иначе двойной счёт)
         else {
           total += h;
-          allIv = allIv.concat(res.intervals ?? []);
+          counted.push({ h, iv: res.iv });
         }
       }
       let extra = res.epic ? "эпик" : res.prs.length ? "PR " + res.prs.map((p) => `#${p}`).join(", ") : "без PR";
@@ -3120,9 +3136,9 @@ function cmdFact(args: FactArgs): void {
       console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} ч  ${pad(res.cov, 7)} оценка ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
       if (args.write && res.cov !== "none") writeFact(repo, issue, res, r.est);
     }
-    const unionH = mergeIntervals(allIv).reduce((s, [a, b]) => s + (b - a), 0) / 3600;
     console.log(`итого: full ${stats.full}, partial ${stats.partial}, none ${stats.none}; сумма часов ${fmtH(total)} (без эпиков; эпики ${fmtH(epicsTotal)} ч — сумма своих подзадач)`);
-    if (total - unionH > 0.05) console.log(`ВНИМАНИЕ: интервалы задач пересекаются: сумма ${fmtH(total)} ч при объединении ${fmtH(unionH)} ч — двойной счёт ≈ ${fmtH(total - unionH)} ч`);
+    const warning = sweepOverlapWarning(counted);
+    if (warning) console.log(warning);
     if (!args.write) console.log("(без --write ничего не записано)");
     return;
   }
