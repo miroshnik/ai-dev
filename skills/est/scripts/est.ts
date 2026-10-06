@@ -3383,6 +3383,12 @@ function cmdEstimate(args: EstimateArgs): void {
     if (n === args.number) throw new EstError(`аналог #${a} — это сама оцениваемая задача`);
     if (!analogs.includes(n)) analogs.push(n);
   }
+  // поправка вниз к чужим аналогам без названного отличия занижала крупные задачи втрое (#348) — правило «без отличия ×1»
+  if (args.mult < 1 && analogs.some((a) => typeof a === "string") && !args.note.trim()) {
+    const msg = `поправка вниз к чужим аналогам (×${fmtH(args.mult)}): назови отличие в --note, без отличия — ×1`;
+    if (args.write) throw new EstError(msg); // до любой записи
+    console.error(`предупреждение: ${msg}; с --write — отказ`);
+  }
   const hidden = hiddenAnalogs(repo, analogs);
   if (hidden.length) {
     const msg = `${repo.full} — публичный репо, а ${plural(hidden.length, "аналог", "аналоги", "аналоги")} ${hidden.join(", ")} — из непубличного: имя и номер чужой задачи остались бы в комментарии «Оценка» и в истории его правок. Возьми аналоги из ${repo.full} или оцени экспертно (--hours)`;
