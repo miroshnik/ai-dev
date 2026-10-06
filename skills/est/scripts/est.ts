@@ -254,7 +254,8 @@ export function loadJson<T>(file: string, dflt: T): T {
 
 export function saveJson(file: string, data: unknown): void {
   mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = file + ".tmp";
+  // временный файл — свой у каждой записи: одновременные est (параллельные сессии, свип, дашборд) пишут один кэш (#347)
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   writeFileSync(tmp, JSON.stringify(data));
   renameSync(tmp, file);
 }
