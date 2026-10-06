@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
   cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, loadPins, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, pinnedTranscripts, plural, resolveLinks,
-  parsePeriods, periodSummary, periodTable, pickAnalogs, priceFor, PRICES, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost,
+  factsWithModel, parsePeriods, periodSummary, periodTable, pickAnalogs, priceFor, PRICES, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, Period, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
@@ -1096,6 +1096,36 @@ describe("Стоимость — API-эквивалент по публичны�
   });
 });
 
+/**
+ * Факт, записанный по неверному тарифу, исправляет `est fact --sweep --model <id> --write`: пересчитываются закрытые
+ * задачи окна, в расходе которых (маркер факта, `models`) есть эта версия модели, затем их закрытые эпики — их
+ * стоимость складывается из фактов подзадач и должна сложиться из уже исправленных.
+ */
+describe("Пересчёт записанных фактов по модели", () => {
+  const DAY = 86400;
+  const now = Date.parse("2026-10-06T00:00:00Z") / 1000;
+  const row = (number: number, x: Partial<Row>): Row => ({
+    item_id: `PI_${number}`, issue_id: `I_${number}`, number, title: `#${number}`, state: "CLOSED", stateReason: "COMPLETED",
+    closedAt: now - DAY, createdAt: now - 2 * DAY, labels: [], est: null, fact: 1, status: "Готово", est_marker: null, fact_marker: null, ...x,
+  });
+  const used = (...models: string[]) => ({ h: 1, models: Object.fromEntries(models.map((m) => [m, { mtok: 1, usd: 1 }])) });
+
+  it("берёт закрытые задачи, в расходе которых есть модель этой версии, и их закрытые эпики — эпики после задач", () => {
+    const rows = [
+      row(10, { labels: ["epic"], closedAt: now - DAY / 2, fact_marker: { h: 2 } }),
+      row(11, { issueType: "Эпик", fact_marker: { h: 3 } }), // эпик без подзадач с этой моделью
+      row(1, { parent: 10, closedAt: now - 3 * DAY, fact_marker: used("claude-opus-5-5", "claude-haiku-4-5-20251001") }),
+      row(2, { closedAt: now - 2 * DAY, fact_marker: used("claude-opus-5-5-20261001") }),
+      row(3, { parent: 11, fact_marker: used("claude-opus-5") }), // другая версия
+      row(4, { state: "OPEN", closedAt: null, fact_marker: used("claude-opus-5-5") }),
+      row(5, { closedAt: now - 120 * DAY, fact_marker: used("claude-opus-5-5") }), // вне окна
+      row(6, { stateReason: "NOT_PLANNED", fact_marker: used("claude-opus-5-5") }),
+      row(7, { fact: null, fact_marker: null }),
+    ];
+    expect(factsWithModel(rows, "claude-opus-5-5", 90 * DAY, now).map((r) => r.number)).toEqual([2, 1, 10]);
+  });
+});
+
 /** Ступени 0,1 · 0,25 · 0,5 · 1 · 1,5 · 2 · 3 · 5 · 8 · 13 ч: точнее по аналогам не угадать, а больше 13 ч — задачу надо дробить. */
 /** Фан-аут меняет токены сильнее часов: у поправки токенов и стоимости своя ступень. */
 describe("Прогноз по фактам аналогов — медиана с поправкой", () => {
@@ -1427,6 +1457,7 @@ describe("Неверный вызов — справка или ошибка д�
   it("проверки аргументов — до обращения к GitHub", () => {
     expect(run("fact", "1", "--repo", "o/r", "--gap", "0").stderr).toContain("--gap должен быть ≥ 1 минуты");
     expect(run("fact", "1", "--sweep", "--repo", "o/r").stderr).toContain("номер issue и --sweep несовместимы");
+    expect(run("fact", "1", "--model", "claude-opus-5-5", "--repo", "o/r").stderr).toContain("--model — только со --sweep");
     expect(run("estimate", "1", "--repo", "o/r").stderr).toContain("--type обязателен");
     expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("укажите номер issue");
     expect(run("estimate", "1", "--repo", "o/r", "--type", "feat", "--analogs", "2,3", "--tok-mult", "2.5").stderr).toContain("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
