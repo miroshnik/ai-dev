@@ -3,7 +3,8 @@
  * spec-claims — сверка реестра точек входа с журналом вызовов: каждая точка входа (маршрут, страница, job, команда)
  * вызывается хотя бы одним тестом capability. Журнал пишет `journal` харнесса во время прогона; журналы шардов
  * складываются из каталога. Вызов не из `tests/capabilities/` не засчитывается: заявленное поведение — это
- * capability, а не стандарт или хелпер.
+ * capability, а не стандарт или хелпер. id в реестре не повторяются (повтор спрятал бы непокрытую точку за покрытой),
+ * каждый id журнала есть в реестре (иначе формат разошёлся или реестр неполон).
  *
  *   bun spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <каталог>]
  *                      [--standard tests/standards/entry-points] [--report .spec-claims.xml]
@@ -101,12 +102,17 @@ export async function main(argv: string[]): Promise<number> {
     return v.help ? 0 : 2;
   }
   let entries: string[];
+  let repeated: string[];
   let exceptions: Exception[] = [];
   let calls: Map<string, Set<string>>;
   try {
     const raw = await load(path.resolve(v.entries));
     if (!Array.isArray(raw)) throw new Error(`${v.entries}: реестр — массив точек входа`);
-    entries = [...new Set(raw.map((e) => (typeof e === "string" ? e : String((e as { id?: unknown }).id))))].sort();
+    const ids = raw.map((e) => (typeof e === "string" ? e : String((e as { id?: unknown }).id)));
+    const count = new Map<string, number>();
+    for (const id of ids) count.set(id, (count.get(id) ?? 0) + 1);
+    entries = [...count.keys()].sort();
+    repeated = entries.filter((id) => count.get(id)! > 1).map((id) => `${id} ×${count.get(id)}`);
     if (v.exceptions) {
       // файл на исключение: прежний массив в одном файле — переносится командой, а не читается вторым путём
       if (existsSync(v.exceptions) && !statSync(v.exceptions).isDirectory()) {
@@ -127,6 +133,12 @@ export async function main(argv: string[]): Promise<number> {
   const excepted = new Map(exceptions.map((e) => [e.item, e]));
   const cases: Case[] = [];
   cases.push({ name: "реестр «точки входа» не пуст", failure: entries.length ? undefined : "реестр точек входа пуст — выборка из кода ошибочна" });
+  cases.push({
+    name: "id точек входа в реестре не повторяются",
+    failure: repeated.length
+      ? `id повторяется в реестре: ${repeated.join(", ")} — у каждой точки входа свой id, иначе непокрытая прячется за покрытой`
+      : undefined,
+  });
   for (const id of entries.filter((id) => !excepted.has(id))) {
     const from = [...(calls.get(id) ?? [])].sort();
     cases.push({
@@ -134,6 +146,17 @@ export async function main(argv: string[]): Promise<number> {
       failure: claimed(id) ? undefined : `${id} не вызывается ни одним тестом capability${from.length ? ` (вызовы: ${from.join(", ")})` : ""} — тест или удалить точку входа`,
     });
   }
+  const registered = new Set(entries);
+  const unknown = [...calls.keys()]
+    .filter((id) => !registered.has(id))
+    .sort()
+    .map((id) => `${id} (вызовы: ${[...calls.get(id)!].sort().join(", ")})`);
+  cases.push({
+    name: "id из журнала есть в реестре",
+    failure: unknown.length
+      ? `id из журнала нет в реестре: ${unknown.join("; ")} — формат id журнала разошёлся с реестром или реестр неполон`
+      : undefined,
+  });
   for (const e of [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : 1))) {
     let failure: string | undefined;
     if (!Number.isInteger(e.issue) || e.issue <= 0) failure = `у исключения ${e.item} нет задачи`;

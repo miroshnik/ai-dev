@@ -87,6 +87,33 @@ it("счёт создаётся", () => { createInvoice(); });
     expect(claims().code).toBe(1);
     expect(failed(report(), "реестр «точки входа» не пуст")).toBe(true);
   });
+
+  // два обработчика с одним id склеились бы в одну точку: вызов покрытого засчитался бы и непокрытому
+  it("id, повторённый в реестре, — упавший тест: непокрытая точка не прячется за покрытой с тем же id", () => {
+    writeTree(dir, {
+      "entries.json": JSON.stringify(["GET /items", "POST /invoices", "GET /items"]),
+      ".spec-journal/1.jsonl": line("GET /items", "tests/capabilities/items/items.test.ts") + line("POST /invoices", "tests/capabilities/billing/billing.test.ts"),
+    });
+    const r = claims();
+    expect(r.code).toBe(1);
+    const xml = report();
+    expect(failed(xml, "id точек входа в реестре не повторяются")).toBe(true);
+    expect(xml).toContain("id повторяется в реестре: GET /items ×2");
+  });
+
+  // разошедшийся формат («GET /reports/42» против «GET /reports/:id») иначе виден только косвенно — «не вызывается»
+  it("id из журнала, которого нет в реестре, — упавший тест: формат id журнала разошёлся с реестром или реестр неполон", () => {
+    writeTree(dir, {
+      "entries.json": JSON.stringify(["POST /invoices", "GET /reports/:id"]),
+      ".spec-journal/1.jsonl": line("POST /invoices", "tests/capabilities/billing/billing.test.ts") + line("GET /reports/42", "tests/capabilities/reports/reports.test.ts"),
+    });
+    const r = claims();
+    expect(r.code).toBe(1);
+    const xml = report();
+    expect(failed(xml, "id из журнала есть в реестре")).toBe(true);
+    expect(xml).toContain("id из журнала нет в реестре: GET /reports/42 (вызовы: tests/capabilities/reports/reports.test.ts)");
+    expect(failed(xml, "GET /reports/:id вызывается тестом capability")).toBe(true);
+  });
 });
 
 describe("Точка входа без теста — исключение с задачей, пока тест не появился", () => {
