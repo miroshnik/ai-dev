@@ -8,8 +8,19 @@
 тест (Vitest, Jest, bun test, `node:test`). Импорт — из копии скилла в
 проекте: `.agents/skills/spec/scripts/harness.ts` (из
 `tests/standards/<name>/` — `../../../.agents/skills/spec/scripts/harness.ts`).
-Импорт с расширением `.ts` — в `tsconfig.json` проекта нужен
-`allowImportingTsExtensions` (вместе с `noEmit`), иначе `tsc` даёт TS5097.
+
+- Импорт с расширением `.ts` (так же харнесс импортирует `speclib.ts` и
+  `architecture.ts`) — `allowImportingTsExtensions` (вместе с `noEmit`) в
+  *каждом* tsconfig, который проверяет импортирующий файл: корневом,
+  `tsconfig.spec.json`, конфиге пакета e2e; иначе `tsc` даёт TS5097. Конфиг
+  сборки с эмитом (`tsconfig.build.json` у `nest build`) флаг не принимает:
+  тесты из него исключены, а наследуя проверочный конфиг, он выключает и
+  флаг, и `noEmit`.
+- Проект на `module: commonjs` под TypeScript 5.x без `esModuleInterop`
+  харнесс не импортирует: `import path from "node:path"` — TS1259, а у
+  раннера, который транспилирует в CommonJS (ts-jest), `path` — `undefined`.
+  Тесты с харнессом — под tsconfig с `esModuleInterop` или `module: nodenext`;
+  TypeScript 6+ включает `esModuleInterop` всегда.
 
 **`invariant` — реестр + инвариант.** Соглашение о поведении («каждая
 мутация пишет аудит», «каждый маршрут проверяет право») проверяется на каждом
@@ -249,10 +260,31 @@ export default {
   `journal("POST /invoices")` из `harness.ts`. Файл теста определяется по стеку
   (в том числе кадр `at async <путь>` после `await`); где стека теста нет (e2e:
   запрос приходит в сервер), — явно: `journal(id, { test: test.info().file })`
-  у Playwright. В Vitest надёжнее стека — `journal(id, { test:
-  expect.getState().testPath })`: путь теста есть, даже если вызов пришёл из
-  хелпера или колбэка. Запись — `.spec-journal/<процесс>.jsonl` (`SPEC_JOURNAL`
-  — другой каталог; в `.gitignore`).
+  у Playwright. Запись — `.spec-journal/<процесс>.jsonl` (`SPEC_JOURNAL` —
+  другой каталог; в `.gitignore`).
+- *Засчитывается вызов, который тест вызвал:* тест — в стеке вызова или
+  передан по причинной цепочке (фикстура e2e, которая шлёт запрос; заголовок
+  запроса — рецепт NestJS ниже). `expect.getState().testPath` у Vitest в
+  обёртке — не замена стеку: это тест, который идёт *сейчас*, и ему приписан
+  и вызов от таймера, фоновой задачи, cron или очереди, сработавших во время
+  теста, — точка выходит «вызванной» без заявленного поведения. `testPath`
+  годится там, где его берёт сам тест, — в хелпере запроса.
+- *Каталог на раннер, сброс в начале прогона:* журналы копятся от прогона к
+  прогону, и удалённый тест продолжает «вызывать» точку входа. Раннер пишет в
+  свой каталог и стирает его перед тестами — `resetJournal()` харнесса в
+  globalSetup (bun test — в `preload`): стирает `*.jsonl` каталога
+  `SPEC_JOURNAL`, подкаталоги — журналы других раннеров — не трогает;
+  `spec-claims` читает каталог с подкаталогами.
+
+  ```ts
+  // vitest.config.ts; Playwright — то же в playwright.config.ts с ".spec-journal/e2e"
+  process.env.SPEC_JOURNAL ??= ".spec-journal/unit"; // до воркеров: они наследуют окружение
+  export default defineConfig({ test: { globalSetup: ["tests/setup/journal.ts"] } });
+
+  // tests/setup/journal.ts — раз на прогон, до тестов
+  import { resetJournal } from "../../.agents/skills/spec/scripts/harness.ts";
+  export default () => resetJournal();
+  ```
 - *Журнал в Next.js:* точки входа — экспорты `page.tsx`, методы `route.ts` и
   экспорты модулей `"use server"`.
   - Vitest — плагин Vite в тестовой сборке оборачивает их вызовом `journal`
@@ -265,6 +297,64 @@ export default {
     `exportedName`); `test` e2e импортируют только из этой фикстуры — правило
     `no-restricted-imports` на `@playwright/test`, иначе вызов не попадёт в
     журнал.
+- *Журнал в NestJS:* точки входа — методы с метаданными Nest: обработчики
+  контроллеров (`@Get()`…), резолверы GraphQL (`@Query()`, `@Mutation()`),
+  задачи `@nestjs/schedule` (`@Cron()`, `@Interval()`).
+  - Обёртка — на самом методе, а не интерсептор: тесты зовут резолвер и
+    напрямую, и через HTTP, интерсептор видит только второе. Setup тестовой
+    сборки (`setupFiles`, до импорта модулей) подменяет `Reflect.decorate`:
+    после декораторов метод с метаданными точки входа заменяется обёрткой с
+    `journal`. `Reflect.decorate` зовёт сборка SWC или tsc (`unplugin-swc` у
+    Vitest — Nest и так требует его ради `emitDecoratorMetadata`); esbuild —
+    нет.
+
+    ```ts
+    const decorate = Reflect.decorate.bind(Reflect) as (...a: unknown[]) => PropertyDescriptor | undefined;
+    (Reflect as any).decorate = (decorators: unknown, target: any, key?: string | symbol, desc?: PropertyDescriptor) => {
+      const result = decorate(decorators, target, key, desc);
+      const original = result?.value;
+      if (key === undefined || typeof original !== "function" || !entryId(target.constructor, key, original)) return result;
+      const wrapped = function (this: unknown, ...args: unknown[]) {
+        // id — при вызове: путь контроллера — метаданные класса, его декоратор идёт после методов
+        journal(entryId(target.constructor, key, original)!, { test: requestTest.getStore() }); // нет запроса — стек
+        return original.apply(this, args);
+      };
+      // метаданные Nest лежат на функции метода: без переноса маршрут и резолвер пропадут
+      for (const k of Reflect.getOwnMetadataKeys(original)) Reflect.defineMetadata(k, Reflect.getOwnMetadata(k, original), wrapped);
+      return { ...result, value: wrapped };
+    };
+    ```
+
+  - `entryId(класс, метод, функция)` — id по метаданным: путь и метод HTTP
+    (`PATH_METADATA`, `METHOD_METADATA` из `@nestjs/common/constants`), тип и
+    имя резолвера (`@nestjs/graphql`), имя задачи (`@nestjs/schedule`); не
+    точка входа — `null`.
+  - Через HTTP теста в стеке нет: хелпер запроса в тестах ставит заголовок с
+    `expect.getState().testPath` (он зовётся из теста), middleware тестового
+    приложения кладёт его в `AsyncLocalStorage` (`requestTest`) на время
+    запроса. Таймер и cron, заведённые не запросом, контекста не получают и
+    без теста в стеке не засчитываются.
+  - Реестр — те же метаданные той же `entryId`, иначе формат разойдётся:
+    тестовая сборка (SWC) после импорта модуля приложения обходит обёрнутые
+    методы и пишет JSON, его читает `spec-claims --entries` — Node без сборки
+    декораторы Nest не загрузит.
+- *Журнал SPA с клиентским роутером* (TanStack Router, React Router на Vite):
+  переход по ссылке сервер не видит — точка входа — маршрут роутера в
+  странице, а не запрос.
+  - Фикстура e2e слушает роутер в странице и пишет шаблон маршрута
+    (`/invoices/$id`), а не URL (`/invoices/42`): реестр — из дерева
+    маршрутов, тем же id.
+  - TanStack Router: роутер — `self.__TSR_ROUTER__` (появляется после загрузки
+    приложения — init-скрипт его дожидается), подписка
+    `router.subscribe("onResolved", …)` и `"onRendered"` (первый переход может
+    завершиться до подписки), id — `routeId` последнего из
+    `router.state.matches`. React Router: тестовая сборка кладёт роутер
+    `createBrowserRouter` в `window`, подписка `router.subscribe(state => …)`,
+    шаблон — пути `state.matches` подряд.
+  - Привязка — на контекст, не на страницу: `context.exposeBinding` (вызов из
+    страницы → `journal(id, { test: testInfo.file })`) и
+    `context.addInitScript` — иначе попап и новая вкладка (`target="_blank"`,
+    `window.open`) идут без журнала.
 - *Отчёт сверки для `spec-doc`:* сверку локально запускают не всегда — нет
   файла отчёта (`.spec-claims.xml`), `spec-doc` предупреждает и строит спеку без
   него; в CI (задан `CI`) нет отчёта — код 2: тесты прогона молча выпали бы.
@@ -280,7 +370,10 @@ export default {
 
   Тесты «<точка> вызывается тестом capability» — вызов из
   `tests/capabilities/` (из стандарта или хелпера не засчитан); «реестр
-  «точки входа» не пуст»; «исключение: <точка> (#N)» — зелёное, пока теста
+  «точки входа» не пуст»; «id точек входа в реестре не повторяются» (повтор
+  спрятал бы непокрытую точку за покрытой); «id из журнала есть в реестре»
+  (иначе формат id журнала разошёлся с реестром, реестр неполон или журнал
+  остался от прежнего прогона); «исключение: <точка> (#N)» — зелёное, пока теста
   нет, появился — «убери исключение». `--exceptions` — каталог, файл на
   исключение (нет каталога — исключений нет; файл вместо каталога — код 2 с
   подсказкой переноса). Код 1 при незаявленных. Отчёт —

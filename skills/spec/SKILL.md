@@ -23,7 +23,9 @@ allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spe
 - `spec-run.ts` — для публикации на мерж PR: зелёный прогон, проверивший
   ровно дерево коммита мержа; такого нет — публикация пропускается;
 - `spec-claims.ts` — после прогона: каждая точка входа вызвана тестом
-  capability (журнал `journal` харнесса), отчёт JUnit — в `spec-doc`;
+  capability (журнал `journal` харнесса, `resetJournal` — в начале прогона),
+  id реестра не повторяются, id журнала — из реестра; отчёт JUnit — в
+  `spec-doc`;
 - `spec-break.ts` — проверка поломкой: правка кода, прогон теста, откат
   всегда (и после обрыва); ✅ упал / ❌ не упал по каждой поломке;
 - `spec-exceptions.ts` — перенос `exceptions.ts` папок решений в каталог
