@@ -32,7 +32,7 @@ const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
 describe("Данные графика — закрытые задачи с фактом по времени закрытия", () => {
   it("закрытая задача с фактом — точка: дата закрытия, оценка и прогноз из маркера «Оценка», часы, токены в млн и стоимость из факта", () => {
     expect(points("o/r", [row(1)])).toEqual([
-      { repo: "o/r", number: 1, title: "Задача 1", url: "https://github.com/o/r/issues/1", t: T0 + DAY, type: "feat", cov: "full", est: 0.5, fact: 0.25, tokEst: 10, tok: 5, usdEst: 8, usd: 4.5 },
+      { repo: "o/r", number: 1, title: "Задача 1", url: "https://github.com/o/r/issues/1", t: T0 + DAY, type: "feat", cov: "full", est: 0.5, fact: 0.25, tokEst: 10, tok: 5, usdEst: 8, usd: 4.5, usdModels: null },
     ]);
     // по времени закрытия, а не по номеру
     expect(points("o/r", [row(1, { closedAt: T0 + 9 * DAY }), row(2)]).map((p) => p.number)).toEqual([2, 1]);
@@ -77,6 +77,16 @@ describe("Сводка — точность оценок и цена задач�
     expect(v.tok).toEqual({ now: 5, prev: 5, n: 10 });
     // предыдущих задач меньше трёх — сравнивать не с чем
     expect(view({ "o/r": rows(4) }, null).h).toEqual({ now: 0.25, prev: null, n: 4 });
+  });
+
+  it("доля $ по моделям последних 10 задач и предыдущих 10: тренд стоимости смешивает флоу с тарифом модели", () => {
+    const by = (models: Record<string, number>) => ({ cov: "full", tok: { total: 5_000_000 }, usd: 4.5, type: "feat", models: Object.fromEntries(Object.entries(models).map(([m, usd]) => [m, { mtok: 1, usd }])) });
+    const rs = Array.from({ length: 20 }, (_, i) => row(i + 1, { fact_marker: i < 10 ? by({ "claude-fable-5": 3, "claude-opus-5": 1 }) : by({ "claude-opus-5-5": 1 }) }));
+    expect(view({ "o/r": rs }, null).models).toEqual({ now: [["claude-opus-5-5", 1]], prev: [["claude-fable-5", 0.75], ["claude-opus-5", 0.25]] });
+    const html = model(rs);
+    expect(html).toContain("Стоимость по моделям");
+    expect(html).toContain("claude-fable-5 75 %, claude-opus-5 25 %");
+    expect(html).toContain("тренд $ смешивает флоу с тарифом модели");
   });
 });
 

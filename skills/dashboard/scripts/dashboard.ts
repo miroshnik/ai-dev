@@ -14,7 +14,7 @@
 import { spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 
-import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo } from "../../est/scripts/est.ts";
+import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo, sharesTxt, TARIFF_NOTE, usdByModel, usdShares } from "../../est/scripts/est.ts";
 import type { Registry, Row } from "../../est/scripts/est.ts";
 import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, repoTranscripts, SESSIONS_CSS, sessionsBody, sessionsView } from "./sessions.ts";
 import type { Live, SessionsInput, SessionsView } from "./sessions.ts";
@@ -47,6 +47,8 @@ export interface Point {
   tok: number | null;
   usdEst: number | null;
   usd: number | null;
+  /** $ факта по моделям; null — факт посчитан до разбивки по моделям. */
+  usdModels: Record<string, number> | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -70,7 +72,7 @@ export function points(repo: string, rows: Row[], since: number | null = null): 
       type: fm.type || em?.type || "", cov: fm.cov || "—",
       est: em ? num(em.h) || r.est || null : null, fact: r.fact,
       tokEst: num(em?.tok), tok: tok === null ? null : tok / 1e6,
-      usdEst: num(em?.usd), usd: num(fm.usd),
+      usdEst: num(em?.usd), usd: num(fm.usd), usdModels: fm.models ? usdByModel([fm]) : null,
     });
   }
   return out.sort((a, b) => a.t - b.t || a.number - b.number);
@@ -97,6 +99,18 @@ function shift(vals: number[]): Shift {
   return { now: last.length ? median(last) : null, prev: before.length >= MIN_TREND ? median(before) : null, n: last.length };
 }
 
+/** Доли $ по моделям последних задач и предыдущих: сдвиг тарифа рядом с трендом стоимости. */
+export interface ModelShift {
+  now: [string, number][];
+  prev: [string, number][];
+}
+
+function modelShares(pts: Point[]): [string, number][] {
+  const sum: Record<string, number> = {};
+  for (const p of pts) for (const [m, v] of Object.entries(p.usdModels ?? {})) sum[m] = (sum[m] ?? 0) + v;
+  return usdShares(sum);
+}
+
 export interface View {
   points: Point[];
   /** Точность оценок — k и доля в допуске, как в `est history`. */
@@ -104,6 +118,7 @@ export interface View {
   h: Shift;
   tok: Shift;
   usd: Shift;
+  models: ModelShift;
 }
 
 /** Всё, что показывает страница: точки, точность оценок и медианы последних задач — по строкам проектов репозиториев. */
@@ -116,6 +131,7 @@ export function view(rowsByRepo: Record<string, Row[]>, since: number | null): V
     h: shift(vals((p) => p.fact)),
     tok: shift(vals((p) => p.tok)),
     usd: shift(vals((p) => p.usd)),
+    models: { now: modelShares(pts.slice(-WINDOW)), prev: pts.length - WINDOW >= MIN_TREND ? modelShares(pts.slice(-2 * WINDOW, -WINDOW)) : [] },
   };
 }
 
@@ -392,12 +408,23 @@ function shiftTile(label: string, s: Shift, f: (v: number) => string): string {
   return tile(label, f(s.now), delta, `медиана последних ${s.n}`);
 }
 
+/** Плитка тарифа: доля $ ведущей модели последних задач, остальные и предыдущие — строками; смена модели двигает тренд $. */
+function modelsTile(m: ModelShift): string {
+  const label = "Стоимость по моделям";
+  const hint = `доля $ последних ${WINDOW}: ${TARIFF_NOTE}`;
+  if (!m.now.length) return tile(label, "—", "", hint);
+  const [top, share] = m.now[0]!;
+  let delta = `<div class="delta">${esc(top)}${m.now.length > 1 ? `; ${esc(sharesTxt(m.now.slice(1)))}` : ""}</div>`;
+  if (m.prev.length) delta += `<div class="delta">предыдущие ${WINDOW}: ${esc(sharesTxt(m.prev))}</div>`;
+  return tile(label, `${Math.round(share * 100)} %`, delta, hint);
+}
+
 function tiles(v: View): string {
   const c = v.calib;
   const accuracy = c.n
     ? tile("Точность оценок", `×${c.k}`, `<div class="delta">в допуске ×0.5…×2 — ${Math.trunc(c.share! * 100)} % задач</div>`, `факт к оценке, медиана ${c.n} последних пар`)
     : tile("Точность оценок", "—", "", "нет задач с оценкой est и фактом");
-  return `<section class="tiles">${accuracy}${shiftTile("Часы на задачу", v.h, (x) => `${fmtH(x)} ч`)}${shiftTile("Токены на задачу", v.tok, (x) => `${fmtH(x, 1)} млн`)}${shiftTile("Стоимость задачи", v.usd, fmtUsd)}</section>`;
+  return `<section class="tiles">${accuracy}${shiftTile("Часы на задачу", v.h, (x) => `${fmtH(x)} ч`)}${shiftTile("Токены на задачу", v.tok, (x) => `${fmtH(x, 1)} млн`)}${shiftTile("Стоимость задачи", v.usd, fmtUsd)}${modelsTile(v.models)}</section>`;
 }
 
 const LEGEND = [
