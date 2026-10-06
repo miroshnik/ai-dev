@@ -58,6 +58,12 @@
   правило `required_status_checks`) и `branches/<base>`
   (`protection.required_status_checks`, если `enforcement_level` не `off`):
   пока любого нет в снимке — ждать.
+- Прогоны Actions на SHA — `actions/runs?head_sha=<sha>`: прогон, упавший
+  без единого job, check-run не даёт — workflow не разобран (имя прогона —
+  путь файла, событие `push`) или не стартовал. Это «красный», а не пустое
+  место: без него снимок из одних статусов хостинга даёт ложный «зелёный».
+  Workflow, который по `on:` на SHA головы срабатывает на PR, а прогона не
+  дал, — ждать.
 - Ответ с `rate limit` — не ошибка: ждать до `reset` из `gh api rate_limit`
   (этот запрос квоту не тратит), вторичный лимит — минуту.
 - Сразу после push `gh pr checks` отвечает `no checks reported` с exit 1 —

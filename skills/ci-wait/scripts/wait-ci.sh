@@ -5,7 +5,8 @@
 # GH_REPO.
 #
 #   wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
-#       Ждёт чеки головы PR (как status) и обязательные чеки базовой ветки — по именам.
+#       Ждёт чеки головы PR (как status), обязательные чеки базовой ветки — по именам, и прогон
+#       каждого workflow, который по своему `on:` на SHA головы срабатывает на PR (нужен bun).
 #       Конфликт с базой — сразу ERROR: CI на таком PR не запустится.
 #
 #   wait-ci.sh status <sha> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
@@ -21,6 +22,8 @@
 #       Ждёт закрытия issue — бага на красный main (github pr premerge, код 3):
 #       PASS, когда закрыт; нет такого issue — ERROR.
 #
+# Прогон Actions на SHA, упавший без единого job (workflow не разобран, не стартовал), — FAIL с путём файла:
+# check-run он не даёт, и без него итог сводился к одним статусам хостинга.
 # Пустой список чеков — pending; PASS засчитывается, когда снимок без pending повторился
 # два опроса подряд (поздно регистрирующиеся чеки не проскакивают) и чеков не меньше
 # --expect. Первый упавший чек — сразу FAIL; --wait-all — FAIL, когда завершились все.
@@ -53,15 +56,20 @@ finish() { echo "RESULT: $1"; exit "$2"; }
 rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 
 # checks <sha>: чеки коммита в $out — JSON-массив {name, bucket}; bucket как у `gh pr checks`:
-# pending | pass | fail | cancel | skipping. Код 1 — ошибка gh, текст в $out.
+# pending | pass | fail | cancel | skipping; пути workflow, давших прогон на SHA, — в $ran. Код 1 — ошибка gh, текст в $out.
 # Статусы API уже сводит к последнему на контекст, check-runs — нет: на SHA лежат check-runs всех
 # прогонов (отменённый новым push, когда голову вернули на прежний коммит; перезапуск job), и итог —
-# за последним check-run имени у того же приложения (id растёт с созданием).
+# за последним check-run имени у того же приложения (id растёт с созданием). Прогон Actions, упавший без job, —
+# check-run не даёт: workflow не разобран (имя прогона — путь файла) или не стартовал (в его check suite нет
+# check-runs); такой прогон — упавший чек с путём файла и ссылкой.
+ran='[]'
 checks() {
-  local statuses runs
+  local statuses runs wruns
   statuses=$(gh api "repos/{owner}/{repo}/commits/$1/status" 2>&1) || { out=$statuses; return 1; }
   runs=$(gh api "repos/{owner}/{repo}/commits/$1/check-runs?per_page=100" 2>&1) || { out=$runs; return 1; }
-  out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --arg ctx "$context" '
+  wruns=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$1&per_page=100" 2>&1) || { out=$wruns; return 1; }
+  ran=$(jq -c '[(.workflow_runs // [])[].path] | unique' <<<"$wruns")
+  out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --argjson w "$wruns" --arg ctx "$context" '
     [ $s.statuses[] | { name: .context,
         bucket: (if .state == "success" then "pass" elif .state == "pending" then "pending" else "fail" end) } ]
     + [ $r.check_runs | group_by([.name, .app.id]) | map(max_by(.id)) | .[] | { name,
@@ -70,6 +78,12 @@ checks() {
                  elif .conclusion == "skipped" then "skipping"
                  elif .conclusion == "cancelled" then "cancel"
                  else "fail" end) } ]
+    + [ [$r.check_runs[].check_suite.id] as $suites
+        | ($w.workflow_runs // []) | group_by([.path, .event]) | map(max_by(.id)) | .[]
+        | select(.status == "completed" and (.conclusion == "failure" or .conclusion == "startup_failure"))
+        | select(.name == .path or (.check_suite_id as $id | any($suites[]; . == $id) | not))
+        | { name: "workflow \(if .name == .path then "not parsed" else "failed without jobs" end): \(.path) \(.html_url)",
+            bucket: "fail" } ]
     | if $ctx == "" then . else map(select(.name == $ctx)) end' 2>&1)
 }
 
@@ -88,6 +102,54 @@ load_required() {
     | unique' 2>/dev/null) || required='[]'
   required_loaded=1
   [ "$required" != '[]' ] && echo "$(ts) required on $1: $(jq -r 'join(", ")' <<<"$required")" >&2
+  return 0
+}
+
+# expected: пути workflow, которые на событие PR должны дать прогон на голове, — по `on:` их файлов на её SHA (#356).
+# Ждём `pull_request` без фильтров или с ветками, пускающими базовую; фильтр путей, `types` без `synchronize`,
+# отрицание и иные спецсимволы в ветках без диффа PR не решить — не ждём: ложный TIMEOUT хуже. Файл, который не
+# разбирается, — ждём: прогон-«пустышка» даст FAIL, а у PR из форка её нет вовсе. Только активные workflow.
+expected='[]'; expected_for=""; workflows=""
+pr_expects() {  # stdin — workflow в JSON (null — не разобран); код 0 — ждать его прогона на PR в ветку $1
+  jq -e --arg base "$1" '
+    def list: if type == "array" then . else [.] end;
+    def rx: "^" + (split("**") | map(split("*") | map(gsub("(?<c>[.^$(){}|\\\\])"; "\\\(.c)")) | join("[^/]*")) | join(".*")) + "$";
+    def match_base: list | if any(.[]; tostring | test("[?+\\[!]")) then null else any(.[]; tostring | rx as $r | $base | test($r)) end;
+    if type != "object" then true
+    else .on
+      | if type == "string" then (if . == "pull_request" then {} else null end)
+        elif type == "array" then (if any(.[]; . == "pull_request") then {} else null end)
+        elif type == "object" and has("pull_request") then (.pull_request // {})
+        else null end
+      | if type != "object" then false
+        elif has("paths") or has("paths-ignore") then false
+        elif has("types") and (.types | list | any(.[]; . == "synchronize") | not) then false
+        elif has("branches") then (.branches | match_base) == true
+        elif has("branches-ignore") then (.["branches-ignore"] | match_base) == false
+        else true end
+    end' >/dev/null
+}
+load_expected() {  # <sha> <base>
+  local list path raw doc exp='[]'
+  if [ -z "$workflows" ]; then
+    list=$(gh api "repos/{owner}/{repo}/actions/workflows?per_page=100" 2>&1) || { absent "$list" || { out=$list; return 1; }; list='{}'; }
+    workflows=$(jq -c '[(.workflows // [])[] | select(.state == "active" and (.path | startswith(".github/workflows/"))) | .path]' <<<"$list")
+  fi
+  if [ "$workflows" != '[]' ] && ! command -v bun >/dev/null; then
+    echo "$(ts) bun not found — workflows due on PR are not checked" >&2; workflows='[]'
+  fi
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    raw=$(gh api "repos/{owner}/{repo}/contents/$path?ref=$1" 2>&1) || { [[ "$raw" == *"HTTP 404"* ]] && continue; out=$raw; return 1; }
+    # не разобран — null; упал сам bun — ошибка опроса, а не «не разобран»: повтор
+    doc=$(jq -r '.content // "" | gsub("\n"; "") | @base64d' <<<"$raw" | bun -e '
+      const t = await Bun.stdin.text();
+      let d = null; try { d = Bun.YAML.parse(t) ?? null } catch {}
+      process.stdout.write(JSON.stringify(d))') || { out="bun failed on $path"; return 1; }
+    pr_expects "$2" <<<"$doc" && exp=$(jq -c --arg p "$path" '. + [$p]' <<<"$exp")
+  done < <(jq -r '.[]' <<<"$workflows")
+  expected=$exp; expected_for=$1
+  [ "$expected" != '[]' ] && echo "$(ts) workflows due on PR: $(jq -r 'join(", ")' <<<"$expected")" >&2
   return 0
 }
 
@@ -111,6 +173,7 @@ case "$mode" in
       # голова — каждый опрос: новый push меняет SHA, ждать надо чеки текущей
       head_sha=$(jq -r .head.sha <<<"$pull")
       label="pr#$target@${head_sha:0:7}"
+      [ "$expected_for" == "$head_sha" ] || load_expected "$head_sha" "$base" || return 1
       checks "$head_sha"
     }
     ;;
@@ -175,7 +238,7 @@ rate_limit_wait() {
 }
 
 deadline=$(( $(date +%s) + timeout ))
-prev_snapshot=""; prev_terminal=""; errors=0; pending=""; missing=""
+prev_snapshot=""; prev_terminal=""; errors=0; pending=""; missing=""; unrun=""
 while :; do
   nap=$interval
   poll; rc=$?
@@ -186,15 +249,17 @@ while :; do
     pending=$(printf '%s' "$out" | jq '[.[] | select(.bucket=="pending")] | length')
     failed=$(printf '%s' "$out" | jq -r '[.[] | select(.bucket=="fail" or .bucket=="cancel") | .name] | join(", ")')
     missing=$(printf '%s' "$out" | jq -r --argjson req "$required" '$req - map(.name) | join(", ")')
+    # workflow, который по `on:` срабатывает на PR, но прогона на голове не дал, — не финал, как обязательный чек
+    unrun=$(jq -rn --argjson e "$expected" --argjson r "$ran" '$e - $r | join(", ")')
     if [ "$snapshot" != "$prev_snapshot" ]; then
       comm -13 <(printf '%s\n' "$prev_snapshot") <(printf '%s\n' "$snapshot") \
         | awk -F'\t' 'NF==2 { print "CHECK " $1 ": " $2 }'
       prev_snapshot=$snapshot
     fi
-    echo "$(ts) $label total=$total pending=$pending failed=[${failed}]${missing:+ missing=[$missing]}" >&2
+    echo "$(ts) $label total=$total pending=$pending failed=[${failed}]${missing:+ missing=[$missing]}${unrun:+ no-run=[$unrun]}" >&2
     # упавший чек — исход известен: долгие чеки рядом (превью-деплой) его не изменят
     [ -n "$failed" ] && [ -z "$wait_all" ] && finish "FAIL $failed" 1
-    if [ "$total" -gt 0 ] && [ "$total" -ge "$expect" ] && [ "$pending" -eq 0 ] && [ -z "$missing" ]; then
+    if [ "$total" -gt 0 ] && [ "$total" -ge "$expect" ] && [ "$pending" -eq 0 ] && [ -z "$missing" ] && [ -z "$unrun" ]; then
       if [ "$snapshot" == "$prev_terminal" ]; then
         [ -n "$failed" ] && finish "FAIL $failed" 1
         finish "PASS ($total checks)" 0
@@ -215,7 +280,7 @@ while :; do
     [ "$errors" -ge 5 ] && finish "ERROR gh: ${out:0:200}" 3
   fi
   now=$(date +%s)
-  [ "$now" -ge "$deadline" ] && finish "TIMEOUT after ${timeout}s (pending=${pending:-?}${missing:+, missing required: $missing})" 2
+  [ "$now" -ge "$deadline" ] && finish "TIMEOUT after ${timeout}s (pending=${pending:-?}${missing:+, missing required: $missing}${unrun:+, no run of workflow: $unrun})" 2
   [ "$nap" -gt $((deadline - now)) ] && nap=$((deadline - now))
   sleep "$nap"
 done
