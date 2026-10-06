@@ -3096,6 +3096,13 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
+  "name": "deadCode и architecture — в проверках харнесса дельты спеки"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
+  ],
   "name": "spec-diff: исключение названия файлом в `names.exceptions/` — добавленное и снятое"
  },
  {
@@ -3328,6 +3335,20 @@
    "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
   ],
   "name": "describe проверки харнесса, которого PR не менял, сценария не закрывает; сменился реестр — закрывает"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
+  ],
+  "name": "сценарий совпадает с describe новых тестов из отчёта без вызова в исходниках (spec-claims)"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Сценарий стандарта «реестр + инвариант» — describe проверки харнесса"
+  ],
+  "name": "сценарий совпадает с describe, в котором вызван deadCode или architecture"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -4312,6 +4333,27 @@
  {
   "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
   "describes": [
+   "Код, до которого доходят только тесты, — находка режима production"
+  ],
+  "name": "исключение с rule — только своего запуска; без rule — гасит находку во всех, храповик — у запуска без rule"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого доходят только тесты, — находка режима production"
+  ],
+  "name": "режим production — knip с --production, тесты с пометкой (production)"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
+  "name": "knip запускается при регистрации тестов, а не под таймаутом первого теста"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
    "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
   ],
   "name": "knip упал или вывел не JSON — упавший тест с причиной, а не зелёный"
@@ -4335,7 +4377,28 @@
   "describes": [
    "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
   ],
+  "name": "исключение со старым ключом без файла — упавший тест с ключами на замену"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
   "name": "исключение — зелёное, пока knip его находит; перестал находить — «убери исключение»"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
+  "name": "ключ зависимости, неустановленного пакета и бинарника — с файлом воркспейса: исключение в одном воркспейсе не прячет находку в другом"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
+  "name": "находка вида, которого харнесс не знает, — упавший тест, а не молчание"
  },
  {
   "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
@@ -4349,7 +4412,35 @@
   "describes": [
    "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
   ],
+  "name": "ссылка catalog: на отсутствующую запись каталога — упавший тест"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Код, до которого не доходит ни одна точка входа, — упавший тест (knip)"
+  ],
   "name": "файл, экспорт и зависимость без потребителя — упавшие тесты своих видов; чисто — зелёные"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Подсказка конфигурации knip — упавший тест: конфиг не врёт о точках входа и исключениях"
+  ],
+  "name": "отчёт файлом без подсказок конфигурации — упавший тест с командой, которая их добавит"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Подсказка конфигурации knip — упавший тест: конфиг не врёт о точках входа и исключениях"
+  ],
+  "name": "подсказка конфигурации knip (лишний ignore, entry без совпадений) — упавший тест; исключение — по ключу подсказки"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
+  "describes": [
+   "Подсказка конфигурации knip — упавший тест: конфиг не врёт о точках входа и исключениях"
+  ],
+  "name": "репортер подсказок печатает подсказки knip строкой JSON: тип, идентификатор, воркспейс, файл"
  },
  {
   "path": "tests/capabilities/spec-harness/exceptions.test.ts",
@@ -4441,6 +4532,13 @@
    "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
   ],
   "name": "каталог exceptions/ в подпапке папки решения — упавший тест с местом каталога, исключение из него не читается"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Исключения папки решения — файл на элемент: параллельные PR не правят один файл"
+  ],
+  "name": "раннер в подпапке: исключения читаются из папки теста, путь в подсказке «удали» — от корня репозитория"
  },
  {
   "path": "tests/capabilities/spec-harness/exceptions.test.ts",
