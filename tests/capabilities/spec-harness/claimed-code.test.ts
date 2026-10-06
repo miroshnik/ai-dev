@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { deadCode, envNamesIn, envVars } from "../../../skills/spec/scripts/harness.ts";
+import { configGet, deadCode, dotenvNames, ENV_SERVICE, envNamesIn, envNamesInCode, envVars } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -143,6 +143,8 @@ describe("Каждая переменная окружения объявлен�
     expect(r["OLD_FLAG читается в коде"]).toStartWith("✗ OLD_FLAG объявлена, но не читается — убери из схемы");
     expect(r["VITE_API_URL читается в коде"]).toBe("✓");
     expect(Object.keys(r).some((n) => n.startsWith("NODE_ENV"))).toBe(false);
+    // служебные — экспортом: проект со своими реестрами на invariant пропускает те же
+    expect(ENV_SERVICE).toContain("NODE_ENV");
   });
 
   // переменная есть только в одном реестре — «читается» или «объявлена»; второй не должен требовать «убери исключение»
@@ -194,5 +196,127 @@ describe("Каждая переменная окружения объявлен�
     expect(r.stdout + r.stderr).toBe("");
     expect(exitOf(r)).toBe(0);
     expect(["const a = process.env.A; // process.env.OLD", "const b = import.meta.env.VITE_B;"].flatMap(envNamesIn)).toEqual(["A", "VITE_B"]);
+  });
+
+  it("чтение через ?. и в скобках у import.meta.env — тоже чтение", () => {
+    const src = 'const a = import.meta.env?.VITE_A;\nconst b = process.env?.B;\nconst c = import.meta.env["VITE_C"];\nconst d = process.env?.["D"];\nconst e = import.meta.env[`VITE_E`];\n';
+    expect(envNamesIn(src).sort()).toEqual(["B", "D", "VITE_A", "VITE_C", "VITE_E"]);
+  });
+
+  it("деструктуризация с умолчанием и из import.meta.env — тоже чтение", () => {
+    const src = 'const { A = "x", B: b, C: c = 1, ...rest } = process.env;\nconst { VITE_D }: Env = import.meta.env;\n';
+    expect(envNamesIn(src).sort()).toEqual(["A", "B", "C", "VITE_D"]);
+  });
+
+  // vite.config: окружение режима — результат loadEnv, а не process.env
+  it("псевдоним результата loadEnv Vite — чтение", () => {
+    const src = [
+      "export default defineConfig(({ mode }) => {",
+      '  const env: Record<string, string> = loadEnv(mode, process.cwd(), "");',
+      "  const { VITE_PORT } = loadEnv(mode, process.cwd());",
+      '  return { define: { api: env.VITE_API, dsn: env?.["SENTRY_DSN"] }, server: { port: Number(VITE_PORT) } };',
+      "});",
+      "function cfg(flag: boolean, e: NodeJS.ProcessEnv = process.env) { return flag && e.API_KEY; }",
+      "const other = load(mode);",
+      "const n = other.NOT_ENV;",
+      "const proc = process.environment;",
+      "const m = proc.NOT_ENV_EITHER;",
+    ].join("\n");
+    expect(envNamesIn(src).sort()).toEqual(["API_KEY", "SENTRY_DSN", "VITE_API", "VITE_PORT"]);
+  });
+
+  // `.get('X')` бывает у Map, кэша, URLSearchParams — аксессор конфига проект подключает сам
+  it("аксессор конфига .get('X') и .getOrThrow('X') — чтение с ридером configGet, без него — нет", () => {
+    const src = 'const a = this.config.get("DATABASE_URL");\nconst b = configService.getOrThrow<string>(\'JWT_SECRET\');\nconst c = cfg?.get<number>(`APP_PORT`, 3000);\nconst d = headers.get("x-request-id");\n';
+    expect(envNamesInCode(src, { readers: [configGet] }).sort()).toEqual(["APP_PORT", "DATABASE_URL", "JWT_SECRET"]);
+    expect(envNamesInCode(src)).toEqual([]);
+  });
+
+  it("свои способы чтения — регэкспом или функцией по коду", async () => {
+    writeTree(dir, { "src/a.ts": '// раньше: env("OLD_KEY")\nconst a = env("API_KEY");\nconst b = secret("DB_PASS");\n' });
+    const files: string[] = [];
+    const secrets = (code: string, file: string) => {
+      files.push(file);
+      return [...code.matchAll(/secret\("(\w+)"\)/g)].map((m) => m[1]!);
+    };
+    const r = await outcomes((it) => envVars(it, { root: dir, declared: ["API_KEY", "DB_PASS"], readers: [/\benv\(\s*"(?<name>[A-Z_]+)"/, secrets] }));
+    expect(r["API_KEY объявлена"]).toBe("✓");
+    expect(r["DB_PASS объявлена"]).toBe("✓");
+    expect(r["API_KEY читается в коде"]).toBe("✓");
+    expect(r["OLD_KEY объявлена"]).toBeUndefined();
+    expect(files).toEqual(["src/a.ts"]);
+  });
+
+  // необязательная переменная с умолчанием в коде — закомментированной строкой: в .env её нет, в схеме она есть
+  it(".env.example: X= и закомментированная # X= — объявления, проза в комментарии — нет", () => {
+    const text = [
+      "# База",
+      "DATABASE_URL=postgres://localhost/app",
+      "export API_KEY=",
+      "# необязательные, умолчание в коде:",
+      "# LOG_LEVEL=info",
+      "#SENTRY_DSN=",
+      "# Set FOO=bar to enable",
+      "",
+      "  APP_PORT = 3000",
+      "DATABASE_URL=",
+    ].join("\n");
+    expect(dotenvNames(text)).toEqual(["DATABASE_URL", "API_KEY", "LOG_LEVEL", "SENTRY_DSN", "APP_PORT"]);
+  });
+
+  // пакет workspace попадает в сборку приложения — и читает его окружение: объявить переменную должно приложение
+  it("монорепо: чтение пакета workspace — у каждого приложения, в чьих dependencies он есть; ключ <приложение>/<VAR>", async () => {
+    const pkg = (name: string, deps: object = {}, key = "dependencies") => JSON.stringify({ name, [key]: deps });
+    writeTree(dir, {
+      "package.json": JSON.stringify({ private: true, workspaces: ["apps/*", "packages/*"] }),
+      "apps/api/package.json": pkg("api", { "@acme/db": "workspace:*", zod: "^4.0.0" }),
+      "apps/api/src/main.ts": "const port = process.env.API_PORT;\n",
+      "apps/web/package.json": pkg("web", { "@acme/ui": "workspace:*" }),
+      "apps/web/src/main.ts": "const api = import.meta.env.VITE_API;\n",
+      "apps/web/vite.config.ts": "const env = loadEnv(mode, process.cwd());\nexport const port = env.VITE_PORT;\n",
+      "packages/db/package.json": pkg("@acme/db", { "@acme/log": "workspace:*" }),
+      "packages/db/src/index.ts": "export const url = process.env.DATABASE_URL;\n",
+      "packages/log/package.json": pkg("@acme/log"),
+      "packages/log/src/index.ts": "export const level = process.env.LOG_LEVEL;\n",
+      "packages/ui/package.json": pkg("@acme/ui", { "@acme/db": "workspace:*" }, "devDependencies"),
+      "packages/ui/src/index.ts": "export const theme = import.meta.env.VITE_THEME;\n",
+    });
+    const r = await outcomes((it) =>
+      envVars(it, {
+        root: dir,
+        dirs: ["src", "vite.config.ts"],
+        apps: {
+          api: { dir: "apps/api", declared: ["API_PORT", "DATABASE_URL"] },
+          web: { dir: "apps/web", declared: ["VITE_API", "VITE_PORT", "VITE_THEME", "DATABASE_URL"] },
+        },
+      }),
+    );
+    expect(r["api/API_PORT объявлена"]).toBe("✓");
+    expect(r["api/DATABASE_URL объявлена"]).toBe("✓");
+    expect(r["api/LOG_LEVEL объявлена"]).toStartWith("✗ LOG_LEVEL читается в packages/log/src/index.ts, но не объявлена в схеме окружения приложения api");
+    expect(r["web/VITE_THEME объявлена"]).toBe("✓");
+    expect(r["web/VITE_PORT объявлена"]).toBe("✓");
+    // devDependencies в сборку не попадают: DATABASE_URL пакета db — не чтение web
+    expect(r["web/DATABASE_URL объявлена"]).toBeUndefined();
+    expect(r["web/DATABASE_URL читается в коде"]).toStartWith("✗ DATABASE_URL объявлена в схеме окружения приложения web, но не читается ни им, ни его пакетами");
+    expect(r["api/VITE_API объявлена"]).toBeUndefined();
+  });
+
+  it("монорепо: пакеты workspace — из workspaces package.json и pnpm-workspace.yaml", async () => {
+    const pkg = (name: string, deps: object = {}) => JSON.stringify({ name, dependencies: deps });
+    writeTree(dir, {
+      "package.json": JSON.stringify({ private: true, workspaces: { packages: ["apps/*"] } }),
+      "pnpm-workspace.yaml": "packages:\n  - \"packages/**\"\n  # фикстуры — не пакеты сборки\n  - '!packages/fixtures/**'\ncatalog:\n  zod: ^4.0.0\n",
+      "apps/api/package.json": pkg("api", { "@acme/config": "workspace:*", "@acme/fixture": "workspace:*" }),
+      "apps/api/src/main.ts": "export {};\n",
+      "packages/shared/config/package.json": pkg("@acme/config"),
+      "packages/shared/config/src/index.ts": "export const url = process.env.CONFIG_URL;\n",
+      "packages/fixtures/x/package.json": pkg("@acme/fixture"),
+      "packages/fixtures/x/src/index.ts": "export const f = process.env.FIXTURE_ONLY;\n",
+    });
+    const r = await outcomes((it) => envVars(it, { root: dir, apps: { api: { dir: "apps/api", declared: ["CONFIG_URL"] } } }));
+    expect(r["api/CONFIG_URL объявлена"]).toBe("✓");
+    expect(r["api/CONFIG_URL читается в коде"]).toBe("✓");
+    expect(r["api/FIXTURE_ONLY объявлена"]).toBeUndefined();
   });
 });
