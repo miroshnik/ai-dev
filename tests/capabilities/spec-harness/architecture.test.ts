@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { architecture, boundariesConfig, cspConnectSrc, deployUnits, hostsIn, importsIn, networkGuard } from "../../../skills/spec/scripts/architecture.ts";
+import { architecture, boundariesConfig, cspConnectSrc, deployUnits, hostsIn, importsIn, networkGuard, workspacePackages } from "../../../skills/spec/scripts/architecture.ts";
 import type { Model } from "../../../skills/spec/scripts/architecture.ts";
 import { configGet, eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
@@ -145,6 +145,50 @@ describe("Модель архитектуры проверяется кодом:
     expect(r["infra использует разрешённый пакет pg"]).toBe("✓");
     expect(r["ui использует разрешённый пакет react"]).toStartWith("✗ модуль ui не импортирует react — убери пакет из модели");
   });
+
+  // корни модели — руками: пакет, добавленный в workspace, иначе остался бы вне проверки целиком
+  it("пакет workspace с кодом — в корнях модели; новый пакет вне корней — упавший тест", async () => {
+    writeTree(dir, {
+      "package.json": JSON.stringify({ name: "mono", workspaces: ["apps/*", "packages/*", "!packages/legacy"] }),
+      "apps/web/package.json": "{}",
+      "apps/web/src/page.ts": "export const p = 1;\n",
+      "apps/notes/readme.ts": "export const n = 1;\n",
+      "packages/ui/package.json": "{}",
+      "packages/ui/button.ts": "export const b = 1;\n",
+      "packages/tsconfig/package.json": "{}",
+      "packages/tsconfig/base.json": "{}",
+      "packages/legacy/package.json": "{}",
+      "packages/legacy/index.js": "export const l = 1;\n",
+      "packages/new/package.json": "{}",
+      "packages/new/src/index.ts": "export const n = 1;\n",
+    });
+    writeTree(path.join(dir, "pnpm"), {
+      "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n  - \'packages/**\'\n  - "!**/fixtures/**"\ncatalog:\n  react: ^19\n',
+      "apps/api/package.json": "{}",
+      "packages/group/inner/package.json": "{}",
+      "packages/ui/package.json": "{}",
+      "packages/ui/fixtures/demo/package.json": "{}",
+      "packages/ui/node_modules/dep/package.json": "{}",
+    });
+    writeTree(path.join(dir, "yarn"), { "package.json": JSON.stringify({ workspaces: { packages: ["libs/*"] } }), "libs/core/package.json": "{}" });
+    expect(workspacePackages(dir)).toEqual(["apps/web", "packages/new", "packages/tsconfig", "packages/ui"]);
+    expect(workspacePackages(path.join(dir, "pnpm"))).toEqual(["apps/api", "packages/group/inner", "packages/ui"]);
+    expect(workspacePackages(path.join(dir, "yarn"))).toEqual(["libs/core"]);
+    expect(workspacePackages(path.join(dir, "apps"))).toEqual([]);
+
+    const ws: Model = {
+      roots: ["apps/web/src", "packages"],
+      modules: { web: { path: "apps/web/src", purpose: "сайт" }, packages: { path: "packages", purpose: "общие пакеты" } },
+    };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: ws }));
+    expect(r["пакет workspace apps/web — в корнях кода"]).toBe("✓");
+    expect(r["пакет workspace packages/ui — в корнях кода"]).toBe("✓");
+    expect(r["пакет workspace packages/tsconfig — в корнях кода"]).toBeUndefined();
+    const narrow: Model = { ...ws, roots: ["apps/web/src", "packages/ui"] };
+    const bad = await outcomes((it) => architecture(it, { root: dir, model: narrow }));
+    expect(bad["пакет workspace packages/new — в корнях кода"]).toStartWith("✗ packages/new: пакет workspace с кодом вне корней модели");
+    expect(bad["нарушитель не проходит: пакет workspace вне корней"]).toBe("✓");
+  });
 });
 
 describe("Импорт — это пакет, только если не локальный путь, не псевдоним, не встроенный модуль и не тип", () => {
@@ -161,6 +205,27 @@ describe("Импорт — это пакет, только если не лок�
       'const q = require("qs");',
     ].join("\n");
     expect(importsIn(text, { "@/": "src/" })).toEqual(["@scope/lib", "lodash", "react", "qs"]);
+  });
+
+  // список путей — тип модели: локальность решает префикс, а прежний Record<string, string> монорепо не выражал (typecheck)
+  it("псевдоним со списком путей — у каждого приложения монорепо свой `@/`, импорт по нему — не пакет", async () => {
+    const mono: Model = {
+      roots: ["apps/web/src", "apps/admin/src"],
+      aliases: { "@/": ["apps/web/src/", "apps/admin/src/"] },
+      modules: {
+        web: { path: "apps/web/src", purpose: "сайт", packages: ["react"] },
+        admin: { path: "apps/admin/src", purpose: "админка" },
+      },
+    };
+    writeTree(dir, {
+      "apps/web/src/page.tsx": 'import React from "react";\nimport { a } from "@/lib/a";\nexport const p = { React, a };\n',
+      "apps/web/src/lib/a.ts": "export const a = 1;\n",
+      "apps/admin/src/page.ts": 'import { b } from "@/b";\nexport const p = b;\n',
+      "apps/admin/src/b.ts": "export const b = 1;\n",
+    });
+    const r = await outcomes((it) => architecture(it, { root: dir, model: mono }));
+    expect(r["web импортирует react"]).toBe("✓");
+    expect(Object.entries(r).filter(([, v]) => v !== "✓")).toEqual([]);
   });
 });
 
@@ -335,6 +400,32 @@ const deploy = {
   "src/mailer/send.ts": "export const send = 1;\n",
 };
 
+// монорепо: два приложения, общие пакеты — библиотеки, собранные в бандл каждого приложения
+const mono: Model = {
+  roots: ["apps", "packages"],
+  modules: {
+    web: { path: "apps/web", purpose: "сайт", dependsOn: ["ui"] },
+    admin: { path: "apps/admin", purpose: "админка", dependsOn: ["ui", "data"] },
+    ui: { path: "packages/ui", purpose: "компоненты", library: true, dependsOn: ["tokens"] },
+    tokens: { path: "packages/tokens", purpose: "цвета и отступы", library: true },
+    data: { path: "packages/data", purpose: "доступ к базе", library: true, packages: ["pg"] },
+  },
+  containers: {
+    site: { purpose: "сайт", modules: ["web", "data"], uses: ["db"] },
+    backoffice: { purpose: "админка", modules: ["admin"] },
+    db: { purpose: "база", clients: ["pg"] },
+  },
+};
+const monorepo = {
+  "apps/web/page.ts": 'import { b } from "../../packages/ui/button.ts";\nexport const p = b;\n',
+  "apps/admin/page.ts": 'import { b } from "../../packages/ui/button.ts";\nexport const p = b;\n',
+  "packages/ui/button.ts": "export const b = 1;\n",
+  "packages/tokens/colors.ts": "export const c = 1;\n",
+  "packages/legacy/old.ts": "export const o = 1;\n",
+  "packages/shared/x.ts": "export const x = 1;\n",
+  "packages/data/db.ts": 'import pg from "pg";\nexport const db = pg;\n',
+};
+
 /**
  * C2 — развёртываемые единицы и связи между ними. Модель называет контейнеры, их модули и связи; реальность —
  * конфиги деплоя в репозитории. Контейнер без конфига и конфиг без контейнера, импорт через границу контейнера и
@@ -374,6 +465,46 @@ describe("Контейнеры модели (C2) сверяются с кодо�
     const r = await outcomes((it) => architecture(it, { root: dir, model: both }));
     expect(r["нарушитель не проходит: ключ вне адаптера"]).toBe("✓");
     expect(r["нарушитель не проходит: зависимость через контейнер"]).toBe("✓");
+  });
+
+  it("развёртываемая единица Terraform — вычислительный ресурс `*.tf`; прочие ресурсы и каталог `.terraform` — нет", () => {
+    writeTree(dir, {
+      "infra/ecs.tf": 'resource "aws_ecs_service" "api" {\n  name = "api"\n}\n\nresource "aws_ecs_cluster" "main" {}\n# resource "aws_ecs_service" "old" {}\n',
+      "infra/lambda.tf": 'resource "aws_lambda_function" "resize" {\n}\n',
+      "infra/gcp/run.tf": '  resource "google_cloud_run_v2_service" "web" {}\n',
+      "infra/.terraform/modules/x/main.tf": 'resource "aws_ecs_service" "vendored" {}\n',
+      "infra/notes.md": 'resource "aws_ecs_service" "doc" {}\n',
+    });
+    expect(deployUnits(dir)).toEqual(["terraform:aws_ecs_service.api", "terraform:aws_lambda_function.resize", "terraform:google_cloud_run_v2_service.web"]);
+  });
+
+  it("библиотека — в контейнерах модулей, которые от неё зависят; модуль без отметки library в нескольких контейнерах — упавший тест", async () => {
+    writeTree(dir, monorepo);
+    const legacy: Model = {
+      ...mono,
+      modules: { ...mono.modules, legacy: { path: "packages/legacy", purpose: "старые компоненты", library: true }, shared: { path: "packages/shared", purpose: "общее" } },
+      containers: { site: { ...mono.containers!.site!, modules: ["web", "shared"] }, backoffice: { ...mono.containers!.backoffice!, modules: ["admin", "shared"] } },
+    };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: legacy }));
+    expect(r["библиотека ui — в контейнерах backoffice, site"]).toBe("✓");
+    expect(r["библиотека tokens — в контейнерах backoffice, site"]).toBe("✓");
+    expect(r["зависимость web → ui — внутри контейнера"]).toBe("✓");
+    expect(r["зависимость ui → tokens — внутри контейнера"]).toBe("✓");
+    expect(r["библиотека legacy — в контейнерах ?"]).toStartWith("✗ библиотека legacy не входит ни в один контейнер: от неё не зависит ни один модуль контейнеров");
+    expect(r["модуль shared — в контейнере ?"]).toStartWith("✗ модуль shared — в нескольких контейнерах: backoffice, site — общий пакет отметь library: true");
+  });
+
+  it("зависимость библиотеки — внутри каждого её контейнера; клиент хранилища в библиотеке — со связью uses из каждого", async () => {
+    writeTree(dir, { ...monorepo, "apps/web/session/s.ts": "export const s = 1;\n" });
+    const leaky: Model = {
+      ...mono,
+      modules: { ...mono.modules, session: { path: "apps/web/session", purpose: "сессия сайта" }, ui: { ...mono.modules.ui!, dependsOn: ["tokens", "session"] } },
+      containers: { ...mono.containers, site: { ...mono.containers!.site!, modules: ["web", "data", "session"] } },
+    };
+    const r = await outcomes((it) => architecture(it, { root: dir, model: leaky }));
+    expect(r["зависимость ui → session — внутри контейнера"]).toStartWith("✗ ui (backoffice, site) зависит от session (site) — между контейнерами только связь uses");
+    expect(r["клиент pg хранилища db — в контейнере site"]).toBe("✓");
+    expect(r["клиент pg хранилища db — в контейнере backoffice"]).toStartWith("✗ контейнер backoffice импортирует клиент pg хранилища db без связи uses: packages/data/db.ts");
   });
 
   it("клиент хранилища импортирует только контейнер со связью с ним", async () => {

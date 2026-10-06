@@ -12,6 +12,7 @@
  */
 
 import { readdirSync, readFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 
@@ -29,6 +30,11 @@ export interface Module {
   dependsOn?: string[];
   /** Внешние пакеты, которые этот модуль может импортировать. */
   packages?: string[];
+  /**
+   * Библиотека — общий пакет, который собирается в несколько контейнеров (пакет монорепо в бандле каждого
+   * приложения): её контейнеры — контейнеры модулей, которые от неё зависят, и те, где она названа в `modules`.
+   */
+  library?: boolean;
 }
 
 /** Внешняя система (C1): кто она, какой модуль с ней говорит и чем — хосты, пакеты, ключи окружения. */
@@ -59,8 +65,11 @@ export interface Model {
   name?: string;
   /** Каталоги кода от корня (по умолчанию `src`): каждый каталог с кодом в них принадлежит модулю. */
   roots?: string[];
-  /** Псевдонимы импорта → путь от корня (`{ "@/": "src/" }`): такой импорт локальный, а не пакет. */
-  aliases?: Record<string, string>;
+  /**
+   * Псевдонимы импорта → путь от корня (`{ "@/": "src/" }`) или список путей — в монорепо у каждого приложения свой
+   * `@/`: такой импорт локальный, а не пакет.
+   */
+  aliases?: Record<string, string | string[]>;
   modules: Record<string, Module>;
   /** Внешние системы (C1): платёжный провайдер, почта, геокодер… */
   externals?: Record<string, External>;
@@ -70,8 +79,9 @@ export interface Model {
 
 /**
  * Развёртываемые единицы из конфигов деплоя в репозитории: сервисы `docker-compose.yml` / `compose.yml`, функции
- * `supabase/functions/<имя>`, crons в `vercel.json`. Разбор без зависимостей: сервис compose — ключ с отступом
- * в два пробела под верхним `services:`.
+ * `supabase/functions/<имя>`, crons в `vercel.json`, вычислительные ресурсы Terraform в `*.tf` (`terraform:<тип>.<имя>`:
+ * сервис ECS, функция Lambda, Cloud Run…). Разбор без зависимостей: сервис compose — ключ с отступом в два пробела
+ * под верхним `services:`, ресурс Terraform — строка `resource "<тип>" "<имя>"`.
  */
 export function deployUnits(root: string): string[] {
   const out = new Set<string>();
@@ -105,7 +115,109 @@ export function deployUnits(root: string): string[] {
   } catch {
     /* нет vercel.json или crons */
   }
+  walkDirs(root, (rel, entries) => {
+    for (const e of entries) {
+      if (!e.isFile() || !e.name.endsWith(".tf")) continue;
+      for (const m of readFileSync(path.join(root, rel, e.name), "utf8").matchAll(TF_RESOURCE)) {
+        if (TERRAFORM_UNITS.has(m[1]!)) out.add(`terraform:${m[1]}.${m[2]}`);
+      }
+    }
+  });
   return sorted([...out]);
+}
+
+// ресурсы Terraform, которые разворачивают код: сервис, функция, задание; кластер, сеть, база — не единица кода
+const TERRAFORM_UNITS = new Set([
+  "aws_ecs_service",
+  "aws_lambda_function",
+  "aws_apprunner_service",
+  "google_cloud_run_service",
+  "google_cloud_run_v2_service",
+  "google_cloud_run_v2_job",
+  "google_cloudfunctions_function",
+  "google_cloudfunctions2_function",
+  "azurerm_container_app",
+  "azurerm_linux_function_app",
+  "kubernetes_deployment",
+  "kubernetes_deployment_v1",
+  "kubernetes_cron_job_v1",
+]);
+const TF_RESOURCE = /^[ \t]*resource\s+"([\w-]+)"\s+"([\w-]+)"/gm;
+
+/**
+ * Пакеты workspace монорепо — каталоги с `package.json` по шаблонам `workspaces` из `package.json` (список или
+ * `{ packages }`) и `packages:` из `pnpm-workspace.yaml`; `!шаблон` исключает. `*` — один уровень каталога, `**` —
+ * любая глубина.
+ */
+export function workspacePackages(root: string): string[] {
+  const patterns: string[] = [];
+  try {
+    const ws = (JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { workspaces?: string[] | { packages?: string[] } }).workspaces;
+    patterns.push(...(Array.isArray(ws) ? ws : (ws?.packages ?? [])));
+  } catch {
+    /* нет package.json или workspaces */
+  }
+  try {
+    let inPackages = false;
+    for (const line of readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8").split(/\r?\n/)) {
+      if (/^packages:\s*$/.test(line)) inPackages = true;
+      else if (/^\S/.test(line)) inPackages = false;
+      else if (inPackages) {
+        const m = /^\s+-\s+(["']?)(.+?)\1\s*(?:#.*)?$/.exec(line);
+        if (m) patterns.push(m[2]!);
+      }
+    }
+  } catch {
+    /* нет pnpm-workspace.yaml */
+  }
+  if (!patterns.length) return [];
+  const include = patterns.filter((p) => !p.startsWith("!")).map(glob);
+  const exclude = patterns.filter((p) => p.startsWith("!")).map((p) => glob(p.slice(1)));
+  const out: string[] = [];
+  walkDirs(root, (rel, entries) => {
+    if (!rel || !entries.some((e) => e.isFile() && e.name === "package.json")) return;
+    if (include.some((r) => r.test(rel)) && !exclude.some((r) => r.test(rel))) out.push(rel);
+  });
+  return sorted(out);
+}
+
+/** Шаблон каталога workspace → RegExp: `*` и `?` — внутри одного уровня, `**` — любая глубина, и нулевая. */
+function glob(pattern: string): RegExp {
+  const segs = pattern.replace(/^\.\//, "").replace(/\/+$/, "").split("/");
+  const body = segs
+    .map((s) => (s === "**" ? "\0" : s.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")))
+    .join("/")
+    .replace(/\0\//g, "(?:.*/)?")
+    .replace(/\/\0/g, "(?:/.*)?")
+    .replace(/\0/g, ".*");
+  return new RegExp(`^${body}$`);
+}
+
+/** Обход каталогов репозитория (без `node_modules`, сборок и скрытых): visit получает путь от корня и записи каталога. */
+function walkDirs(root: string, visit: (rel: string, entries: Dirent[]) => void, rel = ""): void {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(path.join(root, rel), { withFileTypes: true });
+  } catch {
+    return;
+  }
+  visit(rel, entries);
+  for (const e of entries) {
+    if (e.isDirectory() && !SKIP.has(e.name) && !e.name.startsWith(".")) walkDirs(root, visit, rel ? `${rel}/${e.name}` : e.name);
+  }
+}
+
+/** Есть ли в каталоге файл кода (объявления `.d.ts` — не код). */
+function hasCode(dir: string): boolean {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  return entries.some((e) =>
+    e.isDirectory() ? !SKIP.has(e.name) && hasCode(path.join(dir, e.name)) : CODE.test(e.name) && !/\.d\.[cm]?ts$/.test(e.name),
+  );
 }
 
 const CODE = /\.[cm]?[jt]sx?$/;
@@ -157,7 +269,7 @@ export function boundariesConfig(model: Model, boundaries: object, opts: { files
 const IMPORT = /^\s*(import|export)\s+(type\s+)?[^;'"]*?\s*from\s*["']([^"']+)["']|^\s*import\s*["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)|\brequire\s*\(\s*["']([^"']+)["']\s*\)/gm;
 
 /** Внешние пакеты, которые импортирует исходник: имя пакета (`@scope/lib`, `lodash`), по порядку появления, без повторов. */
-export function importsIn(text: string, aliases: Record<string, string> = {}): string[] {
+export function importsIn(text: string, aliases: Record<string, string | string[]> = {}): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(IMPORT)) {
     if (m[2]) continue; // import type / export type
@@ -253,6 +365,7 @@ function owners(model: Model, dir: string): string[] {
 /**
  * Тесты модели: «каталог <каталог> — в модуле <модуль>» на каждый каталог с кодом (модуль — с самым длинным
  * подходящим путём; вне модулей или один путь у нескольких — красный),
+ * «пакет workspace <путь> — в корнях кода» на каждый пакет монорепо с кодом (вне `roots` — красный),
  * «<модуль> импортирует <пакет>» на каждый внешний пакет, который модуль импортирует (не разрешён — красный),
  * «<модуль> использует разрешённый пакет <пакет>» на каждый пакет модели (не импортируется — красный: убери из модели).
  * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions/` папки решения.
@@ -279,6 +392,23 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
     },
     violator: { name: "каталог вне модулей", item: "__вне_модели__" },
   });
+
+  // корни модели — руками: новый пакет workspace вне них проверка не видела бы целиком
+  const roots = (model.roots ?? ["src"]).map((r) => r.replace(/^\.\//, "").replace(/\/+$/, ""));
+  const inRoots = (p: string) => roots.some((r) => r === p || r.startsWith(p + "/") || p.startsWith(r + "/"));
+  const packages = roots.some((r) => r === "" || r === ".") ? [] : workspacePackages(opts.root).filter((p) => hasCode(path.join(opts.root, p)));
+  if (packages.length) {
+    add({
+      registry: "пакеты workspace",
+      items: packages,
+      name: (p) => `пакет workspace ${p} — в корнях кода`,
+      key: (p) => p,
+      check: (p) => {
+        if (!inRoots(p)) throw new Error(`${p}: пакет workspace с кодом вне корней модели — добавь его в roots tests/architecture/model.ts`);
+      },
+      violator: { name: "пакет workspace вне корней", item: "__вне_корней__" },
+    });
+  }
 
   // пакеты, которые модуль импортирует на деле: модуль → пакет → файлы
   const used = new Map<string, Map<string, string[]>>();
@@ -339,22 +469,53 @@ function routeExceptions(exceptions: readonly Exception[], specs: Invariant<unkn
 }
 
 /**
- * C2: модуль — ровно в одном контейнере; зависимость модулей — внутри контейнера (между контейнерами — только
- * `uses`); развёртываемые единицы конфигов и модели совпадают в обе стороны; клиент хранилища — только в контейнере
- * со связью `uses` с этим хранилищем.
+ * Контейнеры каждого модуля: из `modules` контейнеров, у библиотеки — ещё контейнеры модулей, которые от неё зависят
+ * (транзитивно: библиотека библиотеки собирается туда же). Списки отсортированы.
+ */
+export function moduleContainers(model: Model): Map<string, string[]> {
+  const cont = model.containers ?? {};
+  const out = new Map(Object.keys(model.modules).map((m) => [m, new Set(Object.keys(cont).filter((c) => (cont[c]!.modules ?? []).includes(m)))]));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [m, x] of Object.entries(model.modules)) {
+      for (const d of x.dependsOn ?? []) {
+        if (!model.modules[d]?.library) continue;
+        const to = out.get(d)!;
+        for (const c of out.get(m)!) {
+          if (to.has(c)) continue;
+          to.add(c);
+          changed = true;
+        }
+      }
+    }
+  }
+  return new Map([...out].map(([m, cs]) => [m, sorted([...cs])]));
+}
+
+/**
+ * C2: модуль — ровно в одном контейнере, библиотека — хотя бы в одном; зависимость модулей — внутри контейнера:
+ * цель есть в каждом контейнере источника (между контейнерами — только `uses`); развёртываемые единицы конфигов и
+ * модели совпадают в обе стороны; клиент хранилища — только в контейнере со связью `uses` с этим хранилищем.
  */
 function c2(add: Add, root: string, model: Model, src: Source[]): void {
   const cont = model.containers!;
-  const containerOf = (m: string) => Object.keys(cont).filter((c) => (cont[c]!.modules ?? []).includes(m)).sort();
+  const of = moduleContainers(model);
+  const containerOf = (m: string) => of.get(m) ?? [];
+  const isLibrary = (m: string) => !!model.modules[m]?.library;
   add({
     registry: "модули в контейнерах",
     items: names(model),
-    name: (m) => `модуль ${m} — в контейнере ${containerOf(m).length === 1 ? containerOf(m)[0] : "?"}`,
+    name: (m) =>
+      isLibrary(m) ? `библиотека ${m} — в контейнерах ${containerOf(m).join(", ") || "?"}` : `модуль ${m} — в контейнере ${containerOf(m).length === 1 ? containerOf(m)[0] : "?"}`,
     key: (m) => m,
     check: (m) => {
       const c = containerOf(m);
+      if (isLibrary(m)) {
+        if (!c.length) throw new Error(`библиотека ${m} не входит ни в один контейнер: от неё не зависит ни один модуль контейнеров`);
+        return;
+      }
       if (!c.length) throw new Error(`модуль ${m} не входит ни в один контейнер модели`);
-      if (c.length > 1) throw new Error(`модуль ${m} — в нескольких контейнерах: ${c.join(", ")}`);
+      if (c.length > 1) throw new Error(`модуль ${m} — в нескольких контейнерах: ${c.join(", ")} — общий пакет отметь library: true`);
     },
     violator: { name: "модуль вне контейнеров", item: "__вне_контейнеров__" },
   });
@@ -367,10 +528,12 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
       name: (e) => `зависимость ${e.m} → ${e.d} — внутри контейнера`,
       key: (e) => `${e.m}→${e.d}`,
       check: (e) => {
-        const a = containerOf(e.m)[0];
-        const b = containerOf(e.d)[0];
-        // модуль вне контейнеров — тоже не «внутри контейнера»: иначе у нарушителя undefined === undefined
-        if (!a || a !== b) throw new Error(`${e.m} (${a ?? "?"}) зависит от ${e.d} (${b ?? "?"}) — между контейнерами только связь uses`);
+        const a = containerOf(e.m);
+        const b = containerOf(e.d);
+        // модуль вне контейнеров — тоже не «внутри контейнера»: иначе нарушитель прошёл бы на пустом списке
+        if (!a.length || a.some((c) => !b.includes(c))) {
+          throw new Error(`${e.m} (${a.join(", ") || "?"}) зависит от ${e.d} (${b.join(", ") || "?"}) — между контейнерами только связь uses`);
+        }
       },
       violator: { name: "зависимость через контейнер", item: { m: "__a__", d: "__b__" } },
     });
@@ -391,21 +554,21 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
     violator: { name: "единица вне модели", item: "__вне_модели__" },
   });
 
-  // клиенты хранилищ: какой контейнер их импортирует на деле
+  // клиенты хранилищ: какой контейнер их импортирует на деле (библиотека — каждый свой контейнер)
   const storages = Object.entries(cont).flatMap(([s, x]) => (x.clients ?? []).map((pkg) => ({ s, pkg })));
   if (storages.length) {
     const uses = new Map<string, { s: string; pkg: string; c: string; files: string[] }>();
     for (const src1 of src) {
       const mod = owners(model, src1.dir);
       if (mod.length !== 1) continue;
-      const c = containerOf(mod[0]!)[0];
-      if (!c) continue;
-      for (const st of storages) {
-        if (!src1.packages.includes(st.pkg)) continue;
-        const k = `${st.pkg}:${st.s}:${c}`;
-        const u = uses.get(k) ?? { ...st, c, files: [] };
-        u.files.push(src1.file);
-        uses.set(k, u);
+      for (const c of containerOf(mod[0]!)) {
+        for (const st of storages) {
+          if (!src1.packages.includes(st.pkg)) continue;
+          const k = `${st.pkg}:${st.s}:${c}`;
+          const u = uses.get(k) ?? { ...st, c, files: [] };
+          u.files.push(src1.file);
+          uses.set(k, u);
+        }
       }
     }
     add({
