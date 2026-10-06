@@ -418,23 +418,26 @@ export function modelFacts(m: ModelData | undefined): string[] {
   ];
 }
 
-/** Что проверяет вызов харнесса: «реестр «мутации»», «правило no-console»; имя не вычислить без прогона — только вид. */
-const checkLabel = (call: string, value: string | null): string =>
-  call === "invariant" ? (value === null ? "реестр" : `реестр «${value}»`) : value === null ? "правило" : `правило ${value}`;
+/**
+ * Что проверяет вызов харнесса: «реестр «мутации»», «правило no-console», «код без потребителя (production)», «модель
+ * архитектуры»; реестр или правило не вычислить без прогона — только вид.
+ */
+const checkLabel = (call: string, value: string | null): string => {
+  if (call === "invariant") return value === null ? "реестр" : `реестр «${value}»`;
+  if (call === "examples") return value === null ? "правило" : `правило ${value}`;
+  if (call === "deadCode") return value === null ? "код без потребителя" : `код без потребителя (${value})`;
+  return "модель архитектуры";
+};
 
-/** Проверки харнесса в исходниках тестов: реестры invariant и правила examples — опции вызова по AST. */
-export function checkFacts(files: Map<string, string>): string[] {
+// проверка, которую называет опция вызова: без вычислимого реестра или правила её в списке решений не назвать
+const NAMED_BY_OPTION = new Set(["invariant", "examples"]);
+
+/** Проверки харнесса в исходниках тестов (разбор файлов — `parseFiles`): реестры, правила, запуски deadCode, модель. */
+export function checkFacts(checks: Check[]): string[] {
   const out = new Set<string>();
-  for (const [file, text] of files) {
-    if (!/\b(?:invariant|examples)\b/.test(text)) continue;
-    const folder = path.posix.dirname(file);
-    let options: [string, string][];
-    try {
-      options = L.callOptions(text, L.HARNESS_CALLS, file);
-    } catch {
-      continue; // файл не разобран — об этом уже сказал разбор названий (parseFiles)
-    }
-    for (const [call, value] of options) out.add(`\`${folder}\` · ${checkLabel(call, value)}`);
+  for (const c of checks) {
+    if (c.value === null && NAMED_BY_OPTION.has(c.call)) continue;
+    out.add(`\`${path.posix.dirname(c.path)}\` · ${checkLabel(c.call, c.value)}`);
   }
   return [...out].sort();
 }
@@ -465,6 +468,23 @@ export function freshChecks(base: Check[], head: Check[]): HarnessDescribe[] {
   };
   const was = group(base);
   return [...group(head)].filter(([k, g]) => g.checks.some((c) => !was.get(k)?.checks.includes(c))).map(([, g]) => ({ ...g, checks: g.checks.sort() }));
+}
+
+/**
+ * describe новых тестов из отчёта, где в исходниках нет вызова харнесса: тесты пишет не раннер, а скрипт после прогона
+ * (отчёт spec-claims), — проверка видна только по отчёту, и сценарий с её названием закрывают эти тесты. describe с
+ * вызовом харнесса в исходниках — дело `freshChecks`: новый элемент реестра в старой проверке сценария не закрывает.
+ */
+export function reportedChecks(fresh: Test[], generated: Set<Test>, sourced: Check[]): HarnessDescribe[] {
+  const key = (folder: string, describes: string[]) => JSON.stringify([folder, describes]);
+  const inSource = new Set(sourced.map((c) => key(path.posix.dirname(c.path), c.describes)));
+  const out = new Map<string, HarnessDescribe>();
+  for (const t of fresh) {
+    const k = key(L.folderOf(t), t.describes);
+    if (!generated.has(t) || !t.describes.length || inSource.has(k)) continue;
+    out.set(k, { folder: L.folderOf(t), describes: t.describes, checks: ["по отчёту"] });
+  }
+  return [...out.values()];
 }
 
 // файл исключений — по правилу exceptionFile (speclib), как его читают харнесс и spec-doc: exceptions/<элемент>.json —
@@ -500,7 +520,7 @@ function readFiles(rev: string | null, top: string, prefix: string, paths: strin
 }
 
 /** Решения на ревизии: модель, исключения (exceptions/ и exceptions.* в tests/, отключения линта в изменённых файлах), проверки. */
-async function decisionsAt(rev: string | null, top: string, prefix: string, changedCode: string[], tests: Map<string, string>): Promise<Decisions> {
+async function decisionsAt(rev: string | null, top: string, prefix: string, changedCode: string[], checks: Check[]): Promise<Decisions> {
   const listed = rev !== null ? gitText(["ls-tree", "-r", "--name-only", "-z", rev, "--", prefix + L.TESTS], top).split("\0") : [];
   const excPaths =
     rev !== null
@@ -527,7 +547,7 @@ async function decisionsAt(rev: string | null, top: string, prefix: string, chan
     if (!text || !text.includes("eslint-disable")) continue;
     for (const d of disablesIn(rel, text)) exceptions.push(`\`${rel}\` · ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
   }
-  return { model: modelFacts(model), exceptions: exceptions.sort(), checks: checkFacts(tests) };
+  return { model: modelFacts(model), exceptions: exceptions.sort(), checks: checkFacts(checks) };
 }
 
 function walkTests(dir: string, rel = L.TESTS): string[] {
@@ -848,6 +868,7 @@ export async function main(argv: string[]): Promise<number> {
   let harnessNote = "";
   const harness = new Set<Test>(); // тесты только из отчёта — порождены харнессом, в исходниках их нет
   let checks: HarnessDescribe[];
+  let sourced: Check[]; // вызовы харнесса в исходниках головы: их describe — не «только по отчёту»
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
@@ -859,6 +880,7 @@ export async function main(argv: string[]): Promise<number> {
     let headTests = headScan.tests;
     // сценарий стандарта — describe проверки харнесса: по исходникам, без отчёта и ветки spec
     checks = freshChecks(baseScan.checks, headScan.checks);
+    sourced = headScan.checks;
     // тесты харнесса (реестры, примеры) в исходниках не названы: голова — по отчёту раннера, база — tests.json ветки spec
     if (v.report?.length) {
       const branch = v["spec-branch"]!;
@@ -890,8 +912,8 @@ export async function main(argv: string[]): Promise<number> {
       .split("\0")
       .filter((f) => f.startsWith(prefix) && CODE.test(f) && !FLOW_COPY.test(f.slice(prefix.length)));
     decisionData = {
-      base: await decisionsAt(base, top, prefix, changedAll, baseFiles),
-      head: await decisionsAt(v.worktree ? null : v.head, top, prefix, changedAll, headFiles),
+      base: await decisionsAt(base, top, prefix, changedAll, baseScan.checks),
+      head: await decisionsAt(v.worktree ? null : v.head, top, prefix, changedAll, headScan.checks),
     };
     decisions = decisionLines(decisionData.base, decisionData.head, limit);
   } catch (e) {
@@ -914,7 +936,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
   const fresh = [...added, ...changed.map(([, n]) => n)];
-  const match = scenarios ? matchScenarios(scenarios, fresh, checks, harness) : { found: [], extra: fresh };
+  const match = scenarios ? matchScenarios(scenarios, fresh, [...checks, ...reportedChecks(fresh, harness, sourced)], harness) : { found: [], extra: fresh };
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
   const shown = { limit, harness: v.report?.length ? harness : undefined, extra: scenarios ? new Set(match.extra) : undefined };

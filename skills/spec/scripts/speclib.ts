@@ -507,23 +507,6 @@ export function stringsOf(source: string, file?: string): string[] {
   return out;
 }
 
-/**
- * Опции вызовов по имени, известные без прогона: `want` — {имя вызова: ключ опции}, `{ invariant: "registry" }` →
- * [["invariant", "мутации"]] из `invariant(it, { registry: "мутации" })` и `h.invariant(…)`. Опция — свойство объекта
- * литералом в аргументах вызова (ключ — имя или строка), значение — строка, известная без прогона; комментарий,
- * строка и шаблон — не вызов, объект переменной или `...spec()` не вычислить.
- */
-export function callOptions(source: string, want: Record<string, string>, file?: string): [string, string][] {
-  const out: [string, string][] = [];
-  walkAst(parseCode(source, file).program, (n) => {
-    if (n.type !== "CallExpression") return;
-    const name = calleeName(n);
-    if (name === null || !Object.hasOwn(want, name)) return;
-    for (const value of optionsOf(n, want[name]!)) out.push([name, value]);
-  });
-  return out;
-}
-
 /** Имя вызываемого: `f(…)` и `x.f(…)` — `f`; вычисляемое — null. */
 function calleeName(call: AstNode): string | null {
   const callee = call.callee as AstNode;
@@ -531,24 +514,42 @@ function calleeName(call: AstNode): string | null {
   return id.type === "Identifier" ? (id.name as string) : null;
 }
 
-/** Значения опции `key` объектов литералом в аргументах вызова — строки, известные без прогона. */
-function optionsOf(call: AstNode, key: string): string[] {
-  const out: string[] = [];
+/**
+ * Значения опции `key` объектов литералом в аргументах вызова (ключ — имя или строка): `invariant(it, { registry: … })`.
+ * Объект переменной или `...spec()` не вычислить без прогона.
+ */
+function optionValues(call: AstNode, key: string): AstNode[] {
+  const out: AstNode[] = [];
   for (const a of call.arguments as AstNode[]) {
     if (a.type !== "ObjectExpression") continue;
     for (const p of a.properties as AstNode[]) {
       if (p.type !== "ObjectProperty" || p.computed) continue;
       const k = p.key as AstNode;
-      if ((k.type === "Identifier" ? k.name : k.type === "StringLiteral" ? k.value : null) !== key) continue;
-      const value = staticString(p.value as AstNode);
-      if (value !== null) out.push(value);
+      if ((k.type === "Identifier" ? k.name : k.type === "StringLiteral" ? k.value : null) === key) out.push(p.value as AstNode);
     }
   }
   return out;
 }
 
-/** Вызовы харнесса и опция, которая называет проверку: у invariant `rule` — соглашение папки, проверка — его реестр. */
-export const HARNESS_CALLS: Record<string, string> = { invariant: "registry", examples: "rule" };
+/** Значения опции `key` — строки, известные без прогона. */
+function optionsOf(call: AstNode, key: string): string[] {
+  return optionValues(call, key).flatMap((v) => staticString(v) ?? []);
+}
+
+/**
+ * Вызовы харнесса и имя проверки по опциям вызова: у invariant — реестр (его `rule` — соглашение папки, не имя), у
+ * examples — правило линтера, у deadCode — `rule` запуска (`production: true` без него — «production»), у architecture
+ * имени нет — модель одна. null — имени нет или его не вычислить без прогона.
+ */
+const HARNESS_NAMES: Record<string, (call: AstNode) => string | null> = {
+  invariant: (n) => optionsOf(n, "registry")[0] ?? null,
+  examples: (n) => optionsOf(n, "rule")[0] ?? null,
+  deadCode: (n) => optionsOf(n, "rule")[0] ?? (optionValues(n, "production").some((v) => v.type === "BooleanLiteral" && v.value === true) ? "production" : null),
+  architecture: () => null,
+};
+
+/** Вызовы харнесса: describe, в котором вызван любой из них, — сценарий стандарта (`spec-diff --scenarios`). */
+export const HARNESS_CALLS: readonly string[] = Object.keys(HARNESS_NAMES);
 
 /** Проверка харнесса в исходнике: вызов, цепочка describe на его месте и реестр или правило (null — не вычислить без прогона). */
 export interface HarnessCall {
@@ -712,7 +713,7 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
     const call = testCall(n);
     if (!call) {
       const name = calleeName(n);
-      if (name !== null && Object.hasOwn(HARNESS_CALLS, name)) checks.push({ call: name, describes: chain, value: optionsOf(n, HARNESS_CALLS[name]!)[0] ?? null });
+      if (name !== null && Object.hasOwn(HARNESS_NAMES, name)) checks.push({ call: name, describes: chain, value: HARNESS_NAMES[name]!(n) });
       return true;
     }
     calls.add(n.start);
