@@ -428,23 +428,63 @@ knip 6 — «нет членов перечислений без потреби�
 кода нет».
 
 **Переменные окружения — `envVars`.** Переменная, которую читает код
-(`process.env.X`, `process.env["X"]`, `import.meta.env.X`,
-`const { X } = process.env`, чтение через псевдоним — `(env = process.env) =>
-env.X`, `const e = process.env; e["X"]`), объявлена в схеме окружения;
-объявленная — читается. Комментарии не читаются. `declared` — из схемы проекта (ключи zod-схемы, t3-env,
-`.env.example`):
+(`process.env.X`, `import.meta.env.X`, `?.X`, `["X"]`, `?.["X"]`,
+деструктуризация — `const { X, Y = "d", Z: z } = process.env` и из
+`import.meta.env`, чтение через псевдоним — `(env: Env = process.env) =>
+env.X`, `const e = process.env; e["X"]`, результат `loadEnv` Vite —
+`const env = loadEnv(mode, root); env.VITE_X`), объявлена в схеме окружения;
+объявленная — читается. Комментарии не читаются. `declared` — из схемы
+проекта (ключи zod-схемы, t3-env) или `.env.example` — `dotenvNames(text)`:
+`X=`, `export X=` и закомментированная `# X=` — необязательная переменная с
+умолчанием в коде; проза в комментарии — не объявление:
 
 ```ts
 envVars(it, { root: process.cwd(), dirs: ["src"], declared: Object.keys(envSchema.shape) });
+envVars(it, { root: process.cwd(), dirs: ["src", "vite.config.ts"], declared: dotenvNames(readFileSync(".env.example", "utf8")) });
+```
+
+`dirs` — каталоги и отдельные файлы кода (конфиг в корне пакета); так же
+берут их `codeFiles` и `sources`.
+
+Свои способы чтения — `readers`: регэксп (имя — группа `name` или первая,
+флаг `g` не нужен) или функция `(code, file) => имена` по коду без
+комментариев. Аксессор конфига (`ConfigService` NestJS:
+`config.get('X')`, `getOrThrow<string>('X')` у объекта под любым именем) —
+готовый `configGet`; не встроен — `.get('X')` бывает у Map и кэша:
+
+```ts
+envVars(it, { root: process.cwd(), declared, readers: [configGet, /\bsecret\(\s*"(?<name>[A-Z_]+)"/] });
+```
+
+**Монорепо — `apps` вместо `declared`.** Пакет workspace читает окружение
+приложения, в чью сборку попал: его чтения — у каждого приложения, в чьих
+`dependencies` он есть, транзитивно (`devDependencies` в сборку не попадают).
+Пакеты — `workspaces` корневого `package.json` и `pnpm-workspace.yaml` (`!` —
+исключить); `dirs` — от каталога каждого пакета, у приложения — свои `dirs`.
+Элемент — `<приложение>/<VAR>`: тесты «api/DATABASE_URL объявлена», ключи
+исключений и `outside` — такие же:
+
+```ts
+envVars(it, {
+  root: process.cwd(),
+  dirs: ["src", "vite.config.ts"],
+  readers: [configGet],
+  apps: {
+    api: { dir: "apps/api", declared: dotenvNames(readFileSync("apps/api/.env.example", "utf8")) },
+    web: { dir: "apps/web", declared: Object.keys(webEnv.shape) },
+  },
+});
 ```
 
 Тесты «<VAR> объявлена» и «<VAR> читается в коде»; служебные (`NODE_ENV`,
-`CI`, `PORT`…) — вне проверки. Намеренно вне проверки — `outside: [{ item,
-reason }]`: тест «вне охвата: <VAR>» с причиной на странице, переменной нет ни
-в коде, ни в схеме — «убери из охвата»; `ignore` (без причины) — упавший тест
-«перенеси в outside». Исключение и «вне охвата» относятся к проверке, в чьём
-реестре переменная есть: читается без объявления — к «объявлена», объявлена
-без чтения — к «читается».
+`CI`, `PORT`… — `ENV_SERVICE`) — вне проверки. Проект со своими реестрами на
+`invariant` берёт те же части: `envNamesInCode(codeOnly(text, file), { file,
+readers })`, `codeFiles`, `ENV_SERVICE`. Намеренно вне проверки — `outside:
+[{ item, reason }]`: тест «вне охвата: <VAR>» с причиной на странице,
+переменной нет ни в коде, ни в схеме — «убери из охвата»; `ignore` (без
+причины) — упавший тест «перенеси в outside». Исключение и «вне охвата»
+относятся к проверке, в чьём реестре переменная есть: читается без
+объявления — к «объявлена», объявлена без чтения — к «читается».
 
 **Код примеров и причины исключений — в спеке.** Харнесс при регистрации
 тестов пишет метаданные прогона — `.spec-meta/<процесс>.jsonl` (`SPEC_META` —
@@ -468,7 +508,9 @@ URL вне адаптера или хост вне модели — красны
 пространств имён `xmlns` и W3C, домены примеров `example.com` и `.example`,
 `.invalid` по RFC 2606), «пакет <p> внешней системы
 <x> — только у адаптера <a>» (модель без противоречий), «ключ <K> внешней
-системы <x> читает только адаптер <a>». IP в литерале URL — тоже хост внешней
+системы <x> читает только адаптер <a>» (чтение — как у `envVars`, свои
+способы — те же `readers`: `architecture(it, { root, model, readers:
+[configGet] })`). IP в литерале URL — тоже хост внешней
 системы; не хосты — только loopback (`localhost`, `*.localhost`,
 `127.0.0.0/8`, `[::1]`) и `0.0.0.0`.
 
