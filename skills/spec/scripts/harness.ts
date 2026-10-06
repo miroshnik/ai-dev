@@ -570,8 +570,8 @@ export function source(file: string, text: string): SourceFile {
 }
 
 /**
- * Реестр файлов кода в каталогах (от корня): список дешёвый, текст читается при первом обращении — разбор всего
- * `src/` идёт в проверке элемента, а не при сборе тестов.
+ * Реестр файлов кода в каталогах и файлах (от корня; файл — конфиг в корне пакета, `vite.config.ts`): список дешёвый,
+ * текст читается при первом обращении — разбор всего `src/` идёт в проверке элемента, а не при сборе тестов.
  */
 export function sources(root: string, dirs: string[] = ["src"]): SourceFile[] {
   return codeFiles(root, dirs).map((file) => {
@@ -585,25 +585,30 @@ export function sources(root: string, dirs: string[] = ["src"]): SourceFile[] {
   });
 }
 
-/** Файлы кода в каталогах (от корня), по порядку. */
-function codeFiles(root: string, dirs: string[]): string[] {
-  const out: string[] = [];
+/**
+ * Файлы кода в каталогах (от корня), по порядку, без повторов; элемент `dirs` — каталог или файл кода (конфиг в корне
+ * пакета); которого нет — пропускается.
+ */
+export function codeFiles(root: string, dirs: string[]): string[] {
+  const out = new Set<string>();
   const walk = (rel: string): void => {
     let entries;
     try {
       entries = readdirSync(path.join(root, rel), { withFileTypes: true });
-    } catch {
+    } catch (e) {
+      // не каталог — файл кода сам по себе
+      if ((e as { code?: string }).code === "ENOTDIR" && CODE.test(rel)) out.add(rel);
       return;
     }
     for (const e of entries) {
       const child = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name)) walk(child);
-      } else if (CODE.test(e.name)) out.push(child);
+      } else if (CODE.test(e.name)) out.add(child);
     }
   };
   for (const d of dirs) walk(d.replace(/\/+$/, ""));
-  return out.sort();
+  return [...out].sort();
 }
 
 /**
