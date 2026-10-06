@@ -1675,3 +1675,37 @@ describe("Тариф модели — отдельно от флоу: истор
     expect(r.stdout).toContain("тренд $ смешивает флоу с тарифом модели");
   });
 });
+
+/**
+ * Поправка вниз к аналогам из другого репо без названного отличия занизила крупные задачи втрое: в допуск попали 2 из
+ * 8, без поправки — 5 из 8. Правило «без отличия — ×1» скрипт держит сам: поправка вниз к чужим аналогам без --note
+ * не записывается, а без --write — предупреждение.
+ */
+describe("Поправка вниз к чужим аналогам — только с названным отличием", () => {
+  const WORLD = {
+    "o/a": { visibility: "private", project: 6, issues: [{ number: 10, title: "Новая задача", state: "OPEN" }] },
+    "o/b": { visibility: "private", project: 7, issues: [{ number: 1, title: "Прошлая", state: "CLOSED", fact: 2 }, { number: 2, title: "Ещё прошлая", state: "CLOSED", fact: 2 }] },
+  };
+  const estimate = (mult: string, ...extra: string[]) => withFakeGh(WORLD, ["estimate", "10", "--repo", "o/a", "--type", "feat", "--analogs", "o/b#1,o/b#2", "--mult", mult, ...extra]);
+
+  it("поправка вниз к аналогам из другого репо без причины не записывается", () => {
+    const r = estimate("0.5", "--write");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("ошибка: поправка вниз к чужим аналогам (×0.5): назови отличие в --note");
+    expect(r.writes).toEqual([]);
+    const dry = estimate("0.5");
+    expect(dry.code).toBe(0);
+    expect(dry.stderr).toContain("предупреждение: поправка вниз к чужим аналогам (×0.5): назови отличие в --note");
+    expect(dry.stdout).toContain("Оценка: 1 ч");
+  });
+
+  it("с отличием в --note поправка вниз к чужим аналогам записывается, отличие — в комментарии; поправка вверх — без условия", () => {
+    const r = estimate("0.5", "--note", "вдвое меньше экранов", "--write");
+    expect(r.code).toBe(0);
+    expect(r.comment).toContain("Поправка: ×0.5 (вдвое меньше экранов).");
+    expect(r.writes).toHaveLength(2);
+    const up = estimate("2", "--write");
+    expect(up.stderr).toBe("");
+    expect(up.code).toBe(0);
+  });
+});
