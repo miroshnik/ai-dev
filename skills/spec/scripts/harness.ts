@@ -916,8 +916,33 @@ export function deadCode(it: It, opts: { root: string; report?: string; args?: r
   }
 }
 
-const ENV_READ = /\bprocess\.env\.([A-Z_][A-Z0-9_]*)|\bprocess\.env\[\s*["']([A-Z_][A-Z0-9_]*)["']\s*\]|\bimport\.meta\.env\.([A-Z_][A-Z0-9_]*)|\{([^{}]*)\}\s*=\s*process\.env\b/g;
-const ENV_SERVICE = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV", "PROD", "MODE", "SSR", "BASE_URL"];
+// имя переменной и обращение к полю: .X, ?.X, ["X"], ?.["X"], [`X`]
+const ENV_NAME = "[A-Z_][A-Z0-9_]*";
+const FIELD = `(?:\\?\\.|\\.)(${ENV_NAME})|(?:\\?\\.)?\\[\\s*["'\`](${ENV_NAME})["'\`]\\s*\\]`;
+const ENV_OBJECT = "\\bprocess\\??\\.env\\b|\\bimport\\.meta\\??\\.env\\b";
+// источник окружения целиком: process.env, import.meta.env, результат loadEnv Vite (скобки аргументов — один уровень)
+const ENV_SOURCE = `(?:${ENV_OBJECT}|\\bloadEnv\\s*\\((?:[^()]|\\([^()]*\\))*\\))(?!\\s*(?:\\?\\.|[.[]))`;
+// аннотация типа перед «=»: запятая — только внутри <…>, иначе в `(a: A, env = process.env)` псевдонимом стал бы a
+const TYPE = "(?:\\s*:\\s*(?:[^=;,(){}<>]|<[^<>]*>)+?)?";
+const ENV_READ = new RegExp(`(?:${ENV_OBJECT})(?:${FIELD})`, "g");
+const ENV_ALIAS = new RegExp(`(?<![\\w$.])([A-Za-z_$][\\w$]*)${TYPE}\\s*=\\s*${ENV_SOURCE}`, "g");
+const ENV_DESTRUCTURE = new RegExp(`\\{([^{}]*)\\}${TYPE}\\s*=\\s*${ENV_SOURCE}`, "g");
+const IS_ENV_NAME = new RegExp(`^${ENV_NAME}$`);
+
+/** Служебные переменные окружения — вне проверки `envVars`; проект со своими реестрами на `invariant` пропускает те же. */
+export const ENV_SERVICE: readonly string[] = ["NODE_ENV", "CI", "TZ", "PORT", "HOME", "PATH", "PWD", "DEV", "PROD", "MODE", "SSR", "BASE_URL"];
+
+/**
+ * Свой способ чтения окружения проекта сверх встроенных: регэксп — имя в группе `name` или первой (флаг `g` не нужен),
+ * функция — имена по коду без комментариев и пути файла от корня.
+ */
+export type EnvReader = RegExp | ((code: string, file: string) => Iterable<string>);
+
+/**
+ * Аксессор конфига: `.get('X')`, `.getOrThrow<string>('X')` у объекта под любым именем (`ConfigService` NestJS, свой
+ * конфиг). Не встроен: `.get('X')` бывает у Map, кэша и `URLSearchParams` — проект подключает его в `readers`.
+ */
+export const configGet: RegExp = new RegExp(`\\.(?:get|getOrThrow)\\s*(?:<(?:[^<>()]|<[^<>()]*>)*>)?\\s*\\(\\s*["'\`](?<name>${ENV_NAME})["'\`]`);
 
 /**
  * Имена переменных окружения, которые читает исходник. Параметр один: проект зовёт `sources.flatMap(envNamesIn)`, а
@@ -927,48 +952,199 @@ export function envNamesIn(source: string): string[] {
   return envNamesInCode(codeOnly(source));
 }
 
-/** То же по коду без комментариев — `codeOnly(text, file)`: набор плагинов разбора по расширению файла. */
-export function envNamesInCode(text: string): string[] {
+/**
+ * То же по коду без комментариев — `codeOnly(text, file)`: набор плагинов разбора по расширению файла. `readers` — свои
+ * способы чтения проекта (`configGet`, регэксп, функция), `file` — путь для функции.
+ */
+export function envNamesInCode(text: string, opts: { file?: string; readers?: readonly EnvReader[] } = {}): string[] {
   const out = new Set<string>();
-  // process.env под другим именем: параметр по умолчанию `(env = process.env)` или `const e = process.env`
-  for (const [, alias] of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=\s*process\.env\b(?!\s*[.[])/g)) {
+  // источник под другим именем: параметр по умолчанию `(env = process.env)`, `const e = import.meta.env`, `const env = loadEnv(mode, root)`
+  for (const [, alias] of text.matchAll(ENV_ALIAS)) {
     const a = alias!.replace(/\$/g, "\\$");
-    const reads = new RegExp(`(?<![\\w$.])${a}(?:\\.([A-Z_][A-Z0-9_]*)|\\[\\s*["']([A-Z_][A-Z0-9_]*)["']\\s*\\])`, "g");
-    for (const m of text.matchAll(reads)) out.add(m[1] ?? m[2]!);
+    for (const m of text.matchAll(new RegExp(`(?<![\\w$.])${a}(?:${FIELD})`, "g"))) out.add(m[1] ?? m[2]!);
   }
-  for (const m of text.matchAll(ENV_READ)) {
-    const names = m[4] ? m[4].split(",").map((x) => x.split(":")[0]!.trim()).filter((x) => /^[A-Z_][A-Z0-9_]*$/.test(x)) : [m[1] ?? m[2] ?? m[3]!];
-    for (const n of names) out.add(n);
+  for (const m of text.matchAll(ENV_READ)) out.add(m[1] ?? m[2]!);
+  // `const { A = "x", B: b } = process.env`: ключ — до «:» или «=», остаток `...rest` — не переменная
+  for (const m of text.matchAll(ENV_DESTRUCTURE)) {
+    for (const part of m[1]!.split(",")) {
+      const name = part.split(/[:=]/)[0]!.trim().replace(/^(["'`])(.*)\1$/, "$2");
+      if (IS_ENV_NAME.test(name)) out.add(name);
+    }
+  }
+  for (const r of opts.readers ?? []) {
+    if (typeof r === "function") {
+      for (const n of r(text, opts.file ?? "")) out.add(n);
+      continue;
+    }
+    for (const m of text.matchAll(new RegExp(r.source, r.flags.includes("g") ? r.flags : r.flags + "g"))) {
+      const n = m.groups?.name ?? m.slice(1).find((x) => x !== undefined);
+      if (n) out.add(n);
+    }
   }
   return [...out];
 }
 
-/** Переменные окружения, которые читает код: имя → файлы. */
-function envReads(root: string, dirs: string[]): Map<string, string[]> {
+/**
+ * Объявленные переменные файла dotenv (`.env.example`) — для `declared`: `X=…`, `export X=…` и закомментированные
+ * `# X=…` — необязательные, с умолчанием в коде: в `.env` их нет, в схеме окружения они есть. Проза в комментарии — не
+ * объявление. По порядку, без повторов.
+ */
+export function dotenvNames(text: string): string[] {
+  const out = new Set<string>();
+  const commented = new RegExp(`^\\s*#+\\s*(?:export\\s+)?(${ENV_NAME})\\s*=`);
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line) ?? commented.exec(line);
+    if (m) out.add(m[1]!);
+  }
+  return [...out];
+}
+
+/** Переменные окружения, которые читают файлы кода (от корня): имя → файлы. `cache` — имена файла, общего у приложений. */
+function envReads(root: string, files: readonly string[], readers?: readonly EnvReader[], cache = new Map<string, string[]>()): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  for (const file of codeFiles(root, dirs)) {
-    for (const n of envNamesInCode(codeOnly(readFileSync(path.join(root, file), "utf8"), file))) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
+  for (const file of files) {
+    let names = cache.get(file);
+    if (!names) {
+      names = envNamesInCode(codeOnly(readFileSync(path.join(root, file), "utf8"), file), { file, readers });
+      cache.set(file, names);
+    }
+    for (const n of names) out.set(n, [...new Set([...(out.get(n) ?? []), file])]);
   }
   return out;
 }
 
+/** package.json каталога (от корня): имя и пакеты `dependencies`; нет файла или не JSON — null. */
+function packageJson(root: string, dir: string): { name?: string; dependencies: string[]; workspaces?: unknown } | null {
+  try {
+    const p = JSON.parse(readFileSync(path.join(root, dir, "package.json"), "utf8")) as { name?: string; dependencies?: Record<string, string>; workspaces?: unknown };
+    return { name: p.name, dependencies: Object.keys(p.dependencies ?? {}), workspaces: p.workspaces };
+  } catch {
+    return null;
+  }
+}
+
+/** Шаблоны workspace: `workspaces` корневого package.json (массив или `{ packages }`) и `packages` pnpm-workspace.yaml. */
+function workspacePatterns(root: string): string[] {
+  const out: string[] = [];
+  const ws = packageJson(root, ".")?.workspaces;
+  const list: unknown = Array.isArray(ws) ? ws : (ws as { packages?: unknown } | undefined)?.packages;
+  if (Array.isArray(list)) out.push(...list.filter((x): x is string => typeof x === "string"));
+  let yaml = "";
+  try {
+    yaml = readFileSync(path.join(root, "pnpm-workspace.yaml"), "utf8");
+  } catch {
+    /* не pnpm */
+  }
+  // разбор без зависимостей: `packages: [a, b]` в строке или список «- шаблон» под ключом до следующего ключа верхнего уровня
+  const flow = /^packages:\s*\[([^\]]*)\]/m.exec(yaml);
+  if (flow) out.push(...flow[1]!.split(","));
+  const block = /^packages:[ \t]*(?:#.*)?\r?\n((?:[ \t]+.*(?:\r?\n|$)|[ \t]*\r?\n)*)/m.exec(yaml);
+  for (const l of block?.[1]!.split(/\r?\n/) ?? []) {
+    const m = /^\s+-\s*(.+?)\s*(?:#.*)?$/.exec(l);
+    if (m) out.push(m[1]!);
+  }
+  return out.map((p) => p.trim().replace(/^(["'])(.*)\1$/, "$2").replace(/^\.\//, "").replace(/\/+$/, "")).filter(Boolean);
+}
+
+/** Шаблон workspace → регэксп пути: `*` — один уровень, `**` — любая глубина. */
+function globRegExp(pattern: string): RegExp {
+  const segs = pattern.split("/");
+  const re = segs.map((s, i) => {
+    const last = i === segs.length - 1;
+    if (s === "**") return last ? ".*" : "(?:[^/]+/)*";
+    return s.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]") + (last ? "" : "/");
+  });
+  return new RegExp(`^${re.join("")}$`);
+}
+
+/** Пакеты workspace по имени: каталог от корня и `dependencies`. Шаблон с `!` — исключение. */
+function workspacePackages(root: string): Map<string, { dir: string; dependencies: string[] }> {
+  const patterns = workspacePatterns(root);
+  const include = patterns.filter((p) => !p.startsWith("!"));
+  const yes = include.map(globRegExp);
+  const no = patterns.filter((p) => p.startsWith("!")).map((p) => globRegExp(p.slice(1)));
+  // обход — только под постоянной частью шаблонов и не глубже них: в каталоги кода пакетов без `**` не спускается
+  const bases = include.map((p) => {
+    const segs = p.split("/");
+    const glob = segs.findIndex((s) => /[*?]/.test(s));
+    return (glob < 0 ? segs : segs.slice(0, glob)).join("/");
+  });
+  const depth = include.some((p) => p.includes("**")) ? Infinity : Math.max(0, ...include.map((p) => p.split("/").length));
+  const near = (d: string) => bases.some((b) => !b || b === d || b.startsWith(d + "/") || d.startsWith(b + "/"));
+  const out = new Map<string, { dir: string; dependencies: string[] }>();
+  const walk = (rel: string, level: number): void => {
+    let entries;
+    try {
+      entries = readdirSync(path.join(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
+      const child = rel ? `${rel}/${e.name}` : e.name;
+      if (!near(child)) continue;
+      if (yes.some((r) => r.test(child)) && !no.some((r) => r.test(child))) {
+        const p = packageJson(root, child);
+        if (p?.name) out.set(p.name, { dir: child, dependencies: p.dependencies });
+      }
+      if (level + 1 < depth) walk(child, level + 1);
+    }
+  };
+  if (include.length) walk("", 0);
+  return out;
+}
+
+/** Приложение монорепо: каталог с package.json, объявленные переменные, свои каталоги и файлы кода (по умолчанию — `dirs`). */
+export interface EnvApp {
+  dir: string;
+  declared: readonly string[];
+  dirs?: string[];
+}
+
+/**
+ * Чтения приложений монорепо: файлы приложения и пакетов workspace из его `dependencies`, транзитивно (devDependencies в
+ * сборку не попадают) — пакет читает окружение приложения, в чью сборку попал. `dirs` — от каталога каждого пакета.
+ */
+function appReads(root: string, apps: Record<string, EnvApp>, dirs: string[], readers?: readonly EnvReader[]): { app: string; declared: readonly string[]; reads: Map<string, string[]> }[] {
+  const ws = workspacePackages(root);
+  const cache = new Map<string, string[]>();
+  return Object.entries(apps).map(([app, a]) => {
+    const dir = path.posix.normalize(a.dir).replace(/\/+$/, "");
+    const pkgs = [dir];
+    const queue = [...(packageJson(root, dir)?.dependencies ?? [])];
+    const seenDeps = new Set<string>();
+    while (queue.length) {
+      const name = queue.shift()!;
+      const p = ws.get(name);
+      if (!p || seenDeps.has(name)) continue;
+      seenDeps.add(name);
+      if (!pkgs.includes(p.dir)) pkgs.push(p.dir);
+      queue.push(...p.dependencies);
+    }
+    const files = pkgs.flatMap((p) => codeFiles(root, (p === dir ? (a.dirs ?? dirs) : dirs).map((d) => path.posix.join(p, d))));
+    return { app, declared: a.declared, reads: envReads(root, [...new Set(files)], readers, cache) };
+  });
+}
+
 /**
  * Переменные окружения — объявлены и читаются: «<VAR> объявлена» на каждую, что читает код (`process.env.X`,
- * `process.env["X"]`, `import.meta.env.X`, `const { X } = process.env`), и «<VAR> читается в коде» на каждую
- * объявленную (`declared` — из схемы окружения проекта: zod, t3-env, .env.example). Служебные (NODE_ENV, CI, PORT…
- * и `ignore`) — вне проверки.
+ * `import.meta.env?.X`, `["X"]`, деструктуризация, псевдоним источника и результата `loadEnv` Vite, свои способы —
+ * `readers`), и «<VAR> читается в коде» на каждую объявленную (`declared` — из схемы окружения проекта: zod, t3-env,
+ * `dotenvNames(.env.example)`). Монорепо — `apps` вместо `declared`: элемент — `<приложение>/<VAR>`, чтения пакетов
+ * workspace — у приложений, в чьей сборке они. Служебные (`ENV_SERVICE` и `ignore`) — вне проверки.
  */
 export function envVars(
   it: It,
   opts: {
     root: string;
+    /** Каталоги и файлы кода: от корня, в монорепо — от каталога каждого пакета; по умолчанию `src`. */
     dirs?: string[];
-    declared: readonly string[];
+    readers?: readonly EnvReader[];
     outside?: readonly { item: string; reason: string }[];
     /** Устарело: без причины и храповика — упавший тест «перенеси в outside». */
     ignore?: readonly string[];
     exceptions?: readonly Exception[];
-  },
+  } & ({ declared: readonly string[]; apps?: undefined } | { apps: Record<string, EnvApp>; declared?: undefined }),
 ): void {
   const skip = new Set([...ENV_SERVICE, ...(opts.ignore ?? [])]);
   if (opts.ignore?.length) {
@@ -976,36 +1152,49 @@ export function envVars(
       throw new Error("ignore не держит причину — перенеси в outside: [{ item, reason }] (причина — на странице, пропала — «убери из охвата»)");
     });
   }
-  const reads = envReads(opts.root, opts.dirs ?? ["src"]);
-  const declared = new Set(opts.declared);
-  const readItems = [...reads.keys()].filter((v) => !skip.has(v));
-  const declaredItems = [...declared].filter((v) => !skip.has(v));
+  const dirs = opts.dirs ?? ["src"];
+  // приложение одно — ключ элемента имя переменной; приложения монорепо — <приложение>/<VAR>
+  const apps = opts.apps
+    ? appReads(opts.root, opts.apps, dirs, opts.readers)
+    : [{ app: "", declared: opts.declared, reads: envReads(opts.root, codeFiles(opts.root, dirs), opts.readers) }];
+  const byApp = new Map(apps.map((a) => [a.app, { declared: new Set(a.declared), reads: a.reads }]));
+  const of = (app: string) => byApp.get(app) ?? { declared: new Set<string>(), reads: new Map<string, string[]>() };
+  type Item = { app: string; v: string };
+  const keyOf = (i: Item) => (i.app ? `${i.app}/${i.v}` : i.v);
+  const readItems = apps.flatMap((a) => [...a.reads.keys()].filter((v) => !skip.has(v)).map((v) => ({ app: a.app, v })));
+  const declaredItems = apps.flatMap((a) => [...new Set(a.declared)].filter((v) => !skip.has(v)).map((v) => ({ app: a.app, v })));
   // исключение и «вне охвата» — у проверки, в чьём реестре есть переменная; нет ни в одном — у первой: там «убери»
-  const inReads = new Set(readItems);
-  const inDeclared = new Set(declaredItems);
+  const inReads = new Set(readItems.map(keyOf));
+  const inDeclared = new Set(declaredItems.map(keyOf));
   const forReads = <T extends { item: string }>(xs?: readonly T[]) => xs?.filter((x) => inReads.has(x.item) || !inDeclared.has(x.item));
   const forDeclared = <T extends { item: string }>(xs?: readonly T[]) => xs?.filter((x) => inDeclared.has(x.item));
   invariant(it, {
     registry: "переменные окружения в коде",
     items: readItems,
-    name: (v) => `${v} объявлена`,
-    key: (v) => v,
-    check: (v) => {
-      if (!declared.has(v)) throw new Error(`${v} читается в ${reads.get(v)!.join(", ")}, но не объявлена в схеме окружения`);
+    name: (i) => `${keyOf(i)} объявлена`,
+    key: keyOf,
+    check: (i) => {
+      const schema = i.app ? `схеме окружения приложения ${i.app}` : "схеме окружения";
+      if (!of(i.app).declared.has(i.v)) throw new Error(`${i.v} читается в ${(of(i.app).reads.get(i.v) ?? []).join(", ")}, но не объявлена в ${schema}`);
     },
-    violator: { name: "переменная без объявления", item: "__НЕ_ОБЪЯВЛЕНА__" },
+    violator: { name: "переменная без объявления", item: { app: "", v: "__НЕ_ОБЪЯВЛЕНА__" } },
     exceptions: forReads(opts.exceptions),
     outside: forReads(opts.outside),
   });
   invariant(it, {
     registry: "объявленные переменные окружения",
     items: declaredItems,
-    name: (v) => `${v} читается в коде`,
-    key: (v) => v,
-    check: (v) => {
-      if (!reads.has(v)) throw new Error(`${v} объявлена, но не читается — убери из схемы окружения`);
+    name: (i) => `${keyOf(i)} читается в коде`,
+    key: keyOf,
+    check: (i) => {
+      if (of(i.app).reads.has(i.v)) return;
+      throw new Error(
+        i.app
+          ? `${i.v} объявлена в схеме окружения приложения ${i.app}, но не читается ни им, ни его пакетами — убери из схемы окружения`
+          : `${i.v} объявлена, но не читается — убери из схемы окружения`,
+      );
     },
-    violator: { name: "объявлена и не читается", item: "__НЕ_ЧИТАЕТСЯ__" },
+    violator: { name: "объявлена и не читается", item: { app: "", v: "__НЕ_ЧИТАЕТСЯ__" } },
     exceptions: forDeclared(opts.exceptions),
     outside: forDeclared(opts.outside),
   });
