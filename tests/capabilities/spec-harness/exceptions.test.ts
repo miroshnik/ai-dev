@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -113,8 +113,13 @@ invariant(it, {
 
 /** bun test в проекте (`files` — только эти файлы тестов): имя теста → «✓» или «✗ сообщение» из JUnit-отчёта. */
 function bunTest(...files: string[]): Record<string, string> {
-  spawnSync("bun", ["test", ...files.map((f) => `./${f}`), "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
-  const xml = readFileSync(path.join(dir, "r.xml"), "utf8");
+  return bunTestIn(dir, ...files.map((f) => `./${f}`));
+}
+
+/** bun test из каталога `cwd` (раннер пакета монорепо): пути файлов — от него. */
+function bunTestIn(cwd: string, ...files: string[]): Record<string, string> {
+  spawnSync("bun", ["test", ...files, "--reporter=junit", "--reporter-outfile=r.xml"], { cwd, encoding: "utf8" });
+  const xml = readFileSync(path.join(cwd, "r.xml"), "utf8");
   const out: Record<string, string> = {};
   const unescape = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/&amp;/g, "&");
   for (const m of xml.matchAll(/<testcase name="([^"]*)"[^>]*?(\/>|>([\s\S]*?)<\/testcase>)/g)) {
@@ -154,6 +159,28 @@ describe("Исключения папки решения — файл на эл�
     const r = await run(list);
     expect(r["исключение: importLegacy (#12)"]).toBe("✓");
     expect(r["исключение: createInvoice (#13)"]).toBe(`✗ createInvoice уже соблюдает соглашение — убери исключение: удали ${path.join(dir, AUDIT, "exceptions/createInvoice.json")} (#13)`);
+  });
+
+  // раннер пакета монорепо идёт из каталога пакета (turbo, pnpm -r): cwd — не корень, а подсказку читают от корня
+  it("раннер в подпапке: исключения читаются из папки теста, путь в подсказке «удали» — от корня репозитория", () => {
+    mkdirSync(path.join(dir, ".git"));
+    const files = {
+      [`${AUDIT}/audit.test.ts`]: auditTest("", "exceptionsIn()"),
+      [`${AUDIT}/exceptions/importLegacy.json`]: exception("importLegacy", 12, "аудит в #12"),
+      [`${AUDIT}/exceptions/createInvoice.json`]: exception("createInvoice", 13, "было давно"),
+    };
+    const web = path.join(dir, "apps/web");
+    // дерево tests/ в пакете, раннер — из каталога пакета
+    writeTree(web, files);
+    const inPackage = bunTestIn(web, `./${AUDIT}/audit.test.ts`);
+    expect(inPackage["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(inPackage["исключение: createInvoice (#13)"]).toBe(`✗ createInvoice уже соблюдает соглашение — убери исключение: удали apps/web/${AUDIT}/exceptions/createInvoice.json (#13)`);
+    // дерево tests/ в корне, раннер пакета берёт его тесты
+    rmSync(path.join(web, "tests"), { recursive: true });
+    writeTree(dir, files);
+    const fromPackage = bunTestIn(web, `../../${AUDIT}/audit.test.ts`);
+    expect(fromPackage["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(fromPackage["исключение: createInvoice (#13)"]).toBe(`✗ createInvoice уже соблюдает соглашение — убери исключение: удали ${AUDIT}/exceptions/createInvoice.json (#13)`);
   });
 
   it("два файла на один элемент — ошибка с путями обоих", () => {
