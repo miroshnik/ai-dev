@@ -163,6 +163,107 @@ describe("Документация публикуется в ветку spec, а
   });
 });
 
+// `git` — обёртка: перед N-м пушем выполняет push-N из своего каталога, если он есть (параллельная публикация или
+// сбой хостинга), затем настоящий git
+const FAKE_GIT = `#!/usr/bin/env bash
+if [ "$1" = push ]; then
+  n=$(( $(cat "$FAKE_GIT/n" 2>/dev/null || echo 0) + 1 )); echo $n > "$FAKE_GIT/n"
+  [ -f "$FAKE_GIT/push-$n" ] && . "$FAKE_GIT/push-$n"
+fi
+exec "$REAL_GIT" "$@"
+`;
+const OUTAGE = `echo "remote: Internal Server Error" >&2; echo "fatal: the remote end hung up unexpectedly" >&2; exit 1\n`;
+const race = (commit: string) => `"$REAL_GIT" push -q origin ${commit}:refs/heads/spec\n`;
+
+/** spec-publish, у которого перед пушами случается то, что в pushes (по порядку пушей). */
+function publishAmid(pushes: string[], ...args: string[]) {
+  const bin = path.join(dir, "bin");
+  rmSync(bin, { recursive: true, force: true });
+  mkdirSync(bin);
+  writeFileSync(path.join(bin, "git"), FAKE_GIT);
+  chmodSync(path.join(bin, "git"), 0o755);
+  pushes.forEach((sh, i) => writeFileSync(path.join(bin, `push-${i + 1}`), sh));
+  return runScript("spec-publish", ["--interval", "0", ...args], work, "bun", { PATH: `${bin}:${process.env.PATH}`, FAKE_GIT: bin, REAL_GIT: Bun.which("git")! });
+}
+
+/** Коммит параллельной публикации из source: его собирает настоящий spec-publish, ветка на «GitHub» затем возвращается назад. */
+function parallel(source: string, pages: Record<string, string>): string {
+  git(work, "fetch", "-q", "origin", "spec");
+  const before = git(work, "rev-parse", "origin/spec");
+  docs(pages);
+  expect(publish("--source", source).code).toBe(0);
+  git(work, "fetch", "-q", "origin", "spec");
+  const commit = git(work, "rev-parse", "origin/spec");
+  git(work, "push", "-q", "--force", "origin", `${before}:refs/heads/spec`);
+  return commit;
+}
+
+/**
+ * Пуш отклоняется, когда ветку между fetch и push сдвинула другая публикация (прогоны на мерж завершаются не по
+ * порядку мержей), или при сбое хостинга. Красный job публикации на `main` при этом ложный: повтор перечитывает
+ * ветку и решает заново — поверх собранного из потомка не публикует, иначе коммитит поверх новой головы.
+ */
+describe("Отклонённый пуш — повтор поверх новой головы, а не падение", () => {
+  let first: string;
+  let second: string;
+  beforeEach(() => {
+    docs({ "README.md": "# v0\n" });
+    expect(publish().code).toBe(0);
+    first = repo.commit({ "a.ts": "a\n" }, "first");
+    second = repo.commit({ "b.ts": "b\n" }, "second");
+  });
+
+  it("ветку сдвинула публикация из предка — повтор поверх новой головы: код 0, она — родитель публикации", () => {
+    const other = parallel(first, { "README.md": "# v1\n" });
+    docs({ "README.md": "# v2\n" });
+    const r = publishAmid([race(other)], "--source", second);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("spec-publish: пуш в origin/spec отклонён (попытка 1 из 3): ");
+    expect(r.stderr).toContain("[rejected]");
+    expect(r.stderr).toContain("опубликовано docs/spec → origin/spec");
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
+    expect(git(work, "rev-parse", "origin/spec^")).toBe(other);
+    expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${second}`);
+  });
+
+  it("после перечитывания ветка уже собрана из потомка — пропуск «уже новее», код 0, ветка не меняется", () => {
+    const other = parallel(second, { "README.md": "# v2\n" });
+    docs({ "README.md": "# v1\n" });
+    const r = publishAmid([race(other)], "--source", first);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("spec-publish: пуш в origin/spec отклонён (попытка 1 из 3): ");
+    expect(r.stderr).toEndWith(`spec-publish: пропуск — origin/spec уже новее: опубликовано из ${second.slice(0, 12)}\n`);
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "rev-parse", "origin/spec")).toBe(other);
+  });
+
+  it("отказ без сдвига ветки (сбой хостинга) — пауза и повтор; в логе причина из stderr git push", () => {
+    docs({ "README.md": "# v1\n" });
+    const r = publishAmid([OUTAGE]);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain(
+      "spec-publish: пуш в origin/spec отклонён (попытка 1 из 3): remote: Internal Server Error; fatal: the remote end hung up unexpectedly — перечитываю ветку, повтор через 0 с\n",
+    );
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "show", "origin/spec:README.md")).toBe("# v1");
+    expect(remoteLog().split("\n")).toHaveLength(2);
+  });
+
+  it("попытки исчерпаны — код 1 с причиной из stderr git push, ветка не меняется", () => {
+    git(work, "fetch", "-q", "origin", "spec");
+    const published = git(work, "rev-parse", "origin/spec");
+    docs({ "README.md": "# v1\n" });
+    const r = publishAmid([OUTAGE, OUTAGE], "--attempts", "2");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toEndWith(
+      "spec-publish: пуш в origin/spec отклонён (попытка 2 из 2): remote: Internal Server Error; fatal: the remote end hung up unexpectedly\n",
+    );
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "rev-parse", "origin/spec")).toBe(published);
+  });
+});
+
 /** Проверяю то, что дошло до читателя: ветка на «GitHub», а не свой вывод. */
 describe("--check сверяет опубликованное с собранным", () => {
   it("ветка совпадает с docs/spec — код 0; отстала или её нет — код 1 и что не совпало", () => {
