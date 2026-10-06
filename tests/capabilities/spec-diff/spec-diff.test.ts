@@ -18,6 +18,8 @@ afterEach(() => cleanup());
 
 const ts = (body: string) => `import { describe, it } from "bun:test";\n${body}\n`;
 const BILLING = "tests/capabilities/billing/invoice.test.ts";
+const DEAD = "tests/standards/dead-code/dead-code.test.ts";
+const ARCH = "tests/architecture/modules/modules.test.ts";
 
 function diffFrom(base: string, ...args: string[]) {
   return runScript("spec-diff", ["--base", base, ...args], dir);
@@ -540,6 +542,46 @@ describe("Сценарий стандарта «реестр + инвариан�
     expect(out).toContain("**Тесты сверх сценариев (1):** в списках выше, с пометкой «сверх сценариев».");
   });
 
+  it("сценарий совпадает с describe, в котором вызван deadCode или architecture", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({
+      [DEAD]: ts(
+        `import { deadCode } from "../../../harness.ts";\n` +
+          `describe("нет кода без потребителя", () => { deadCode(it, { root: "." }); });\n` +
+          `describe("тестам не нужен код продукта", () => { deadCode(it, { root: ".", production: true }); });`,
+      ),
+      [ARCH]: ts(`import { architecture } from "../../../harness.ts";\ndescribe("код разложен по модулям модели", () => { architecture(it, { root: ".", model }); });`),
+      "issue.md": "## Сценарии\n\n- нет кода без потребителя\n- тестам не нужен код продукта\n- код разложен по модулям модели\n",
+    });
+    const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain(
+      [
+        "- ✅ `tests/standards/dead-code` · нет кода без потребителя — проверка харнесса: код без потребителя",
+        "- ✅ `tests/standards/dead-code` · тестам не нужен код продукта — проверка харнесса: код без потребителя (production)",
+        "- ✅ `tests/architecture/modules` · код разложен по модулям модели — проверка харнесса: модель архитектуры",
+      ].join("\n"),
+    );
+    expect(out).not.toContain("❌");
+  });
+
+  // spec-claims сверяет журнал после прогона и пишет отчёт сам: вызова в исходниках нет, describe есть только в отчёте
+  it("сценарий совпадает с describe новых тестов из отчёта без вызова в исходниках (spec-claims)", () => {
+    const DESCRIBE = "Каждая точка входа вызывается хотя бы одним тестом capability";
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    publishSpec(base, [{ path: BILLING, describes: [], name: "x" }]);
+    repo.commit({ "issue.md": `## Сценарии\n\n- ${DESCRIBE}\n` });
+    writeTree(dir, {
+      "entries.json": JSON.stringify(["GET /invoices"]),
+      ".spec-journal/1.jsonl": JSON.stringify({ id: "GET /invoices", test: BILLING }) + "\n",
+    });
+    expect(runScript("spec-claims", ["--entries", "entries.json"], dir).code).toBe(0);
+    const out = diffFrom(base, "--report", ".spec-claims.xml", "--spec-branch", "spec", "--scenarios", "issue.md").stdout;
+    expect(out).toContain(`- ✅ \`tests/standards/entry-points\` · ${DESCRIBE} — проверка харнесса: по отчёту`);
+    expect(out).not.toContain("сверх сценариев");
+    // без отчёта describe не видно — сценарий не закрыт
+    expect(diffFrom(base, "--scenarios", "issue.md").stdout).toContain(`- ❌ ${DESCRIBE} — теста нет`);
+  });
+
   // как с тестами: сценарий закрывает то, что PR добавил или переименовал, а не то, что уже было
   it("describe проверки харнесса, которого PR не менял, сценария не закрывает; сменился реестр — закрывает", () => {
     const base = repo.commit({ [STD]: audit("мутации") });
@@ -742,6 +784,14 @@ describe("Решения вне названий тестов — модель, 
     const out = diffFrom(base).stdout;
     expect(out).toContain("**Проверки харнесса — добавлено (1):**\n\n- `tests/standards/audit` · реестр «формы»\n");
     expect(out).not.toContain("правило audit");
+  });
+
+  it("deadCode и architecture — в проверках харнесса дельты спеки", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [DEAD]: ts(`deadCode(it, { root: "." });\ndeadCode(it, { root: ".", production: true });`), [ARCH]: ts(`architecture(it, { root: ".", model });`) });
+    expect(diffFrom(base).stdout).toContain(
+      "**Проверки харнесса — добавлено (3):**\n\n- `tests/architecture/modules` · модель архитектуры\n- `tests/standards/dead-code` · код без потребителя\n- `tests/standards/dead-code` · код без потребителя (production)\n",
+    );
   });
 
   it("без изменений модели, исключений и проверок — разделов нет", () => {
