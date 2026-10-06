@@ -116,6 +116,30 @@ it("счёт создаётся", () => { createInvoice(); });
   });
 });
 
+describe("Журнал — только текущего прогона: прежние прогоны не засчитываются", () => {
+  // локально журналы копятся от прогона к прогону: удалённый тест продолжал бы «вызывать» точку входа
+  it("resetJournal в начале прогона стирает журналы своего каталога; журнал другого раннера в соседнем подкаталоге цел, spec-claims складывает подкаталоги", () => {
+    writeTree(dir, {
+      "bunfig.toml": '[test]\npreload = ["./tests/setup.ts"]\n',
+      "tests/setup.ts": `import { resetJournal } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};\nresetJournal();\n`,
+      "tests/capabilities/billing/billing.test.ts": `import { it } from "bun:test";
+import { journal } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};
+it("счёт создаётся", () => { journal("POST /invoices"); });
+`,
+      "entries.json": JSON.stringify(["POST /invoices", "GET /reports"]),
+      ".spec-journal/unit/old.jsonl": line("GET /removed", "tests/capabilities/old/old.test.ts"),
+      ".spec-journal/e2e/1.jsonl": line("GET /reports", "tests/capabilities/reports/reports.e2e.ts"),
+    });
+    const r = spawnSync("bun", ["test"], { cwd: dir, encoding: "utf8", env: { ...process.env, SPEC_JOURNAL: ".spec-journal/unit" } });
+    expect(r.status).toBe(0);
+    expect(readdirSync(path.join(dir, ".spec-journal/unit"))).not.toContain("old.jsonl");
+    expect(readdirSync(path.join(dir, ".spec-journal/e2e"))).toEqual(["1.jsonl"]);
+    const c = claims();
+    expect(c.stderr).not.toContain("GET /removed");
+    expect(c.code).toBe(0);
+  });
+});
+
 describe("Точка входа без теста — исключение с задачей, пока тест не появился", () => {
   it("исключение на точку без теста — зелёное; точка, у которой тест появился, — «убери исключение»", () => {
     const EXC = "tests/standards/entry-points/exceptions";
