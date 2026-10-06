@@ -6,6 +6,7 @@
  *   est history  — таблица закрытых задач с фактом, калибровочный коэффициент k
  *   est fact     — факт (активные часы агента) по транскриптам Claude Code и Codex для issue
  *   est estimate — записать оценку с аналогами и маркером
+ *   est period   — сводка всех сессий репо за период без привязки к задачам: сравнение флоу до и после
  *
  * Запуск — Bun (`bun est.ts …`), только `node:`-API + CLI `gh`. Источник истины — GitHub (поля
  * проекта «Оценка, ч», «Факт, ч» и комментарии с HTML-маркерами <!-- est {...} --> /
@@ -551,6 +552,7 @@ export class Repo implements FactRepo {
   private open_: OpenPrs | null = null;
   private closers_: Closers | null = null;
   private sessions_: Session[] | null = null;
+  private parsed_: Parsed | null = null;
   private rows_: Row[] | null = null;
   private recorded_: Recorded | null = null;
   private pins_: Map<string, string> | null = null;
@@ -890,9 +892,24 @@ export class Repo implements FactRepo {
   }
 
   // --- транскрипты -------------------------------------------------------
+  /** Сессии для факта: из каталогов репозитория без рутин, гости и закреплённые (selectSessions). */
   sessions(): Session[] {
-    if (this.sessions_ === null) this.sessions_ = loadSessions(this);
+    if (this.sessions_ === null) {
+      const p = this.parsed();
+      this.sessions_ = selectSessions(p.all, this.paths, p.guests, p.pinned);
+    }
     return this.sessions_;
+  }
+
+  /** Сессии для сводки периода: все из каталогов репозитория и закреплённые, без гостей (selectPeriodSessions). */
+  periodSessions(): Session[] {
+    const p = this.parsed();
+    return selectPeriodSessions(p.all, this.paths, p.pinned);
+  }
+
+  private parsed(): Parsed {
+    if (this.parsed_ === null) this.parsed_ = loadSessions(this);
+    return this.parsed_;
   }
 }
 
@@ -1676,8 +1693,25 @@ export function selectSessions(parsed: Record<string, Session>, paths: string[],
   return sessions;
 }
 
+/**
+ * Сессии для сводки периода: все из каталогов репозитория — и короткие без коммитов и PR, которые факт отбрасывает как
+ * рутину, — и закреплённые за его задачами. Гостей нет: их работа — в своём репозитории, здесь — лишь упоминание.
+ */
+export function selectPeriodSessions(parsed: Record<string, Session>, paths: string[], pinned: Set<string>): Session[] {
+  return Object.entries(parsed)
+    .filter(([f, s]) => s.ev.length && (pinned.has(f) || inRepo(s, paths)))
+    .map(([, s]) => s);
+}
+
+/** Разобранные транскрипты репозитория по файлу и какие из них гости и закреплённые. */
+interface Parsed {
+  all: Record<string, Session>;
+  guests: Set<string>;
+  pinned: Set<string>;
+}
+
 /** Разбор транскриптов с кэшем по mtime (инкрементально). */
-function loadSessions(repo: Repo): Session[] {
+function loadSessions(repo: Repo): Parsed {
   if (!repo.paths.length) throw new EstError(`для ${repo.full} не заданы локальные пути в ${REGISTRY_PATH} — транскрипты искать негде`);
   const file = path.join(repo.cacheDir, "sessions.json");
   const cache = loadJson<Record<string, Session>>(file, {});
@@ -1712,7 +1746,7 @@ function loadSessions(repo: Repo): Session[] {
   }
   const same = Object.keys(cache).length === Object.keys(out).length && Object.keys(cache).every((k) => k in out);
   if (changed || !same) saveJson(file, out);
-  return selectSessions(out, repo.paths, guests, pinned);
+  return { all: out, guests, pinned };
 }
 
 // ----------------------------------------------------------------------------
@@ -2851,6 +2885,8 @@ function cmdHistory(args: HistoryArgs): void {
       console.log("k: нет пар «оценка с маркером est + факт» — калибровка недоступна");
     }
     if (c.n_partial) console.log(`в k не вошли задачи с покрытием partial/none: ${c.n_partial}`);
+    const shares = usdShares(usdByModel(rowsFact.map((r) => r.fact_marker)));
+    if (shares.length) console.log(`$ по моделям: ${sharesTxt(shares)} — ${TARIFF_NOTE} (est period)`);
     console.log(`закрытых за 90 дней без факта: ${noFact90}`);
     console.log();
   }
@@ -3586,6 +3622,214 @@ function cmdBacktest(args: { repo?: string; allRepos: boolean }): void {
 }
 
 // ----------------------------------------------------------------------------
+// Команда period — сводка всех сессий репо за период, без привязки к задачам
+// ----------------------------------------------------------------------------
+
+/** Тариф модели — отдельно от флоу: смена модели меняет $ задачи в разы при том же флоу. */
+export const TARIFF_NOTE = "тренд $ смешивает флоу с тарифом модели: флоу сравнивай по токенам и выходу";
+
+/** $ по моделям из маркеров «Факт» (models: {модель: {mtok, usd}}); модель без цены — мимо. */
+export function usdByModel(markers: Any[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const fm of markers) {
+    for (const [m, v] of Object.entries(fm?.models ?? {})) {
+      const usd = (v as Any)?.usd;
+      if (typeof usd === "number" && usd > 0) out[m] = (out[m] ?? 0) + usd;
+    }
+  }
+  return out;
+}
+
+/** Доли $ по моделям, по убыванию: [модель, доля 0…1]. */
+export function usdShares(byModel: Record<string, number>): [string, number][] {
+  const total = Object.values(byModel).reduce((a, x) => a + x, 0);
+  if (!(total > 0)) return [];
+  return Object.entries(byModel)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([m, v]) => [m, v / total]);
+}
+
+/** «claude-opus-5 62 %, claude-fable-5-1 38 %, claude-haiku-4-5 <1 %». */
+export const sharesTxt = (shares: [string, number][]) => shares.map(([m, x]) => `${m} ${Math.round(x * 100) || "<1"} %`).join(", ");
+
+/** Момент для --since/--until: 90d / 12w / 6m / 48h назад, дата ГГГГ-ММ-ДД (полночь по местному времени) или время ISO. */
+export function parseWhen(s: string, now = nowTs()): number {
+  const v = s.trim();
+  if (/^\d+[dhwm]$/.test(v)) return now - parseSince(v);
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (d) return new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])).getTime() / 1000;
+  const t = /^\d{4}-\d{2}-\d{2}T/.test(v) ? parseTs(v) : null;
+  if (t === null) throw new EstError(`неверная дата «${s}»: ожидается ГГГГ-ММ-ДД, время ISO или 90d / 12w / 6m / 48h`);
+  return t;
+}
+
+/** Периоды [начало, конец): i-й --until закрывает i-й --since, без него — до сейчас. */
+export function parsePeriods(since: string[], until: string[], now = nowTs()): [number, number][] {
+  if (!since.length) throw new EstError("укажите --since: начало периода (ГГГГ-ММ-ДД, время ISO или 90d)");
+  if (until.length > since.length) throw new EstError("--until без своего --since: периоды — пары --since … [--until …] по порядку");
+  return since.map((s, i) => {
+    const a = parseWhen(s, now);
+    const z = i < until.length ? parseWhen(until[i]!, now) : now;
+    if (!(a < z)) throw new EstError(`период ${i + 1}: конец не позже начала (${fmtLocal(a)} … ${fmtLocal(z)})`);
+    return [a, z];
+  });
+}
+
+/** Сводка сессий репозитория за период [since, until): всё, что делал агент, без привязки к задачам. */
+export interface Period {
+  since: number;
+  until: number;
+  sessions: number; // сессий с записями в периоде
+  prs: number; // влитых за период PR
+  h: number; // часы агента, с: активное время по сессиям, сложенное
+  machine: number; // часы машины, с: объединение активных интервалов всех сессий
+  tok: number; // токены всего
+  out: number; // из них выход
+  usd: number | null; // null — ни одной модели из прайса
+  models: Record<string, number>; // $ по моделям из прайса
+  unpriced: string[]; // модели без цены
+  steps: number; // ходы — ответы модели, по одному на message.id
+  agents: number; // субагентов с записями в периоде
+  prompts: number; // промптов человека
+}
+
+/**
+ * Сводка периода по всем сессиям — как факт, но без привязки: активное время — промежутки между соседними записями
+ * сессии не длиннее gap, обе в периоде; токены и стоимость — раз на ответ модели (возобновлённая сессия копирует
+ * историю); часы машины — объединение промежутков всех сессий, их отношение к часам агента — параллельность.
+ */
+export function periodSummary(sessions: Session[], prs: PR[], since: number, until: number, gapMin = 30): Period {
+  const gap = gapMin * 60;
+  const seen = new Set<string>();
+  const all: [number, number][] = [];
+  const byModel = new Map<string, number | null>();
+  const res: Period = { since, until, sessions: 0, prs: 0, h: 0, machine: 0, tok: 0, out: 0, usd: null, models: {}, unpriced: [], steps: 0, agents: 0, prompts: 0 };
+  const inside = (t: number) => t >= since && t < until;
+  for (const s of sessions) {
+    const ev = s.ev;
+    const agents = new Set<number>();
+    let touched = false;
+    for (let i = 0; i < ev.length; i++) {
+      const e = ev[i]!;
+      const t = e[0] as number;
+      if (!inside(t)) continue;
+      touched = true;
+      if (e[2]) res.prompts++;
+      if (e[5] > 0) agents.add(e[5]);
+      const prev = i > 0 ? (ev[i - 1]![0] as number) : null;
+      if (prev !== null && prev >= since && t - prev <= gap) {
+        all.push([prev, t]);
+        res.h += t - prev;
+      }
+      const u = e.length > 4 && e[4] >= 0 ? s.usage?.[e[4]] : undefined;
+      if (!u || seen.has(u[0])) continue;
+      seen.add(u[0]);
+      const model: string = s.models?.[u[1]] ?? "?";
+      const vals: [number, number, number, number, number] = [u[2], u[3], u[4], u[5], u[6]];
+      res.steps++;
+      res.tok += vals.reduce((a, x) => a + x, 0);
+      res.out += vals[1];
+      const c = usageCost(model, vals, !!u[7]);
+      const was = byModel.has(model) ? byModel.get(model)! : 0;
+      byModel.set(model, c === null || was === null ? null : was + c);
+    }
+    if (touched) res.sessions++;
+    res.agents += agents.size;
+  }
+  res.machine = mergeIntervals(all).reduce((a, [x, y]) => a + (y - x), 0);
+  for (const [m, v] of byModel) {
+    if (v === null) res.unpriced.push(m);
+    else res.models[m] = v;
+  }
+  res.unpriced.sort();
+  if (Object.keys(res.models).length) res.usd = Object.values(res.models).reduce((a, x) => a + x, 0);
+  res.prs = prs.filter((p) => p.mergedAt !== null && inside(p.mergedAt)).length;
+  return res;
+}
+
+/** Таблица периодов: итоги и они же на влитой PR; у двух периодов — отношение «после / до»; затем доля $ по моделям. */
+export function periodTable(ps: Period[]): string[] {
+  const when = (t: number) => {
+    const s = fmtLocal(t);
+    return s.endsWith(" 00:00") ? s.slice(0, 10) : s;
+  };
+  const heads = ps.map((p) => `${when(p.since)} … ${when(p.until)}`);
+  const int = (v: number) => String(Math.round(v));
+  const one = (v: number) => fmtH(v, 1);
+  const hrs = (v: number) => fmtH(v, 2);
+  const mln = (v: number) => fmtH(v / 1e6, 1);
+  const thou = (v: number) => String(Math.round(v / 1e3));
+  const usd = (v: number) => v.toFixed(2);
+  const h = (p: Period) => p.h / 3600;
+  const m = (p: Period) => p.machine / 3600;
+  const perPr = (f: (p: Period) => number | null) => (p: Period) => {
+    const v = f(p);
+    return v === null || !p.prs ? null : v / p.prs;
+  };
+  type Line = [string, (p: Period) => number | null, (v: number) => string];
+  const lines: (Line | string)[] = [
+    ["сессий", (p) => p.sessions, int],
+    ["влитых PR", (p) => p.prs, int],
+    ["часы агента (сумма по сессиям)", h, hrs],
+    ["часы машины (объединение сессий)", m, hrs],
+    ["параллельность сессий", (p) => (p.machine ? p.h / p.machine : null), (v) => `×${one(v)}`],
+    ["токены, млн", (p) => p.tok, mln],
+    ["выход, тыс.", (p) => p.out, thou],
+    ["стоимость, $", (p) => p.usd, usd],
+    ["ходы", (p) => p.steps, int],
+    ["субагентов", (p) => p.agents, int],
+    ["промптов человека", (p) => p.prompts, int],
+    "на влитой PR:",
+    ["  часы агента", perPr(h), hrs],
+    ["  часы машины", perPr(m), hrs],
+    ["  токены, млн", perPr((p) => p.tok), mln],
+    ["  выход, тыс.", perPr((p) => p.out), thou],
+    ["  стоимость, $", perPr((p) => p.usd), usd],
+    ["  ходов", perPr((p) => p.steps), one],
+    ["  субагентов", perPr((p) => p.agents), one],
+    ["  промптов человека", perPr((p) => p.prompts), one],
+    ["$ за 1 млн токенов", (p) => (p.usd !== null && p.tok ? p.usd / (p.tok / 1e6) : null), usd],
+  ];
+  const ratio = ps.length === 2;
+  const ratioOf = (f: (p: Period) => number | null) => {
+    const [a, b] = [f(ps[0]!), f(ps[1]!)];
+    return a && b !== null ? `×${fmtH(b / a, 2)}` : "—";
+  };
+  const head = ["", ...heads, ...(ratio ? ["после / до"] : [])];
+  const rows = lines.map((l) => (typeof l === "string" ? l : [l[0], ...ps.map((p) => {
+    const v = l[1](p);
+    return v === null ? "—" : l[2](v);
+  }), ...(ratio ? [ratioOf(l[1])] : [])]));
+  const widths = head.map((x, i) => Math.max(x.length, ...rows.map((r) => (typeof r === "string" ? 0 : r[i]!.length))));
+  const fmt = (r: string[]) => r.map((x, i) => (i ? pad(x, widths[i]!, true) : pad(x, widths[0]!))).join("  ").trimEnd();
+  const out = [fmt(head), ...rows.map((r) => (typeof r === "string" ? r : fmt(r)))];
+  out.push("");
+  ps.forEach((p, i) => {
+    const shares = usdShares(p.models);
+    const unpriced = p.unpriced.length ? `; без цены (нет в прайсе): ${p.unpriced.join(", ")}` : "";
+    out.push(`$ по моделям ${heads[i]}: ${shares.length ? sharesTxt(shares) : "—"}${unpriced}`);
+  });
+  out.push(`${TARIFF_NOTE}; $ за 1 млн токенов — сдвиг тарифа.`);
+  return out;
+}
+
+interface PeriodArgs {
+  repo?: string;
+  periods: [number, number][];
+  gap: number;
+}
+
+function cmdPeriod(args: PeriodArgs): void {
+  if (isCloud()) throw new EstError(CLOUD_ERR);
+  const repo = new Repo(resolveRepo(args.repo), loadRegistry());
+  const sessions = repo.periodSessions();
+  const prs = [...repo.prs().values()];
+  console.log(`== ${repo.full}: все сессии репозитория за период, без привязки к задачам`);
+  for (const line of periodTable(args.periods.map(([a, z]) => periodSummary(sessions, prs, a, z, args.gap)))) console.log(line);
+}
+
+// ----------------------------------------------------------------------------
 // CLI
 // ----------------------------------------------------------------------------
 
@@ -3598,6 +3842,7 @@ const USAGE = `est — оценка задач по истории проект�
   est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — аналоги вручную
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
   est backtest [--repo o/r] [--all-repos]   — механика против ручных оценок по закрытым задачам
+  est period --since ДАТА [--until ДАТА] [--since ДАТА [--until ДАТА]] [--repo o/r] [--gap 30]   — все сессии репо за период; два периода — рядом, «после / до»
   est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Облачная сессия») в источники факта
   <type> — ${EST_TYPES.join(" ")}`;
 
@@ -3664,6 +3909,13 @@ export function main(argv: string[]): number {
       cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since });
       return 0;
     }
+    if (cmd === "period") {
+      const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, since: { type: "string", multiple: true }, until: { type: "string", multiple: true }, gap: { type: "string", default: "30" } } });
+      const gap = intArg(values.gap, "--gap")!;
+      if (gap < 1) throw new EstError(`--gap должен быть ≥ 1 минуты, получено ${gap}`);
+      cmdPeriod({ repo: values.repo, periods: parsePeriods(values.since ?? [], values.until ?? []), gap });
+      return 0;
+    }
     if (cmd === "backtest") {
       const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, "all-repos": { type: "boolean", default: false } } });
       cmdBacktest({ repo: values.repo, allRepos: values["all-repos"] });
@@ -3681,7 +3933,7 @@ export function main(argv: string[]): number {
       cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, tokMult: floatArg(values["tok-mult"], "--tok-mult"), tokNote: values["tok-note"], note: values.note, write: values.write });
       return 0;
     }
-    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact, estimate, backtest или cloud-import`);
+    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact, estimate, backtest, period или cloud-import`);
   } catch (e) {
     if (e instanceof EstError) die(e.message);
     if (e && typeof e === "object" && (e as Any).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") die((e as Error).message, 2);
