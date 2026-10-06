@@ -24,7 +24,8 @@
 # Пустой список чеков — pending; PASS засчитывается, когда снимок без pending повторился
 # два опроса подряд (поздно регистрирующиеся чеки не проскакивают) и чеков не меньше
 # --expect. Первый упавший чек — сразу FAIL; --wait-all — FAIL, когда завершились все.
-# Только REST: квота GraphQL общая на все сессии; лимит REST — ожидание до сброса.
+# Только REST: квота GraphQL общая на все сессии; лимит REST — ожидание до сброса. Сбой gh
+# (и в запросах до первого опроса) — повтор, ERROR — после пяти подряд; «не найден» — только по 404/422.
 #
 # Вывод: stdout — только события («CHECK <имя>: <bucket>») и финальная строка
 #        «RESULT: PASS|FAIL|TIMEOUT|ERROR …»; stderr — heartbeat каждый опрос.
@@ -73,13 +74,14 @@ checks() {
 }
 
 # required: имена обязательных чеков базовой ветки — ruleset и классическая защита. Нет
-# правил или прав их читать (приватный репо на Free отвечает 403) — обязательных нет;
-# лимит — код 1, как ошибка опроса.
+# правил или прав их читать (приватный репо на Free отвечает 403, ветки нет — 404) — обязательных нет;
+# лимит и иной сбой — код 1, как ошибка опроса: разовый сбой не должен стереть обязательные.
 required='[]'; required_loaded=""
+absent() { [[ "$1" == *"HTTP 403"* || "$1" == *"HTTP 404"* ]] && ! rate_limited "$1"; }
 load_required() {
   local rules branch
-  rules=$(gh api "repos/{owner}/{repo}/rules/branches/$1" 2>&1) || { rate_limited "$rules" && { out=$rules; return 1; }; rules='[]'; }
-  branch=$(gh api "repos/{owner}/{repo}/branches/$1" 2>&1) || { rate_limited "$branch" && { out=$branch; return 1; }; branch='{}'; }
+  rules=$(gh api "repos/{owner}/{repo}/rules/branches/$1" 2>&1) || { absent "$rules" || { out=$rules; return 1; }; rules='[]'; }
+  branch=$(gh api "repos/{owner}/{repo}/branches/$1" 2>&1) || { absent "$branch" || { out=$branch; return 1; }; branch='{}'; }
   required=$(jq -nc --argjson r "$rules" --argjson b "$branch" '
     [ ($r | arrays | .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context),
       ($b | objects | .protection.required_status_checks // {} | select(.enforcement_level != "off") | (.contexts // [])[]) ]
@@ -114,13 +116,19 @@ case "$mode" in
     ;;
   status)
     [[ "$target" =~ ^[0-9a-f]{40}$ ]] || finish "ERROR sha must be full 40-hex (take it from git: git rev-parse origin/main)" 3
-    # по несуществующему SHA API молча отдаёт пустой статус — проверяем коммит заранее
-    if ! gh api "repos/{owner}/{repo}/commits/$target" --jq .sha >/dev/null 2>&1; then
-      finish "ERROR commit $target not found in repository" 3
-    fi
     : "${interval:=20}" "${timeout:=1200}"
-    label="${context:-commit}@${target:0:7}"
-    poll() { checks "$target"; }
+    label="${context:-commit}@${target:0:7}"; commit_found=""
+    poll() {
+      local commit
+      # по несуществующему SHA API молча отдаёт пустой статус — коммит проверяем до чеков. «Не найден» —
+      # только 422 «No commit found» или 404; иной сбой — ошибка опроса: разовый сбой API не исход
+      if [ -z "$commit_found" ]; then
+        commit=$(gh api "repos/{owner}/{repo}/commits/$target" --jq .sha 2>&1) || {
+          out=$commit; [[ "$commit" == *"HTTP 422"* || "$commit" == *"HTTP 404"* ]] && { out="commit $target not found in repository: $commit"; return 2; }; return 1; }
+        commit_found=1
+      fi
+      checks "$target"
+    }
     ;;
   merged)
     [[ "$target" =~ ^[0-9]+$ ]] || finish "ERROR PR number expected, got: $target" 3

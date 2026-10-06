@@ -22,6 +22,7 @@ case "$1 $2" in
   api\\ *) case "$2" in
       */check-runs*) kind=check-runs ;;
       */status) kind=status ;;
+      */commits/*) kind=commit ;;
       */pulls/*) kind=pull ;;
       */rules/branches/*) kind=rules ;;
       */branches/*) kind=branch ;;
@@ -218,6 +219,47 @@ describe("PR ждут по SHA его головы, пока чеки не за�
     write("rate_limit", [{ resources: { core: { limit: 5000, remaining: 0, reset: 0 } } }]);
     writeChecks([{ runs: [ok("tests")] }]);
     const r = ciWait(["pr", "1", "--timeout", "5"]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+  });
+});
+
+/**
+ * Сбой `gh` — не исход (#330): во время инцидента GitHub разовый сбой проверки коммита до опроса давал «коммит не
+ * найден», код 3, хотя коммит был, — а сессия читает ERROR как неверный вызов. «Нет» — только ответ «нет» от API.
+ */
+describe("Разовый сбой API до начала опроса — повтор, как в опросе, а не исход «не найден»", () => {
+  const BAD_GATEWAY = "gh: Server Error (HTTP 502)";
+
+  it("ожидание чеков коммита переживает разовый сбой API до начала опроса", () => {
+    write("commit", [BAD_GATEWAY, { sha: SHA }]);
+    const r = waitCommit([{ runs: [ok("tests")] }]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+  });
+
+  it("коммита нет в репозитории — ERROR сразу, а не ожидание до таймаута", () => {
+    write("commit", [`gh: No commit found for SHA: ${SHA} (HTTP 422)`]);
+    const r = waitCommit([{ runs: [ok("tests")] }]);
+    expect(r.code).toBe(3);
+    expect(r.result).toStartWith(`ERROR commit ${SHA} not found in repository`);
+  });
+
+  it("проверка коммита сбоит пять раз подряд — ERROR с текстом ответа gh", () => {
+    write("commit", [BAD_GATEWAY]);
+    const r = waitCommit([{ runs: [ok("tests")] }]);
+    expect([r.code, r.result]).toEqual([3, `ERROR gh: ${BAD_GATEWAY}`]);
+  });
+
+  it("разовый сбой API при чтении обязательных чеков базовой ветки — повтор, а не PR без обязательных", () => {
+    write("rules", [BAD_GATEWAY, [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "tests" }] } }]]);
+    const preview = status("preview", "success");
+    const r = waitPr([{ statuses: [preview] }, { statuses: [preview] }, { statuses: [preview] }, { statuses: [preview], runs: [ok("tests")] }]);
+    expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
+  });
+
+  // сторож от перекоррекции: повтор на любой отказ дал бы ERROR на приватном репо без прав читать правила
+  it("правила базовой ветки читать нельзя (403) — обязательных нет, а не ERROR", () => {
+    write("rules", ["gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)"]);
+    const r = waitPr([{ runs: [ok("tests")] }]);
     expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
   });
 });
