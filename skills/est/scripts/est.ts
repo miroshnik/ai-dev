@@ -66,30 +66,40 @@ export const FIELD_TOK = "Токены, млн"; // необязательные
 export const FIELD_USD = "Стоимость, $";
 
 // Публичные API-тарифы Anthropic, $ за 1 млн токенов: (вход, выход, чтение кэша).
-// Запись кэша = вход × 1.25 (TTL 5 мин) или × 2 (TTL 1 ч). Ключ — префикс id модели,
-// берётся самый длинный совпавший. Это API-эквивалент: на подписке эти деньги не списываются,
-// но величина сравнима между задачами. Переопределение/дополнение — <каталог состояния>/prices.json
-// в том же формате: {"<префикс модели>": [вход, выход, чтение_кэша]}.
-export const PRICES_DATE = "2026-06-24";
+// Запись кэша = вход × 1.25 (TTL 5 мин) или × 2 (TTL 1 ч). Ключ — id модели без даты: у id модели
+// дата после ключа (-ГГГГММДД, у Vertex AI — @ГГГГММДД) тариф не меняет, другое продолжение — другая
+// версия (claude-opus-5-5 при ключе claude-opus-5), она без цены, пока её нет в прайсе (#345).
+// Это API-эквивалент: на подписке эти деньги не списываются, но величина сравнима между задачами.
+// Переопределение/дополнение — <каталог состояния>/prices.json в том же формате:
+// {"<id модели>": [вход, выход, чтение_кэша]}.
+export const PRICES_DATE = "2026-10-06";
 type Price = [number, number, number];
 export const PRICES: Record<string, Price> = {
   "claude-fable-5-1": [10.0, 50.0, 0.25],
   "claude-mythos-5-1": [10.0, 50.0, 0.25],
   "claude-fable-5": [10.0, 50.0, 1.0],
   "claude-mythos-5": [10.0, 50.0, 1.0],
+  "claude-opus-5-5": [4.0, 20.0, 0.2],
   "claude-opus-5": [5.0, 25.0, 0.5],
   "claude-opus-4-8": [5.0, 25.0, 0.5],
   "claude-opus-4-7": [5.0, 25.0, 0.5],
   "claude-opus-4-6": [5.0, 25.0, 0.5],
+  "claude-sonnet-5-5": [2.0, 10.0, 0.2],
   "claude-sonnet-5": [2.0, 10.0, 0.2],
   "claude-sonnet-4-6": [3.0, 15.0, 0.3],
   "claude-haiku-4-5": [1.0, 5.0, 0.1],
 };
-const FAST_PRICES: Record<string, Price> = { "claude-opus-5": [10.0, 50.0, 1.0] }; // speed=fast; для прочих моделей тариф fast не опубликован
+// speed=fast; чтение кэша — ×0,1 входа; для прочих моделей тариф fast не опубликован
+const FAST_PRICES: Record<string, Price> = { "claude-opus-5-5": [8.0, 40.0, 0.8], "claude-opus-5": [10.0, 50.0, 1.0] };
 const PRICES_PATH = path.join(EST_DIR, "prices.json");
 let pricesCache: Record<string, Price> | null = null;
 
-const byLenDesc = (a: string, b: string) => b.length - a.length;
+/** Версия модели — её id без даты: `claude-haiku-4-5-20251001` и `claude-opus-4-5@20251101` — `claude-haiku-4-5`, `claude-opus-4-5`. */
+const modelVersion = (model: string) => model.replace(/[-@]\d{8}$/, "");
+
+/** Тариф модели в таблице: по id целиком, иначе по версии; префикс другой версии не в счёт. */
+const priceIn = (table: Record<string, Price>, model: string): Price | null =>
+  Object.hasOwn(table, model) ? table[model]! : Object.hasOwn(table, modelVersion(model)) ? table[modelVersion(model)]! : null;
 
 /** (вход, выход, чтение кэша) $/млн для модели или null, если модели нет в прайсе. */
 export function priceFor(model: string, fast = false, table?: Record<string, Price>): Price | null {
@@ -104,11 +114,7 @@ export function priceFor(model: string, fast = false, table?: Record<string, Pri
     }
     table = pricesCache;
   }
-  if (fast) {
-    for (const k of Object.keys(FAST_PRICES).sort(byLenDesc)) if (model.startsWith(k)) return FAST_PRICES[k]!;
-  }
-  for (const k of Object.keys(table).sort(byLenDesc)) if (model.startsWith(k)) return table[k]!;
-  return null;
+  return (fast ? priceIn(FAST_PRICES, model) : null) ?? priceIn(table, model);
 }
 
 /** Стоимость одного ответа модели в $; vals = (вход, выход, запись кэша 5м, запись кэша 1ч, чтение кэша). */

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
   cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, loadPins, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, pinnedTranscripts, plural, resolveLinks,
-  parsePeriods, periodSummary, periodTable, pickAnalogs, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost,
+  parsePeriods, periodSummary, periodTable, pickAnalogs, priceFor, PRICES, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, Period, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
@@ -1069,6 +1069,30 @@ describe("Стоимость — API-эквивалент по публичны�
 
   it("модель вне прайса — без цены (null), а не ноль", () => {
     expect(usageCost("gpt-5", [1e6, 0, 0, 0, 0], false, table)).toBeNull();
+  });
+
+  /** Ключ прайса — id модели без даты, а не префикс: `claude-opus-5-5` продолжает имя `claude-opus-5`, но тариф у него свой. */
+  it("модель новой версии с именем-продолжением старой не получает тариф старой — она без цены, как модель вне прайса", () => {
+    const old = { "claude-opus-5": [5, 25, 0.5] as [number, number, number] };
+    expect(usageCost("claude-opus-5-5", [1e6, 0, 0, 0, 0], false, old)).toBeNull();
+    expect(usageCost("claude-opus-5-7", [1e6, 0, 0, 0, 0], true, PRICES)).toBeNull(); // и fast-тариф старой версии не достаётся
+  });
+
+  /** Сторож перекоррекции: граница версии не отрезает дату — через дефис у API (`claude-haiku-4-5-20251001`), через `@` у Vertex AI (`claude-opus-4-5@20251101`). */
+  it("модель с датой в имени получает тариф своей версии", () => {
+    const both = { "claude-opus-5": [5, 25, 0.5] as [number, number, number], "claude-opus-5-5": [4, 20, 0.2] as [number, number, number] };
+    expect(priceFor("claude-opus-5-5-20261001", false, both)).toEqual([4, 20, 0.2]);
+    expect(priceFor("claude-opus-5-5@20261001", false, both)).toEqual([4, 20, 0.2]);
+    expect(priceFor("claude-opus-5-20260101", false, both)).toEqual([5, 25, 0.5]);
+  });
+
+  it("стоимость ответа Opus 5.5 — по тарифу $4 / $20 / $0,20, Sonnet 5.5 — $2 / $10 / $0,20", () => {
+    expect(usageCost("claude-opus-5-5", [1e6, 1e6, 0, 0, 1e6], false, PRICES)).toBeCloseTo(24.2, 6);
+    expect(usageCost("claude-sonnet-5-5", [1e6, 1e6, 0, 0, 1e6], false, PRICES)).toBeCloseTo(12.2, 6);
+  });
+
+  it("fast-режим Opus 5.5 — по своему fast-тарифу $8 / $40, чтение кэша ×0,1 входа", () => {
+    expect(usageCost("claude-opus-5-5", [1e6, 1e6, 0, 0, 1e6], true, PRICES)).toBeCloseTo(48.8, 6);
   });
 });
 
