@@ -12,6 +12,8 @@ setDefaultTimeout(SPAWN_TIMEOUT);
 const SCRIPT = fileURLToPath(new URL("../../../skills/ci-wait/scripts/wait-ci.sh", import.meta.url));
 const SHA = "e6dba3bc59256d1324b2f0de3914dfaa56ea8786";
 const HEAD = "4270c1c020120a3c709131f0986d67689e7a343d";
+const MERGE = "9b1e3f7c2d4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c";
+const CI = ".github/workflows/ci.yml";
 
 // `gh` — внешний край, подменяется он: ответы — массивы JSON в <вид>.json, по одному на вызов, последний
 // повторяется; строка — ошибка gh (текст в stderr, код 1), как «API rate limit exceeded»; нет файла — `{}`.
@@ -20,6 +22,9 @@ const FAKE_GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "api rate_limit") kind=rate_limit ;;
   api\\ *) case "$2" in
+      */actions/runs*) kind=runs ;;
+      */actions/workflows*) kind=workflows ;;
+      */contents/*) kind=contents ;;
       */check-runs*) kind=check-runs ;;
       */status) kind=status ;;
       */commits/*) kind=commit ;;
@@ -47,17 +52,30 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
-interface CheckRun { id: number; name: string; status: string; conclusion: string | null; html_url: string; app: { id: number } }
+interface CheckRun {
+  id: number; name: string; status: string; conclusion: string | null; html_url: string; app: { id: number }; check_suite: { id: number };
+}
 interface Status { context: string; state: string; target_url: string }
-// id растёт с созданием check-run, как в GitHub; app — приложение, создавшее его (GitHub Actions — 15368)
+// id растёт с созданием check-run, как в GitHub; app — приложение, создавшее его (GitHub Actions — 15368); check suite —
+// прогона workflow, чей это job
 let lastId = 0;
-const run = (name: string, status: string, conclusion: string | null = null, app = 15368): CheckRun => ({
-  id: ++lastId, name, status, conclusion, html_url: "", app: { id: app },
+const run = (name: string, status: string, conclusion: string | null = null, app = 15368, suite = 1): CheckRun => ({
+  id: ++lastId, name, status, conclusion, html_url: "", app: { id: app }, check_suite: { id: suite },
 });
 const ok = (name: string) => run(name, "completed", "success");
 const failed = (name: string) => run(name, "completed", "failure");
 const cancelled = (name: string) => run(name, "completed", "cancelled");
 const status = (context: string, state: string): Status => ({ context, state, target_url: "" });
+interface WorkflowRun {
+  id: number; name: string; path: string; event: string; status: string; conclusion: string | null; check_suite_id: number; html_url: string;
+}
+/** Прогон workflow `ci.yml` на SHA; его job — check-runs с тем же check suite (по умолчанию 1, как у `run`). */
+const wfRun = (conclusion: string | null, o: Partial<WorkflowRun> = {}): WorkflowRun => ({
+  id: ++lastId, name: "CI", path: CI, event: "pull_request", status: conclusion ? "completed" : "in_progress", conclusion,
+  check_suite_id: 1, html_url: `https://github.com/o/r/actions/runs/${lastId}`, ...o,
+});
+/** Прогон-«пустышка» неразобранного workflow, как его оставляет GitHub: имя — путь файла, событие push, без job. */
+const unparsed = () => wfRun("failure", { name: CI, event: "push", check_suite_id: 99 });
 const write = (kind: string, v: unknown[]) => writeFileSync(path.join(sb.dir, `${kind}.json`), JSON.stringify(v));
 const calls = () => readFileSync(path.join(sb.dir, "calls"), "utf8").split("\n");
 
@@ -70,10 +88,17 @@ function ciWait(args: string[]) {
   return { code: r.status, result: /^RESULT: (.*)$/m.exec(r.stdout)?.[1] ?? `(нет RESULT) ${r.stdout}${r.stderr}`, stdout: r.stdout };
 }
 
-interface Poll { statuses?: Status[]; runs?: CheckRun[] }
+interface Poll { statuses?: Status[]; runs?: CheckRun[]; workflowRuns?: WorkflowRun[] }
 function writeChecks(polls: Poll[]) {
   write("status", polls.map((p) => ({ state: "pending", statuses: p.statuses ?? [] })));
   write("check-runs", polls.map((p) => ({ total_count: p.runs?.length ?? 0, check_runs: p.runs ?? [] })));
+  write("runs", polls.map((p) => ({ total_count: p.workflowRuns?.length ?? 0, workflow_runs: p.workflowRuns ?? [] })));
+}
+
+/** Workflow `ci.yml` репозитория: состояние и файл на SHA головы — в base64 строками по 60, как отдаёт contents API. */
+function workflow(yaml: string, state = "active") {
+  write("workflows", [{ total_count: 1, workflows: [{ id: 1, name: "CI", path: CI, state }] }]);
+  write("contents", [{ path: CI, encoding: "base64", content: Buffer.from(yaml).toString("base64").replace(/.{60}/g, "$&\n") }]);
 }
 
 /** Коммит: на каждый опрос — его статусы и check-runs. */
@@ -282,8 +307,6 @@ describe("PR с конфликтом с базой не ждут — CI на н�
  * сессии; `merged <N>` берёт его из PR сам — ожидание запускается тем же ходом, что `task actualize`.
  */
 describe("Коммит мержа ждут по номеру PR — SHA мержа скрипт берёт сам", () => {
-  const MERGE = "9b1e3f7c2d4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c";
-
   it("влитый PR — ждут чеки коммита мержа: SHA скрипт берёт из PR сам", () => {
     write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
     writeChecks([{ runs: [run("spec-publish", "queued")] }, { runs: [ok("spec-publish")] }]);
@@ -300,6 +323,92 @@ describe("Коммит мержа ждут по номеру PR — SHA мерж
     expect(r.code).toBe(3);
     expect(r.result).toStartWith("ERROR PR #7 not merged");
   });
+});
+
+/**
+ * Прогон Actions, упавший без единого job, check-run не даёт (#356): PR правил `ci.yml`, файл перестал разбираться, и
+ * GitHub оставил на голове только прогон-«пустышку» — имя прогона — путь файла, событие push, без job. Ожидание видело
+ * одни чеки хостинга и отдало PASS — PR без единого прогона тестов был бы влит. У PR из форка нет и «пустышки»: тогда
+ * не PASS даёт workflow, который по своему `on:` на голове срабатывает на PR, а прогона не дал.
+ */
+describe("Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR", () => {
+  const preview = status("preview", "success");
+
+  it("ci-wait pr: прогон Actions с ошибкой разбора workflow на голове PR — FAIL с путём файла", () => {
+    const r = waitPr([{ statuses: [preview], workflowRuns: [unparsed()] }]);
+    expect(r.code).toBe(1);
+    expect(r.result).toStartWith(`FAIL workflow not parsed: ${CI} https://github.com/o/r/actions/runs/`);
+  });
+
+  it("ci-wait merged: прогон Actions с ошибкой разбора workflow на SHA мержа — FAIL с путём файла", () => {
+    write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
+    writeChecks([{ statuses: [preview], workflowRuns: [unparsed()] }]);
+    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    expect(r.code).toBe(1);
+    expect(r.result).toStartWith(`FAIL workflow not parsed: ${CI}`);
+    expect(calls()).toContain(`repos/{owner}/{repo}/actions/runs?head_sha=${MERGE}&per_page=100`);
+  });
+
+  it("прогон Actions упал, не начав ни одного job, — FAIL с путём файла", () => {
+    const r = waitCommit([{ statuses: [preview], workflowRuns: [wfRun("startup_failure", { event: "push", check_suite_id: 98 })] }]);
+    expect(r.code).toBe(1);
+    expect(r.result).toStartWith(`FAIL workflow failed without jobs: ${CI}`);
+  });
+
+  // сторож от перекоррекции: job упавшего прогона — уже упавший чек, пометка «без job» к нему не добавляется
+  it("прогон Actions упал на job — FAIL по имени job, без пометки «без job»", () => {
+    const r = waitCommit([{ runs: [failed("tests")], workflowRuns: [wfRun("failure")] }]);
+    expect([r.code, r.result]).toEqual([1, "FAIL tests"]);
+  });
+
+  it("ci-wait pr: только чеки хостинга, а workflow с `on: pull_request` не дал прогона — не PASS", () => {
+    workflow("on:\n  pull_request:\n    branches: [main]\n");
+    const r = waitPr([{ statuses: [preview] }], ["--timeout", "2"]);
+    expect(r.code).toBe(2);
+    expect(r.result).toEndWith(`no run of workflow: ${CI})`);
+    expect(calls()).toContain(`repos/{owner}/{repo}/contents/${CI}?ref=${HEAD}`);
+  });
+
+  it("workflow на голове PR не разбирается, а прогона-«пустышки» нет (PR из форка) — не PASS", () => {
+    workflow("on: pull_request\njobs:\n  t:\n    steps:\n      - run: echo '{ \"a\": 1 }' > f\n");
+    const r = waitPr([{ statuses: [preview] }], ["--timeout", "2"]);
+    expect(r.code).toBe(2);
+    expect(r.result).toEndWith(`no run of workflow: ${CI})`);
+  });
+
+  const due: [string, string][] = [
+    ["on: pull_request", "on: pull_request\n"],
+    ["on: [push, pull_request]", "on: [push, pull_request]\n"],
+    ["ветки, пускающие базовую", "on:\n  pull_request:\n    branches: [develop, 'm*n']\n"],
+    ["branches-ignore без базовой", "on:\n  pull_request:\n    branches-ignore: ['release/**']\n"],
+    ["types с synchronize", "on:\n  pull_request:\n    types: [opened, synchronize]\n"],
+  ];
+  for (const [title, yaml] of due) {
+    it(`workflow на PR (${title}) ждут: PASS — только с его прогоном и чеками`, () => {
+      workflow(yaml);
+      const later = { statuses: [preview], runs: [ok("tests")], workflowRuns: [wfRun("success")] };
+      const r = waitPr([{ statuses: [preview] }, { statuses: [preview] }, { statuses: [preview] }, later]);
+      expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
+    });
+  }
+
+  // сторожа от перекоррекции: пойдёт ли такой workflow на этот PR, без диффа не решить — ожидание дало бы ложный TIMEOUT
+  const notDue: [string, string, string?][] = [
+    ["только push", "on:\n  push:\n    branches: [main]\n"],
+    ["фильтр путей", "on:\n  pull_request:\n    paths: ['src/**']\n"],
+    ["ветки без базовой", "on:\n  pull_request:\n    branches: ['release/**']\n"],
+    ["отрицание в ветках", "on:\n  pull_request:\n    branches: ['**', '!main']\n"],
+    ["types без synchronize", "on:\n  pull_request:\n    types: [labeled]\n"],
+    ["pull_request_target", "on: pull_request_target\n"],
+    ["workflow выключен", "on: pull_request\n", "disabled_manually"],
+  ];
+  for (const [title, yaml, state] of notDue) {
+    it(`workflow, который на PR может не пойти (${title}), не ждут — PASS по остальным чекам`, () => {
+      workflow(yaml, state);
+      const r = waitPr([{ statuses: [preview] }]);
+      expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    });
+  }
 });
 
 /**
