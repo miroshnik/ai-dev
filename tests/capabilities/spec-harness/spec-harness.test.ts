@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { invariant, source, sources } from "../../../skills/spec/scripts/harness.ts";
+import { codeFiles, invariant, source, sources } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -194,6 +194,13 @@ describe("Реестр + инвариант на реальном коде: не
     );
     expect(r["нарушитель не проходит: обработчик без default"]).toBe("✓");
     expect(r["src/b.ts экспортирует default"]).toBe("✗ нет default");
+  });
+
+  // конфиг в корне пакета (vite.config.ts) — исходник, как src/: его каталог целиком — не код
+  it("codeFiles и sources берут и отдельные файлы — конфиги в корне пакета", () => {
+    writeTree(dir, { "src/a.ts": "export {};\n", "vite.config.ts": "export default {};\n", "README.md": "# x\n", "scripts/run.ts": "export {};\n" });
+    expect(codeFiles(dir, ["src", "vite.config.ts", "README.md", "missing.ts"])).toEqual(["src/a.ts", "vite.config.ts"]);
+    expect(sources(dir, ["vite.config.ts"]).map((x) => x.file)).toEqual(["vite.config.ts"]);
   });
 });
 
