@@ -1150,12 +1150,21 @@ describe("Оценка — ступень шкалы от 0,1 до 13 ч", () =>
 });
 
 // `gh` — внешний край, подменяется он: ответы — из мира $FAKE_GH/world.json (репозиторий → видимость, номер проекта,
-// задачи с фактом), каждый вызов — строкой JSON в $FAKE_GH/calls.jsonl.
-const FAKE_GH = `import { appendFileSync, readFileSync } from "node:fs";
+// задачи с фактом), каждый вызов — строкой JSON в $FAKE_GH/calls.jsonl. Сбои — из $FAKE_GH/fails.json: вызов, в
+// аргументах или теле которого есть match, падает со stderr, пока не исчерпано times (-1 — всегда).
+const FAKE_GH = `import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 const dir = process.env.FAKE_GH;
 const args = process.argv.slice(2);
 const stdin = args.includes("--input") ? readFileSync(0, "utf8") : "";
 appendFileSync(dir + "/calls.jsonl", JSON.stringify({ args, stdin }) + "\\n");
+const fails = JSON.parse(readFileSync(dir + "/fails.json", "utf8"));
+const fail = fails.find((f) => f.times !== 0 && (args.join(" ") + " " + stdin).includes(f.match));
+if (fail) {
+  if (fail.times > 0) fail.times--;
+  writeFileSync(dir + "/fails.json", JSON.stringify(fails));
+  console.error(fail.stderr);
+  process.exit(1);
+}
 const world = JSON.parse(readFileSync(dir + "/world.json", "utf8"));
 const print = (x) => console.log(JSON.stringify(x));
 const num = (name, number) => ({ __typename: "ProjectV2ItemFieldNumberValue", number, field: { name } });
@@ -1179,13 +1188,15 @@ if (args[1] === "graphql") {
     const fieldValues = (i) => ({ nodes: [...(i.fact ? [num("Факт, ч", i.fact)] : []), ...(i.est ? [num("Оценка, ч", i.est)] : [])] });
     const nodes = r.issues.map((i) => ({ id: "PI_" + i.number, type: "ISSUE", content: issueOf(i), fieldValues: fieldValues(i) }));
     print({ data: { node: { items: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
-  } else if (query.includes("pullRequests(first:")) {
+  } else if (query.includes("pullRequests(states:[OPEN]")) print({ data: { repository: { pullRequests: { nodes: [] } } } });
+  else if (query.includes("issues(states:[CLOSED]")) print({ data: { repository: { issues: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } });
+  else if (query.includes("pullRequests(first:")) {
     const pr = (p) => ({ number: p.number, title: "PR " + p.number, state: "MERGED", headRefName: "b" + p.number, baseRefName: "main", body: "", mergedAt: p.mergedAt,
       updatedAt: p.mergedAt, additions: 0, deletions: 0, changedFiles: 0, mergeCommit: null, closingIssuesReferences: { nodes: [] }, commits: { totalCount: 0, nodes: [] }, files: { nodes: [] } });
     print({ data: { repository: { defaultBranchRef: { name: "main" }, pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: (repo.prs ?? []).map(pr) } } } });
   } else if (query.includes("issue(number:$n)")) {
     const i = repo.issues.find((x) => x.number === v.n);
-    print({ data: { repository: { issue: { ...issueOf(i), url: "", timelineItems: { nodes: [] }, closedEvents: { nodes: [] },
+    print({ data: { repository: { issue: { ...issueOf(i), url: "", closedByPullRequestsReferences: { nodes: [] }, timelineItems: { nodes: [] }, closedEvents: { nodes: [] },
       projectItems: { nodes: [{ id: "PI_" + i.number, project: { id: "P" + repo.project }, fieldValues: { nodes: [] } }] }, comments: { nodes: [] } } } } });
   } else { console.error("fake gh: " + query.slice(0, 80)); process.exit(1); }
 } else if (args[0] === "api" && args[1] === "-X") {
@@ -1195,8 +1206,14 @@ if (args[1] === "graphql") {
 } else { console.error("fake gh: " + args.join(" ")); process.exit(1); }
 `;
 
-/** `est <args>` с фейковым gh в мире `world` (все его репо — в реестре, `paths` репо — его каталоги): исход, записи в GitHub, тело нового комментария. */
-function withFakeGh(world: Record<string, unknown>, args: string[]) {
+/** Сбой фейкового gh: вызов с `match` в аргументах или теле падает со `stderr` первые `times` раз (-1 — всегда). */
+type FakeFail = { match: string; times: number; stderr: string };
+
+/**
+ * `est <args>` с фейковым gh в мире `world` (все его репо — в реестре, `paths` репо — его каталоги) и сбоями `fails`:
+ * исход, все вызовы gh, записи в GitHub, тело нового комментария. Повтор gh при сбое сети — без пауз.
+ */
+function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeFail[] = []) {
   const bin = path.join(dir, "bin");
   const cfg = path.join(dir, "ai-dev");
   mkdirSync(bin, { recursive: true });
@@ -1208,11 +1225,13 @@ function withFakeGh(world: Record<string, unknown>, args: string[]) {
   writeFileSync(path.join(cfg, "repos.json"), JSON.stringify(Object.fromEntries(Object.entries(world).map(([k, v]) => [k, (v as { paths?: string[] }).paths ? { paths: (v as { paths: string[] }).paths } : {}]))));
   const log = path.join(bin, "calls.jsonl");
   writeFileSync(log, "");
-  const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin } });
+  writeFileSync(path.join(bin, "fails.json"), JSON.stringify(fails));
+  const env = { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, AI_DEV_GH_RETRY_MS: "0,0,0" };
+  const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env });
   const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));
   const comment = calls.filter((c) => c.args.includes("POST")).map((c) => JSON.parse(c.stdin).body as string)[0] ?? null;
-  return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, writes, comment };
+  return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, calls, writes, comment };
 }
 
 /**
@@ -1762,5 +1781,107 @@ describe("Поправка вниз к чужим аналогам — толь�
     const up = estimate("2", "--write");
     expect(up.stderr).toBe("");
     expect(up.code).toBe(0);
+  });
+});
+
+/**
+ * gh ходит в сеть, а сеть рвётся: таймаут соединения, обрыв, 5xx GitHub лечит повтор, поэтому вызов gh повторяется с
+ * паузой (2, 5 и 15 с), прежде чем стать ошибкой. Ошибка самого запроса (404, права, валидация) от повтора не пройдёт —
+ * она сразу. Новый комментарий (POST) повторяется, только если запрос не ушёл: иначе GitHub мог его принять, и повтор
+ * задвоил бы «Факт». Свип с `--write` — сотни вызовов: ошибка одной задачи — строка и дальше по списку, сеть, не
+ * вернувшаяся за повторы, останавливает свип; в итоге — что не записано и команда повтора (#353).
+ */
+describe("Сбой сети gh повторяется, ошибка запроса — нет, ошибка задачи не обрывает свип", () => {
+  const TIMEOUT = 'Post "https://api.github.com/graphql": dial tcp 140.82.121.6:443: connect: operation timed out';
+  const RESET = 'Post "https://api.github.com/graphql": read tcp 10.0.0.2:51234->140.82.121.6:443: read: connection reset by peer';
+  const BAD_GATEWAY = "HTTP 502: Bad Gateway (https://api.github.com/graphql)";
+  const onComments = (n: number, stderr: string) => stderr.replace("graphql", `repos/o/r/issues/${n}/comments`);
+  const WORLD = {
+    "o/r": { visibility: "private", project: 1, issues: [{ number: 1, title: "Прошлая задача", state: "CLOSED", fact: 0.5 }, { number: 2, title: "Ещё прошлая", state: "CLOSED", fact: 1 }, { number: 10, title: "Новая задача", state: "OPEN" }] },
+  };
+  const estimate = (...fails: FakeFail[]) => withFakeGh(WORLD, ["estimate", "10", "--repo", "o/r", "--type", "fix", "--analogs", "1,2", "--write"], fails);
+  const callsWith = (r: { calls: { args: string[]; stdin: string }[] }, match: string) => r.calls.filter((c) => `${c.args.join(" ")} ${c.stdin}`.includes(match)).length;
+
+  /** Закрытые #42 (вчера) и #43 (позавчера) — каждая со своей сессией (три промпта — не рутина) на своей ветке в каталоге /repo. */
+  function sweepWorld(issue: Record<string, unknown> = {}) {
+    const proj = path.join(dir, ".claude", "projects", "-repo");
+    mkdirSync(proj, { recursive: true });
+    const ago = (days: number, min = 0) => new Date(Date.now() - days * 86_400_000 + min * 60_000).toISOString();
+    for (const [n, branch, days] of [[42, "feat/42-export", 1], [43, "feat/43-import", 2]] as const) {
+      writeFileSync(path.join(proj, `${n}000000-0000-4000-8000-000000000000.jsonl`), jsonl([
+        ...[-60, -50, -40].map((min, k) => ({ type: "user", timestamp: ago(days, min), cwd: "/repo", gitBranch: branch, message: { role: "user", content: `#${n} шаг ${k}` } })),
+        { type: "assistant", timestamp: ago(days, -30), cwd: "/repo", gitBranch: branch, message: { id: `msg_${n}`, model: "claude-opus-5-5", usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: "text", text: "ok" }] } },
+      ]));
+    }
+    const issues = [{ number: 42, title: "Экспорт", state: "CLOSED", closedAt: ago(1), ...issue }, { number: 43, title: "Импорт", state: "CLOSED", closedAt: ago(2), ...issue }];
+    return { "o/r": { visibility: "private", project: 1, paths: ["/repo"], issues } };
+  }
+
+  it("временный сетевой сбой gh не роняет команду est: вызов повторяется", () => {
+    const r = estimate(
+      { match: "organization(login:$o)", times: 1, stderr: BAD_GATEWAY },
+      { match: "issues/10/comments", times: 2, stderr: onComments(10, TIMEOUT) },
+      { match: "updateProjectV2ItemFieldValue", times: 1, stderr: RESET },
+    );
+    expect(r.code).toBe(0);
+    expect(r.comment).toStartWith("Оценка: 0.5 ч");
+    expect(callsWith(r, "organization(login:$o)")).toBe(2);
+    expect(callsWith(r, "issues/10/comments")).toBe(3);
+    expect(callsWith(r, "updateProjectV2ItemFieldValue")).toBe(2);
+    expect(r.stderr).toContain("сбой сети, повтор через 0 с: команда gh api -X…");
+  });
+
+  it("ошибка запроса без сбоя сети не повторяется", () => {
+    const r = estimate({ match: "issues/10/comments", times: 1, stderr: "HTTP 403: Resource not accessible by personal access token (https://api.github.com/repos/o/r/issues/10/comments)" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("HTTP 403: Resource not accessible");
+    expect(r.stderr).not.toContain("сбой сети");
+    expect(callsWith(r, "issues/10/comments")).toBe(1);
+  });
+
+  it("сеть, не вернувшаяся за повторы, — ошибка «сбой сети» с числом повторов", () => {
+    const r = estimate({ match: "updateProjectV2ItemFieldValue", times: -1, stderr: TIMEOUT });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("connect: operation timed out — сбой сети, повторов: 3");
+    expect(callsWith(r, "updateProjectV2ItemFieldValue")).toBe(4);
+  });
+
+  it("новый комментарий после обрыва ответа не повторяется — GitHub мог его принять", () => {
+    const r = estimate({ match: "issues/10/comments", times: 1, stderr: onComments(10, RESET) });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("запрос мог дойти до GitHub");
+    expect(callsWith(r, "issues/10/comments")).toBe(1);
+  });
+
+  it("сетевой сбой при чтении проекта организации не превращается в «не найден пользователь»", () => {
+    const r = estimate({ match: "organization(login:$o)", times: -1, stderr: TIMEOUT });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("сбой сети, повторов: 3");
+    expect(callsWith(r, "user(login:$o)")).toBe(0);
+  });
+
+  it("ошибка записи одной задачи в свипе не обрывает свип — задача в итоге «не записано»", () => {
+    const r = withFakeGh(sweepWorld(), ["fact", "--sweep", "--repo", "o/r", "--write"], [{ match: "issues/42/comments", times: -1, stderr: "HTTP 422: Validation Failed (https://api.github.com/repos/o/r/issues/42/comments)" }]);
+    expect(r.stdout).toContain("#42: ошибка записи: команда gh api -X… завершилась с кодом 1: HTTP 422: Validation Failed");
+    expect(callsWith(r, "issues/43/comments")).toBe(1);
+    expect(r.stdout).toContain("не записано: 1 — #42\nповтор: est fact --sweep --since 90d --repo o/r --write — записанные он пропустит");
+    expect(r.code).toBe(1);
+  });
+
+  it("сеть, не вернувшаяся за повторы, останавливает свип — непройденные тоже в «не записано»", () => {
+    const r = withFakeGh(sweepWorld(), ["fact", "--sweep", "--repo", "o/r", "--write"], [{ match: "issues/42/comments", times: -1, stderr: onComments(42, TIMEOUT) }]);
+    expect(r.stdout).toContain("сеть не вернулась за повторы — свип остановлен, не пройдено: 1");
+    expect(callsWith(r, "issues/42/comments")).toBe(4);
+    expect(callsWith(r, "issues/43/comments")).toBe(0);
+    expect(r.stdout).toContain("не записано: 2 — #42, #43");
+    expect(r.code).toBe(1);
+  });
+
+  it("пересчёт по модели называет повтор по задаче — повтор свипа пересчитал бы и записанные", () => {
+    const world = sweepWorld({ fact: 0.5, models: { "claude-opus-5-5": { mtok: 1, usd: 1 } } });
+    const r = withFakeGh(world, ["fact", "--sweep", "--model", "claude-opus-5-5", "--repo", "o/r", "--write"], [{ match: "issues/43/comments", times: -1, stderr: "HTTP 422: Validation Failed" }]);
+    expect(callsWith(r, "issues/42/comments")).toBe(1);
+    expect(r.stdout).toContain("не записано: 1 — #43\nповтор по задаче, по порядку (свип пересчитал бы и записанные): est fact <N> --repo o/r --write — #43");
+    expect(r.code).toBe(1);
   });
 });

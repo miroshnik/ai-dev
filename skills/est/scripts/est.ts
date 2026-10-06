@@ -307,14 +307,42 @@ const pad = (s: string, n: number, right = false) => (right ? s.padStart(n) : s.
 // gh
 // ----------------------------------------------------------------------------
 
-function run(cmd: string[], stdin?: string): string {
-  const r = spawnSync(cmd[0]!, cmd.slice(1), { input: stdin, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-  if (r.error) {
-    if ((r.error as NodeJS.ErrnoException).code === "ENOENT") throw new EstError(`не найдена команда '${cmd[0]}'; нужен установленный gh CLI`);
-    throw new EstError(`команда ${cmd.slice(0, 3).join(" ")}…: ${r.error.message}`);
+/** Сеть не вернулась за все повторы вызова gh: дальше по списку идти незачем (#353). */
+export class NetworkError extends EstError {}
+
+/** Сбой сети или сервера GitHub (таймаут, обрыв соединения, 5xx) — не ошибка запроса: повтор может пройти. */
+const NETWORK_FAILURE = /dial tcp|i\/o timeout|timed out|TLS handshake|connection reset|connection refused|broken pipe|unexpected EOF|no such host|network is unreachable|stream error|Client\.Timeout|deadline exceeded|HTTP 5\d\d|status code: 5\d\d/i;
+/** Запрос до GitHub не дошёл: соединение не установлено. */
+const NOT_SENT = /dial tcp|TLS handshake|no such host|network is unreachable/i;
+
+/** Паузы перед повторами вызова gh при сбое сети, мс: `AI_DEV_GH_RETRY_MS` через запятую, иначе 2, 5 и 15 с. */
+function retryPauses(): number[] {
+  const env = process.env.AI_DEV_GH_RETRY_MS;
+  return env === undefined ? [2000, 5000, 15000] : env.split(",").filter(Boolean).map(Number);
+}
+
+/**
+ * Команда; gh при сбое сети повторяется с паузами (#353). `idempotent: false` (новый комментарий) — повтор, только если
+ * запрос не ушёл: иначе GitHub мог его принять, и повтор задвоил бы комментарий.
+ */
+function run(cmd: string[], stdin?: string, idempotent = true): string {
+  const pauses = cmd[0] === "gh" ? retryPauses() : [];
+  const what = `команда ${cmd.slice(0, 3).join(" ")}…`;
+  for (let attempt = 0; ; attempt++) {
+    const r = spawnSync(cmd[0]!, cmd.slice(1), { input: stdin, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    if (r.error) {
+      if ((r.error as NodeJS.ErrnoException).code === "ENOENT") throw new EstError(`не найдена команда '${cmd[0]}'; нужен установленный gh CLI`);
+      throw new EstError(`${what}: ${r.error.message}`);
+    }
+    if (r.status === 0) return r.stdout;
+    const err = (r.stderr || "").trim();
+    const failed = `${what} завершилась с кодом ${r.status}: ${err.slice(0, 500)}`;
+    if (!pauses.length || !NETWORK_FAILURE.test(err)) throw new EstError(failed);
+    if (!idempotent && !NOT_SENT.test(err)) throw new EstError(`${failed} — сбой сети, но запрос мог дойти до GitHub: повтора нет, чтобы не задвоить; проверь и повтори`);
+    if (attempt >= pauses.length) throw new NetworkError(`${failed} — сбой сети, повторов: ${pauses.length}`);
+    console.error(`сбой сети, повтор через ${pauses[attempt]! / 1000} с: ${what}`);
+    Bun.sleepSync(pauses[attempt]!);
   }
-  if (r.status !== 0) throw new EstError(`команда ${cmd.slice(0, 3).join(" ")}… завершилась с кодом ${r.status}: ${(r.stderr || "").trim().slice(0, 500)}`);
-  return r.stdout;
 }
 
 function ghGraphql(query: string, variables: Record<string, unknown>): Any {
@@ -335,7 +363,7 @@ function ghRest(p: string, method = "GET", body?: unknown): Any {
     cmd.push("--input", "-");
     stdin = JSON.stringify(body);
   }
-  const out = run(cmd, stdin);
+  const out = run(cmd, stdin, method !== "POST");
   return out.trim() ? JSON.parse(out) : null;
 }
 
@@ -606,7 +634,7 @@ export class Repo implements FactRepo {
     try {
       pv = ghGraphql(q, { o: owner, n: number })?.organization?.projectV2 ?? null;
     } catch (e) {
-      if (!(e instanceof EstError)) throw e;
+      if (!(e instanceof EstError) || e instanceof NetworkError) throw e; // сеть — не «не организация»: иначе ложное «Could not resolve to a User»
       pv = null;
     }
     if (!pv) {
@@ -3145,7 +3173,8 @@ interface FactArgs {
   model?: string;
 }
 
-function cmdFact(args: FactArgs): void {
+/** Код выхода: 1 — свип с --write что-то не записал (#353). */
+function cmdFact(args: FactArgs): number {
   const registry = loadRegistry();
   if (args.gap < 1) throw new EstError(`--gap должен быть ≥ 1 минуты, получено ${args.gap}`);
   if (args.sweep && args.number !== undefined) throw new EstError("номер issue и --sweep несовместимы: либо одно, либо другое");
@@ -3162,7 +3191,7 @@ function cmdFact(args: FactArgs): void {
         `Запиши комментарий ниже в issue #${args.number} инструментом GitHub; «Готово» ставит workflow проекта «Item closed», иначе — пользователь.\n\n` +
         cloudFactBody(process.env.CLAUDE_CODE_REMOTE_SESSION_ID, part, args.number),
     );
-    return;
+    return 0;
   }
   const repo = new Repo(resolveRepo(args.repo), registry);
   const meta = repo.projectMeta();
@@ -3182,14 +3211,23 @@ function cmdFact(args: FactArgs): void {
     let total = 0.0;
     let epicsTotal = 0.0;
     const counted: { h: number; iv?: Record<string, [number, number][]> }[] = [];
-    for (const r of rows) {
+    // ошибка одной задачи — строка и дальше по списку; сеть, не вернувшаяся за повторы, — стоп: следующие ждали бы те же повторы (#353)
+    const failed: number[] = [];
+    let left: Row[] = [];
+    const failure = (r: Row, what: string, e: unknown, i: number) => {
+      if (!(e instanceof EstError)) throw e;
+      console.log(`  #${r.number}: ${what}: ${e.message}`);
+      failed.push(r.number);
+      if (e instanceof NetworkError) left = rows.slice(i + 1);
+      return e instanceof NetworkError;
+    };
+    for (const [i, r] of rows.entries()) {
       let issue: Any;
       let res: Fact;
       try {
         [issue, res] = factForIssue(repo, r.number, args.gap, true);
       } catch (e) {
-        if (!(e instanceof EstError)) throw e;
-        console.log(`  #${r.number}: ошибка: ${e.message}`);
+        if (failure(r, "ошибка", e, i)) break;
         continue;
       }
       stats[res.cov] = (stats[res.cov] ?? 0) + 1;
@@ -3208,17 +3246,36 @@ function cmdFact(args: FactArgs): void {
       if (args.model !== undefined) extra += `; было ${fmtH(r.fact)} ч, $${fmtH(r.fact_marker?.usd ?? null)} → $${fmtH(res.usd ?? null)}`;
       console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} ч  ${pad(res.cov, 7)} оценка ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
       if (args.write && res.cov !== "none") {
-        const body = writeFact(repo, issue, res, r.est);
+        let body: string;
+        try {
+          body = writeFact(repo, issue, res, r.est);
+        } catch (e) {
+          if (failure(r, "ошибка записи", e, i)) break;
+          continue;
+        }
         // эпик дальше в этом же свипе складывает факты подзадач из строк проекта — им нужен записанный, а не прежний
         if (h !== null) r.fact = h;
         r.fact_marker = parseMarker(body, "fact");
       }
     }
+    if (left.length) console.log(`сеть не вернулась за повторы — свип остановлен, не пройдено: ${left.length}`);
     console.log(`итого: full ${stats.full}, partial ${stats.partial}, none ${stats.none}; сумма часов ${fmtH(total)} (без эпиков; эпики ${fmtH(epicsTotal)} ч — сумма своих подзадач)`);
     const warning = sweepOverlapWarning(counted);
     if (warning) console.log(warning);
     if (!args.write) console.log("(без --write ничего не записано)");
-    return;
+    else if (failed.length || left.length) {
+      const missed = [...failed, ...left.map((r) => r.number)];
+      console.log(`не записано: ${missed.length} — ${missed.map((n) => `#${n}`).join(", ")}`);
+      const opts = `--repo ${repo.full}${args.gap === 30 ? "" : ` --gap ${args.gap}`}`;
+      // обычный свип берёт только задачи без факта — записанные он пропустит; свип по модели пересчитал бы и их
+      console.log(
+        args.model === undefined
+          ? `повтор: est fact --sweep --since ${args.since} ${opts} --write — записанные он пропустит`
+          : `повтор по задаче, по порядку (свип пересчитал бы и записанные): est fact <N> ${opts} --write — ${missed.map((n) => `#${n}`).join(", ")}`,
+      );
+      return 1;
+    }
+    return 0;
   }
   if (args.number === undefined) throw new EstError("укажите номер issue или --sweep");
   const [issue, res] = factForIssue(repo, args.number, args.gap);
@@ -3234,6 +3291,7 @@ function cmdFact(args: FactArgs): void {
   }
   if (args.write) writeFact(repo, issue, res, est);
   else if (!args.json) console.log("(без --write ничего не записано)");
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -3954,8 +4012,7 @@ export function main(argv: string[]): number {
         options: { repo: { type: "string" }, write: { type: "boolean", default: false }, gap: { type: "string", default: "30" }, json: { type: "boolean", default: false }, sweep: { type: "boolean", default: false }, since: { type: "string", default: "90d" }, model: { type: "string" } },
       });
       if (positionals.length > 1) throw new EstError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
-      cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model });
-      return 0;
+      return cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model });
     }
     if (cmd === "period") {
       const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, since: { type: "string", multiple: true }, until: { type: "string", multiple: true }, gap: { type: "string", default: "30" } } });
