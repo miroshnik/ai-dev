@@ -25,7 +25,15 @@ beforeEach(() => {
   running = [];
 });
 afterEach(() => {
-  for (const p of running) if (p.exitCode === null && p.signalCode === null) process.kill(-p.pid!, "SIGKILL");
+  for (const p of running) {
+    if (p.exitCode !== null || p.signalCode !== null) continue;
+    try {
+      process.kill(-p.pid!, "SIGKILL");
+    } catch (e) {
+      // отпущенная команда уже вышла, а событие exit до теста ещё не дошло: группы нет — убирать нечего
+      if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e;
+    }
+  }
   cleanup();
 });
 
