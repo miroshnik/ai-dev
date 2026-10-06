@@ -4716,6 +4716,34 @@
   "name": "удалённая страница исчезает из ветки"
  },
  {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Отклонённый пуш — повтор поверх новой головы, а не падение"
+  ],
+  "name": "ветку сдвинула публикация из предка — повтор поверх новой головы: код 0, она — родитель публикации"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Отклонённый пуш — повтор поверх новой головы, а не падение"
+  ],
+  "name": "отказ без сдвига ветки (сбой хостинга) — пауза и повтор; в логе причина из stderr git push"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Отклонённый пуш — повтор поверх новой головы, а не падение"
+  ],
+  "name": "попытки исчерпаны — код 1 с причиной из stderr git push, ветка не меняется"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Отклонённый пуш — повтор поверх новой головы, а не падение"
+  ],
+  "name": "после перечитывания ветка уже собрана из потомка — пропуск «уже новее», код 0, ветка не меняется"
+ },
+ {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
