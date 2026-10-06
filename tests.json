@@ -1164,6 +1164,27 @@
   "describes": [
    "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
   ],
+  "name": "premerge при красном main ждёт бага, чей заголовок называет упавший чек"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "premerge при красном main и открытом баге про другой чек просит завести баг на упавший"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "красный test:spec и на голом main — premerge ждёт бага, чей заголовок называет test:spec"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
   "name": "красный test:spec и на слиянии PR, и на голом main — premerge выходит отдельным кодом «main красный», а не «PR ломает»"
  },
  {
@@ -1179,6 +1200,13 @@
    "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
   ],
   "name": "красный чек последнего коммита main — premerge не вливает и называет чек"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "красных чеков несколько, открытый баг называет часть — premerge ждёт его и просит завести баг на остальные"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
