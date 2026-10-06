@@ -16,7 +16,7 @@ import { builtinModules } from "node:module";
 import path from "node:path";
 
 import { codeOnly, envNamesInCode, invariant } from "./harness.ts";
-import type { Exception, Invariant, It } from "./harness.ts";
+import type { EnvReader, Exception, Invariant, It } from "./harness.ts";
 
 export interface Module {
   /** Каталог модуля от корня проекта (или несколько). */
@@ -194,7 +194,11 @@ const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
 
 /** Хосты внешних систем в литералах URL исходника; комментарии, пространства имён и зарезервированные домены — нет. */
 export function hostsIn(source: string, file?: string): string[] {
-  const text = codeOnly(source, file);
+  return hostsInCode(codeOnly(source, file));
+}
+
+/** То же по коду без комментариев: исходник разбирается один раз на хосты и ключи окружения. */
+function hostsInCode(text: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(URL_HOST)) {
     const h = m[1]!.toLowerCase();
@@ -204,7 +208,8 @@ export function hostsIn(source: string, file?: string): string[] {
   return [...out];
 }
 
-function sources(root: string, model: Model): Source[] {
+/** Исходники корней модели: пакеты, хосты и ключи окружения — по коду без комментариев, ключи — и способами `readers`. */
+function sources(root: string, model: Model, readers?: readonly EnvReader[]): Source[] {
   const out: Source[] = [];
   const walk = (rel: string): void => {
     let entries;
@@ -219,7 +224,8 @@ function sources(root: string, model: Model): Source[] {
         if (!SKIP.has(e.name)) walk(child);
       } else if (CODE.test(e.name) && !/\.d\.[cm]?ts$/.test(e.name)) {
         const text = readFileSync(path.join(root, child), "utf8");
-        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsIn(text, child), env: envNamesInCode(text) });
+        const code = codeOnly(text, child);
+        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsInCode(code), env: envNamesInCode(code, { file: child, readers }) });
       }
     }
   };
@@ -250,13 +256,14 @@ function owners(model: Model, dir: string): string[] {
  * «<модуль> импортирует <пакет>» на каждый внешний пакет, который модуль импортирует (не разрешён — красный),
  * «<модуль> использует разрешённый пакет <пакет>» на каждый пакет модели (не импортируется — красный: убери из модели).
  * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions/` папки решения.
+ * `readers` — свои способы чтения окружения проекта, те же, что у `envVars` (`configGet`): для ключей внешних систем.
  */
-export function architecture(it: It, opts: { root: string; model: Model; exceptions?: readonly Exception[] }): void {
+export function architecture(it: It, opts: { root: string; model: Model; exceptions?: readonly Exception[]; readers?: readonly EnvReader[] }): void {
   const { model } = opts;
   // реестры собираются целиком, потом регистрируются: исключение уходит только в реестр, где есть его элемент
   const specs: Invariant<unknown>[] = [];
   const add: Add = (spec) => void specs.push(spec as Invariant<unknown>);
-  const src = sources(opts.root, model);
+  const src = sources(opts.root, model, opts.readers);
   const dirs = sorted([...new Set(src.map((s) => s.dir))]);
   const moduleOf = (dir: string) => owners(model, dir);
 
