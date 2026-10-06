@@ -1939,6 +1939,15 @@ function mainBugsOf(io: Io, slug: string, base: string): { number: number; title
 }
 
 /**
+ * Заголовок бага «<base> красный…» называет чек — имя целиком после префикса, не часть другого: `test` — не в
+ * «test:spec», `main` — не префикс.
+ */
+function bugNames(base: string, title: string, check: string): boolean {
+  const name = check.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\s,«"(])${name}(?=$|[\\s,;»")])`, "u").test(title.slice(`${base} красный`.length));
+}
+
+/**
  * Перед мержем зелёного PR: main ушёл после его CI — слияние головы PR со свежим main во временном worktree и быстрые
  * проверки (`typecheck`, затем `test:spec`, как в CI); не ушёл — CI проверил ровно это слияние. Что проверил CI, GitHub
  * не хранит (merge-ref пересобирается), поэтому по времени: самый ранний check suite головы против последнего события
@@ -1953,10 +1962,11 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   const closes = closingInBody(pr.body ?? "");
 
   /**
-   * Красный main: не вливать и в своём PR не чинить — один баг на всех, остальные ждут его закрытия. PR, который
-   * закрывает этот баг, — починка: null, проверка идёт как обычно.
+   * Красный main: не вливать и в своём PR не чинить — один баг на всех, остальные ждут его закрытия. `red` — упавшие
+   * чеки (или скрипт), `what` — как их назвать в заголовке бага. PR, который закрывает этот баг, — починка: null,
+   * проверка идёт как обычно.
    */
-  const mainRed = (lead: string, why: string, title: string): number | null => {
+  const mainRed = (lead: string, why: string, red: string[], what: (names: string[]) => string): number | null => {
     let bugs: { number: number; title: string }[] = [];
     try {
       bugs = mainBugsOf(io, slug, base);
@@ -1964,19 +1974,24 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       if (!(e instanceof GhError)) throw e;
       io.out(`○ открытый баг на красный ${base} не найден поиском: ${e.message}`);
     }
-    // починка — PR, который закрывает любой из открытых багов; ждать — первого по номеру
+    // починка — PR, который закрывает любой из открытых багов, без сверки с упавшим чеком (в отличие от ожидания ниже):
+    // один красный main назван то скриптом (test:spec на голом main), то чеком CI — сверка не дала бы влить починку
     const fix = bugs.find((b) => closes.includes(b.number));
-    const bug = fix ?? bugs[0];
-    if (fix && bug) {
-      io.out(`○ ${base} красный — ${why}; PR закрывает баг #${bug.number} на него — проверяю PR как обычно`);
+    if (fix) {
+      io.out(`○ ${base} красный — ${why}; PR закрывает баг #${fix.number} на него — проверяю PR как обычно`);
       return null;
     }
     io.out(lead);
+    // ждать — бага, чей заголовок называет упавший чек (в отличие от починки выше): баг про другой чек main зелёным не сделает
+    const named = (b: { title: string }) => red.some((n) => bugNames(base, b.title, n));
+    for (const b of bugs.filter((b) => !named(b))) io.out(`○ #${b.number} «${b.title}» — про другой чек: не ждать`);
     const wait = (n: string) => `ждать его закрытия — bash ${WAIT_CI} issue ${n} фоновой командой, затем снова pr premerge ${number}`;
+    const bug = bugs.find(named);
     if (bug) io.out(`баг на красный ${base} — #${bug.number} «${bug.title}»: ${wait(String(bug.number))}`);
-    else {
+    const unnamed = red.filter((n) => !bugs.some((b) => bugNames(base, b.title, n)));
+    if (unnamed.length) {
       const priority = pr.base?.repo?.owner?.type === "Organization" ? " --priority Urgent" : "";
-      io.out(`бага на красный ${base} нет — заведи (метка — решение упавшего теста) и дай чип: bun ${import.meta.path} task new --type Баг${priority} --title ${JSON.stringify(`${base} красный: ${title}`)}; ${wait("<N>")}`);
+      io.out(`бага на красный ${base} про ${what(unnamed)} нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${import.meta.path} task new --type Баг${priority} --title ${JSON.stringify(`${base} красный: ${what(unnamed)}`)}; ${wait("<N>")}`);
     }
     io.out(`⛔ не вливать: ${base} красный, не этот PR — в своём PR не чинить`);
     return 3;
@@ -1985,9 +2000,9 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   try {
     const red = redChecksOf(io, slug, base);
     if (red.names.length) {
-      const what = `${red.names.length > 1 ? "чеки" : "чек"} ${red.names.join(", ")}`;
-      const why = `${what} последнего коммита ${base} (${red.sha.slice(0, 7)})`;
-      const code = mainRed(`${base} красный: ${why}`, why, what);
+      const checks = (names: string[]) => `${names.length > 1 ? "чеки" : "чек"} ${names.join(", ")}`;
+      const why = `${checks(red.names)} последнего коммита ${base} (${red.sha.slice(0, 7)})`;
+      const code = mainRed(`${base} красный: ${why}`, why, red.names, checks);
       if (code !== null) return code;
     }
   } catch (e) {
@@ -2100,7 +2115,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       return 1;
     }
     const why = `${red.script} красный и на голом origin/${base} тем же`;
-    const code = mainRed(`${base} красный и сам: ${why}`, why, red.script);
+    const code = mainRed(`${base} красный и сам: ${why}`, why, [red.script], (names) => names.join(", "));
     if (code !== null) return code;
     io.out(breaks(red.script));
     return 1;

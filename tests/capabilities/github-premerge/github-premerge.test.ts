@@ -379,8 +379,65 @@ describe("pr premerge: main красный — не этот PR: не влива
     const none = fakeGh(p.head, { main, owner: "Organization" });
     const r = premerge(none.gh, p.work);
     expect(none.calls.find((c) => c.startsWith("search/issues?"))).toBe(`search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "main красный"`)}&per_page=20`);
-    expect(r.out).toContain(`бага на красный main нет — заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
+    expect(r.out).toContain(`бага на красный main про чек deploy нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
     expect(r.code).toBe(3);
+  });
+
+  /**
+   * Открытый баг «main красный…» мог остаться от другой поломки (#338): ждать его — ждать того, что main зелёным не
+   * сделает. Ждать — бага, чей заголовок называет упавший чек; остальные идут строкой «про другой чек».
+   */
+  it("premerge при красном main ждёт бага, чей заголовок называет упавший чек", () => {
+    const p = project({ pr: { "uses.txt": "a\n" } });
+    const main: MainChecks = { runs: [{ name: "ci / job", conclusion: "failure" }] };
+    const bugs = [
+      { number: 40, title: "main красный: чек spec-publish" },
+      { number: 41, title: "main красный: чек ci / job" },
+    ];
+    const r = premerge(fakeGh(p.head, { main, bugs }).gh, p.work);
+    expect(r.code).toBe(3);
+    expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — про другой чек: не ждать");
+    expect(r.out).toContain(`баг на красный main — #41 «main красный: чек ci / job»: ждать его закрытия — bash ${WAIT} issue 41 фоновой командой`);
+    expect(r.out).not.toContain("issue 40");
+    expect(r.out).not.toContain("заведи");
+    expect(r.last).toBe(MAIN_RED);
+  });
+
+  it("premerge при красном main и открытом баге про другой чек просит завести баг на упавший", () => {
+    const p = project({ pr: { "uses.txt": "a\n" } });
+    const main: MainChecks = { runs: [{ name: "test", conclusion: "failure" }] };
+    // «test» в «test:spec» — часть другого имени, не упавший чек
+    const bugs = [
+      { number: 40, title: "main красный: чек spec-publish" },
+      { number: 42, title: "main красный: test:spec" },
+    ];
+    const r = premerge(fakeGh(p.head, { main, bugs }).gh, p.work);
+    expect(r.code).toBe(3);
+    expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — про другой чек: не ждать\n○ #42 «main красный: test:spec» — про другой чек: не ждать");
+    expect(r.out).not.toContain("баг на красный main —");
+    expect(r.out).toContain(`бага на красный main про чек test нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --title "main красный: чек test"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
+    expect(r.last).toBe(MAIN_RED);
+  });
+
+  it("красных чеков несколько, открытый баг называет часть — premerge ждёт его и просит завести баг на остальные", () => {
+    const p = project({ pr: { "uses.txt": "a\n" } });
+    const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }, { name: "smoke", conclusion: "failure" }, { name: "e2e", conclusion: "failure" }] };
+    const r = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чеки deploy, e2e" }] }).gh, p.work);
+    expect(r.code).toBe(3);
+    expect(r.out).toContain("баг на красный main — #41 «main красный: чеки deploy, e2e»: ждать его закрытия");
+    expect(r.out).toContain(`бага на красный main про чек smoke нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --title "main красный: чек smoke"`);
+  });
+
+  it("красный test:spec и на голом main — premerge ждёт бага, чей заголовок называет test:spec", () => {
+    const p = project({ pr: { "other.txt": "x\n" }, mainAfter: { "uses.txt": "z\n" } });
+    const bugs = [
+      { number: 40, title: "main красный: typecheck" },
+      { number: 43, title: "main красный: test:spec — реестр > ссылка z" },
+    ];
+    const r = premerge(fakeGh(p.head, { moved: AFTER, bugs }).gh, p.work);
+    expect(r.code).toBe(3);
+    expect(r.out).toContain("○ #40 «main красный: typecheck» — про другой чек: не ждать");
+    expect(r.out).toContain("баг на красный main — #43 «main красный: test:spec — реестр > ссылка z»: ждать его закрытия");
   });
 
   it("PR закрывает открытый баг «main красный…» — красный main его не останавливает: это починка", () => {
