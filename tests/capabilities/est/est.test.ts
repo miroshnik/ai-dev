@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
   cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, loadPins, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, pinnedTranscripts, plural, resolveLinks,
-  pickAnalogs, roundScale, selectSessions, sweepOverlapWarning, usageCost,
+  parsePeriods, periodSummary, periodTable, pickAnalogs, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost,
 } from "../../../skills/est/scripts/est.ts";
-import type { CloudPart, FactRepo, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
+import type { CloudPart, FactRepo, Period, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
@@ -1105,7 +1105,7 @@ appendFileSync(dir + "/calls.jsonl", JSON.stringify({ args, stdin }) + "\\n");
 const world = JSON.parse(readFileSync(dir + "/world.json", "utf8"));
 const print = (x) => console.log(JSON.stringify(x));
 const num = (name, number) => ({ __typename: "ProjectV2ItemFieldNumberValue", number, field: { name } });
-const factMarker = (i) => "<!-- fact " + JSON.stringify({ v: 1, h: i.fact, cov: i.cov ?? "full", tok: { total: 2000000 }, usd: 1.5, type: i.type ?? "fix" }) + " -->";
+const factMarker = (i) => "<!-- fact " + JSON.stringify({ v: 1, h: i.fact, cov: i.cov ?? "full", tok: { total: 2000000 }, usd: 1.5, type: i.type ?? "fix", ...(i.models ? { models: i.models } : {}) }) + " -->";
 const estMarker = (i) => "<!-- est " + JSON.stringify({ v: 2, h: i.est, type: i.type ?? "fix", mult: i.mult ?? 1 }) + " -->";
 const issueOf = (i) => ({ __typename: "Issue", id: "I_" + i.number, number: i.number, title: i.title, state: i.state, stateReason: null,
   closedAt: i.closedAt ?? null, createdAt: i.createdAt ?? null, body: i.body ?? "", labels: { nodes: (i.labels ?? []).map((name) => ({ name })) },
@@ -1125,6 +1125,10 @@ if (args[1] === "graphql") {
     const fieldValues = (i) => ({ nodes: [...(i.fact ? [num("Факт, ч", i.fact)] : []), ...(i.est ? [num("Оценка, ч", i.est)] : [])] });
     const nodes = r.issues.map((i) => ({ id: "PI_" + i.number, type: "ISSUE", content: issueOf(i), fieldValues: fieldValues(i) }));
     print({ data: { node: { items: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
+  } else if (query.includes("pullRequests(first:")) {
+    const pr = (p) => ({ number: p.number, title: "PR " + p.number, state: "MERGED", headRefName: "b" + p.number, baseRefName: "main", body: "", mergedAt: p.mergedAt,
+      updatedAt: p.mergedAt, additions: 0, deletions: 0, changedFiles: 0, mergeCommit: null, closingIssuesReferences: { nodes: [] }, commits: { totalCount: 0, nodes: [] }, files: { nodes: [] } });
+    print({ data: { repository: { defaultBranchRef: { name: "main" }, pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: (repo.prs ?? []).map(pr) } } } });
   } else if (query.includes("issue(number:$n)")) {
     const i = repo.issues.find((x) => x.number === v.n);
     print({ data: { repository: { issue: { ...issueOf(i), url: "", timelineItems: { nodes: [] }, closedEvents: { nodes: [] },
@@ -1137,7 +1141,7 @@ if (args[1] === "graphql") {
 } else { console.error("fake gh: " + args.join(" ")); process.exit(1); }
 `;
 
-/** `est <args>` с фейковым gh в мире `world` (все его репо — в реестре): исход, записи в GitHub, тело нового комментария. */
+/** `est <args>` с фейковым gh в мире `world` (все его репо — в реестре, `paths` репо — его каталоги): исход, записи в GitHub, тело нового комментария. */
 function withFakeGh(world: Record<string, unknown>, args: string[]) {
   const bin = path.join(dir, "bin");
   const cfg = path.join(dir, "ai-dev");
@@ -1147,7 +1151,7 @@ function withFakeGh(world: Record<string, unknown>, args: string[]) {
   writeFileSync(path.join(bin, "gh"), `#!/usr/bin/env bash\nexec bun "$FAKE_GH/fake-gh.mjs" "$@"\n`);
   chmodSync(path.join(bin, "gh"), 0o755);
   writeFileSync(path.join(bin, "world.json"), JSON.stringify(world));
-  writeFileSync(path.join(cfg, "repos.json"), JSON.stringify(Object.fromEntries(Object.keys(world).map((k) => [k, {}]))));
+  writeFileSync(path.join(cfg, "repos.json"), JSON.stringify(Object.fromEntries(Object.entries(world).map(([k, v]) => [k, (v as { paths?: string[] }).paths ? { paths: (v as { paths: string[] }).paths } : {}]))));
   const log = path.join(bin, "calls.jsonl");
   writeFileSync(log, "");
   const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin } });
@@ -1534,5 +1538,140 @@ describe("Кэш est переживает параллельные запуск�
     const last = JSON.parse(readFileSync(file, "utf8"));
     expect(last).toEqual({ writer: last.writer, i: ROUNDS - 1, pad: "x".repeat(2000 * (Number(last.writer) + 1)) });
     expect(readdirSync(path.dirname(file))).toEqual(["prs.json"]);
+  });
+});
+
+/**
+ * Факт задачи видит только работу, привязанную к задаче: во флоу без задач (PR без issue, ветка worktree до
+ * переименования, общая ветка нескольких PR) он занижен или делится неверно, и сравнить по нему флоу до и после правки
+ * нельзя. Сводка периода берёт все сессии репозитория за период, без привязки к задачам: часы агента (сумма по
+ * сессиям), часы машины (объединение сессий) и их отношение — параллельность, токены, выход, стоимость, ходы,
+ * субагентов, промпты человека, — и то же на влитой за период PR. Два периода — рядом, с отношением «после / до».
+ */
+describe("Сводка периода — все сессии репозитория без привязки к задачам", () => {
+  const opus = (mid: string): unknown[] => [mid, 0, 0, 40_000, 0, 0, 2_000_000, 0]; // $1 выхода + $1 чтения кэша
+  const haiku = (mid: string): unknown[] => [mid, 1, 0, 100_000, 0, 0, 0, 0]; // $0.5 выхода
+  const sess = (sid: string, ev: unknown[][], usage: unknown[][], o: Partial<Session> = {}): Session => ({
+    sid, cwd: "/repo", n_human: 3, ev, prlinks: [], commits: [], first_refs: [], first_urls: [], usage, models: ["claude-opus-5", "claude-haiku-4-5"],
+    title: "", title_refs: [], title_urls: [], n_subagents: 0, source: "claude", routine: false, ...o,
+  });
+  // задача #42: промпт, ответ, ответ субагента, пауза длиннее 30 мин, промпт и ответ — 30 мин работы
+  const task = sess("s1", [
+    [ts("10:00"), "feat/42-x", 1, "", -1, 0], [ts("10:10"), "feat/42-x", 0, "", 0, 0], [ts("10:20"), "feat/42-x", 0, "42", 1, 1],
+    [ts("11:30"), "feat/42-x", 1, "", -1, 0], [ts("11:40"), "feat/42-x", 0, "", 2, 0],
+  ], [opus("m1"), haiku("m2"), opus("m3")]);
+  // сессия без задачи на main — её нет ни в одном факте; 20 мин, из них 15 — одновременно с #42
+  const loose = sess("s2", [[ts("10:05"), "main", 1, "", -1, 0], [ts("10:25"), "main", 0, "", 0, 0]], [opus("m4")]);
+  // записи до начала и с конца периода не в счёт
+  const outside = sess("s3", [[ts("08:00"), "main", 1, "", -1, 0], [ts("08:10"), "main", 0, "", 0, 0], [ts("12:00"), "main", 0, "", 1, 0]], [opus("m5"), opus("m6")]);
+  const merged = (number: number, hhmm: string): PR => ({ ...pr77(), number, mergedAt: ts(hhmm) });
+
+  it("сводка периода считает часы, токены и стоимость всех сессий репо, а не только привязанных к задачам", () => {
+    const p = periodSummary([task, loose, outside], [merged(1, "09:00"), merged(2, "10:30"), merged(3, "11:50"), merged(4, "12:00")], ts("09:30"), ts("12:00"));
+    expect(p).toMatchObject({ sessions: 2, prs: 2, h: 50 * 60, machine: 35 * 60, tok: 6_220_000, out: 220_000, steps: 4, agents: 1, prompts: 3, unpriced: [] });
+    expect(p.usd).toBeCloseTo(6.5, 9);
+    expect(p.models["claude-opus-5"]).toBeCloseTo(6, 9);
+    expect(p.models["claude-haiku-4-5"]).toBeCloseTo(0.5, 9);
+  });
+
+  it("в сводку идут все сессии каталогов репозитория — и короткие без коммитов, и закреплённые за его задачами; гость другого репозитория — нет", () => {
+    const parsed = {
+      "/t/r.jsonl": sess("r", loose.ev, [], { n_human: 1, routine: true }),
+      "/t/p.jsonl": sess("p", loose.ev, [], { cwd: "/elsewhere" }),
+      "/t/g.jsonl": sess("g", loose.ev, [], { cwd: "/other" }),
+      "/t/e.jsonl": sess("e", [], []),
+    };
+    expect(selectPeriodSessions(parsed, ["/repo"], new Set(["/t/p.jsonl"])).map((s) => s.sid)).toEqual(["r", "p"]);
+  });
+
+  /** Строка таблицы по началу подписи — ячейки, разделённые двумя и более пробелами. */
+  const cells = (lines: string[] | string, label: string) => (typeof lines === "string" ? lines.split("\n") : lines).find((l) => l.startsWith(label))?.trim().split(/\s{2,}/);
+  const period = (o: Partial<Period>): Period => ({
+    since: ts("00:00"), until: ts("12:00"), sessions: 5, prs: 4, h: 4 * 3600, machine: 2 * 3600, tok: 40e6, out: 400_000, usd: 40,
+    models: { "claude-fable-5": 30, "claude-opus-5": 10 }, unpriced: [], steps: 400, agents: 8, prompts: 12, ...o,
+  });
+
+  it("сводка периода делит итоги на влитые за период PR", () => {
+    const before = period({});
+    const after = period({ since: ts("12:00"), until: ts("18:00"), prs: 2, machine: 3600, tok: 30e6, out: 300_000, usd: 10, models: { "claude-opus-5-5": 10 }, steps: 300, agents: 2, prompts: 4 });
+    const lines = periodTable([before, after]);
+    expect(lines[0]).toContain("после / до");
+    expect(cells(lines, "влитых PR")).toEqual(["влитых PR", "4", "2", "×0.5"]);
+    expect(cells(lines, "параллельность сессий")).toEqual(["параллельность сессий", "×2", "×4", "×2"]);
+    expect(cells(lines, "  часы агента")).toEqual(["часы агента", "1", "2", "×2"]);
+    expect(cells(lines, "  часы машины")).toEqual(["часы машины", "0.5", "0.5", "×1"]);
+    expect(cells(lines, "  токены, млн")).toEqual(["токены, млн", "10", "15", "×1.5"]);
+    expect(cells(lines, "  выход, тыс.")).toEqual(["выход, тыс.", "100", "150", "×1.5"]);
+    expect(cells(lines, "  стоимость, $")).toEqual(["стоимость, $", "10.00", "5.00", "×0.5"]);
+    expect(cells(lines, "  субагентов")).toEqual(["субагентов", "2", "1", "×0.5"]);
+    expect(cells(lines, "  промптов человека")).toEqual(["промптов человека", "3", "2", "×0.67"]);
+    expect(cells(lines, "$ за 1 млн токенов")).toEqual(["$ за 1 млн токенов", "1.00", "0.33", "×0.33"]);
+    // тариф отдельно от флоу: доля $ по моделям у каждого периода и напоминание сравнивать флоу по токенам и выходу
+    expect(lines.filter((l) => l.startsWith("$ по моделям"))).toHaveLength(2);
+    expect(lines.join("\n")).toContain("claude-fable-5 75 %, claude-opus-5 25 %");
+    expect(lines.join("\n")).toContain("тренд $ смешивает флоу с тарифом модели");
+    // без влитых PR делить не на что; один период — без отношения
+    const alone = periodTable([period({ prs: 0 })]);
+    expect(alone[0]).not.toContain("после / до");
+    expect(cells(alone, "  часы агента")).toEqual(["часы агента", "—"]);
+  });
+
+  it("период — пары --since … [--until …] по порядку, без --until — до сейчас; дата, время ISO или 90d", () => {
+    const now = Date.parse("2026-09-10T12:00:00Z") / 1000;
+    expect(parsePeriods(["2026-09-01T00:00:00Z", "2026-09-05T00:00:00Z"], ["2026-09-05T00:00:00Z"], now)).toEqual([
+      [Date.parse("2026-09-01T00:00:00Z") / 1000, Date.parse("2026-09-05T00:00:00Z") / 1000],
+      [Date.parse("2026-09-05T00:00:00Z") / 1000, now],
+    ]);
+    expect(parsePeriods(["7d"], [], now)).toEqual([[now - 7 * 86400, now]]);
+    expect(parsePeriods(["2026-09-01"], [], now)[0]![0]).toBe(new Date(2026, 8, 1).getTime() / 1000);
+    expect(() => parsePeriods([], [], now)).toThrow("укажите --since");
+    expect(() => parsePeriods(["вчера"], [], now)).toThrow("неверная дата «вчера»");
+    expect(() => parsePeriods(["2026-09-05"], ["2026-09-01"], now)).toThrow("конец не позже начала");
+    expect(() => parsePeriods(["2026-09-01"], ["2026-09-02", "2026-09-03"], now)).toThrow("--until без своего --since");
+  });
+
+  it("est period печатает два периода рядом по транскриптам и влитым PR — в GitHub не пишет", () => {
+    const proj = path.join(dir, ".claude", "projects", "-repo");
+    mkdirSync(proj, { recursive: true });
+    const at = (hhmm: string) => `2026-09-01T${hhmm}:00Z`;
+    const prompt = (hhmm: string, text: string) => ({ type: "user", timestamp: at(hhmm), cwd: "/repo", gitBranch: "main", message: { role: "user", content: text } });
+    const answer = (hhmm: string, id: string) => ({
+      type: "assistant", timestamp: at(hhmm), cwd: "/repo", gitBranch: "main",
+      message: { id, model: "claude-opus-5", usage: { input_tokens: 0, output_tokens: 40_000, cache_read_input_tokens: 2_000_000 }, content: [{ type: "text", text: "ok" }] },
+    });
+    writeFileSync(path.join(proj, "55555555-6666-7777-8888-999999999999.jsonl"), jsonl([prompt("10:00", "вопрос"), answer("10:10", "msg_a"), prompt("10:20", "ещё"), prompt("11:00", "дальше"), answer("11:10", "msg_b"), answer("11:20", "msg_c")]));
+    const world = { "o/r": { visibility: "private", project: 1, paths: ["/repo"], issues: [], prs: [{ number: 5, mergedAt: at("10:15") }, { number: 6, mergedAt: at("11:15") }, { number: 7, mergedAt: at("11:30") }] } };
+    const r = withFakeGh(world, ["period", "--repo", "o/r", "--since", at("09:00"), "--until", at("10:30"), "--since", at("10:30"), "--until", at("12:00")]);
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("после / до");
+    expect(cells(r.stdout, "влитых PR")).toEqual(["влитых PR", "1", "2", "×2"]);
+    expect(cells(r.stdout, "стоимость, $")).toEqual(["стоимость, $", "2.00", "4.00", "×2"]);
+    expect(cells(r.stdout, "  стоимость, $")).toEqual(["стоимость, $", "2.00", "2.00", "×1"]);
+    expect(r.stdout).toContain("claude-opus-5 100 %");
+    expect(r.writes).toEqual([]);
+  });
+});
+
+/**
+ * Стоимость задачи — прежде всего тариф модели: смена модели меняет $ на задачу в разы при том же флоу, и тренд $
+ * смешивает флоу с ценой. Эффект флоу виден в токенах и выходе; история показывает долю $ по моделям, чтобы сдвиг
+ * тарифа был виден рядом с трендом.
+ */
+describe("Тариф модели — отдельно от флоу: история показывает долю $ по моделям", () => {
+  it("est history показывает долю $ по моделям и напоминает сравнивать флоу по токенам и выходу", () => {
+    const world = {
+      "o/h": {
+        visibility: "private", project: 5,
+        issues: [
+          { number: 1, title: "Альфа", state: "CLOSED", closedAt: day(2), fact: 1, models: { "claude-fable-5": { mtok: 1, usd: 3 } } },
+          { number: 2, title: "Бета", state: "CLOSED", closedAt: day(3), fact: 1, models: { "claude-opus-5-5": { mtok: 2, usd: 1 }, "gpt-5": { mtok: 1, usd: null } } },
+        ],
+      },
+    };
+    const r = withFakeGh(world, ["history", "--repo", "o/h"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("$ по моделям: claude-fable-5 75 %, claude-opus-5-5 25 %");
+    expect(r.stdout).toContain("тренд $ смешивает флоу с тарифом модели");
   });
 });
