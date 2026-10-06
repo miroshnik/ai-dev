@@ -407,11 +407,13 @@ export default {
 графу импортов (точки входа knip — из его конфига проекта).
 
 ```ts
-import { it } from "vitest";
+import { describe, it } from "vitest";
 import { deadCode, exceptionsIn } from "../../../.agents/skills/spec/scripts/harness.ts";
 
 const exceptions = exceptionsIn(); // exceptions/<находка>.json папки: { "item": "export:src/math.ts#factorial", … }
-deadCode(it, { root: process.cwd(), exceptions }); // или report: ".knip.json" — готовый `knip --reporter json`
+describe("нет кода без потребителя", () => deadCode(it, { root: process.cwd(), exceptions }));
+// код, до которого доходят только тесты: knip --production, тесты с пометкой « (production)»
+describe("код продукта нужен продукту", () => deadCode(it, { root: process.cwd(), exceptions, production: true }));
 // аргументы knip: deadCode(it, { root, args: ["--tsConfig", "tsconfig.test.json"] }) — тесты вне основного tsconfig
 ```
 
@@ -420,14 +422,46 @@ deadCode(it, { root: process.cwd(), exceptions }); // или report: ".knip.json
 «нет импортов неустановленных пакетов», «нет нерезолвящихся импортов» и виды
 knip 6 — «нет членов перечислений без потребителя», «нет членов пространств
 имён без потребителя», «нет экспортов-дублей», «нет вызовов неустановленных
-бинарников», «нет лишних записей каталога пакетов» — упавшие со списком
-находок. Исключение — ключ находки (`file:src/legacy.ts`,
-`export:src/math.ts#factorial`, `dependency:lodash`,
-`enumMember:src/color.ts#Color.Blue`) с задачей: зелёное, пока knip его
-находит; перестал — «убери исключение». Без `report` запускается
-`node_modules/.bin/knip --reporter json` проекта (и `args`); код выхода не 0/1
-или вывод не JSON — все тесты вида падают с причиной: сбой knip — не «мёртвого
-кода нет».
+бинарников», «нет лишних записей каталога пакетов», «нет ссылок на
+отсутствующие записи каталога пакетов» — упавшие со списком находок. «Все
+находки knip — известных видов» падает на виде, которого харнесс не знает
+(новый в knip, `cycles` по `--cycles`): находка не пропадает молча.
+
+**Ключ находки** — `<вид>:<файл>#<имя>`, файл — из отчёта knip:
+`export:src/math.ts#factorial`, `enumMember:src/color.ts#Color.Blue`; у
+зависимости и бинарника из scripts — `package.json` воркспейса
+(`dependency:packages/a/package.json#lodash`), у неустановленного пакета —
+файл с импортом (`unlisted:packages/a/src/x.ts#zod`), у каталога — его файл
+и имя каталога (`catalog:pnpm-workspace.yaml#default.vue`,
+`catalogReference:packages/a/package.json#react18.react`); у файла —
+`file:src/legacy.ts`. Исключение одного воркспейса не прячет тот же пакет в
+другом. Исключение — ключ с задачей: зелёное, пока knip его находит;
+перестал — «убери исключение»; прежний ключ без файла (`dependency:lodash`) —
+упавший тест с ключами на замену.
+
+**Подсказки конфигурации** — тест «нет подсказок конфигурации knip»: лишний
+`ignore*`, `entry` или `project` без совпадений, лишний воркспейс — строкой
+`<воркспейс>#<тип>:<что>` (`packages/a#ignoreDependencies:lodash`,
+`.#entry-empty:src/main.ts`), исключение — `hint:<строка>`. В JSON-отчёт knip
+их не кладёт — их печатает репортер скилла `knip-hints.cjs` второй строкой
+вывода; `hints: false` — без проверки.
+
+**Запуск knip** — при регистрации тестов, а не в первом тесте: монорепо knip
+проходит дольше таймаута теста (5 с у Vitest). Без `report` запускается
+`node_modules/.bin/knip --reporter json --reporter <скилл>/knip-hints.cjs`
+проекта (и `args`); `report` — готовый вывод той же команды (`knip --reporter
+json --reporter .agents/skills/spec/scripts/knip-hints.cjs > .knip.json`), без
+строки подсказок — упавший тест с этой командой. Код выхода не 0/1 или вывод
+не JSON — все тесты вида падают с причиной: сбой knip — не «мёртвого кода
+нет».
+
+**Несколько запусков** в папке (режим production, воркспейсы через `args`) —
+у каждого `rule` (у `production: true` — `production`): пометка ` (<rule>)` в
+названиях тестов. Исключение с `rule` — только своего запуска; без `rule` —
+гасит находку во всех запусках, а храповик — у запуска без `rule`: в
+production knip не смотрит devDependencies и тесты, и «убери» там было бы
+ложным. `rule`, которого нет ни у одного запуска, — упавший тест сверки, как
+у `invariant`.
 
 **Переменные окружения — `envVars`.** Переменная, которую читает код
 (`process.env.X`, `import.meta.env.X`, `?.X`, `["X"]`, `?.["X"]`,

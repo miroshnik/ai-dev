@@ -464,7 +464,7 @@ bun <каталог скилла>/scripts/spec-exceptions.ts [--root DIR]
 | Контейнеры (C2): модули, связи, конфиги деплоя, клиенты хранилищ | `containers` в модели, `architecture`, `deployUnits` | `architecture/model.ts` |
 | Порядок взаимодействия в сценарии, сиквенс-схема | `trace` в обёртках границ, `sequence` | тест capability |
 | Каждая точка входа вызывается тестом capability | `journal` + `spec-claims` после прогона | `standards/entry-points/` |
-| Нет кода без потребителя (файлы, экспорты, зависимости) | `deadCode` по отчёту knip | `standards/dead-code/` |
+| Нет кода без потребителя (файлы, экспорты, зависимости, конфиг knip; режим production) | `deadCode` по отчёту knip, репортер `knip-hints.cjs` | `standards/dead-code/` |
 | Переменные окружения объявлены и читаются (монорепо — по приложениям) | `envVars`, `dotenvNames`, `configGet` в `readers` | `standards/env/` |
 
 ## Подключение в репозиторий
