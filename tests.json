@@ -149,6 +149,132 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "ci-wait merged: прогон Actions с ошибкой разбора workflow на SHA мержа — FAIL с путём файла"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "ci-wait pr: прогон Actions с ошибкой разбора workflow на голове PR — FAIL с путём файла"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "ci-wait pr: только чеки хостинга, а workflow с `on: pull_request` не дал прогона — не PASS"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow на PR (branches-ignore без базовой) ждут: PASS — только с его прогоном и чеками"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow на PR (on: [push, pull_request]) ждут: PASS — только с его прогоном и чеками"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow на PR (on: pull_request) ждут: PASS — только с его прогоном и чеками"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow на PR (types с synchronize) ждут: PASS — только с его прогоном и чеками"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow на PR (ветки, пускающие базовую) ждут: PASS — только с его прогоном и чеками"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow на голове PR не разбирается, а прогона-«пустышки» нет (PR из форка) — не PASS"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (pull_request_target), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (types без synchronize), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (workflow выключен), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (ветки без базовой), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (отрицание в ветках), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (только push), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "workflow, который на PR может не пойти (фильтр путей), не ждут — PASS по остальным чекам"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "прогон Actions упал на job — FAIL по имени job, без пометки «без job»"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
+  ],
+  "name": "прогон Actions упал, не начав ни одного job, — FAIL с путём файла"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
    "Разовый сбой API до начала опроса — повтор, как в опросе, а не исход «не найден»"
   ],
   "name": "коммита нет в репозитории — ERROR сразу, а не ожидание до таймаута"
