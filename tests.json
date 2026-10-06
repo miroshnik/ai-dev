@@ -5837,6 +5837,13 @@
   "describes": [
    "Ядро канона умещается в бюджет контекста"
   ],
+  "name": "docs/judgment.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
   "name": "docs/parallel-checkouts.md есть в репозитории"
  },
  {
@@ -6693,6 +6700,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: справочник docs/cloud-sessions.md — со ссылкой"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: справочник docs/judgment.md — со ссылкой"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
