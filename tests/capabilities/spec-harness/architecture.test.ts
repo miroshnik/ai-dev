@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 
 import { architecture, boundariesConfig, cspConnectSrc, deployUnits, hostsIn, importsIn, networkGuard } from "../../../skills/spec/scripts/architecture.ts";
 import type { Model } from "../../../skills/spec/scripts/architecture.ts";
-import { eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
+import { configGet, eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -252,6 +252,23 @@ describe("Внешние системы модели (C1) проверяются
     expect(r["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toStartWith(
       "✗ ключ STRIPE_KEY внешней системы payments читается вне адаптера stripe: src/billing/pay.ts",
     );
+  });
+
+  // NestJS: ключ читают аксессором ConfigService — те же readers, что у envVars
+  it("ключ внешней системы, прочитанный аксессором конфига вне адаптера, — упавший тест", async () => {
+    writeTree(dir, { ...adapter, "src/billing/pay.ts": 'export const k = (config: Config) => config.getOrThrow<string>("STRIPE_KEY");\n' });
+    const plain = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
+    expect(plain["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toBe("✓");
+    const r = await outcomes((it) => architecture(it, { root: dir, model: c1, readers: [configGet] }));
+    expect(r["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toStartWith(
+      "✗ ключ STRIPE_KEY внешней системы payments читается вне адаптера stripe: src/billing/pay.ts",
+    );
+  });
+
+  it("ключ окружения в комментарии вне адаптера — не чтение", async () => {
+    writeTree(dir, { ...adapter, "src/billing/pay.ts": "// ключ (process.env.STRIPE_KEY) читает только адаптер\nexport const k = 1;\n" });
+    const r = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
+    expect(r["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toBe("✓");
   });
 
   // сторож — сеть под моками: что до него дошло, не замокано; дальше пускает только то, что из машины не уходит, и allow
