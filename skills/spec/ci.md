@@ -8,7 +8,8 @@
 (без CI на `main` — публикация на мерж PR, раздел в конце).
 `spec-diff` — своя лёгкая job после `spec`: git-история, Node и склеенные
 отчёты (тесты харнесса видны только в отчёте; база для них — `tests.json`
-ветки `spec`).
+ветки `spec`). Отчёт сверки `.spec-claims.xml` — туда же: его тесты есть в
+`tests.json`, и без отчёта они в каждом PR выходят «удалены».
 
 ```yaml
 on:
@@ -87,7 +88,13 @@ jobs:
         with: { name: docs-spec, path: docs/spec/, retention-days: 1 }
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
-        with: { name: spec-reports, path: ".spec-*.json", retention-days: 1, include-hidden-files: true }
+        with:
+          name: spec-reports
+          path: |
+            .spec-*.json
+            .spec-claims.xml
+          retention-days: 1
+          include-hidden-files: true
 
   spec-publish:
     if: github.event_name == 'push'
@@ -115,7 +122,7 @@ jobs:
         with: { node-version: 24, package-manager-cache: false }
       - uses: actions/download-artifact@v8
         with: { name: spec-reports }
-      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --full >> "$GITHUB_STEP_SUMMARY"
+      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
 Отчёты и журналы `.spec-*` — скрытые файлы: `upload-artifact` их пропускает
