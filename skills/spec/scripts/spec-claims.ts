@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
  * spec-claims — сверка реестра точек входа с журналом вызовов: каждая точка входа (маршрут, страница, job, команда)
- * вызывается хотя бы одним тестом capability. Журнал пишет `journal` харнесса во время прогона; журналы шардов
- * складываются из каталога. Вызов не из `tests/capabilities/` не засчитывается: заявленное поведение — это
- * capability, а не стандарт или хелпер. id в реестре не повторяются (повтор спрятал бы непокрытую точку за покрытой),
- * каждый id журнала есть в реестре (иначе формат разошёлся или реестр неполон).
+ * вызывается хотя бы одним тестом capability. Журнал пишет `journal` харнесса во время прогона; журналы шардов и
+ * раннеров складываются из каталога и его подкаталогов (каталог на раннер). Вызов не из `tests/capabilities/` не
+ * засчитывается: заявленное поведение — это capability, а не стандарт или хелпер. id в реестре не повторяются (повтор
+ * спрятал бы непокрытую точку за покрытой), каждый id журнала есть в реестре (иначе формат разошёлся или реестр неполон).
  *
  *   bun spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <каталог>]
  *                      [--standard tests/standards/entry-points] [--report .spec-claims.xml]
@@ -41,10 +41,11 @@ async function load(file: string): Promise<unknown> {
   return typeof v === "function" ? await (v as () => unknown)() : v;
 }
 
-/** Точка входа → файлы тестов, которые её вызывали (все журналы каталога). */
+/** Точка входа → файлы тестов, которые её вызывали (все журналы каталога и подкаталогов — каталог на раннер). */
 function readJournal(dir: string): Map<string, Set<string>> {
   const calls = new Map<string, Set<string>>();
-  for (const f of readdirSync(dir).filter((f) => f.endsWith(".jsonl")).sort()) {
+  const files = readdirSync(dir, { recursive: true, encoding: "utf8" });
+  for (const f of files.filter((f) => f.endsWith(".jsonl")).sort()) {
     for (const line of readFileSync(path.join(dir, f), "utf8").split("\n")) {
       if (!line.trim()) continue;
       const { id, test } = JSON.parse(line) as { id: string; test: string | null };
@@ -154,7 +155,7 @@ export async function main(argv: string[]): Promise<number> {
   cases.push({
     name: "id из журнала есть в реестре",
     failure: unknown.length
-      ? `id из журнала нет в реестре: ${unknown.join("; ")} — формат id журнала разошёлся с реестром или реестр неполон`
+      ? `id из журнала нет в реестре: ${unknown.join("; ")} — формат id журнала разошёлся с реестром, реестр неполон или журнал остался от прежнего прогона (resetJournal)`
       : undefined,
   });
   for (const e of [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : 1))) {

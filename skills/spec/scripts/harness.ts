@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -679,6 +679,7 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
 // V8 пишет анонимную async-функцию после await кадром «at async <путь>» — без имени и скобок
 const STACK_FILE = /(?:\(|\bat\s+(?:async\s+)?)(?:file:\/\/)?(\/[^()\n]*?\.(?:test|spec|e2e)\.[cm]?[jt]sx?)(?=:\d+)/g;
 const seen = new Set<string>();
+const journaled = new Set<string>();
 let journalFile: string | null = null;
 
 /** Файл теста, из которого идёт вызов, от корня проекта — по стеку; не из теста — null. */
@@ -726,20 +727,37 @@ function meta(test: string, data: object, file: string | null = callerTest(proce
  * Журнал точек входа: тестовое окружение отмечает вызов точки входа (маршрута, job, команды) — обёрткой роутера
  * или обработчика в тестовой сборке. Файл теста определяется по стеку; где стека теста нет (e2e: запрос приходит в
  * сервер) — передать явно (`test.info().file` у Playwright). Запись — строка JSON в `.spec-journal/<процесс>.jsonl`
- * (`SPEC_JOURNAL` — другой каталог); сверку с реестром делает `spec-claims` после прогона всех тестов и шардов.
+ * (`SPEC_JOURNAL` — другой каталог, у каждого раннера свой: `.spec-journal/unit`); сверку с реестром делает
+ * `spec-claims` после прогона всех тестов и шардов.
  */
 export function journal(id: string, opts: { test?: string; root?: string } = {}): void {
   const root = opts.root ?? process.cwd();
   const test = opts.test ? path.relative(root, path.resolve(root, opts.test)).split(path.sep).join("/") : callerTest(root);
   const key = `${id}\0${test}`;
-  if (seen.has(key)) return;
-  seen.add(key);
+  if (journaled.has(key)) return;
+  journaled.add(key);
   if (!journalFile) {
-    const dir = path.resolve(root, process.env.SPEC_JOURNAL ?? ".spec-journal");
+    const dir = journalDir(root);
     mkdirSync(dir, { recursive: true });
     journalFile = path.join(dir, `${process.pid}-${Math.random().toString(36).slice(2, 10)}.jsonl`);
   }
   appendFileSync(journalFile, JSON.stringify({ id, test }) + "\n");
+}
+
+const journalDir = (root: string): string => path.resolve(root, process.env.SPEC_JOURNAL ?? ".spec-journal");
+
+/**
+ * Начало прогона — журналы прежних прогонов долой: иначе удалённый тест продолжает «вызывать» точку входа. Зовётся раз
+ * на прогон раннера, до тестов (globalSetup Vitest и Playwright, preload bun test); стирает `*.jsonl` своего каталога
+ * (`SPEC_JOURNAL`), подкаталоги — журналы других раннеров — не трогает.
+ */
+export function resetJournal(opts: { root?: string } = {}): void {
+  const dir = journalDir(opts.root ?? process.cwd());
+  if (existsSync(dir)) {
+    for (const f of readdirSync(dir).filter((f) => f.endsWith(".jsonl"))) rmSync(path.join(dir, f), { force: true });
+  }
+  journalFile = null;
+  journaled.clear();
 }
 
 /** Вызов на границе модели: кто, кому, что. */
