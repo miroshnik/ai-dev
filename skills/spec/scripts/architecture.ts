@@ -410,9 +410,14 @@ function owners(model: Model, dir: string): string[] {
  * «<модуль> импортирует <пакет>» на каждый внешний пакет, который модуль импортирует (не разрешён — красный),
  * «<модуль> использует разрешённый пакет <пакет>» на каждый пакет модели (не импортируется — красный: убери из модели).
  * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions/` папки решения.
+ * `outside` — элементы вне модели намеренно, с причиной (инструменты разработки: общий конфиг ESLint, хелперы тестов):
+ * решение, а не долг с задачей; пакет workspace — и отметкой `spec-outside(<решение>)` в своём `package.json`.
  * `readers` — свои способы чтения окружения проекта, те же, что у `envVars` (`configGet`): для ключей внешних систем.
  */
-export function architecture(it: It, opts: { root: string; model: Model; exceptions?: readonly Exception[]; readers?: readonly EnvReader[] }): void {
+export function architecture(
+  it: It,
+  opts: { root: string; model: Model; exceptions?: readonly Exception[]; outside?: readonly Outside[]; readers?: readonly EnvReader[] },
+): void {
   const { model } = opts;
   // реестры собираются целиком, потом регистрируются: исключение уходит только в реестр, где есть его элемент
   const specs: Invariant<unknown>[] = [];
@@ -444,6 +449,8 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
       items: packages,
       name: (p) => `пакет workspace ${p} — в корнях кода`,
       key: (p) => p,
+      // «вне охвата» и исключение пакета — отметкой в его package.json: удалили пакет — ушла и отметка
+      fileOf: (p) => path.join(opts.root, p, "package.json"),
       check: (p) => {
         if (!inRoots(p)) throw new Error(`${p}: пакет workspace с кодом вне корней модели — добавь его в roots tests/architecture/model.ts`);
       },
@@ -487,24 +494,32 @@ export function architecture(it: It, opts: { root: string; model: Model; excepti
 
   if (model.externals) c1(add, model, src);
   if (model.containers) c2(add, opts.root, model, src);
-  const routed = routeExceptions(opts.exceptions ?? [], specs);
-  for (const [i, spec] of specs.entries()) invariant(it, { ...spec, exceptions: routed[i] });
+  const exceptions = route(opts.exceptions ?? [], specs);
+  const outside = route(opts.outside ?? [], specs);
+  for (const [i, spec] of specs.entries()) invariant(it, { ...spec, exceptions: exceptions[i], outside: outside[i] });
 }
 
 type Add = <T>(spec: Invariant<T>) => void;
 
+/** «Вне охвата» элемента модели: ключ, причина и, когда элемент есть в нескольких реестрах, имя реестра. */
+export interface Outside {
+  item: string;
+  reason: string;
+  rule?: string;
+}
+
 /**
- * Исключения по реестрам: с `rule` — реестру с этим именем, без — реестрам, в которых есть его элемент; элемента нет
- * нигде — первому реестру, чтобы храповик сказал «убери исключение», а не молчал.
+ * Исключения и «вне охвата» по реестрам: с `rule` — реестру с этим именем, без — реестрам, в которых есть его элемент;
+ * элемента нет нигде — первому реестру, чтобы храповик сказал «убери исключение» («убери из охвата»), а не молчал.
  */
-function routeExceptions(exceptions: readonly Exception[], specs: Invariant<unknown>[]): Exception[][] {
+function route<X extends { item: string; rule?: string }>(xs: readonly X[], specs: Invariant<unknown>[]): Omit<X, "rule">[][] {
   const keys = specs.map((sp) => new Set(sp.items.map((x) => String((sp.key ?? sp.name)(x)))));
-  const out: Exception[][] = specs.map(() => []);
-  for (const e of exceptions) {
-    const byRule = e.rule ? specs.findIndex((sp) => sp.registry === e.rule) : -1;
-    let to = byRule >= 0 ? [byRule] : keys.flatMap((k, i) => (!e.rule && k.has(e.item) ? [i] : []));
+  const out: Omit<X, "rule">[][] = specs.map(() => []);
+  for (const { rule, ...x } of xs) {
+    const byRule = rule ? specs.findIndex((sp) => sp.registry === rule) : -1;
+    let to = byRule >= 0 ? [byRule] : keys.flatMap((k, i) => (!rule && k.has(x.item) ? [i] : []));
     if (!to.length) to = [0];
-    for (const i of to) out[i]!.push({ item: e.item, issue: e.issue, reason: e.reason, ...(e.file ? { file: e.file } : {}) });
+    for (const i of to) out[i]!.push(x);
   }
   return out;
 }

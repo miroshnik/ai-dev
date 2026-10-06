@@ -446,6 +446,31 @@ describe("Отметка в файле элемента — «вне охват�
     expect(marksIn("tsconfig.json", '{\n  // spec-outside(modules): конфиг сборки\n  "compilerOptions": {}\n}\n').map((m) => [m.reason, m.line])).toEqual([["конфиг сборки", 2]]);
   });
 
+  it("отметка spec-outside в package.json пакета workspace выводит его из охвата с причиной на странице", () => {
+    writeTree(dir, {
+      "tests/architecture/modules/modules.test.ts": `import { it } from "bun:test";
+import { architecture } from ${JSON.stringify(path.join(SCRIPTS, "architecture.ts"))};
+architecture(it, { root: ".", model: { roots: ["apps/web/src"], modules: { web: { path: "apps/web/src", purpose: "сайт" } } } });
+`,
+      "package.json": JSON.stringify({ name: "mono", workspaces: ["apps/*", "packages/*"] }),
+      "apps/web/package.json": "{}",
+      "apps/web/src/page.ts": "export const p = 1;\n",
+      "packages/eslint-config/package.json": JSON.stringify({ name: "@acme/eslint-config", "//": "spec-outside(modules): общий конфиг ESLint — инструмент разработки" }, null, 2),
+      "packages/eslint-config/index.js": "export default [];\n",
+      "packages/test-helpers/package.json": JSON.stringify({ "//": ["spec-exception(modules) #9: хелперы тестов переедут в #9"] }, null, 2),
+      "packages/test-helpers/index.ts": "export const h = 1;\n",
+      "packages/http-bridge/package.json": JSON.stringify({ "//": "spec-outside(other): отметка другого решения" }),
+      "packages/http-bridge/index.ts": "export const b = 1;\n",
+    });
+    const r = bunTest();
+    expect(r["вне охвата: packages/eslint-config"]).toBe("✓");
+    expect(r["пакет workspace packages/eslint-config — в корнях кода"]).toBeUndefined();
+    expect(metaOf("вне охвата: packages/eslint-config")).toMatchObject({ reason: "общий конфиг ESLint — инструмент разработки" });
+    expect(r["исключение: packages/test-helpers (#9)"]).toBe("✓");
+    expect(r["пакет workspace packages/http-bridge — в корнях кода"]).toStartWith("✗ packages/http-bridge: пакет workspace с кодом вне корней модели");
+    expect(r["пакет workspace apps/web — в корнях кода"]).toBe("✓");
+  });
+
   it("отметка в файле двух элементов — красный тест: к какому элементу, неизвестно", () => {
     writeTree(dir, {
       [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["login", "logout"], fileOf: '(m) => "src/session.ts"' }),

@@ -462,12 +462,12 @@ bun <каталог скилла>/scripts/spec-exceptions.ts [--root DIR]
 | Соглашение на каждом элементе реестра из кода («каждая мутация пишет аудит») | `invariant` | `standards/<name>/` |
 | Линт-правило: «нельзя», «можно», «вне охвата» | `examples`, `eslintLinter` | `standards/<name>/` + фрагмент `eslint.ts` |
 | Правило ESLint в папке стандарта | `collectEslint` в `eslint.config.*` | фрагменты `eslint.ts` дерева |
-| «Вне охвата» и исключение элемента со своим файлом | `fileOf` в `invariant`; отметка `spec-outside(<решение>)` / `spec-exception(<решение>) #N` в файле (`marksIn`) | файл элемента (маршрут, скрипт, миграция) |
+| «Вне охвата» и исключение элемента со своим файлом | `fileOf` в `invariant`; отметка `spec-outside(<решение>)` / `spec-exception(<решение>) #N` в файле (`marksIn`), в JSON — значение ключа `"//"` | файл элемента (маршрут, скрипт, миграция, `package.json` пакета workspace) |
 | Исключения с храповиком | `exceptionsIn()` → `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions/<элемент>.json` папки решения; перенос — `spec-exceptions` |
 | Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
 | Внешние системы (C1): хосты, пакеты, ключи и заголовки — только в адаптерах, периметр без адаптера, сеть в тестах, CSP | `externals` в модели, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, настройка тестов |
 | Контейнеры (C2): модули и библиотеки, связи, конфиги деплоя (compose, Supabase, Vercel, Terraform), клиенты хранилищ | `containers` в модели, `architecture`, `deployUnits` | `architecture/model.ts` |
-| Пакеты workspace монорепо — в корнях модели | `architecture`, `workspacePackages` | `architecture/model.ts` |
+| Пакеты workspace монорепо — в корнях модели; инструменты разработки вне модели — «вне охвата» с причиной | `architecture` (`outside`), `workspacePackages` | `architecture/model.ts`, отметка в `package.json` пакета |
 | Порядок взаимодействия в сценарии, сиквенс-схема | `trace` в обёртках границ, `sequence` | тест capability |
 | Каждая точка входа вызывается тестом capability | `journal` + `spec-claims` после прогона | `standards/entry-points/` |
 | Нет кода без потребителя (файлы, экспорты, зависимости, конфиг knip; режим production) | `deadCode` по отчёту knip, репортер `knip-hints.cjs` | `standards/dead-code/` |

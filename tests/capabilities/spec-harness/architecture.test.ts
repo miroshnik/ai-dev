@@ -189,6 +189,35 @@ describe("Модель архитектуры проверяется кодом:
     expect(bad["пакет workspace packages/new — в корнях кода"]).toStartWith("✗ packages/new: пакет workspace с кодом вне корней модели");
     expect(bad["нарушитель не проходит: пакет workspace вне корней"]).toBe("✓");
   });
+
+  // инструменты разработки вне модели — решение, а не долг: исключение с задачей пережило бы закрытую задачу
+  it("пакет workspace вне корней и каталог вне модулей — вне охвата по outside с причиной; элемента нет — «убери из охвата»", async () => {
+    writeTree(dir, {
+      "package.json": JSON.stringify({ name: "mono", workspaces: ["apps/*", "packages/*"] }),
+      "apps/web/package.json": "{}",
+      "apps/web/src/app/page.ts": "export const p = 1;\n",
+      "apps/web/src/scripts/seed.ts": "export const s = 1;\n",
+      "packages/eslint-config/package.json": "{}",
+      "packages/eslint-config/index.js": "export default [];\n",
+    });
+    const ws: Model = { roots: ["apps/web/src"], modules: { web: { path: "apps/web/src/app", purpose: "сайт" } } };
+    const outside = [
+      { item: "packages/eslint-config", reason: "общий конфиг ESLint — инструмент разработки" },
+      { item: "apps/web/src/scripts", reason: "скрипты разработчика — не код сайта" },
+      { item: "packages/gone", reason: "пакет удалён" },
+    ];
+    const all = await allOutcomes((it) => architecture(it, { root: dir, model: ws, outside }));
+    const r = Object.fromEntries(all);
+    expect(all.filter(([n]) => n.startsWith("вне охвата"))).toEqual([
+      ["вне охвата: apps/web/src/scripts", "✓"],
+      ["вне охвата: packages/gone", "✗ элемента packages/gone в реестре «каталоги кода» нет — убери из охвата"],
+      ["вне охвата: packages/eslint-config", "✓"],
+    ]);
+    expect(r["каталог apps/web/src/scripts — в модуле ?"]).toBeUndefined();
+    expect(r["пакет workspace packages/eslint-config — в корнях кода"]).toBeUndefined();
+    expect(r["каталог apps/web/src/app — в модуле web"]).toBe("✓");
+    expect(r["пакет workspace apps/web — в корнях кода"]).toBe("✓");
+  });
 });
 
 describe("Импорт — это пакет, только если не локальный путь, не псевдоним, не встроенный модуль и не тип", () => {
