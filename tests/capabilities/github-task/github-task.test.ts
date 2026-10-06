@@ -204,6 +204,21 @@ describe("task new ставит метки решений — по имени р
     expect(issueLabels(f, 45)).toEqual(["epic", "billing"]);
     expect(r.out).toContain("+ эпик #45: billing");
   });
+
+  // метка-разрез (описание «Разрез: …») — разрез задач проекта, а не метка решения, хотя имя у них одно (#343)
+  it("метка-разрез с именем решения: `вид:имя` — ошибка до создания, по имени — обычная метка задачи, эпику не передаётся", () => {
+    const f = new FakeGitHub(REC);
+    f.tree.model = `export default { modules: { api: { path: "apps/api" } } };\n`;
+    const api = f.label("api", "C5DEF5", "Разрез: приложения — API-сервер");
+    const refused = task(f, ["new", "--title", "Экспорт", "--labels", "architecture:api"]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("метка «api» — разрез «приложения», не метка решения: решение api меткой не отмечается; метка разреза — --labels api");
+    expect(f.mutations).toEqual([]);
+    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "api"]);
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([api.id]);
+    expect(issueLabels(f, 45)).toEqual(["epic"]);
+  });
 });
 
 const HEAD = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
@@ -353,6 +368,19 @@ describe("pr labels ставит задаче метки решений по д�
     expect(issueLabels(f, 47)).toEqual(["billing", "est"]);
     expect(issueLabels(f, 45)).toEqual(["epic", "est", "billing"]);
     expect(r.out).toContain("+ эпик #45: billing");
+  });
+
+  // модуль web модели и метка-разрез web команды — одно имя, разный смысл: метка решения модулю не нужна (#343)
+  it("модуль модели в диффе, его имя у метки-разреза — строка ○, метка-разрез задаче и эпику не ставится", () => {
+    const f = new FakeGitHub(REC);
+    f.label("web", "C5DEF5", "Разрез: приложения");
+    f.prs[120] = { files: ["src/domain/invoice.ts", "src/web/page.tsx"], closes: [47], head: HEAD, model: MODEL };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 47)).toEqual(["domain"]);
+    expect(issueLabels(f, 45)).toEqual(["epic", "domain"]);
+    expect(r.out).toContain("PR #120 → #47: domain");
+    expect(r.out).toContain("○ web — метка «web» — разрез «приложения», не метка решения: не ставится");
   });
 
   // GitHub связывает PR с задачей не сразу после создания: pr labels зовут как раз тогда (#164)

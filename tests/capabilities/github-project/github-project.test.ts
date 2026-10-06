@@ -534,6 +534,26 @@ describe("Метки решений — имя решения без вида, �
     fix(f, { confirm: true });
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: CAP, description: "Решение: tests/capabilities/documentation" }]);
   });
+
+  /**
+   * Метки `web`, `api`, `admin` команды режут задачи по приложениям, а модули модели названы так же: это другой разрез
+   * задач, а не метки решений, и в метку решения превращать их владелец не хочет. Признак разреза — описание метки
+   * (#343), как `Решение: …` у метки решения. Отвергнуто: список разрезов в `.agents/ai-dev.json` — манифест установки
+   * `install` и `update` пишут заново, а `check` читает всё через API основной ветки.
+   */
+  it("метка-разрез (описание «Разрез: …») с именем решения — строка ○ с разрезом, пункт ✅; fix её не трогает", () => {
+    const f = fake();
+    Object.assign(f.tree, { model: `export default { modules: { web: { path: "apps/web" }, api: { path: "apps/api" }, domain: { path: "src/domain" } } };\n` });
+    f.label("api", "C5DEF5", "Разрез: приложения — API-сервер");
+    f.label("web", "C5DEF5", "Разрез: приложения");
+    f.label("domain", ARCH, "Решение: tests/architecture — правило или модуль domain");
+    const r = check(f);
+    expect(r.code).toBe(0);
+    expect(marks(r.out).Метки).toBe("✅");
+    expect(r.out).toContain("○ разрез «приложения»: метки «api», «web» — не метки решений, одноимённые решения меткой не отмечаются");
+    fix(f, { confirm: true });
+    expect(f.mutations.filter((m) => /Label/.test(m.op))).toEqual([]);
+  });
 });
 
 /**

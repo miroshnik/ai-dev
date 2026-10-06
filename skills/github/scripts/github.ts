@@ -713,6 +713,19 @@ export function labelKinds(description: string | null | undefined): DecisionKind
   return DECISION_KINDS.filter((k) => parts.some((p) => p === k || p.startsWith(`tests/${DECISIONS[k].dir}`)));
 }
 
+/**
+ * Признак метки-разреза — описание `Разрез: <разрез>[ — пояснение]`: разрез задач проекта (приложения, команды), а не
+ * решение, хотя имя может совпасть с модулем модели. Разрез живёт с меткой, а не в `.agents/ai-dev.json`: манифест
+ * установки `install` и `update` пишут заново, а `check` читает всё через API.
+ */
+const DIMENSION_MARK = "Разрез: ";
+
+/** Разрез метки-разреза — по описанию; другая метка — null. */
+function labelDimension(description: string | null | undefined): string | null {
+  if (!description?.startsWith(DIMENSION_MARK)) return null;
+  return description.slice(DIMENSION_MARK.length).split(" — ")[0]!.trim() || null;
+}
+
 /** Решения основной ветки по имени: имя → его виды (старший первым). */
 function decisionsByName(d: Decisions): Map<string, DecisionKind[]> {
   const out = new Map<string, DecisionKind[]>();
@@ -931,7 +944,8 @@ export function analyze(s: State): Check[] {
   // решения обычную — только с --confirm: метка стоит на задачах. Одна лишняя и одна недостающая одного вида —
   // переименованная папка, а не два решения. Старый вид `вид:имя` → имя — сам, есть решение или нет: задачи сохраняют
   // метку, догадки нет. Метка без решения на открытой задаче — новое решение (task new ставит её до PR): строка ○, не
-  // удаляется и по догадке не переименовывается — это отняло бы её у задачи.
+  // удаляется и по догадке не переименовывается — это отняло бы её у задачи. Метка-разрез с именем решения — другой
+  // разрез задач: строка ○, fix её не трогает, а решение остаётся без метки (имя занято).
   const labels = add("labels", "Метки решений — имя решения, вид — цветом; по дереву спеки и модели в основной ветке");
   const d = s.decisions;
   if (d.modelError) labels(`модель ${MODEL_PATH} не загружается — метки модулей не сверяются: ${d.modelError}`);
@@ -940,6 +954,7 @@ export function analyze(s: State): Check[] {
   const unsure = (kinds: DecisionKind[]) => !!d.modelError && kinds.includes("architecture");
   const taken = new Map(s.labels.filter((l) => !legacyDecision(l.name)).map((l) => [l.name, l]));
   const orphans: { label: Label; kinds: DecisionKind[] }[] = [];
+  const dimensions = new Map<string, string[]>();
   for (const l of s.labels) {
     const old = legacyDecision(l.name);
     if (!old) continue;
@@ -965,6 +980,11 @@ export function analyze(s: State): Check[] {
       if (kinds) orphans.push({ label: l, kinds });
       continue;
     }
+    const dim = labelDimension(l.description);
+    if (dim) {
+      dimensions.set(dim, [...(dimensions.get(dim) ?? []), l.name]);
+      continue;
+    }
     const to = decisionLabel(l.name, w);
     if (!kinds) {
       labels(`метка ${q(l.name)} — не метка решения, а решение ${l.name} есть в основной ветке`, { kind: "confirm", text: `сделать ${q(l.name)} меткой решения: цвет ${to.color}, описание ${q(to.description)}`, mutations: [{ op: "UpdateLabel", input: { id: l.id, color: to.color, description: to.description } }] });
@@ -974,6 +994,9 @@ export function analyze(s: State): Check[] {
     if (!recolor && (l.description === to.description || unsure(kinds))) continue;
     const text = recolor ? `метка ${q(l.name)} цвета ${l.color}, а не ${to.color}` : `метка ${q(l.name)}: в описании не те виды решения`;
     labels(text, api(`${recolor ? "перекрасить" : "переписать описание"} метки ${q(l.name)}: ${to.color}, ${q(to.description)}`, { op: "UpdateLabel", input: { id: l.id, color: to.color, description: to.description } }));
+  }
+  for (const [dim, names] of dimensions) {
+    labels.note(`разрез ${q(dim)}: метки ${names.map(q).join(", ")} — не метки решений, одноимённые решения меткой не отмечаются`);
   }
   const unlabeled = [...want.keys()].filter((n) => !taken.has(n));
   const sure = orphans.filter((o) => !unsure(o.kinds));
@@ -1394,6 +1417,8 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
     const label = has(name);
     const main = inMain.get(name) ?? [];
     const kinds = dec && !main.includes(dec.kind) ? [...main, dec.kind] : main;
+    const dim = dec && label ? labelDimension(label.description) : null;
+    if (dim) throw new GhError(`метка ${q(name)} — разрез ${q(dim)}, не метка решения: решение ${name} меткой не отмечается; метка разреза — --labels ${name}`);
     if (!label && !kinds.length) {
       throw new GhError(`метки ${q(l)} в репозитории нет, решения ${l} в основной ветке тоже; новое решение — вид:имя (${DECISION_KINDS.map((k) => `${k}:${l}`).join(", ")})`);
     }
@@ -1844,12 +1869,18 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     else modules = m;
   }
   const { changed: decided, mechanical: skipped } = decisionsOfFiles(files, modules);
-  const want = [...decided.keys()];
+  const all = decided.size ? loadLabels(io, slug) : [];
+  // метка-разрез с именем решения — другой разрез задач: как метку решения её не ставим
+  const dimensions = all.flatMap((l) => {
+    const dim = decided.has(l.name) ? labelDimension(l.description) : null;
+    return dim ? [{ name: l.name, dim }] : [];
+  });
+  const want = [...decided.keys()].filter((n) => !dimensions.some((x) => x.name === n));
   io.out(`PR #${number} → ${closes.map((n) => `#${n}`).join(", ")}: ${want.join(", ") || "решений в диффе нет"}`);
   for (const l of skipped) io.out(`○ ${l} — только механическая правка (удаление, переименование без правки, исключения): метка не ставится`);
+  for (const x of dimensions) io.out(`○ ${x.name} — метка ${q(x.name)} — разрез ${q(x.dim)}, не метка решения: не ставится`);
   if (!want.length) return 0;
 
-  const all = loadLabels(io, slug);
   const fresh = want.filter((l) => !all.some((x) => x.name === l));
   const repoId = fresh.length ? loadRepo(io, slug).id : "";
   for (const l of fresh) {
@@ -2147,7 +2178,7 @@ const USAGE = `github — проект и задачи GitHub репозитор
   github pr premerge   <N> [--repo owner/repo]
 
 check — пункты ✅/❌, код 0 — всё по канону, 1 — есть ❌; метки решений — по дереву спеки основной ветки,
-        метка нового решения на открытой задаче — строка ○, не ❌.
+        метка нового решения на открытой задаче и метка-разрез («Разрез: …») с именем решения — строка ○, не ❌.
 fix   — исправляет через API; шаги UI печатает со ссылками; удаление и переименование в проекте
         с задачами и настройки организации — только с --confirm (после «да» пользователя).
         Проекта нет — привязывает одноимённый, иначе копирует эталон (${DEFAULT_TEMPLATE}), иначе создаёт.
@@ -2159,7 +2190,8 @@ task actualize — сразу после мержа, параллельно с �
 task close — после мержа PR и деплоя (или закрытия без PR) одним вызовом: факт (est fact --write), Status «Готово»,
         эпик и milestone, влитая ветка долой (--no-git — без git).
 pr labels — метки решений по диффу PR задачам из «Closes #N» и их эпикам; прежние не снимает; решение, тронутое
-            только механически (удаление, переименование без правки, исключения), — строка ○, без метки.
+            только механически (удаление, переименование без правки, исключения), и решение с именем
+            метки-разреза — строка ○, без метки.
 pr premerge — перед gh pr merge, после PASS ci-wait: основная ветка ушла после CI PR — слияние головы PR с ней
             во временном worktree и ${PREMERGE_SCRIPTS.join(", затем ")} из package.json (какие есть, как в CI); код 0 —
             вливать, 1 — не вливать (красное, конфликт), 2 — проверить не удалось, 3 — main красный и сам (та же
