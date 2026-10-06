@@ -37,14 +37,19 @@ export interface Module {
   library?: boolean;
 }
 
-/** Внешняя система (C1): кто она, какой модуль с ней говорит и чем — хосты, пакеты, ключи окружения. */
+/** Внешняя система (C1): кто она, какие модули с ней говорят и чем — хосты, пакеты, ключи окружения, заголовки. */
 export interface External {
   purpose: string;
-  /** Модуль-адаптер: единственный, кто говорит с внешней системой. */
-  adapter: string;
+  /**
+   * Модуль-адаптер или несколько: только они говорят с внешней системой. Нет — периметр (CDN, WAF перед системой):
+   * с ним не говорит ни один модуль, его хостов, пакетов, ключей и заголовков в коде нет.
+   */
+  adapter?: string | string[];
   hosts?: string[];
   packages?: string[];
   env?: string[];
+  /** Заголовки HTTP, через которые внешняя система интегрируется (`CF-IPCountry` от CDN): читает только адаптер. */
+  headers?: string[];
 }
 
 /** Контейнер (C2): развёртываемая единица — приложение, функция, cron, воркер, база, хранилище. */
@@ -290,6 +295,8 @@ interface Source {
   packages: string[];
   hosts: string[];
   env: string[];
+  /** Заголовки внешних систем модели, которые исходник называет строкой, — в нижнем регистре. */
+  headers: string[];
 }
 
 // литерал URL в коде: "https://api.example.com/…" — хост; локальные адреса и IP — не внешние системы
@@ -303,26 +310,53 @@ const isReserved = (h: string) => /(^|\.)(example|invalid|test)$|(^|\.)example\.
 // URI пространства имён XML — не адрес сервиса: атрибут xmlns и пространства W3C (createElementNS)
 const XMLNS = /xmlns(?::[\w-]+)?\s*=\s*$/;
 const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
+// значение href — ссылка, которую открывает браузер посетителя (`<a href>`, `<Link href={…}>`, `{ href: … }`): система с
+// этим хостом не говорит. `<link href>` браузер грузит сам, `location.href =` — переход кодом (оплата, вход): хосты
+const HREF = /(?<![.\w$])["']?href["']?\s*(?:=\s*\{?|:)\s*$/;
+const OPEN_TAG = /<([A-Za-z][\w.:-]*)[^<>]*$/;
+const isLink = (text: string, at: number): boolean =>
+  HREF.test(text.slice(Math.max(0, at - 40), at)) && OPEN_TAG.exec(text.slice(Math.max(0, at - 2000), at))?.[1] !== "link";
 
-/** Хосты внешних систем в литералах URL исходника; комментарии, пространства имён и зарезервированные домены — нет. */
+/**
+ * Хосты внешних систем в литералах URL исходника; комментарии, пространства имён, зарезервированные домены и ссылки
+ * навигации (`href`) — нет.
+ */
 export function hostsIn(source: string, file?: string): string[] {
   return hostsInCode(codeOnly(source, file));
 }
 
-/** То же по коду без комментариев: исходник разбирается один раз на хосты и ключи окружения. */
+/** То же по коду без комментариев: исходник разбирается один раз на хосты, ключи окружения и заголовки. */
 function hostsInCode(text: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(URL_HOST)) {
     const h = m[1]!.toLowerCase();
     if (isLocal(h) || isReserved(h) || NAMESPACE_HOSTS.has(h) || XMLNS.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
+    if (isLink(text, m.index)) continue;
     out.add(h);
   }
   return [...out];
 }
 
-/** Исходники корней модели: пакеты, хосты и ключи окружения — по коду без комментариев, ключи — и способами `readers`. */
+// строка-литерал, похожая на имя заголовка HTTP: `h.get("cf-ipcountry")`, `req.headers["CF-Connecting-IP"]`
+const HEADER_LITERAL = /(["'`])([A-Za-z][A-Za-z0-9-]*)\1/g;
+
+/** Заголовки из `declared` (в нижнем регистре), которые код называет строкой, без учёта регистра. */
+function headersInCode(text: string, declared: Set<string>): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(HEADER_LITERAL)) {
+    const h = m[2]!.toLowerCase();
+    if (declared.has(h)) out.add(h);
+  }
+  return [...out];
+}
+
+/**
+ * Исходники корней модели: пакеты, хосты, ключи окружения и заголовки — по коду без комментариев, ключи — и способами
+ * `readers`.
+ */
 function sources(root: string, model: Model, readers?: readonly EnvReader[]): Source[] {
   const out: Source[] = [];
+  const declared = new Set(Object.values(model.externals ?? {}).flatMap((e) => (e.headers ?? []).map((h) => h.toLowerCase())));
   const walk = (rel: string): void => {
     let entries;
     try {
@@ -337,7 +371,14 @@ function sources(root: string, model: Model, readers?: readonly EnvReader[]): So
       } else if (CODE.test(e.name) && !/\.d\.[cm]?ts$/.test(e.name)) {
         const text = readFileSync(path.join(root, child), "utf8");
         const code = codeOnly(text, child);
-        out.push({ file: child, dir: rel, packages: importsIn(text, model.aliases), hosts: hostsInCode(code), env: envNamesInCode(code, { file: child, readers }) });
+        out.push({
+          file: child,
+          dir: rel,
+          packages: importsIn(text, model.aliases),
+          hosts: hostsInCode(code),
+          env: envNamesInCode(code, { file: child, readers }),
+          headers: declared.size ? headersInCode(code, declared) : [],
+        });
       }
     }
   };
@@ -586,15 +627,22 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
   }
 }
 
+/** Модули-адаптеры внешней системы: ни одного — периметр. */
+export const adaptersOf = (e: External): string[] => (e.adapter === undefined ? [] : Array.isArray(e.adapter) ? e.adapter : [e.adapter]);
+
+/** «адаптере a» / «адаптерах a, b» — форма по числу адаптеров. */
+const adapterWord = (a: string[], one: string, many: string): string => `${a.length === 1 ? one : many} ${a.join(", ")}`;
+
 /**
- * C1: хост внешней системы — только в её адаптере (хост вне модели — красный), пакет внешней системы — только у
- * адаптера (модель без противоречий), ключ окружения внешней системы — читает только адаптер. Реестры — из модели и
- * кода; реестр, которого модель не объявляет (у внешних систем нет пакетов), не регистрируется.
+ * C1: хост внешней системы — только в её адаптерах (хост вне модели — красный), пакет внешней системы — только у
+ * адаптеров (модель без противоречий), ключ окружения и заголовок внешней системы читают только адаптеры; у периметра
+ * (адаптера нет) ничего из этого в коде нет. Реестры — из модели и кода; реестр, которого модель не объявляет (у внешних
+ * систем нет пакетов), не регистрируется.
  */
 function c1(add: Add, model: Model, src: Source[]): void {
   const ext = model.externals!;
-  const moduleOfFile = (s: Source) => owners(model, s.dir);
-  const inAdapter = (s: Source, adapter: string) => moduleOfFile(s).includes(adapter);
+  const inAdapters = (s: Source, a: string[]) => owners(model, s.dir).some((m) => a.includes(m));
+  const files = (xs: Source[]) => xs.map((s) => s.file).join(", ");
   const hostOwner = new Map<string, string>();
   for (const [name, e] of Object.entries(ext)) for (const h of e.hosts ?? []) hostOwner.set(h.toLowerCase(), name);
   const hostFiles = new Map<string, Source[]>();
@@ -604,48 +652,77 @@ function c1(add: Add, model: Model, src: Source[]): void {
     add({
       registry: "хосты внешних систем",
       items: hosts,
-      name: (h) => `хост ${h} — только в адаптере ${hostOwner.has(h) ? ext[hostOwner.get(h)!]!.adapter : "?"}`,
+      name: (h) => {
+        const x = hostOwner.get(h);
+        if (!x) return `хост ${h} — только в адаптере ?`;
+        const a = adaptersOf(ext[x]!);
+        return a.length ? `хост ${h} — только в ${adapterWord(a, "адаптере", "адаптерах")}` : `хост ${h} внешней системы ${x} — не в коде: адаптера нет`;
+      },
       key: (h) => h,
       check: (h) => {
-        const files = hostFiles.get(h) ?? [];
-        const owner = hostOwner.get(h);
-        if (!owner) throw new Error(`хост ${h} не объявлен ни одной внешней системой модели: ${files.map((s) => s.file).join(", ")}`);
-        const outside = files.filter((s) => !inAdapter(s, ext[owner]!.adapter));
-        if (outside.length) throw new Error(`хост ${h} внешней системы ${owner} — вне её адаптера ${ext[owner]!.adapter}: ${outside.map((s) => s.file).join(", ")}`);
+        const found = hostFiles.get(h) ?? [];
+        const x = hostOwner.get(h);
+        if (!x) throw new Error(`хост ${h} не объявлен ни одной внешней системой модели: ${files(found)}`);
+        const a = adaptersOf(ext[x]!);
+        const outside = found.filter((s) => !inAdapters(s, a));
+        if (!outside.length) return;
+        if (!a.length) throw new Error(`у внешней системы ${x} нет адаптера, а хост ${h} — в коде: ${files(outside)}`);
+        throw new Error(`хост ${h} внешней системы ${x} — вне её ${adapterWord(a, "адаптера", "адаптеров")}: ${files(outside)}`);
       },
       violator: { name: "хост вне модели", item: "__вне_модели__.example" },
     });
   }
-  const pkgs = Object.entries(ext).flatMap(([x, e]) => (e.packages ?? []).map((p) => ({ x, p, a: e.adapter })));
+  const pkgs = Object.entries(ext).flatMap(([x, e]) => (e.packages ?? []).map((p) => ({ x, p, a: adaptersOf(e) })));
   if (pkgs.length) {
     add({
       registry: "пакеты внешних систем",
       items: pkgs,
-      name: (i) => `пакет ${i.p} внешней системы ${i.x} — только у адаптера ${i.a}`,
+      name: (i) =>
+        i.a.length ? `пакет ${i.p} внешней системы ${i.x} — только у ${adapterWord(i.a, "адаптера", "адаптеров")}` : `пакет ${i.p} внешней системы ${i.x} — ни у одного модуля: адаптера нет`,
       key: (i) => `${i.x}:${i.p}`,
       check: (i) => {
-        if (!(model.modules[i.a]?.packages ?? []).includes(i.p)) throw new Error(`адаптеру ${i.a} пакет ${i.p} внешней системы ${i.x} не разрешён в модели`);
-        const others = names(model).filter((n) => n !== i.a && (model.modules[n]!.packages ?? []).includes(i.p));
-        if (others.length) throw new Error(`пакет ${i.p} внешней системы ${i.x} разрешён не только адаптеру: ${others.join(", ")}`);
+        const allowedTo = names(model).filter((n) => (model.modules[n]!.packages ?? []).includes(i.p));
+        if (!i.a.length) {
+          if (allowedTo.length) throw new Error(`у внешней системы ${i.x} нет адаптера, а пакет ${i.p} разрешён модулям: ${allowedTo.join(", ")}`);
+          return;
+        }
+        if (!i.a.some((a) => allowedTo.includes(a))) {
+          throw new Error(`${i.a.length === 1 ? `адаптеру ${i.a[0]}` : `ни одному из адаптеров ${i.a.join(", ")}`} пакет ${i.p} внешней системы ${i.x} не разрешён в модели`);
+        }
+        const others = allowedTo.filter((n) => !i.a.includes(n));
+        if (others.length) throw new Error(`пакет ${i.p} внешней системы ${i.x} разрешён не только ${i.a.length === 1 ? "адаптеру" : "адаптерам"}: ${others.join(", ")}`);
       },
-      violator: { name: "пакет без адаптера", item: { x: "__нарушитель__", p: "__нет__", a: "__нет_модуля__" } },
+      violator: { name: "пакет без адаптера", item: { x: "__нарушитель__", p: "__нет__", a: ["__нет_модуля__"] } },
     });
   }
-  const keys: { x: string; k: string; a: string; src?: Source[] }[] = Object.entries(ext).flatMap(([x, e]) => (e.env ?? []).map((k) => ({ x, k, a: e.adapter })));
-  if (keys.length) {
+
+  // ключ окружения и заголовок — одно соглашение: читает только адаптер; нарушителю — свой исходник, читающий вне адаптера
+  type Read = { x: string; k: string; a: string[]; src?: Source[] };
+  const readOnlyByAdapters = (registry: string, noun: string, list: (e: External) => string[] | undefined, reads: (s: Source, k: string) => boolean, fake: Partial<Source>) => {
+    const items: Read[] = Object.entries(ext).flatMap(([x, e]) => (list(e) ?? []).map((k) => ({ x, k, a: adaptersOf(e) })));
+    if (!items.length) return;
     add({
-      registry: "ключи окружения внешних систем",
-      items: keys,
-      name: (i) => `ключ ${i.k} внешней системы ${i.x} читает только адаптер ${i.a}`,
+      registry,
+      items,
+      name: (i) =>
+        i.a.length
+          ? `${noun} ${i.k} внешней системы ${i.x} ${i.a.length === 1 ? "читает только адаптер" : "читают только адаптеры"} ${i.a.join(", ")}`
+          : `${noun} ${i.k} внешней системы ${i.x} — не в коде: адаптера нет`,
       key: (i) => `${i.x}:${i.k}`,
       check: (i) => {
-        const outside = (i.src ?? src).filter((s) => s.env.includes(i.k) && !inAdapter(s, i.a));
-        if (outside.length) throw new Error(`ключ ${i.k} внешней системы ${i.x} читается вне адаптера ${i.a}: ${outside.map((s) => s.file).join(", ")}`);
+        const outside = (i.src ?? src).filter((s) => reads(s, i.k) && !inAdapters(s, i.a));
+        if (!outside.length) return;
+        if (!i.a.length) throw new Error(`у внешней системы ${i.x} нет адаптера, а ${noun} ${i.k} читается в коде: ${files(outside)}`);
+        throw new Error(`${noun} ${i.k} внешней системы ${i.x} читается вне ${adapterWord(i.a, "адаптера", "адаптеров")}: ${files(outside)}`);
       },
-      // нарушителю — свой исходник, который читает ключ вне адаптера: в коде проекта такого ключа нет
-      violator: { name: "ключ вне адаптера", item: { x: "__нарушитель__", k: "__КЛЮЧ__", a: "__нет_модуля__", src: [{ file: "__нарушитель__.ts", dir: "__вне_модели__", packages: [], hosts: [], env: ["__КЛЮЧ__"] }] } },
+      violator: {
+        name: `${noun} вне адаптера`,
+        item: { x: "__нарушитель__", k: "__КЛЮЧ__", a: ["__нет_модуля__"], src: [{ file: "__нарушитель__.ts", dir: "__вне_модели__", packages: [], hosts: [], env: [], headers: [], ...fake }] },
+      },
     });
-  }
+  };
+  readOnlyByAdapters("ключи окружения внешних систем", "ключ", (e) => e.env, (s, k) => s.env.includes(k), { env: ["__КЛЮЧ__"] });
+  readOnlyByAdapters("заголовки внешних систем", "заголовок", (e) => e.headers, (s, k) => s.headers.includes(k.toLowerCase()), { headers: ["__ключ__"] });
 }
 
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;

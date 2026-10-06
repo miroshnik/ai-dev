@@ -36,6 +36,24 @@ const FULL = `{
   },
 }`;
 
+// общий пакет ui — библиотека в бандле обоих приложений; CDN — периметр, код с ним не говорит
+const MONOREPO = `{
+  name: "Магазин",
+  modules: {
+    web: { path: "apps/web", purpose: "сайт", dependsOn: ["ui"] },
+    admin: { path: "apps/admin", purpose: "админка", dependsOn: ["ui"] },
+    ui: { path: "packages/ui", purpose: "компоненты", library: true },
+  },
+  externals: {
+    telegram: { purpose: "мессенджер", adapter: ["web", "admin"], hosts: ["api.telegram.org"] },
+    cdn: { purpose: "CDN перед сайтом" },
+  },
+  containers: {
+    site: { purpose: "сайт", modules: ["web"] },
+    backoffice: { purpose: "админка", modules: ["admin"] },
+  },
+}`;
+
 const MODULES_ONLY = `{
   modules: {
     domain: { path: "src/domain", purpose: "правила счетов" },
@@ -129,6 +147,49 @@ describe("Архитектура — страница из модели `tests/a
         "| domain | правила счетов | `src/domain` | `src/domain/index.ts` | — | — |",
         "| repo | запросы к базе | `src/repo` | — | domain | `pg` |",
         "| payments | платежи | `src/payments` | — | — | `stripe` |",
+      ),
+    );
+  });
+
+  it("C3 — библиотека вне границ контейнеров; внешняя система с несколькими адаптерами — связь от каждого, без адаптера — периметр перед системой", () => {
+    writeTree(dir, { [MODEL]: model(MONOREPO) });
+    expect(doc(rules()).code).toBe(0);
+    const page = read("docs/spec/architecture.md");
+    expect(page).toContain(
+      block(
+        '  System(system, "Магазин")',
+        '  System_Ext(ext_telegram, "telegram", "мессенджер")',
+        '  System_Ext(ext_cdn, "cdn", "CDN перед сайтом")',
+        '  Rel(system, ext_telegram, "через модули web, admin", "api.telegram.org")',
+        '  Rel(ext_cdn, system, "периметр")',
+        "```",
+      ),
+    );
+    expect(page).toContain(
+      block(
+        '  Rel(c_site, ext_telegram, "через модуль web", "api.telegram.org")',
+        '  Rel(c_backoffice, ext_telegram, "через модуль admin", "api.telegram.org")',
+        "```",
+      ),
+    );
+    expect(page).toContain(
+      block(
+        "C4Component",
+        "  title Модули",
+        '  Container_Boundary(c_site, "site") {',
+        '    Component(m_web, "web", "apps/web", "сайт")',
+        "  }",
+        '  Container_Boundary(c_backoffice, "backoffice") {',
+        '    Component(m_admin, "admin", "apps/admin", "админка")',
+        "  }",
+        '  Component(m_ui, "ui", "packages/ui, библиотека", "компоненты")',
+        '  System_Ext(ext_telegram, "telegram", "мессенджер")',
+        '  System_Ext(ext_cdn, "cdn", "CDN перед сайтом")',
+        '  Rel(m_web, m_ui, "зависит")',
+        '  Rel(m_admin, m_ui, "зависит")',
+        '  Rel(m_web, ext_telegram, "вызывает", "api.telegram.org")',
+        '  Rel(m_admin, ext_telegram, "вызывает", "api.telegram.org")',
+        "```",
       ),
     );
   });

@@ -6,7 +6,8 @@
  * Метка `<!-- spec: c4-… -->` отдельной строкой в `<папка>.md` заменяется той же схемой (`embed`).
  */
 
-import type { Container, Model, Module } from "./architecture.ts";
+import { adaptersOf, moduleContainers } from "./architecture.ts";
+import type { Container, External, Model, Module } from "./architecture.ts";
 import { mdText, plural } from "./speclib.ts";
 
 const entries = <T>(r?: Record<string, T>): [string, T][] => Object.entries(r ?? {});
@@ -31,47 +32,53 @@ function containerLine(name: string, c: Container, indent: string): string {
 const externalLines = (m: Model): string[] =>
   entries(m.externals).map(([n, x]) => `  System_Ext(${id("ext_", n)}, ${q(n)}, ${q(x.purpose)})`);
 
-/** Контейнер модуля — первый по объявлению (проверка «модуль — ровно в одном контейнере» — в `architecture`). */
-const containerOf = (m: Model, module: string): string | undefined =>
-  entries(m.containers).find(([, c]) => (c.modules ?? []).includes(module))?.[0];
+/** «через модуль a» / «через модули a, b». */
+const via = (a: string[]): string => `через ${a.length === 1 ? "модуль" : "модули"} ${a.join(", ")}`;
 
 const fence = (kind: string, title: string, body: string[]): string[] => ["```mermaid", kind, `  title ${title}`, ...body, "```"];
 
-/** C1: система и внешние системы; связь подписана модулем-адаптером и хостами. */
+/** C1: система и внешние системы; связь подписана модулями-адаптерами и хостами, периметр (без адаптера) — перед системой. */
 export function c4Context(m: Model): string[] {
-  return fence("C4Context", "Система и внешние системы", [
-    `  System(system, ${q(systemName(m))})`,
-    ...externalLines(m),
-    ...entries(m.externals).map(([n, x]) => rel("system", id("ext_", n), `через модуль ${x.adapter}`, hosts(x))),
-  ]);
+  const link = ([n, x]: [string, External]) => {
+    const a = adaptersOf(x);
+    return a.length ? rel("system", id("ext_", n), via(a), hosts(x)) : rel(id("ext_", n), "system", "периметр", hosts(x));
+  };
+  return fence("C4Context", "Система и внешние системы", [`  System(system, ${q(systemName(m))})`, ...externalLines(m), ...entries(m.externals).map(link)]);
 }
 
-/** C2: контейнеры внутри системы (хранилище — база), связи `uses`, внешняя система — у контейнера с её адаптером. */
+/**
+ * C2: контейнеры внутри системы (хранилище — база), связи `uses`, внешняя система — у каждого контейнера с её
+ * адаптером (библиотека-адаптер — во всех своих контейнерах); у периметра связей с контейнерами нет.
+ */
 export function c4Container(m: Model): string[] {
   const body = [`  System_Boundary(system, ${q(systemName(m))}) {`];
   for (const [n, c] of entries(m.containers)) body.push(containerLine(n, c, "    "));
   body.push("  }", ...externalLines(m));
   for (const [n, c] of entries(m.containers)) for (const u of c.uses ?? []) body.push(rel(id("c_", n), id("c_", u), "использует"));
+  const of = moduleContainers(m);
   for (const [n, x] of entries(m.externals)) {
-    const c = containerOf(m, x.adapter);
-    if (c) body.push(rel(id("c_", c), id("ext_", n), `через модуль ${x.adapter}`, hosts(x)));
+    for (const [cn] of entries(m.containers)) {
+      const a = adaptersOf(x).filter((ad) => (of.get(ad) ?? []).includes(cn));
+      if (a.length) body.push(rel(id("c_", cn), id("ext_", n), via(a), hosts(x)));
+    }
   }
   return fence("C4Container", "Контейнеры", body);
 }
 
 /**
- * C3: модули по контейнерам, зависимости `dependsOn`; хранилище — у модуля, чьи пакеты — его клиенты; внешняя
- * система — у модуля-адаптера.
+ * C3: модули по контейнерам, библиотека — вне их границ (её контейнеры видны по зависящим модулям), зависимости
+ * `dependsOn`; хранилище — у модуля, чьи пакеты — его клиенты; внешняя система — у каждого модуля-адаптера.
  */
 export function c4Component(m: Model): string[] {
   const component = (n: string, indent: string) => {
     const x = m.modules[n]!;
-    return `${indent}Component(${id("m_", n)}, ${q(n)}, ${q(paths(x).join(", "))}, ${q(x.purpose)})`;
+    const techn = [...paths(x), ...(x.library ? ["библиотека"] : [])].join(", ");
+    return `${indent}Component(${id("m_", n)}, ${q(n)}, ${q(techn)}, ${q(x.purpose)})`;
   };
   const body: string[] = [];
   const placed = new Set<string>();
   for (const [cn, c] of entries(m.containers)) {
-    const mods = (c.modules ?? []).filter((x) => m.modules[x]);
+    const mods = (c.modules ?? []).filter((x) => m.modules[x] && !m.modules[x].library);
     if (!mods.length) continue;
     body.push(`  Container_Boundary(${id("c_", cn)}, ${q(cn)}) {`, ...mods.map((x) => component(x, "    ")), "  }");
     for (const x of mods) placed.add(x);
@@ -93,7 +100,7 @@ export function c4Component(m: Model): string[] {
   body.push(...externalLines(m));
   for (const [n, x] of entries(m.modules)) for (const d of x.dependsOn ?? []) body.push(rel(id("m_", n), id("m_", d), "зависит"));
   body.push(...storageRels);
-  for (const [n, x] of entries(m.externals)) body.push(rel(id("m_", x.adapter), id("ext_", n), "вызывает", hosts(x)));
+  for (const [n, x] of entries(m.externals)) for (const a of adaptersOf(x)) body.push(rel(id("m_", a), id("ext_", n), "вызывает", hosts(x)));
   return fence("C4Component", "Модули", body);
 }
 

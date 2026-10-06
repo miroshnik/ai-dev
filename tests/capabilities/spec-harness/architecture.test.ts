@@ -285,6 +285,92 @@ describe("Внешние системы модели (C1) проверяются
     expect(hostsIn(src)).toEqual(["8.8.8.8"]);
   });
 
+  // ссылку открывает браузер посетителя — система с этим хостом не говорит; переход кодом (location) — часть
+  // интеграции (оплата, вход), а <link href> и src браузер грузит сам: это хосты
+  it("ссылка навигации — `href` ссылки и объекта — не хост; `<link href>`, `src`, `fetch` и `location` — хосты", () => {
+    const src = [
+      'export const A = () => <a href="https://t.me/support">Telegram</a>;',
+      'export const B = () => <Link className="x" href={"https://wa.me/79990000000"}>WhatsApp</Link>;',
+      "export const C = (u: string) => <a href={`https://vk.com/${u}`}>VK</a>;",
+      'export const links = [{ label: "VK", href: "https://vk.com/club" }];',
+      'export const H = () => <link rel="preconnect" href="https://fonts.gstatic.com" />;',
+      'export const I = () => <img src="https://cdn.shop.io/logo.png" />;',
+      'export const r = fetch("https://api.shop.io/v1");',
+      'location.href = "https://pay.provider.io/checkout";',
+    ].join("\n");
+    expect(hostsIn(src, "links.tsx")).toEqual(["fonts.gstatic.com", "cdn.shop.io", "api.shop.io", "pay.provider.io"]);
+  });
+
+  it("хост, пакет и ключ внешней системы с несколькими адаптерами — в любом из них; вне адаптеров — упавший тест", async () => {
+    const multi: Model = {
+      roots: ["src"],
+      modules: {
+        bot: { path: "src/bot", purpose: "бот", packages: ["grammy"] },
+        notify: { path: "src/notify", purpose: "уведомления" },
+        billing: { path: "src/billing", purpose: "счета" },
+      },
+      externals: { telegram: { purpose: "мессенджер", adapter: ["bot", "notify"], hosts: ["api.telegram.org"], packages: ["grammy"], env: ["TG_TOKEN"] } },
+    };
+    const files = {
+      "src/bot/bot.ts": 'import { Bot } from "grammy";\nexport const b = new Bot(process.env.TG_TOKEN!);\n',
+      "src/notify/send.ts": 'export const s = fetch("https://api.telegram.org/bot" + process.env.TG_TOKEN);\n',
+      "src/billing/pay.ts": "export const p = 1;\n",
+    };
+    writeTree(dir, files);
+    const ok = await outcomes((it) => architecture(it, { root: dir, model: multi }));
+    expect(ok["хост api.telegram.org — только в адаптерах bot, notify"]).toBe("✓");
+    expect(ok["пакет grammy внешней системы telegram — только у адаптеров bot, notify"]).toBe("✓");
+    expect(ok["ключ TG_TOKEN внешней системы telegram читают только адаптеры bot, notify"]).toBe("✓");
+    writeTree(dir, { "src/billing/pay.ts": 'export const p = fetch("https://api.telegram.org/x?t=" + process.env.TG_TOKEN);\n' });
+    const bad = await outcomes((it) => architecture(it, { root: dir, model: multi }));
+    expect(bad["хост api.telegram.org — только в адаптерах bot, notify"]).toStartWith("✗ хост api.telegram.org внешней системы telegram — вне её адаптеров bot, notify: src/billing/pay.ts");
+    expect(bad["ключ TG_TOKEN внешней системы telegram читают только адаптеры bot, notify"]).toStartWith(
+      "✗ ключ TG_TOKEN внешней системы telegram читается вне адаптеров bot, notify: src/billing/pay.ts",
+    );
+    const stray: Model = { ...multi, modules: { ...multi.modules, billing: { path: "src/billing", purpose: "счета", packages: ["grammy"] } } };
+    const pkg = await outcomes((it) => architecture(it, { root: dir, model: stray }));
+    expect(pkg["пакет grammy внешней системы telegram — только у адаптеров bot, notify"]).toStartWith("✗ пакет grammy внешней системы telegram разрешён не только адаптерам: billing");
+  });
+
+  // CDN или WAF перед сайтом: трафик идёт через него, а код с ним не говорит — адаптера нет, и в коде его следов нет
+  it("внешняя система без адаптера — периметр: её хост, пакет или ключ в коде — упавший тест", async () => {
+    const edge: Model = {
+      roots: ["src"],
+      modules: { web: { path: "src/web", purpose: "страницы" } },
+      externals: { cdn: { purpose: "CDN и WAF перед сайтом", hosts: ["edge.shop.io"], packages: ["edge-sdk"], env: ["EDGE_PURGE_KEY"] } },
+    };
+    writeTree(dir, { "src/web/page.ts": "export const p = 1;\n" });
+    const ok = await outcomes((it) => architecture(it, { root: dir, model: edge }));
+    expect(ok["хост edge.shop.io внешней системы cdn — не в коде: адаптера нет"]).toBe("✓");
+    expect(ok["пакет edge-sdk внешней системы cdn — ни у одного модуля: адаптера нет"]).toBe("✓");
+    expect(ok["ключ EDGE_PURGE_KEY внешней системы cdn — не в коде: адаптера нет"]).toBe("✓");
+    writeTree(dir, { "src/web/purge.ts": 'export const u = "https://edge.shop.io/purge";\nexport const k = process.env.EDGE_PURGE_KEY;\n' });
+    const withSdk: Model = { ...edge, modules: { web: { path: "src/web", purpose: "страницы", packages: ["edge-sdk"] } } };
+    const bad = await outcomes((it) => architecture(it, { root: dir, model: withSdk }));
+    expect(bad["хост edge.shop.io внешней системы cdn — не в коде: адаптера нет"]).toStartWith("✗ у внешней системы cdn нет адаптера, а хост edge.shop.io — в коде: src/web/purge.ts");
+    expect(bad["пакет edge-sdk внешней системы cdn — ни у одного модуля: адаптера нет"]).toStartWith("✗ у внешней системы cdn нет адаптера, а пакет edge-sdk разрешён модулям: web");
+    expect(bad["ключ EDGE_PURGE_KEY внешней системы cdn — не в коде: адаптера нет"]).toStartWith("✗ у внешней системы cdn нет адаптера, а ключ EDGE_PURGE_KEY читается в коде: src/web/purge.ts");
+  });
+
+  // интеграция через заголовки: периметр (Cloudflare, балансировщик) кладёт страну и IP посетителя в запрос
+  it("заголовок интеграции внешней системы читает только адаптер", async () => {
+    const cf: Model = {
+      roots: ["src"],
+      modules: { geo: { path: "src/geo", purpose: "страна и IP посетителя" }, web: { path: "src/web", purpose: "страницы" } },
+      externals: { cloudflare: { purpose: "CDN перед сайтом", adapter: "geo", headers: ["CF-IPCountry", "CF-Connecting-IP"] } },
+    };
+    writeTree(dir, {
+      "src/geo/country.ts": 'export const country = (h: Headers) => h.get("cf-ipcountry");\n',
+      "src/web/ip.ts": 'export const ip = (req: { headers: Record<string, string> }) => req.headers["CF-Connecting-IP"];\n// h.get("cf-ipcountry") — в комментарии не чтение\n',
+    });
+    const r = await outcomes((it) => architecture(it, { root: dir, model: cf }));
+    expect(r["заголовок CF-IPCountry внешней системы cloudflare читает только адаптер geo"]).toBe("✓");
+    expect(r["заголовок CF-Connecting-IP внешней системы cloudflare читает только адаптер geo"]).toStartWith(
+      "✗ заголовок CF-Connecting-IP внешней системы cloudflare читается вне адаптера geo: src/web/ip.ts",
+    );
+    expect(r["нарушитель не проходит: заголовок вне адаптера"]).toBe("✓");
+  });
+
   it("хост внешней системы в коде — только в её адаптере; необъявленный хост — упавший тест", async () => {
     writeTree(dir, {
       ...adapter,
