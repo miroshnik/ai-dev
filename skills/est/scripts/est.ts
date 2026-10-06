@@ -408,6 +408,8 @@ export interface Row {
   labels: string[];
   /** Тип issue организации («Эпик»); в личном аккаунте типов нет — эпик помечен меткой `epic`. */
   issueType?: string | null;
+  /** Номер эпика задачи (родитель sub-issue). */
+  parent?: number | null;
   /** Размер описания issue, знаков без ответов на вопросы (descSize) — признак объёма при подборе аналогов. */
   size?: number;
   est: number | null;
@@ -667,7 +669,7 @@ export class Repo implements FactRepo {
     const q = `
         query($id:ID!,$c:String){ node(id:$id){ ... on ProjectV2{
           items(first:100,after:$c){ pageInfo{hasNextPage endCursor} nodes{ id type
-            content{ __typename ... on Issue{ id number title body state stateReason closedAt createdAt issueType{name}
+            content{ __typename ... on Issue{ id number title body state stateReason closedAt createdAt issueType{name} parent{number}
               labels(first:15){nodes{name}} comments(last:25){nodes{databaseId body}} } }
             fieldValues(first:20){ nodes{ __typename
               ... on ProjectV2ItemFieldNumberValue{ number field{ ... on ProjectV2Field{name} } }
@@ -691,6 +693,7 @@ export class Repo implements FactRepo {
           createdAt: parseTs(c.createdAt),
           labels: c.labels.nodes.map((l: Any) => l.name),
           issueType: c.issueType?.name ?? null,
+          parent: c.parent?.number ?? null,
           size: descSize(c.body ?? ""),
           est: null,
           fact: null,
@@ -3090,7 +3093,8 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
   for (const sid of res.cloud_missing ?? []) console.log(`ВНИМАНИЕ: часть работы — облачная сессия https://claude.ai/code/${sid}, её события не импортированы: выгрузить браузером и est cloud-import (SKILL.md est, «Облачная сессия»)`);
 }
 
-function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): void {
+/** Записывает факт (комментарий и поля проекта); возвращает тело комментария. */
+function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): string {
   if (res.is_pr) throw new EstError(`#${res.issue} — это PR, а не issue: факт по PR не записывается`);
   const existing = findMarkerComment(issue, "fact");
   const [manual, cause, kept] = extractKeptLines(existing ? existing.body : "");
@@ -3112,6 +3116,22 @@ function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): void 
     else msg += ` (поля «${fname}» в проекте нет — пропущено)`;
   }
   console.log(msg);
+  return body;
+}
+
+/**
+ * Факты к пересчёту по модели (#345): закрытые задачи окна, в расходе которых (маркер факта, `models`) есть эта
+ * версия модели, свежие первыми, затем их закрытые эпики — стоимость эпика — сумма фактов подзадач.
+ */
+export function factsWithModel(rows: Row[], model: string, since: number, now: number): Row[] {
+  const version = modelVersion(model);
+  const done = (r: Row) => r.state === "CLOSED" && r.stateReason !== "NOT_PLANNED";
+  const tasks = rows
+    .filter((r) => done(r) && !isEpicRow(r) && (r.closedAt || 0) >= now - since)
+    .filter((r) => Object.keys(r.fact_marker?.models ?? {}).some((m) => modelVersion(m) === version))
+    .sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
+  const parents = new Set(tasks.map((r) => r.parent));
+  return [...tasks, ...rows.filter((r) => done(r) && isEpicRow(r) && parents.has(r.number))];
 }
 
 interface FactArgs {
@@ -3122,12 +3142,14 @@ interface FactArgs {
   json: boolean;
   sweep: boolean;
   since: string;
+  model?: string;
 }
 
 function cmdFact(args: FactArgs): void {
   const registry = loadRegistry();
   if (args.gap < 1) throw new EstError(`--gap должен быть ≥ 1 минуты, получено ${args.gap}`);
   if (args.sweep && args.number !== undefined) throw new EstError("номер issue и --sweep несовместимы: либо одно, либо другое");
+  if (args.model !== undefined && !args.sweep) throw new EstError("--model — только со --sweep: пересчёт записанных фактов с этой моделью");
   if (isCloud()) {
     if (args.number === undefined) throw new EstError(CLOUD_ERR);
     const sid = cloudSid(process.env.CLAUDE_CODE_REMOTE_SESSION_ID);
@@ -3147,9 +3169,15 @@ function cmdFact(args: FactArgs): void {
   if (args.sweep) {
     const since = parseSince(args.since);
     const now = nowTs();
-    const rows = repo.projectRows().filter((r) => r.state === "CLOSED" && r.fact === null && r.stateReason !== "NOT_PLANNED" && (r.closedAt || 0) >= now - since);
-    rows.sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
-    console.log(`== ${repo.full}: закрытых без факта за ${args.since}: ${rows.length}`);
+    let rows: Row[];
+    if (args.model !== undefined) {
+      rows = factsWithModel(repo.projectRows(), args.model, since, now);
+      console.log(`== ${repo.full}: закрытых с фактом по ${modelVersion(args.model)} за ${args.since} (с их эпиками): ${rows.length}`);
+    } else {
+      rows = repo.projectRows().filter((r) => r.state === "CLOSED" && r.fact === null && r.stateReason !== "NOT_PLANNED" && (r.closedAt || 0) >= now - since);
+      rows.sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
+      console.log(`== ${repo.full}: закрытых без факта за ${args.since}: ${rows.length}`);
+    }
     const stats: Record<string, number> = { full: 0, partial: 0, none: 0 };
     let total = 0.0;
     let epicsTotal = 0.0;
@@ -3176,8 +3204,15 @@ function cmdFact(args: FactArgs): void {
       let extra = res.epic ? "эпик" : res.prs.length ? "PR " + res.prs.map((p) => `#${p}`).join(", ") : "без PR";
       if (res.weak_links) extra += " (слабая связь)";
       if (res.shared?.length) extra += ` (доля 1/${Math.max(...res.shared.map((s) => s.k))})`;
+      // пересчёт — весь факт по текущей логике, а не один тариф: прежние часы рядом, чтобы расхождение было видно до --write
+      if (args.model !== undefined) extra += `; было ${fmtH(r.fact)} ч, $${fmtH(r.fact_marker?.usd ?? null)} → $${fmtH(res.usd ?? null)}`;
       console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} ч  ${pad(res.cov, 7)} оценка ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
-      if (args.write && res.cov !== "none") writeFact(repo, issue, res, r.est);
+      if (args.write && res.cov !== "none") {
+        const body = writeFact(repo, issue, res, r.est);
+        // эпик дальше в этом же свипе складывает факты подзадач из строк проекта — им нужен записанный, а не прежний
+        if (h !== null) r.fact = h;
+        r.fact_marker = parseMarker(body, "fact");
+      }
     }
     console.log(`итого: full ${stats.full}, partial ${stats.partial}, none ${stats.none}; сумма часов ${fmtH(total)} (без эпиков; эпики ${fmtH(epicsTotal)} ч — сумма своих подзадач)`);
     const warning = sweepOverlapWarning(counted);
@@ -3850,6 +3885,7 @@ const USAGE = `est — оценка задач по истории проект�
   est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
   est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
   est fact --sweep [--since 90d] [--repo o/r] [--write]
+  est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   — пересчёт записанных фактов с этой моделью и их эпиков
   est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "причина"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]   — аналоги подбирает скрипт
   est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — аналоги вручную
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
@@ -3915,10 +3951,10 @@ export function main(argv: string[]): number {
       const { values, positionals } = parseArgs({
         args: rest,
         allowPositionals: true,
-        options: { repo: { type: "string" }, write: { type: "boolean", default: false }, gap: { type: "string", default: "30" }, json: { type: "boolean", default: false }, sweep: { type: "boolean", default: false }, since: { type: "string", default: "90d" } },
+        options: { repo: { type: "string" }, write: { type: "boolean", default: false }, gap: { type: "string", default: "30" }, json: { type: "boolean", default: false }, sweep: { type: "boolean", default: false }, since: { type: "string", default: "90d" }, model: { type: "string" } },
       });
       if (positionals.length > 1) throw new EstError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
-      cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since });
+      cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model });
       return 0;
     }
     if (cmd === "period") {
