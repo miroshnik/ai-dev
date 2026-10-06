@@ -18,6 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Model } from "./architecture.ts";
+import knipHints from "./knip-hints.cjs";
 import { commentsOf, decisionFolder, EXCEPTIONS_DIR, exceptionFile, stringsOf } from "./speclib.ts";
 
 /** `it` раннера: имя и тело; тело бросает (expect) при нарушении. */
@@ -879,77 +880,183 @@ const KNIP: [string, string, string[]][] = [
   ["нет экспортов-дублей", "duplicate", ["duplicates"]],
   ["нет вызовов неустановленных бинарников", "binary", ["binaries"]],
   ["нет лишних записей каталога пакетов", "catalog", ["catalog"]],
+  ["нет ссылок на отсутствующие записи каталога пакетов", "catalogReference", ["catalogReferences"]],
 ];
+// ключи строки отчёта, которые не виды находок: файл и владельцы (CODEOWNERS)
+const KNIP_ROW = new Set(["file", "owners", ...KNIP.flatMap(([, , keys]) => keys)]);
+// виды, чей ключ раньше был без файла (`dependency:lodash`) и закрывал пакет во всех воркспейсах
+const KEYED_BY_NAME = new Set(["dependency", "unlisted", "binary", "catalog"]);
+// репортер подсказок конфигурации: в JSON knip их нет; путь — из самого файла, import.meta здесь нельзя (harness-load)
+const HINTS_REPORTER = knipHints.file;
 
 type KnipItem = { name: string; namespace?: string };
+type KnipHint = { type: string; identifier: string; workspace?: string };
+type KnipReport = { issues?: Record<string, unknown>[]; configurationHints?: KnipHint[] };
 
-/** Находка knip для показа и ключа исключения: файл — путь, пакет и бинарник — имя, остальное — `<файл>#<имя>`. */
+/**
+ * Находка knip для показа и ключа исключения: файл — путь, остальное — `<файл>#<имя>`. Файл — из отчёта knip: у
+ * зависимости — `package.json` воркспейса, у неустановленного пакета — файл с импортом, у каталога — файл каталога;
+ * имя в пространстве (член перечисления, запись каталога) — `<пространство>.<имя>`.
+ */
 function knipShown(kind: string, file: string, item: KnipItem | KnipItem[]): string {
   if (Array.isArray(item)) return `${file}#${item.map((x) => x.name).join(" = ")}`; // дубли — группа имён одного экспорта
-  if (["file", "dependency", "unlisted", "binary", "catalog"].includes(kind)) return item.name;
+  if (kind === "file") return item.name;
   return `${file}#${item.namespace ? item.namespace + "." : ""}${item.name}`;
 }
 
-/** Находки knip по видам: ключ вида (`file:…`, `export:<файл>#<имя>`, `dependency:<пакет>`) → то, что показать. */
-function knipFindings(report: { issues?: Record<string, unknown>[] }): Map<string, Map<string, string>> {
-  const out = new Map(KNIP.map(([, kind]) => [kind, new Map<string, string>()]));
+/** Подсказка конфигурации для показа и ключа исключения (`hint:<…>`): воркспейс, тип подсказки и что она называет. */
+const hintShown = (h: KnipHint): string => `${h.workspace ?? "."}#${h.type}:${h.identifier}`;
+
+/** Разобранный вывод knip: находки по видам (ключ → показ), строки неизвестных видов, подсказки (null — их нет в выводе). */
+interface KnipFindings {
+  kinds: Map<string, Map<string, string>>;
+  unknown: string[];
+  hints: Map<string, string> | null;
+}
+
+/** Находки по видам: ключ вида (`file:…`, `export:<файл>#<имя>`, `dependency:<package.json>#<пакет>`) → то, что показать. */
+function knipFindings(report: KnipReport): KnipFindings {
+  const kinds = new Map(KNIP.map(([, kind]) => [kind, new Map<string, string>()]));
+  const unknown = new Set<string>();
   for (const issue of report.issues ?? []) {
     const file = String(issue.file ?? "");
     for (const [, kind, keys] of KNIP) {
       for (const k of keys) {
         for (const item of (issue[k] as (KnipItem | KnipItem[])[] | undefined) ?? []) {
           const shown = knipShown(kind, file, item);
-          out.get(kind)!.set(`${kind}:${shown}`, shown);
+          kinds.get(kind)!.set(`${kind}:${shown}`, shown);
         }
       }
     }
+    // вид, которого харнесс не знает (новый в knip, cycles по --cycles), — не молчание: такой была ссылка catalog:
+    for (const [k, v] of Object.entries(issue)) if (!KNIP_ROW.has(k) && Array.isArray(v) && v.length) unknown.add(`${k} (${file})`);
   }
-  return out;
+  const hints = Array.isArray(report.configurationHints) ? new Map(report.configurationHints.map((h) => [`hint:${hintShown(h)}`, hintShown(h)])) : null;
+  return { kinds, unknown: [...unknown].sort(), hints };
+}
+
+/** Вывод knip — строка отчёта `json` и строка подсказок `knip-hints.cjs`; отчёт файлом — и один JSON. Не JSON — ошибка. */
+function knipOutput(text: string): KnipReport {
+  try {
+    return JSON.parse(text) as KnipReport;
+  } catch {
+    const lines = text.split("\n").filter((l) => l.trim());
+    if (!lines.length) throw new Error("пустой вывод");
+    return Object.assign({}, ...lines.map((l) => JSON.parse(l) as KnipReport)) as KnipReport;
+  }
+}
+
+export interface DeadCode {
+  /** Корень проекта для knip — каталог с его конфигом и `node_modules/.bin/knip`; ключи находок — от него. */
+  root: string;
+  /** Готовый вывод `knip --reporter json --reporter <скилл>/knip-hints.cjs` (от `root`) вместо запуска knip. */
+  report?: string;
+  /** Аргументы knip проекта: `--tsConfig`, `--workspace`, … */
+  args?: readonly string[];
+  /** Исключения — `exceptionsIn()`: ключ находки, задача, причина; `rule` — только запуска с этим `rule`. */
+  exceptions?: readonly Exception[];
+  /** Режим production (`knip --production`): код, до которого доходят только тесты, — находка. Rule запуска — `production`. */
+  production?: boolean;
+  /** Имя запуска, когда их в папке несколько (режимы, воркспейсы): пометка в названиях тестов и исключения с этим `rule`. */
+  rule?: string;
+  /** Подсказки конфигурации knip — находки (по умолчанию да); `false` — без проверки. */
+  hints?: boolean;
 }
 
 /**
  * Код без потребителя — по отчёту knip: тест на каждый вид находок (файлы, экспорты, типы, зависимости, неустановленные
- * пакеты, нерезолвящиеся импорты) — упавший со списком находок. Отчёт — файл `knip --reporter json` (`report`) или
- * запуск knip проекта (`node_modules/.bin/knip`). Исключение — ключ находки (`file:src/legacy.ts`,
- * `export:src/math.ts#factorial`, `dependency:lodash`) с задачей: зелёное, пока knip его находит, иначе — «убери».
+ * пакеты, нерезолвящиеся импорты, каталог pnpm…) — упавший со списком находок; «все находки knip — известных видов» —
+ * новый вид knip не проходит молча; «нет подсказок конфигурации knip» — лишний ignore и entry без совпадений. Отчёт —
+ * файл (`report`) или запуск knip проекта (`node_modules/.bin/knip`) — при регистрации тестов, а не под таймаутом
+ * первого теста. Исключение — ключ находки (`file:src/legacy.ts`, `export:src/math.ts#factorial`,
+ * `dependency:packages/a/package.json#lodash`, `hint:.#ignore:src/gen/**`) с задачей: зелёное, пока knip его находит,
+ * иначе — «убери». Исключение с `rule` — только своего запуска; без `rule` — гасит находку во всех запусках папки, а
+ * храповик у запуска без `rule`: в production knip не смотрит devDependencies и тесты, и «убери» там было бы ложным.
  */
-export function deadCode(it: It, opts: { root: string; report?: string; args?: readonly string[]; exceptions?: readonly Exception[] }): void {
-  let findings: Map<string, Map<string, string>> | null = null;
-  const load = (): Map<string, Map<string, string>> => {
-    if (findings) return findings;
-    let text: string;
-    if (opts.report) text = readFileSync(path.resolve(opts.root, opts.report), "utf8");
-    else {
-      const r = spawnSync(path.join(opts.root, "node_modules", ".bin", "knip"), ["--reporter", "json", ...(opts.args ?? [])], { cwd: opts.root, encoding: "utf8" });
-      if (r.error) throw new Error(`knip не запустился: ${r.error.message} — установи knip в проект или передай report`);
-      // 0 — чисто, 1 — есть находки; иное — сбой knip, а не «мёртвого кода нет»
-      if (r.status !== 0 && r.status !== 1) throw new Error(`knip завершился с кодом ${r.status ?? r.signal}: ${(r.stderr || r.stdout).trim().slice(0, 1000)}`);
-      text = r.stdout;
-    }
-    try {
-      findings = knipFindings(JSON.parse(text));
-    } catch {
-      throw new Error(`knip вывел не JSON — отчёт не разобрать: ${text.trim().slice(0, 300)}`);
-    }
+export function deadCode(it: It, opts: DeadCode): void {
+  const rule = opts.rule ?? (opts.production ? "production" : undefined);
+  const tag = rule ? ` (${rule})` : "";
+  const hints = opts.hints ?? true;
+  // knip — при регистрации: монорепо он проходит дольше таймаута теста (5 с у Vitest); сбой — в тестах, не в сборе файла
+  let findings: KnipFindings | Error;
+  try {
+    findings = runKnip(opts, hints);
+  } catch (e) {
+    findings = e as Error;
+  }
+  const load = (): KnipFindings => {
+    if (findings instanceof Error) throw findings;
     return findings;
   };
   legacyExceptions(it);
-  const excepted = new Map((opts.exceptions ?? []).map((e) => [e.item, e]));
+  const all = opts.exceptions ?? [];
+  const own = all.filter((e) => e.rule === rule || (!e.rule && !rule));
+  const silenced = new Set([...own, ...all.filter((e) => !e.rule)].map((e) => e.item));
+  const open = (found: Map<string, string>) => [...found].filter(([key]) => !silenced.has(key)).map(([, shown]) => shown).sort();
   for (const [name, kind] of KNIP) {
-    it(name, () => {
-      const found = [...load().get(kind)!].filter(([key]) => !excepted.has(key)).map(([, shown]) => shown).sort();
+    it(name + tag, () => {
+      const found = open(load().kinds.get(kind)!);
       if (found.length) throw new Error(found.join("\n"));
     });
   }
-  for (const e of [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : 1))) {
-    meta(`исключение: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
-    it(`исключение: ${e.item} (#${e.issue})`, () => {
+  it(`все находки knip — известных видов${tag}`, () => {
+    const { unknown } = load();
+    if (unknown.length) throw new Error(`knip нашёл то, чего харнесс не разбирает: ${unknown.join(", ")} — убери вид из запуска knip (--exclude) или обнови скилл spec`);
+  });
+  if (hints) {
+    it(`нет подсказок конфигурации knip${tag}`, () => {
+      const found = load().hints;
+      const reporter = path.relative(opts.root, HINTS_REPORTER).split(path.sep).join("/");
+      if (!found && opts.report) throw new Error(`в отчёте ${opts.report} нет подсказок конфигурации — сформируй его: knip --reporter json --reporter ${reporter} > ${opts.report} (или hints: false)`);
+      if (!found) throw new Error(`knip не вывел подсказок конфигурации — репортер ${reporter} не отработал`);
+      const left = open(found);
+      if (left.length) throw new Error(left.join("\n"));
+    });
+  }
+  for (const e of [...own].sort((a, b) => (a.item < b.item ? -1 : 1))) {
+    meta(`исключение${tag}: ${e.item} (#${e.issue})`, { issue: e.issue, reason: e.reason });
+    it(`исключение${tag}: ${e.item} (#${e.issue})`, () => {
       if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи`);
       if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
       const kind = e.item.split(":")[0]!;
-      if (!load().get(kind)?.has(e.item)) throw new Error(`knip больше не находит ${e.item} — ${dropHint(e)} (#${e.issue})`);
+      const found = kind === "hint" ? load().hints : load().kinds.get(kind);
+      if (found?.has(e.item)) return;
+      const name = e.item.slice(kind.length + 1);
+      // ключ без файла — от прежнего формата: назвать находки того же пакета, на которые его заменить
+      const renames =
+        KEYED_BY_NAME.has(kind) && !name.includes("#")
+          ? [...(found?.keys() ?? [])].filter((k) => {
+              const tail = k.slice(k.lastIndexOf("#") + 1);
+              return tail === name || (kind === "catalog" && tail.endsWith("." + name));
+            })
+          : [];
+      if (renames.length) throw new Error(`ключ ${e.item} — без файла: исключение закрыло бы ${name} во всех воркспейсах — переименуй в ${renames.join(", ")} (#${e.issue})`);
+      throw new Error(`knip больше не находит ${e.item} — ${dropHint(e)} (#${e.issue})`);
     });
   }
+  unknownRules(it, rule, all, []);
+}
+
+/** Отчёт knip: файл `report` или запуск knip проекта с репортером подсказок; сбой knip — ошибка, а не «чисто». */
+function runKnip(opts: DeadCode, hints: boolean): KnipFindings {
+  let text: string;
+  if (opts.report) text = readFileSync(path.resolve(opts.root, opts.report), "utf8");
+  else {
+    const args = ["--reporter", "json", ...(hints ? ["--reporter", HINTS_REPORTER] : []), ...(opts.production ? ["--production"] : []), ...(opts.args ?? [])];
+    // отчёт монорепо — мегабайты: буфер вывода по умолчанию (1 МБ у Node) оборвал бы его
+    const r = spawnSync(path.join(opts.root, "node_modules", ".bin", "knip"), args, { cwd: opts.root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    if (r.error) throw new Error(`knip не запустился: ${r.error.message} — установи knip в проект или передай report`);
+    // 0 — чисто, 1 — есть находки; иное — сбой knip, а не «мёртвого кода нет»
+    if (r.status !== 0 && r.status !== 1) throw new Error(`knip завершился с кодом ${r.status ?? r.signal}: ${(r.stderr || r.stdout).trim().slice(0, 1000)}`);
+    text = r.stdout;
+  }
+  let report: KnipReport;
+  try {
+    report = knipOutput(text);
+  } catch {
+    throw new Error(`knip вывел не JSON — отчёт не разобрать: ${text.trim().slice(0, 300)}`);
+  }
+  return knipFindings(report);
 }
 
 // имя переменной и обращение к полю: .X, ?.X, ["X"], ?.["X"], [`X`]
