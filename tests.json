@@ -149,6 +149,13 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
+   "Прогон Actions, ещё не давший check-runs, — ожидание, а не PASS по одним чекам хостинга"
+  ],
+  "name": "прогон workflow в очереди без check-runs держит ожидание"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
    "Прогон Actions, не ставший чеком, — не PASS: workflow не разобран, не стартовал или не дал прогона на PR"
   ],
   "name": "ci-wait merged: прогон Actions с ошибкой разбора workflow на SHA мержа — FAIL с путём файла"
