@@ -23,7 +23,8 @@
 #       PASS, когда закрыт; нет такого issue — ERROR.
 #
 # Прогон Actions на SHA, упавший без единого job (workflow не разобран, не стартовал), — FAIL с путём файла:
-# check-run он не даёт, и без него итог сводился к одним статусам хостинга.
+# check-run он не даёт, и без него итог сводился к одним статусам хостинга. Незавершённый прогон без check-runs (в
+# очереди) — pending: прогон на SHA есть, а чеков у него ещё нет.
 # Пустой список чеков — pending; PASS засчитывается, когда снимок без pending повторился
 # два опроса подряд (поздно регистрирующиеся чеки не проскакивают) и чеков не меньше
 # --expect. Первый упавший чек — сразу FAIL; --wait-all — FAIL, когда завершились все.
@@ -61,7 +62,8 @@ rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 # прогонов (отменённый новым push, когда голову вернули на прежний коммит; перезапуск job), и итог —
 # за последним check-run имени у того же приложения (id растёт с созданием). Прогон Actions, упавший без job, —
 # check-run не даёт: workflow не разобран (имя прогона — путь файла) или не стартовал (в его check suite нет
-# check-runs); такой прогон — упавший чек с путём файла и ссылкой.
+# check-runs); такой прогон — упавший чек с путём файла и ссылкой. Незавершённый прогон без check-runs (в очереди) —
+# pending с путём: прогон на SHA есть, и без этой строки итог сводился к статусам хостинга (#360).
 ran='[]'
 checks() {
   local statuses runs wruns
@@ -80,10 +82,14 @@ checks() {
                  else "fail" end) } ]
     + [ [$r.check_runs[].check_suite.id] as $suites
         | ($w.workflow_runs // []) | group_by([.path, .event]) | map(max_by(.id)) | .[]
-        | select(.status == "completed" and (.conclusion == "failure" or .conclusion == "startup_failure"))
-        | select(.name == .path or (.check_suite_id as $id | any($suites[]; . == $id) | not))
-        | { name: "workflow \(if .name == .path then "not parsed" else "failed without jobs" end): \(.path) \(.html_url)",
-            bucket: "fail" } ]
+        | (.check_suite_id as $id | any($suites[]; . == $id) | not) as $nojobs
+        | if .status != "completed" then
+            select($nojobs) | { name: "workflow \(.status): \(.path) \(.html_url)", bucket: "pending" }
+          else
+            select((.conclusion == "failure" or .conclusion == "startup_failure") and (.name == .path or $nojobs))
+            | { name: "workflow \(if .name == .path then "not parsed" else "failed without jobs" end): \(.path) \(.html_url)",
+                bucket: "fail" }
+          end ]
     | if $ctx == "" then . else map(select(.name == $ctx)) end' 2>&1)
 }
 
