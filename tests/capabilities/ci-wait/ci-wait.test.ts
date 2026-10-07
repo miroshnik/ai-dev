@@ -412,6 +412,22 @@ describe("Прогон Actions, не ставший чеком, — не PASS: w
 });
 
 /**
+ * Прогон workflow в очереди check-runs ещё не дал (#360): на голове PR были только превью-деплой и его комментарий, а
+ * прогон CI стоял `queued`. Прогон на SHA есть — workflow не «без прогона», и не упал — не FAIL; ожидание отдало PASS
+ * по чекам хостинга, мерж ушёл бы без CI.
+ */
+describe("Прогон Actions, ещё не давший check-runs, — ожидание, а не PASS по одним чекам хостинга", () => {
+  it("прогон workflow в очереди без check-runs держит ожидание", () => {
+    const preview = status("preview", "success");
+    const queued = { statuses: [preview], workflowRuns: [wfRun(null, { status: "queued" })] };
+    const done = { statuses: [preview], runs: [ok("tests")], workflowRuns: [wfRun("success")] };
+    const r = waitPr([queued, queued, queued, done]);
+    expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
+    expect(r.stdout).toContain(`CHECK workflow queued: ${CI}`);
+  });
+});
+
+/**
  * Красный `main` чинит одна сессия по багу «main красный…», остальные ждут его закрытия (`github pr premerge`, код 3,
  * #282): фоновой командой, чьё завершение будит сессию, а не опросом руками.
  */
