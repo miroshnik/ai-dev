@@ -20,6 +20,9 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
+import locale from "../../github/scripts/locale.cjs";
+import type { Names, Plural } from "../../github/scripts/locale.cjs";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
@@ -59,11 +62,33 @@ function ensureConfigDir(): void {
   mkdirSync(EST_DIR, { recursive: true });
 }
 
-export const FIELD_EST = "Оценка, ч";
-export const FIELD_FACT = "Факт, ч";
-export const FIELD_STATUS = "Status";
-export const FIELD_TOK = "Токены, млн"; // необязательные поля: есть в проекте — заполняем, нет — пропускаем
-export const FIELD_USD = "Стоимость, $";
+// Поля проекта — по ключу словаря (`fields` в locales скилла github): «Оценка, ч» и «Estimate, h» — одно поле, название
+// любого языка; комментарии пишутся на языке проекта (`locale.projectLanguage`), разбираются — на любом.
+export const FIELD_EST = "estimate";
+export const FIELD_FACT = "actual";
+export const FIELD_STATUS = "status";
+export const FIELD_TOK = "tokens"; // необязательные поля: есть в проекте — заполняем, нет — пропускаем
+export const FIELD_USD = "cost";
+
+/** Ключ поля проекта по его названию на любом языке словаря; не поле est — null. */
+function fieldKey(name: string | undefined): string | null {
+  if (name === "Status") return FIELD_STATUS;
+  for (const n of locale.everyNames()) {
+    if (name === n.fields.estimate) return FIELD_EST;
+    if (name === n.fields.actual) return FIELD_FACT;
+    if (name === n.fields.tokens) return FIELD_TOK;
+    if (name === n.fields.cost) return FIELD_USD;
+  }
+  return null;
+}
+/** Названия на языке проекта текущего каталога. */
+const projectNames = (): Names => locale.names(locale.projectLanguage());
+/** Название поля в выводе: как в проекте, нет поля — на языке проекта. */
+function fieldShown(meta: Meta, key: string): string {
+  const n = projectNames();
+  const byKey: Record<string, string> = { [FIELD_EST]: n.fields.estimate, [FIELD_FACT]: n.fields.actual, [FIELD_TOK]: n.fields.tokens, [FIELD_USD]: n.fields.cost, [FIELD_STATUS]: "Status" };
+  return meta.fields[key]?.name ?? byKey[key] ?? key;
+}
 
 // Публичные API-тарифы Anthropic, $ за 1 млн токенов: (вход, выход, чтение кэша).
 // Запись кэша = вход × 1.25 (TTL 5 мин) или × 2 (TTL 1 ч). Ключ — id модели без даты: у id модели
@@ -452,7 +477,8 @@ interface Meta {
   owner: string;
   number: number;
   title: string;
-  fields: Record<string, { id: string; options: Record<string, string> }>;
+  /** Поля по ключу (FIELD_*): id, название в проекте, варианты. */
+  fields: Record<string, { id: string; name: string; options: Record<string, string> }>;
   fetched_at: number;
 }
 
@@ -612,7 +638,7 @@ export class Repo implements FactRepo {
     if (this.meta_ && !force) return this.meta_;
     const file = path.join(this.cacheDir, "project.json");
     const cached = force ? null : loadJson<Meta | null>(file, null);
-    if (cached && cached.fields?.[FIELD_FACT]) {
+    if (cached && cached.fields?.[FIELD_FACT]?.name) {
       const fresh = nowTs() - (cached.fetched_at || 0) < PROJECT_META_TTL;
       const same = !this.projectRef || (cached.owner === this.projectRef.owner && cached.number === Number(this.projectRef.number));
       if (fresh && same) {
@@ -644,13 +670,14 @@ export class Repo implements FactRepo {
     if (!pv) throw new EstError(`проект ${owner} #${number} не найден`);
     const fields: Meta["fields"] = {};
     for (const f of pv.fields.nodes) {
-      if ([FIELD_EST, FIELD_FACT, FIELD_STATUS, FIELD_TOK, FIELD_USD].includes(f.name)) {
+      const key = fieldKey(f.name);
+      if (key) {
         const options: Record<string, string> = {};
         for (const o of f.options ?? []) options[o.name] = o.id;
-        fields[f.name] = { id: f.id, options };
+        fields[key] = { id: f.id, name: f.name, options };
       }
     }
-    const missing = [FIELD_EST, FIELD_FACT, FIELD_STATUS].filter((n) => !fields[n]);
+    const missing = [FIELD_EST, FIELD_FACT, FIELD_STATUS].filter((k) => !fields[k]).map((k) => fieldShown({ fields } as Meta, k));
     if (missing.length) throw new EstError(`в проекте ${owner} #${number} нет полей: ${missing.join(", ")}`);
     const meta: Meta = { id: pv.id, owner, number, title: pv.title, fields, fetched_at: nowTs() };
     saveJson(file, meta);
@@ -730,10 +757,10 @@ export class Repo implements FactRepo {
           fact_marker: null,
         };
         for (const fv of it.fieldValues.nodes) {
-          const fname = fv.field?.name;
-          if (fname === FIELD_EST) row.est = fv.number ?? null;
-          else if (fname === FIELD_FACT) row.fact = fv.number ?? null;
-          else if (fname === FIELD_STATUS) row.status = fv.name ?? null;
+          const key = fieldKey(fv.field?.name);
+          if (key === FIELD_EST) row.est = fv.number ?? null;
+          else if (key === FIELD_FACT) row.fact = fv.number ?? null;
+          else if (key === FIELD_STATUS) row.status = fv.name ?? null;
         }
         for (const cm of c.comments.nodes) {
           const em = parseMarker(cm.body, "est");
@@ -981,11 +1008,14 @@ const SKIP_PROMPT_PREFIXES = ["<task-notification", "<\\task-notification", "<lo
 const refsIn = (txt: string) => uniqSortedNums([...txt.matchAll(ISSUE_REF_RE)].map((m) => parseInt(m[1]!, 10)));
 const urlsIn = (txt: string) => uniqSortedStrs([...txt.matchAll(ISSUE_URL_RE)].map((m) => `${m[1]}#${parseInt(m[2]!, 10)}`));
 
-// Задание субагенту: номер или ссылка сразу после слова «задача» либо в самом начале — задача; после «эпик» и «PR» — нет
+// Задание субагенту: номер или ссылка сразу после слова «задача» (`subagentPrompt.task` любого языка словаря: «Задача
+// #42», «Task #42») либо в самом начале — задача; после «эпик» (`subagentPrompt.epic`, с окончанием) и «PR» — нет
 const ISSUE_ALT = String.raw`#(\d{1,6})(?![\p{L}\p{N}_])|(?:https?:\/\/)?github\.com\/([\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+)\/issues\/(\d{1,6})(?!\d)`;
-const TASK_WORD_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])задача\s+(?:${ISSUE_ALT})`, "iu");
+const TASK_WORDS = locale.every((n) => n.subagentPrompt.task).map(locale.escapeRe).join("|");
+const EPIC_WORDS = locale.every((n) => n.subagentPrompt.epic).map((w) => `${locale.escapeRe(w)}\\p{L}*`).join("|");
+const TASK_WORD_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:${TASK_WORDS})\s+(?:${ISSUE_ALT})`, "iu");
 const TASK_LEAD_RE = new RegExp(String.raw`^\s*(?:${ISSUE_ALT})`, "u");
-const NOT_TASK_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:эпик\p{L}*|epic|PR)\s*[:—-]?\s*(?:${ISSUE_ALT})`, "giu");
+const NOT_TASK_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:${EPIC_WORDS}|PR)\s*[:—-]?\s*(?:${ISSUE_ALT})`, "giu");
 
 /**
  * Задача из задания субагенту: «Задача #42 (эпик #40). …» — 42, «#42 (эпик #40): …» — 42, ссылка на issue — с
@@ -1893,10 +1923,10 @@ function issueProjectFields(issue: Any, meta: Meta): IssueFields {
     if (it.project.id !== meta.id) continue;
     const vals: IssueFields = { item_id: it.id, est: null, fact: null, status: null };
     for (const fv of it.fieldValues.nodes) {
-      const fname = fv.field?.name;
-      if (fname === FIELD_EST) vals.est = fv.number ?? null;
-      else if (fname === FIELD_FACT) vals.fact = fv.number ?? null;
-      else if (fname === FIELD_STATUS) vals.status = fv.name ?? null;
+      const key = fieldKey(fv.field?.name);
+      if (key === FIELD_EST) vals.est = fv.number ?? null;
+      else if (key === FIELD_FACT) vals.fact = fv.number ?? null;
+      else if (key === FIELD_STATUS) vals.status = fv.name ?? null;
     }
     return vals;
   }
@@ -2123,7 +2153,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   for (const c of closers) {
     const iss = issuesOfOid(c.oid);
     ourOid.set(c.oid, [c.at, 1.0 / iss.size]);
-    if (iss.size > 1) shared.push({ unit: `коммит ${c.oid.slice(0, 7)}`, with: others(iss), k: iss.size });
+    if (iss.size > 1) shared.push({ unit: locale.fill(projectNames().est.fact.commitUnit, { oid: c.oid.slice(0, 7) }), with: others(iss), k: iss.size });
   }
 
   const idx = oidIndex(prsAll); // коммиты смёрженных PR (чужие якоря)
@@ -2589,24 +2619,25 @@ const fmtMtok = (n: number | null | undefined) => fmtH((n || 0) / 1e6, 2);
 
 /** «Токены: 12.3 млн (вход … · выход … · запись кэша … · чтение кэша …); стоимость по API-тарифам ≈ $…». */
 /** «Ходы: 250 (субагентов 2, их ходов 120), преамбула 104 тыс., контекст в конце 581 тыс., ходов с контекстом > 400 тыс. — 31 %.» */
-function stepsTxt(res: Fact): string {
+function stepsTxt(res: Fact, language = locale.projectLanguage()): string {
   const k = (v: number | null | undefined) => (v === null || v === undefined ? "—" : String(Math.round(v / 1000)));
   const n = res.steps ?? 0;
   const share = n ? Math.round(((res.tail ?? 0) / n) * 100) : 0;
-  return `Ходы: ${n} (субагентов ${res.agents ?? 0}, их ходов ${res.steps_agents ?? 0}), преамбула ${k(res.preamble)} тыс., контекст в конце ${k(res.ctx_end)} тыс., ходов с контекстом > ${TAIL_CTX / 1000} тыс. — ${share} %.`;
+  return locale.fill(locale.names(language).est.fact.steps, { n, agents: res.agents ?? 0, agentSteps: res.steps_agents ?? 0, preamble: k(res.preamble), end: k(res.ctx_end), tail: TAIL_CTX / 1000, share });
 }
 
-function tokensTxt(res: Fact): string {
+function tokensTxt(res: Fact, language = locale.projectLanguage()): string {
   const t = res.tok;
   if (!t) return "";
-  let s = `Токены: ${fmtMtok(t.total)} млн`;
-  if ("in" in t) s += ` (вход ${fmtMtok(t.in)} · выход ${fmtMtok(t.out)} · запись кэша ${fmtMtok(t.cw)} · чтение кэша ${fmtMtok(t.cr)})`;
+  const n = locale.names(language);
+  let s = locale.fill(n.est.fact.tokens, { total: fmtMtok(t.total) });
+  if ("in" in t) s += locale.fill(n.est.fact.tokensSplit, { in: fmtMtok(t.in), out: fmtMtok(t.out), cw: fmtMtok(t.cw), cr: fmtMtok(t.cr) });
   if (res.usd !== null && res.usd !== undefined) {
-    s += `; стоимость по API-тарифам ≈ $${res.usd.toFixed(2)}`;
+    s += locale.fill(n.est.fact.cost, { usd: res.usd.toFixed(2) });
     const ms = Object.entries(res.models ?? {}).filter(([, m]) => m.usd);
-    if (ms.length > 1) s += " (" + ms.map(([n, m]) => `${n} $${m.usd!.toFixed(2)}`).join(", ") + ")";
+    if (ms.length > 1) s += " (" + ms.map(([id, m]) => `${id} $${m.usd!.toFixed(2)}`).join(", ") + ")";
   }
-  if (res.usd_partial?.length) s += `; без цены (нет в прайсе): ${res.usd_partial.join(", ")}`;
+  if (res.usd_partial?.length) s += locale.fill(n.est.fact.unpriced, { models: res.usd_partial.join(", ") });
   return s + ".";
 }
 
@@ -2646,18 +2677,24 @@ function findMarkerComment(issue: Any, kind: string): Any | null {
   return null;
 }
 
-/** Строки «+ вручную: N ч» и «Причина: …», дописанные человеком. */
+const alt = (xs: string[]) => xs.map(locale.escapeRe).join("|");
+// «+ вручную: N ч» и «Причина: …» — на любом языке словаря: строку пишет человек, язык мог смениться
+const MANUAL_WORDS = locale.every((n) => n.est.manual).map((m) => m.replace(/^\+\s*/, "").replace(/:$/, ""));
+const MANUAL_RE = new RegExp(String.raw`^\+\s*(?:${alt(MANUAL_WORDS)}):\s*([\d.,]+)\s*(?:${alt(locale.every((n) => n.est.hours))})`, "iu");
+const REASON_RE = new RegExp(`^(?:${alt(locale.every((n) => n.est.reason))})`, "iu");
+
+/** Строки «+ вручную: N ч» и «Причина: …» (`est.manual`, `est.reason` любого языка словаря), дописанные человеком. */
 export function extractKeptLines(body: string | null | undefined): [number, string | null, string[]] {
   let manual = 0.0;
   let cause: string | null = null;
   const lines: string[] = [];
   for (const line of (body || "").split(/\r?\n/)) {
     const s = line.trim();
-    const m = /^\+\s*вручную:\s*([\d.,]+)\s*ч/i.exec(s);
+    const m = MANUAL_RE.exec(s);
     if (m) {
       manual = parseFloat(m[1]!.replace(",", "."));
       lines.push(s);
-    } else if (/^Причина:/i.test(s)) {
+    } else if (REASON_RE.test(s)) {
       cause = s.slice(s.indexOf(":") + 1).trim();
       lines.push(s);
     }
@@ -2665,29 +2702,29 @@ export function extractKeptLines(body: string | null | undefined): [number, stri
   return [manual, cause, lines];
 }
 
-export function factCommentBody(res: Fact, est: number | null, keptLines: string[], manual: number, cause: string | null): string {
+/** Комментарий «Факт» на языке проекта (`language`, по умолчанию — текущего каталога); маркер — один на все языки. */
+export function factCommentBody(res: Fact, est: number | null, keptLines: string[], manual: number, cause: string | null, language = locale.projectLanguage()): string {
+  const n = locale.names(language);
+  const count = (forms: Plural, x: number) => locale.count(language, forms, x);
   const h = res.h;
   let text: string;
   if (h === null) {
-    text = "Факт недоступен: сессии не найдены (покрытие none).";
+    text = n.est.fact.unavailable;
   } else {
-    const ratio = est ? `, ×${(h / est).toFixed(2)}` : "";
-    const estTxt = est ? `оценка ${fmtH(est)} ч${ratio}` : "оценки нет";
-    const ns = res.sessions;
-    const npr = res.prompts;
+    const estimate = est ? locale.fill(n.est.fact.estimate, { h: fmtH(est), ratio: `, ×${(h / est).toFixed(2)}` }) : n.est.fact.noEstimate;
     const na = res.agents ?? 0;
-    const agents = na ? ` ${na} ${plural(na, "субагент", "субагента", "субагентов")},` : "";
-    text = `Факт: ${fmtH(h)} ч активных в ${agentsTxt(res)} (${estTxt}). ${ns} ${plural(ns, "сессия", "сессии", "сессий")}, ${npr} ${plural(npr, "промпт", "промпта", "промптов")},${agents} стена ${fmtH(res.wall, 1)} ч, покрытие ${res.cov}.`;
+    const subagents = na ? ` ${count(n.est.fact.subagents, na)},` : "";
+    const body = { h: fmtH(h), agents: agentsTxt(res, language), estimate, sessions: count(n.est.fact.sessions, res.sessions), prompts: count(n.est.fact.prompts, res.prompts), subagents, wall: fmtH(res.wall, 1), cov: res.cov };
+    text = `${n.comments.actual} ${locale.fill(n.est.fact.body, body)}`;
   }
-  text += res.prs.length ? " PR " + res.prs.map((p) => `#${p}`).join(", ") + ";" : " PR нет;";
-  const nc = res.commits;
-  text += ` ${nc} ${plural(nc, "коммит", "коммита", "коммитов")}, дифф ${diffTxt(res)}.`;
-  if (res.shared?.length) text += " " + sharedTxt(res) + ".";
-  for (const x of res.taken ?? []) text += ` Не засчитано повторно: ${fmtH(x.h)} ч уже в факте #${x.issue}.`;
-  for (const x of res.overlap ?? []) text += ` Пересечение с фактом #${x.issue}: ${fmtH(x.h)} ч — пересчитать #${x.issue}.`;
-  for (const sid of res.cloud_missing ?? []) text += ` Облачная сессия https://claude.ai/code/${sid} не импортирована — est cloud-import.`;
-  if (res.tok) text += "\n" + tokensTxt(res);
-  if (res.steps) text += "\n" + stepsTxt(res);
+  text += res.prs.length ? locale.fill(n.est.fact.prs, { list: res.prs.map((p) => `#${p}`).join(", ") }) : n.est.fact.noPr;
+  text += locale.fill(n.est.fact.diff, { commits: count(n.est.fact.commits, res.commits), diff: diffTxt(res, language) });
+  if (res.shared?.length) text += " " + sharedTxt(res, language) + ".";
+  for (const x of res.taken ?? []) text += locale.fill(n.est.fact.taken, { h: fmtH(x.h), issue: x.issue });
+  for (const x of res.overlap ?? []) text += locale.fill(n.est.fact.overlap, { h: fmtH(x.h), issue: x.issue });
+  for (const sid of res.cloud_missing ?? []) text += locale.fill(n.est.fact.cloudMissing, { sid });
+  if (res.tok) text += "\n" + tokensTxt(res, language);
+  if (res.steps) text += "\n" + stepsTxt(res, language);
   const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, agents: res.agents ?? 0, prs: res.prs, commits: res.commits, diff: res.diff, cause };
   if (res.tok) {
     marker.tok = res.tok;
@@ -2754,25 +2791,28 @@ function cloudOwnPart(number: number, session: string, gap: number): CloudPart |
   };
 }
 
-export function cloudFactBody(sessionId: string | undefined, part: CloudPart | null = null, number?: number): string {
+/** Комментарий «Факт (облако)» на языке проекта (`language`, по умолчанию — текущего каталога). */
+export function cloudFactBody(sessionId: string | undefined, part: CloudPart | null = null, number?: number, language = locale.projectLanguage()): string {
+  const n = locale.names(language);
   const sid = cloudSid(sessionId);
   if (sid && part) {
     const usds = Object.values(part.models).map((m) => m.usd);
     const usd = usds.length && usds.every((u) => u !== null) ? round2(usds.reduce((a, u) => a + (u as number), 0)) : null;
-    let text = `Факт (облако): ${fmtH(part.h)} ч активных в облачной сессии Claude Code, ${part.prompts} ${plural(part.prompts, "промпт", "промпта", "промптов")}.`;
-    if (part.tok) text += ` Токены: ${fmtMtok(part.tok.total)} млн${usd !== null ? `, по API-тарифам ≈ $${usd.toFixed(2)}` : ""}.`;
-    text += ` Сессия: https://claude.ai/code/${sid}. Поля проекта поставит локальная сессия: est fact ${number ?? "<N>"} --write.`;
+    let text = `${n.est.cloud.actual} ${locale.fill(n.est.cloud.body, { h: fmtH(part.h), prompts: locale.count(language, n.est.fact.prompts, part.prompts) })}`;
+    if (part.tok) text += locale.fill(n.est.cloud.tokens, { total: fmtMtok(part.tok.total), cost: usd !== null ? locale.fill(n.est.cloud.cost, { usd: usd.toFixed(2) }) : "" });
+    text += locale.fill(n.est.cloud.fields, { sid, number: number ?? "<N>" });
     return `${text}\n<!-- fact ${pyDumps({ v: 1, h: part.h, manual: 0, cov: "cloud", src: "cloud", session: sid, cloud: [part] })} -->`;
   }
-  let text = "Факт недоступен (облако): задача сделана в облачной сессии Claude Code — там est не видит проекта GitHub; цифру даст локальная сессия, импортировав события этой сессии (est cloud-import) (покрытие none).";
-  if (sid) text += ` Сессия: https://claude.ai/code/${sid}.`;
+  let text = n.est.cloud.unavailable;
+  if (sid) text += locale.fill(n.est.cloud.session, { sid });
   return `${text}\n<!-- fact ${pyDumps({ v: 1, h: null, manual: 0, cov: "none", src: "cloud", session: sid })} -->`;
 }
 
-const diffTxt = (res: Fact) => (res.diff_na ? "н/д (без PR)" : `${res.diff} строк`);
+const diffTxt = (res: Fact, language = locale.projectLanguage()) => (res.diff_na ? locale.names(language).est.fact.diffNa : locale.fill(locale.names(language).est.fact.diffLines, { n: res.diff }));
 
 /** «общий коммит a9e2854 с #7, #8 (доля 1/3)». */
-const sharedTxt = (res: Fact) => (res.shared ?? []).map((s) => `общий ${s.unit} с ${s.with.map((n) => `#${n}`).join(", ")} (доля 1/${s.k})`).join("; ");
+const sharedTxt = (res: Fact, language = locale.projectLanguage()) =>
+  (res.shared ?? []).map((s) => locale.fill(locale.names(language).est.fact.shared, { unit: s.unit, list: s.with.map((n) => `#${n}`).join(", "), k: s.k })).join("; ");
 
 function upsertComment(repo: Repo, issue: Any, kind: string, body: string): string {
   const existing = findMarkerComment(issue, kind);
@@ -2933,11 +2973,11 @@ function cmdHistory(args: HistoryArgs): void {
   }
 }
 
-/** k по репо, иначе по всем репо (n≥5), иначе нет. */
+/** k по репо, иначе по всем репо (n≥5), иначе нет; уровень — на языке проекта. */
 function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string] {
   const rows = repo.projectRows();
   let c = calib(rows);
-  let level = "репо";
+  let level = projectNames().est.estimate.levelRepo;
   if (c.n < 5) {
     let allRows = [...rows];
     for (const full of Object.keys(registry)) {
@@ -2952,7 +2992,7 @@ function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string
     const c2 = calib(allRows);
     if (c2.n >= 5) {
       c = c2;
-      level = "все репо";
+      level = projectNames().est.estimate.levelAll;
     }
   }
   return [rows, c, level];
@@ -3080,11 +3120,12 @@ function factForEpic(repo: Repo, issue: Any, gap: number, quiet = false): [Any, 
 }
 
 /** «Claude Code», «Codex» или «Claude Code и Codex» — по источникам привязанных сессий. */
-function agentsTxt(res: Fact): string {
+function agentsTxt(res: Fact, language = locale.projectLanguage()): string {
+  const n = locale.names(language);
   const srcs = new Set((res.details ?? []).map((d) => d.src ?? "claude"));
-  const names: Record<string, string> = { claude: "Claude Code", codex: "Codex", cloud: "облачной сессии Claude Code" };
+  const names: Record<string, string> = { claude: "Claude Code", codex: "Codex", cloud: n.est.fact.cloudAgent };
   if (!srcs.size) return "Claude Code";
-  return [...srcs].sort().map((s) => names[s] ?? s).join(" и ");
+  return [...srcs].sort().map((s) => names[s] ?? s).join(n.est.fact.and);
 }
 
 function printFact(repo: Repo, res: Fact, est: number | null): void {
@@ -3132,7 +3173,7 @@ function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): strin
   let msg = `комментарий «Факт» ${what}`;
   if (res.h !== null) {
     setNumberField(repo, issue, FIELD_FACT, res.h);
-    msg += `, поле «${FIELD_FACT}» = ${fmtH(res.h)}`;
+    msg += `, поле «${fieldShown(repo.projectMeta(), FIELD_FACT)}» = ${fmtH(res.h)}`;
   }
   const extra: [string, number | null][] = [
     [FIELD_TOK, res.tok ? round2(res.tok.total / 1e6) : null],
@@ -3140,8 +3181,8 @@ function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): strin
   ];
   for (const [fname, val] of extra) {
     if (val === null) continue;
-    if (setOptionalNumberField(repo, issue, fname, val)) msg += `, «${fname}» = ${fmtH(val)}`;
-    else msg += ` (поля «${fname}» в проекте нет — пропущено)`;
+    if (setOptionalNumberField(repo, issue, fname, val)) msg += `, «${fieldShown(repo.projectMeta(), fname)}» = ${fmtH(val)}`;
+    else msg += ` (поля «${fieldShown(repo.projectMeta(), fname)}» в проекте нет — пропущено)`;
   }
   console.log(msg);
   return body;
@@ -3356,8 +3397,8 @@ function hiddenAnalogs(repo: Repo, analogs: (number | string)[]): string[] {
 // Подбор аналогов скриптом
 // ----------------------------------------------------------------------------
 
-/** Метки, которые не решение: `epic` — вид задачи, «вопросы» — её состояние. */
-const NOT_DECISION = new Set(["epic", "вопросы"]);
+/** Метки, которые не решение: `epic` — вид задачи, метка вопросов (любого языка словаря) — её состояние. */
+const NOT_DECISION = new Set(["epic", ...locale.every((n) => n.labels.questions)]);
 /** Служебные слова заголовка (короче трёх букв отсекаются и так): на сходство задач не указывают. */
 const STOP_WORDS = new Set("для без при что как или все это его из от до за под над про через после перед если чем где когда только также уже ещё еще так the and for with from into".split(" "));
 /** Основа слова — первые четыре буквы: «оценка», «оценки», «оценок» — одно слово (пять букв беглая гласная «оценок» уже
@@ -3375,18 +3416,21 @@ export function titleWords(title: string): Map<string, string> {
   return out;
 }
 
-/** Ответ на вопрос в «## Вопросы»: от «Ответ…:» до следующего пункта списка или пустой строки. */
-const ANSWER_RE = /\s*(?:\*\*)?Ответ[^:\n]*:(?:\*\*)?[^\n]*(?:\n(?![ \t]*(?:\d+\.|$))[^\n]*)*/gm;
+/** Ответ на вопрос в разделе вопросов: от «Ответ…:» (`est.answer` любого языка словаря) до следующего пункта списка или пустой строки. */
+const ANSWER_RE = new RegExp(String.raw`\s*(?:\*\*)?(?:${locale.every((n) => n.est.answer).map(locale.escapeRe).join("|")})[^:\n]*:(?:\*\*)?[^\n]*(?:\n(?![ \t]*(?:\d+\.|$))[^\n]*)*`, "gm");
+/** Раздел вопросов issue — `sections.questions` любого языка словаря — до следующего раздела. */
+const QUESTIONS_RE = new RegExp(String.raw`(?<=^|\n)(?:${locale.every((n) => n.sections.questions).map(locale.escapeRe).join("|")})\n[\s\S]*?(?=\n## |$)`);
 
 /**
  * Размер описания issue, знаков, — признак объёма задачи: в бэктесте #279 он связан с фактом теснее ручной оценки.
  * Ответы на вопросы и отметки ✅ не в счёт: их дописывают после оценки, и у закрытых задач они раздували бы размер.
  */
 export function descSize(body: string): number {
-  return body.replace(/(?<=^|\n)## Вопросы\n[\s\S]*?(?=\n## |$)/, (sec) => sec.replace(ANSWER_RE, "").replace(/✅\s*/g, "")).length;
+  return body.replace(QUESTIONS_RE, (sec) => sec.replace(ANSWER_RE, "").replace(/✅\s*/g, "")).length;
 }
 
-const isEpicRow = (r: Row): boolean => r.labels.includes("epic") || /^(эпик|epic)$/i.test(r.issueType ?? "");
+const EPIC_TYPES = new Set(locale.every((n) => n.issueTypes.epic).map((t) => t.toLowerCase()));
+const isEpicRow = (r: Row): boolean => r.labels.includes("epic") || EPIC_TYPES.has((r.issueType ?? "").toLowerCase());
 /** Закрытая задача с измеренным фактом (покрытие full), не эпик (его факт — сумма подзадач): аналог и выборка бэктеста. */
 const factRow = (r: Row): boolean => r.state === "CLOSED" && r.fact !== null && r.fact > 0 && (r.fact_marker?.cov ?? "full") === "full" && !isEpicRow(r);
 
@@ -3440,13 +3484,14 @@ export function pickAnalogs(target: AnalogTarget, type: string, rows: Row[], k =
   return out.slice(0, k);
 }
 
-/** Чем аналог похож на задачу — для комментария «Оценка»: «метка est · тип feat · слова «a», «b» · описание ×0.8». */
-function analogWhy(a: Analog, type: string): string {
+/** Чем аналог похож на задачу — для комментария «Оценка» на языке проекта: «метка est · тип feat · слова «a», «b» · описание ×0.8». */
+function analogWhy(a: Analog, type: string, language: string): string {
+  const n = locale.names(language);
   const parts: string[] = [];
-  if (a.labels.length) parts.push(`${plural(a.labels.length, "метка", "метки", "меток")} ${a.labels.join(", ")}`);
-  if (a.sameType) parts.push(`тип ${type}`);
-  if (a.words.length) parts.push(`${plural(a.words.length, "слово", "слова", "слов")} ${a.words.map((w) => `«${w}»`).join(", ")}`);
-  if (a.sizeRatio !== null) parts.push(`описание ×${fmtH(a.sizeRatio, 1)}`);
+  if (a.labels.length) parts.push(`${locale.plural(language, n.est.estimate.labels, a.labels.length)} ${a.labels.join(", ")}`);
+  if (a.sameType) parts.push(locale.fill(n.est.estimate.type, { type }));
+  if (a.words.length) parts.push(`${locale.plural(language, n.est.estimate.words, a.words.length)} ${a.words.map((w) => `«${w}»`).join(", ")}`);
+  if (a.sizeRatio !== null) parts.push(locale.fill(n.est.estimate.size, { ratio: fmtH(a.sizeRatio, 1) }));
   return parts.join(" · ");
 }
 
@@ -3504,22 +3549,25 @@ function cmdEstimate(args: EstimateArgs): void {
   const otherParts = new Map<string, string[]>();
   const otherRows = new Map<string, Map<number, Row>>();
 
+  // комментарий «Оценка» — на языке проекта
+  const language = locale.projectLanguage();
+  const n = locale.names(language);
   const take = (r: Row, label: string, bucket: string[], why = "") => {
     const fm = r.fact_marker ?? {};
     if (r.fact === null) {
-      bucket.push(`${label} (факт неизвестен)`);
+      bucket.push(locale.fill(n.est.estimate.unknown, { label }));
       return;
     }
     const cov = fm.cov || "full";
     if (cov !== "full") {
-      bucket.push(`${label} (факт ${fmtH(r.fact)} ч, покрытие ${cov} — не учтён)`);
+      bucket.push(locale.fill(n.est.estimate.partialCoverage, { label, h: fmtH(r.fact), cov }));
       return;
     }
     facts.push(Number(r.fact));
     const tt = fm.tok?.total;
     if (tt) toks.push(tt / 1e6);
     if (fm.usd !== undefined && fm.usd !== null) usds.push(Number(fm.usd));
-    bucket.push(`${label} (факт ${fmtH(r.fact)} ч${why ? `: ${why}` : ""})`);
+    bucket.push(locale.fill(n.est.estimate.analog, { label, h: fmtH(r.fact), why: why ? `: ${why}` : "" }));
   };
 
   const issue = fetchIssue(repo, args.number);
@@ -3546,7 +3594,7 @@ function cmdEstimate(args: EstimateArgs): void {
         throw new EstError(`аналог #${a} не найден в репо ${repo.full} как issue (${e.message})`);
       }
       console.error(`предупреждение: аналог #${a} есть в репо, но не в проекте — факт неизвестен`);
-      parts.push(`#${a} (нет в проекте)`);
+      parts.push(locale.fill(n.est.estimate.notInProject, { label: `#${a}` }));
       continue;
     }
     take(r, `#${a}`, parts);
@@ -3558,11 +3606,11 @@ function cmdEstimate(args: EstimateArgs): void {
     if (picked.length < 2) throw new EstError(`в ${repo.full} закрытых до создания #${args.number} задач с фактом (покрытие full) меньше двух — аналоги из другого репо (--analogs owner/repo#N) или экспертная оценка (--hours)`);
     for (const a of picked) {
       analogs.push(a.row.number);
-      take(a.row, `#${a.row.number}`, parts, analogWhy(a, args.type));
+      take(a.row, `#${a.row.number}`, parts, analogWhy(a, args.type, language));
     }
   }
-  for (const [full, lst] of otherParts) parts.push(`из проекта ${full}: ` + lst.join(", "));
-  const analogTxt = parts.length ? parts.join("; ") : "нет";
+  for (const [full, lst] of otherParts) parts.push(locale.fill(n.est.estimate.otherProject, { repo: full, list: lst.join(", ") }));
+  const analogTxt = parts.length ? parts.join("; ") : n.est.estimate.none;
 
   const expert = args.hours !== undefined;
   if (!facts.length && !expert) throw new EstError("нет аналогов с фактом (покрытие full) — укажи --analogs с фактами или --hours как экспертную оценку");
@@ -3581,33 +3629,33 @@ function cmdEstimate(args: EstimateArgs): void {
     usdF = f.usd;
     const mn = Math.min(...facts);
     const mx = Math.max(...facts);
-    if (mn > 0 && mx / mn > 3) spreadTxt = ` Разброс фактов аналогов ${fmtH(mn)}…${fmtH(mx)} ч — взята медиана.`;
-    basis = "прогноз по фактам аналогов";
+    if (mn > 0 && mx / mn > 3) spreadTxt = locale.fill(n.est.estimate.spread, { min: fmtH(mn), max: fmtH(mx) });
+    basis = n.est.estimate.forecast;
     if (expert) {
       // экспертные часы поверх прогноза: токены и стоимость масштабируются пропорционально
       const ratio = raw > 0 ? args.hours! / raw : 1;
-      basis = `экспертная оценка; по аналогам вышло бы ${fmtH(h)} ч, токены и стоимость пересчитаны ×${ratio.toFixed(1)}`;
+      basis = locale.fill(n.est.estimate.expertOver, { h: fmtH(h), ratio: ratio.toFixed(1) });
       h = roundScale(args.hours!);
       tokF = tokF !== null ? tokF * ratio : null;
       usdF = usdF !== null ? usdF * ratio : null;
     }
   } else {
     h = roundScale(args.hours!);
-    basis = "экспертная оценка, аналогов с фактом нет";
+    basis = n.est.estimate.expert;
   }
   if (expert && Math.abs(h - args.hours!) > 1e-9) console.error(`предупреждение: --hours ${fmtH(args.hours)} округлено к шкале: ${fmtH(h)}`);
   const sameType = rows.filter((r) => r.state === "CLOSED" && r.fact !== null && (r.fact_marker?.cov ?? "full") === "full" && rowType(r) === args.type).length;
   const counted = facts.length;
   const conf = expert ? "C" : counted >= 3 && sameType >= 5 ? "A" : "B";
-  let headline = `Оценка: ${fmtH(h)} ч`;
-  if (tokF !== null) headline += `, ≈ ${fmtH(tokF, tokF < 1 ? 2 : 1)} млн токенов`;
+  let headline = locale.fill(n.est.estimate.headline, { h: fmtH(h) });
+  if (tokF !== null) headline += locale.fill(n.est.estimate.tokens, { tok: fmtH(tokF, tokF < 1 ? 2 : 1) });
   if (usdF !== null) headline += usdF < 1 ? `, ≈ $${usdF.toFixed(2)}` : `, ≈ $${usdF.toFixed(0)}`;
-  if (facts.length && (toks.length < facts.length || usds.length < facts.length)) headline += ` (токены и стоимость по ${Math.min(toks.length, usds.length)} из ${facts.length} аналогов)`;
+  if (facts.length && (toks.length < facts.length || usds.length < facts.length)) headline += locale.fill(n.est.estimate.partial, { k: Math.min(toks.length, usds.length), n: facts.length });
   const note = args.note ? ` (${args.note})` : "";
-  let multTxt = facts.length ? ` Поправка: ×${fmtH(args.mult)}${note}.` : "";
-  if (facts.length && tokMult !== args.mult) multTxt += ` Поправка токенов и стоимости: ×${fmtH(tokMult)}${args.tokNote ? ` (${args.tokNote})` : ""}.`;
-  const kTxt = c.n ? `k=${c.k} (n=${c.n}, уровень «${level}»; справочно, к прогнозу не применяется)` : "k: истории нет";
-  const text = `${headline} (тип ${args.type}, доверие ${conf}; ${basis}). Аналоги${auto ? " (подбор скриптом)" : ""}: ${analogTxt}.${multTxt}${spreadTxt ?? ""} ${kTxt}.`;
+  let multTxt = facts.length ? locale.fill(n.est.estimate.correction, { mult: fmtH(args.mult), note }) : "";
+  if (facts.length && tokMult !== args.mult) multTxt += locale.fill(n.est.estimate.tokCorrection, { mult: fmtH(tokMult), note: args.tokNote ? ` (${args.tokNote})` : "" });
+  const kTxt = c.n ? locale.fill(n.est.estimate.k, { k: String(c.k), n: c.n, level }) : n.est.estimate.noK;
+  const text = locale.fill(n.est.estimate.body, { headline, type: args.type, conf, basis, auto: auto ? n.est.estimate.auto : "", analogs: analogTxt, correction: multTxt, spread: spreadTxt ?? "", k: kTxt });
   const marker = {
     v: 2,
     h,
@@ -3627,7 +3675,7 @@ function cmdEstimate(args: EstimateArgs): void {
   const body = text + "\n" + `<!-- est ${pyDumps(marker)} -->`;
   const cur = issueProjectFields(issue, meta);
   console.log(`== ${repo.full}#${args.number}: ${issue.title}`);
-  console.log(`текущая «${FIELD_EST}»: ${fmtH(cur.est)}; статус: ${cur.status || "—"}`);
+  console.log(`текущая «${fieldShown(meta, FIELD_EST)}»: ${fmtH(cur.est)}; статус: ${cur.status || "—"}`);
   const over = raw !== null && !expert ? raw : expert ? args.hours! : null;
   if (over !== null && over > SCALE[SCALE.length - 1]!) console.log(`ВНИМАНИЕ: выходит ${fmtH(over)} ч > 13 — в поле записано ${fmtH(h)}, задачу надо дробить на подзадачи`);
   console.log("комментарий:");
@@ -3635,7 +3683,7 @@ function cmdEstimate(args: EstimateArgs): void {
   if (args.write) {
     const what = upsertComment(repo, issue, "est", body);
     setNumberField(repo, issue, FIELD_EST, h);
-    console.log(`комментарий «Оценка» ${what}, поле «${FIELD_EST}» = ${fmtH(h)}`);
+    console.log(`комментарий «Оценка» ${what}, поле «${fieldShown(meta, FIELD_EST)}» = ${fmtH(h)}`);
   } else {
     console.log("(без --write ничего не записано)");
   }

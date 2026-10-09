@@ -59,6 +59,105 @@
     "comment": "What you fixed — one line in a comment on epic #{epic} (`gh issue comment {epic} --repo {repo}`); nothing to fix — no comment.",
     "answer": "Answer — fixes one per line with task numbers and questions to the owner, if any; otherwise «The block is current»."
   },
+  "est": {
+    "answer": "Answer",
+    "manual": "+ manually:",
+    "reason": "Reason:",
+    "hours": "h",
+    "fact": {
+      "unavailable": "Actual unavailable: no sessions found (coverage none).",
+      "body": "{h} h active in {agents} ({estimate}). {sessions}, {prompts},{subagents} wall {wall} h, coverage {cov}.",
+      "estimate": "estimate {h} h{ratio}",
+      "noEstimate": "no estimate",
+      "sessions": {
+        "one": "session",
+        "few": "sessions",
+        "many": "sessions",
+        "other": "sessions"
+      },
+      "prompts": {
+        "one": "prompt",
+        "few": "prompts",
+        "many": "prompts",
+        "other": "prompts"
+      },
+      "subagents": {
+        "one": "subagent",
+        "few": "subagents",
+        "many": "subagents",
+        "other": "subagents"
+      },
+      "commits": {
+        "one": "commit",
+        "few": "commits",
+        "many": "commits",
+        "other": "commits"
+      },
+      "prs": " PR {list};",
+      "noPr": " no PR;",
+      "diff": " {commits}, diff {diff}.",
+      "diffLines": "{n} lines",
+      "diffNa": "n/a (no PR)",
+      "shared": "shared {unit} with {list} (share 1/{k})",
+      "commitUnit": "commit {oid}",
+      "taken": " Not counted again: {h} h already in the actual of #{issue}.",
+      "overlap": " Overlap with the actual of #{issue}: {h} h — recount #{issue}.",
+      "cloudMissing": " Cloud session https://claude.ai/code/{sid} not imported — est cloud-import.",
+      "tokens": "Tokens: {total} M",
+      "tokensSplit": " (input {in} · output {out} · cache write {cw} · cache read {cr})",
+      "cost": "; cost at API rates ≈ ${usd}",
+      "unpriced": "; no price (not in the price list): {models}",
+      "steps": "Turns: {n} (subagents {agents}, their turns {agentSteps}), preamble {preamble}K, context at the end {end}K, turns with context > {tail}K — {share} %.",
+      "and": " and ",
+      "cloudAgent": "a Claude Code cloud session"
+    },
+    "cloud": {
+      "actual": "Actual (cloud):",
+      "body": "{h} h active in a Claude Code cloud session, {prompts}.",
+      "tokens": " Tokens: {total} M{cost}.",
+      "cost": ", at API rates ≈ ${usd}",
+      "fields": " Session: https://claude.ai/code/{sid}. The local session sets the project fields: est fact {number} --write.",
+      "unavailable": "Actual unavailable (cloud): the task was done in a Claude Code cloud session — est can't see the GitHub project there; a local session gives the number by importing this session's events (est cloud-import) (coverage none).",
+      "session": " Session: https://claude.ai/code/{sid}."
+    },
+    "estimate": {
+      "headline": "Estimate: {h} h",
+      "tokens": ", ≈ {tok}M tokens",
+      "partial": " (tokens and cost from {k} of {n} analogs)",
+      "body": "{headline} (type {type}, confidence {conf}; {basis}). Analogs{auto}: {analogs}.{correction}{spread} {k}.",
+      "auto": " (picked by the script)",
+      "forecast": "forecast from the analogs' actuals",
+      "expertOver": "expert estimate; the analogs would give {h} h, tokens and cost rescaled ×{ratio}",
+      "expert": "expert estimate, no analogs with an actual",
+      "spread": " The analogs' actuals spread {min}…{max} h — the median is taken.",
+      "correction": " Correction: ×{mult}{note}.",
+      "tokCorrection": " Token and cost correction: ×{mult}{note}.",
+      "k": "k={k} (n={n}, level «{level}»; for reference, not applied to the forecast)",
+      "noK": "k: no history",
+      "levelRepo": "repo",
+      "levelAll": "all repos",
+      "none": "none",
+      "otherProject": "from project {repo}: {list}",
+      "analog": "{label} (actual {h} h{why})",
+      "unknown": "{label} (actual unknown)",
+      "partialCoverage": "{label} (actual {h} h, coverage {cov} — not counted)",
+      "notInProject": "{label} (not in the project)",
+      "labels": {
+        "one": "label",
+        "few": "labels",
+        "many": "labels",
+        "other": "labels"
+      },
+      "type": "type {type}",
+      "words": {
+        "one": "word",
+        "few": "words",
+        "many": "words",
+        "other": "words"
+      },
+      "size": "description ×{ratio}"
+    }
+  },
   "standardIssue": "Standard ·",
   "autoAnswer": "✅ auto",
   "lastLine": {
