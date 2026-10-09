@@ -1,19 +1,20 @@
 #!/usr/bin/env bun
 /**
- * spec-run — зелёный прогон, проверивший дерево коммита мержа, для публикации спеки на мерж PR (без CI на main): id
- * прогона — в stdout, артефакт `docs-spec-<hash дерева>` из него скачивает `gh run download`. Прогон PR проверяет
- * merge-ref и называет артефакт по его дереву; у коммита мержа дерево то же, только если между стартом прогона и
- * мержем в main ничего не влили — тогда main проверен целиком. Влит отставший PR — такого артефакта нет, и публикация
- * пропускается: из прогона его головы она откатила бы ветку spec (в ней не стало бы страниц PR, влитого раньше).
+ * spec-run — the green run that checked the merge commit's tree, for publishing the spec on a PR merge (without CI on
+ * main): the run id goes to stdout, `gh run download` downloads the artifact `docs-spec-<tree hash>` from it. A PR run
+ * checks the merge-ref and names the artifact by its tree; the merge commit has the same tree only if nothing was merged
+ * into main between the run's start and the merge — then main is checked as a whole. A PR that fell behind was merged —
+ * there is no such artifact, and publishing is skipped: from its head's run it would roll the spec branch back (the pages
+ * of a PR merged earlier would vanish from it).
  *
- * Из прогонов этого репозитория с не истёкшим артефактом дерева: есть зелёный — он (новейший); есть идущий — опрос до
- * его исхода, к потолку не завершился — ошибка; иначе (артефакта нет, истёк, из форка, прогон не зелёный) — пропуск:
- * код 0, stdout пуст, причина — строкой в stderr.
+ * Among this repository's runs with an unexpired artifact of the tree: a green one exists — it (the newest); one is
+ * running — polling until its outcome, not finished by the ceiling — an error; otherwise (no artifact, expired, from a
+ * fork, the run isn't green) — skip: code 0, stdout empty, the reason in a stderr line.
  *
  *   bun spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
  *
- * Коды: 0 — найден или публикация пропущена, 1 — прогон не завершился к потолку, 2 — ошибка вызова (аргументы, gh).
- * Запуск — Bun или Node ≥ 22.18, без зависимостей; нужен `gh` с токеном (в Actions — `GH_TOKEN`, `actions: read`).
+ * Codes: 0 — found or publishing skipped, 1 — the run didn't finish by the ceiling, 2 — a call error (arguments, gh).
+ * Runs on Bun or Node ≥ 22.18, no dependencies; needs `gh` with a token (in Actions — `GH_TOKEN`, `actions: read`).
  */
 
 import { execFileSync } from "node:child_process";
@@ -52,14 +53,14 @@ function api<T>(endpoint: string): T {
 }
 
 /**
- * Прогоны с живым артефактом дерева. В счёт идут только прогоны этого репозитория: артефакт с любым именем может
- * выложить и прогон PR из форка. Исход — отдельным запросом прогона: артефакт выкладывается посреди прогона и
- * зелёного исхода не доказывает.
+ * Runs with a live artifact of the tree. Only this repository's runs count: a PR run from a fork can upload an artifact
+ * with any name too. The outcome — a separate request for the run: the artifact is uploaded mid-run and doesn't prove a
+ * green outcome.
  */
 function runs(artifact: string): Run[] {
   const { artifacts } = api<{ artifacts: Artifact[] }>(`repos/{owner}/{repo}/actions/artifacts?name=${artifact}`);
   const own = artifacts.filter((a) => !a.expired && a.workflow_run && a.workflow_run.head_repository_id === a.workflow_run.repository_id);
-  // перезапуск прогона выкладывает артефакт заново под тем же id прогона
+  // a rerun uploads the artifact again under the same run id
   const ids = [...new Set(own.map((a) => a.workflow_run!.id))];
   return ids.map((id) => api<Run>(`repos/{owner}/{repo}/actions/runs/${id}`));
 }
@@ -101,7 +102,7 @@ export async function main(argv: string[]): Promise<number> {
     let said = "";
     for (;;) {
       const all = runs(artifact);
-      // выдача — новейшие первыми: из нескольких зелёных берётся последний
+      // the listing is newest first: of several green runs the latest is taken
       const ok = all.find((r) => r.status === "completed" && r.conclusion === "success");
       if (ok) {
         console.error(`spec-run: ${at}: прогон ${ok.id} успешен — ${ok.html_url}`);
@@ -110,14 +111,14 @@ export async function main(argv: string[]): Promise<number> {
       }
       const going = all.filter((r) => r.status !== "completed");
       if (!going.length) {
-        // не ошибка: влит отставший PR — такой main не проверял ни один прогон, ветка spec ждёт следующего мержа
+        // not an error: a PR that fell behind was merged — no run checked such a main, the spec branch waits for the next merge
         const why = all.length ? all.map((r) => `${r.id} ${r.conclusion} ${r.html_url}`).join(", ") : `артефакта ${artifact} нет`;
         console.error(`spec-run: ${at} не проверено целиком — публикация пропущена: ${why}`);
         return 0;
       }
       if (Date.now() >= deadline) throw new Fail(`${at}: прогон ${going.map((r) => r.id).join(", ")} не завершился за ${timeout} с`, 1);
       const now = `${at}: прогон ${going.map((r) => `${r.id} ${r.status}`).join(", ")} — ждём`;
-      // в лог — только смена состояния, а не строка на каждый опрос
+      // only a change of state goes to the log, not a line on every poll
       if (now !== said) console.error(`spec-run: ${(said = now)}`);
       await new Promise((resolve) => setTimeout(resolve, Math.min(interval * 1000, Math.max(0, deadline - Date.now()))));
     }
