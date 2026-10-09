@@ -59,6 +59,105 @@
     "comment": "Что поправил — одной строкой в комментарии к эпику #{epic} (`gh issue comment {epic} --repo {repo}`); править нечего — без комментария.",
     "answer": "Ответ — правки по строке с номерами задач и вопросы владельцу, если есть; иначе «Блок актуален»."
   },
+  "est": {
+    "answer": "Ответ",
+    "manual": "+ вручную:",
+    "reason": "Причина:",
+    "hours": "ч",
+    "fact": {
+      "unavailable": "Факт недоступен: сессии не найдены (покрытие none).",
+      "body": "{h} ч активных в {agents} ({estimate}). {sessions}, {prompts},{subagents} стена {wall} ч, покрытие {cov}.",
+      "estimate": "оценка {h} ч{ratio}",
+      "noEstimate": "оценки нет",
+      "sessions": {
+        "one": "сессия",
+        "few": "сессии",
+        "many": "сессий",
+        "other": "сессии"
+      },
+      "prompts": {
+        "one": "промпт",
+        "few": "промпта",
+        "many": "промптов",
+        "other": "промпта"
+      },
+      "subagents": {
+        "one": "субагент",
+        "few": "субагента",
+        "many": "субагентов",
+        "other": "субагента"
+      },
+      "commits": {
+        "one": "коммит",
+        "few": "коммита",
+        "many": "коммитов",
+        "other": "коммита"
+      },
+      "prs": " PR {list};",
+      "noPr": " PR нет;",
+      "diff": " {commits}, дифф {diff}.",
+      "diffLines": "{n} строк",
+      "diffNa": "н/д (без PR)",
+      "shared": "общий {unit} с {list} (доля 1/{k})",
+      "commitUnit": "коммит {oid}",
+      "taken": " Не засчитано повторно: {h} ч уже в факте #{issue}.",
+      "overlap": " Пересечение с фактом #{issue}: {h} ч — пересчитать #{issue}.",
+      "cloudMissing": " Облачная сессия https://claude.ai/code/{sid} не импортирована — est cloud-import.",
+      "tokens": "Токены: {total} млн",
+      "tokensSplit": " (вход {in} · выход {out} · запись кэша {cw} · чтение кэша {cr})",
+      "cost": "; стоимость по API-тарифам ≈ ${usd}",
+      "unpriced": "; без цены (нет в прайсе): {models}",
+      "steps": "Ходы: {n} (субагентов {agents}, их ходов {agentSteps}), преамбула {preamble} тыс., контекст в конце {end} тыс., ходов с контекстом > {tail} тыс. — {share} %.",
+      "and": " и ",
+      "cloudAgent": "облачной сессии Claude Code"
+    },
+    "cloud": {
+      "actual": "Факт (облако):",
+      "body": "{h} ч активных в облачной сессии Claude Code, {prompts}.",
+      "tokens": " Токены: {total} млн{cost}.",
+      "cost": ", по API-тарифам ≈ ${usd}",
+      "fields": " Сессия: https://claude.ai/code/{sid}. Поля проекта поставит локальная сессия: est fact {number} --write.",
+      "unavailable": "Факт недоступен (облако): задача сделана в облачной сессии Claude Code — там est не видит проекта GitHub; цифру даст локальная сессия, импортировав события этой сессии (est cloud-import) (покрытие none).",
+      "session": " Сессия: https://claude.ai/code/{sid}."
+    },
+    "estimate": {
+      "headline": "Оценка: {h} ч",
+      "tokens": ", ≈ {tok} млн токенов",
+      "partial": " (токены и стоимость по {k} из {n} аналогов)",
+      "body": "{headline} (тип {type}, доверие {conf}; {basis}). Аналоги{auto}: {analogs}.{correction}{spread} {k}.",
+      "auto": " (подбор скриптом)",
+      "forecast": "прогноз по фактам аналогов",
+      "expertOver": "экспертная оценка; по аналогам вышло бы {h} ч, токены и стоимость пересчитаны ×{ratio}",
+      "expert": "экспертная оценка, аналогов с фактом нет",
+      "spread": " Разброс фактов аналогов {min}…{max} ч — взята медиана.",
+      "correction": " Поправка: ×{mult}{note}.",
+      "tokCorrection": " Поправка токенов и стоимости: ×{mult}{note}.",
+      "k": "k={k} (n={n}, уровень «{level}»; справочно, к прогнозу не применяется)",
+      "noK": "k: истории нет",
+      "levelRepo": "репо",
+      "levelAll": "все репо",
+      "none": "нет",
+      "otherProject": "из проекта {repo}: {list}",
+      "analog": "{label} (факт {h} ч{why})",
+      "unknown": "{label} (факт неизвестен)",
+      "partialCoverage": "{label} (факт {h} ч, покрытие {cov} — не учтён)",
+      "notInProject": "{label} (нет в проекте)",
+      "labels": {
+        "one": "метка",
+        "few": "метки",
+        "many": "меток",
+        "other": "метки"
+      },
+      "type": "тип {type}",
+      "words": {
+        "one": "слово",
+        "few": "слова",
+        "many": "слов",
+        "other": "слова"
+      },
+      "size": "описание ×{ratio}"
+    }
+  },
   "standardIssue": "Стандарт ·",
   "autoAnswer": "✅ авто",
   "lastLine": {

@@ -25,6 +25,68 @@ declare namespace locale {
     mainRed: { title: string; check: string; checks: string };
     /** Задание субагенту актуализации блока (`github task actualize`). */
     actualize: { lead: string; shipped: string; prs: string; noPr: string; epic: string; openTask: string; checks: string; scope: string; comment: string; answer: string };
+    /** Комментарии «Оценка» и «Факт» скилла est и строки, которые в них дописывает человек. */
+    est: {
+      answer: string;
+      manual: string;
+      reason: string;
+      hours: string;
+      fact: {
+        unavailable: string;
+        body: string;
+        estimate: string;
+        noEstimate: string;
+        sessions: Plural;
+        prompts: Plural;
+        subagents: Plural;
+        commits: Plural;
+        prs: string;
+        noPr: string;
+        diff: string;
+        diffLines: string;
+        diffNa: string;
+        shared: string;
+        commitUnit: string;
+        taken: string;
+        overlap: string;
+        cloudMissing: string;
+        tokens: string;
+        tokensSplit: string;
+        cost: string;
+        unpriced: string;
+        steps: string;
+        and: string;
+        cloudAgent: string;
+      };
+      cloud: { actual: string; body: string; tokens: string; cost: string; fields: string; unavailable: string; session: string };
+      estimate: {
+        headline: string;
+        tokens: string;
+        partial: string;
+        body: string;
+        auto: string;
+        forecast: string;
+        expertOver: string;
+        expert: string;
+        spread: string;
+        correction: string;
+        tokCorrection: string;
+        k: string;
+        noK: string;
+        levelRepo: string;
+        levelAll: string;
+        none: string;
+        otherProject: string;
+        analog: string;
+        unknown: string;
+        partialCoverage: string;
+        notInProject: string;
+        labels: Plural;
+        type: string;
+        words: Plural;
+        size: string;
+      };
+    };
     standardIssue: string;
     autoAnswer: string;
     lastLine: { done: string; questions: string; remaining: string };

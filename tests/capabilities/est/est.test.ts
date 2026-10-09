@@ -734,6 +734,11 @@ describe("Транскрипт Claude Code даёт привязки к зада
     expect(subHints("Задача #42 (эпик #40). Перенеси спеку в тесты")).toEqual(["42", "42"]);
   });
 
+  it("задание субагенту в проекте на en «Task #42 (epic #40). …» даёт подсказку 42: слово задачи — любого языка словаря", () => {
+    expect(subHints("Task #42 (epic #40). Move the spec into tests")).toEqual(["42", "42"]);
+    expect(subHints("Task #40 (epic #42): other")).toEqual(["40", "40"]);
+  });
+
   it("задание, начинающееся с «#42 (эпик #40)», даёт подсказку 42", () => {
     expect(subHints("#42 (эпик #40): перенеси спеку в тесты")).toEqual(["42", "42"]);
   });
@@ -982,9 +987,11 @@ describe("В облачной сессии est считает свою част�
     expect(parseMarker(r.stdout, "fact")).toMatchObject({ h: null, cov: "none", src: "cloud", session: "session_01Test" });
   });
 
-  it("est fact в облаке считает часть сессии по её транскрипту в контейнере: «Факт (облако)» с цифрами и маркером части", () => {
+  /** Транскрипт облачной сессии над #42 в каталоге репозитория `repo` с манифестом `language`; вывод `est fact 42`. */
+  function cloudFact(language: string) {
     const cwd = path.join(dir, "repo");
-    mkdirSync(cwd);
+    mkdirSync(path.join(cwd, ".agents"), { recursive: true });
+    writeFileSync(path.join(cwd, ".agents/ai-dev.json"), JSON.stringify({ language }));
     const proj = path.join(dir, ".claude", "projects", realpathSync(cwd).replace(/[^A-Za-z0-9]/g, "-"));
     mkdirSync(proj, { recursive: true });
     const usage = { input_tokens: 1, output_tokens: 1000, cache_read_input_tokens: 100000, cache_creation_input_tokens: 0 };
@@ -994,13 +1001,24 @@ describe("В облачной сессии est считает свою част�
       rec("10:06", { type: "assistant", message: { id: "msg_01", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
       rec("10:12", { type: "assistant", message: { id: "msg_02", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
     ]));
-    const r = spawnSync("bun", [EST, "fact", "42"], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+    return spawnSync("bun", [EST, "fact", "42"], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+  }
+
+  it("est fact в облаке считает часть сессии по её транскрипту в контейнере: «Факт (облако)» с цифрами и маркером части", () => {
+    const r = cloudFact("ru");
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("Факт (облако): 0.2 ч активных в облачной сессии Claude Code, 1 промпт.");
     expect(r.stdout).toContain("Сессия: https://claude.ai/code/session_01Test. Поля проекта поставит локальная сессия: est fact 42 --write.");
     const m = parseMarker(r.stdout, "fact");
     expect(m).toMatchObject({ h: 0.2, src: "cloud", session: "session_01Test" });
     expect(m.cloud).toMatchObject([{ session: "session_01Test", h: 0.2, iv: [[ts("10:00"), ts("10:12")]], prompts: 1, tok: { total: 202002 } }]);
+  });
+
+  it("в проекте на en комментарий облачной сессии — «Actual (cloud): …» по-английски, маркер тот же", () => {
+    const r = cloudFact("en");
+    expect(r.stdout).toContain("Actual (cloud): 0.2 h active in a Claude Code cloud session, 1 prompt. Tokens: 0.2 M, at API rates ≈ $0.08.");
+    expect(r.stdout).toContain("Session: https://claude.ai/code/session_01Test. The local session sets the project fields: est fact 42 --write.");
+    expect(parseMarker(r.stdout, "fact")).toMatchObject({ h: 0.2, src: "cloud", session: "session_01Test" });
   });
 
   it("оценка, история и sweep в облаке — ошибка с объяснением, а не сбой gh", () => {
@@ -1045,6 +1063,20 @@ describe("Комментарии «Оценка» и «Факт» обновля
     expect(marker.manual).toBe(1);
     expect(marker.type).toBe("feat");
     expect(marker.prs).toEqual([77]);
+  });
+
+  it("в проекте на en — комментарий «Actual: …» по-английски, маркер тот же", () => {
+    const s = parseSessionFile(claudeFixture());
+    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const body = factCommentBody(res, 1, ["+ manually: 1 h"], 1, null, "en");
+    expect(body).toContain("Actual: 0.22 h active in Claude Code (estimate 1 h, ×0.22). 1 session, 3 prompts, 1 subagent, wall 0.2 h, coverage full. PR #77; 1 commit, diff 12 lines.");
+    expect(body).toContain("Tokens: 0.01 M (input 0 · output 0 · cache write 0 · cache read 0.01); cost at API rates ≈ $0.02.\n");
+    expect(parseMarker(body, "fact")).toMatchObject({ h: 0.22, manual: 1, prs: [77] });
+  });
+
+  it("строки человека «+ manually: N h» и «Reason: …» — на любом языке словаря: язык проекта мог смениться", () => {
+    const [manual, cause, lines] = extractKeptLines("Actual: 1 h.\n+ manually: 2 h\nReason: scope grew: two subsystems\n<!-- fact {} -->");
+    expect([manual, cause, lines]).toEqual([2, "scope grew: two subsystems", ["+ manually: 2 h", "Reason: scope grew: two subsystems"]]);
   });
 
   it("без сессий — «Факт недоступен» и покрытие none в маркере", () => {
@@ -1213,7 +1245,8 @@ type FakeFail = { match: string; times: number; stderr: string };
  * `est <args>` с фейковым gh в мире `world` (все его репо — в реестре, `paths` репо — его каталоги) и сбоями `fails`:
  * исход, все вызовы gh, записи в GitHub, тело нового комментария. Повтор gh при сбое сети — без пауз.
  */
-function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeFail[] = []) {
+/** `cwd` — каталог проекта: язык комментариев — его `.agents/ai-dev.json`; без него — клон ai-dev (ru). */
+function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeFail[] = [], cwd?: string) {
   const bin = path.join(dir, "bin");
   const cfg = path.join(dir, "ai-dev");
   mkdirSync(bin, { recursive: true });
@@ -1227,7 +1260,7 @@ function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeF
   writeFileSync(log, "");
   writeFileSync(path.join(bin, "fails.json"), JSON.stringify(fails));
   const env = { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, AI_DEV_GH_RETRY_MS: "0,0,0" };
-  const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env });
+  const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env, cwd });
   const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));
   const comment = calls.filter((c) => c.args.includes("POST")).map((c) => JSON.parse(c.stdin).body as string)[0] ?? null;
@@ -1334,6 +1367,12 @@ describe("Аналоги подбирает скрипт — по меткам �
     expect(descSize(answered)).toBe(descSize(asked));
     expect(descSize(asked)).toBeGreaterThan(descSize("## Что сделать\nЭкспорт.\n"));
   });
+
+  it("раздел вопросов на en (## Questions, «Answer:») — ответы так же не в счёт размера", () => {
+    const asked = "## What to do\nExport.\n\n## Questions\n1. Format? Recommendation: PDF.\n\n## Done when\nPDF exists.\n";
+    const answered = "## What to do\nExport.\n\n## Questions\n1. ✅ Format? Recommendation: PDF. **Answer (auto):** as recommended — PDF.\n\n## Done when\nPDF exists.\n";
+    expect(descSize(answered)).toBe(descSize(asked));
+  });
 });
 
 /** Мир фейкового gh для оценки одним вызовом и бэктеста: задачи с метками, датами, описанием, фактом и ручной оценкой. */
@@ -1365,6 +1404,17 @@ describe("Оценка — один вызов: est estimate без --analogs", 
     expect(r.comment).not.toContain("#4");
     expect(parseMarker(r.comment, "est")).toMatchObject({ h: 1, analogs: [1, 2, 3], auto: true });
     expect(r.writes).toHaveLength(2); // комментарий и поле «Оценка, ч»
+  });
+
+  it("в проекте на en комментарий «Оценка» — по-английски: «Estimate: …», аналоги и их сходство, маркер тот же", () => {
+    const en = path.join(dir, "en-project");
+    mkdirSync(path.join(en, ".agents"), { recursive: true });
+    writeFileSync(path.join(en, ".agents/ai-dev.json"), '{ "language": "en" }\n');
+    const r = withFakeGh(WORLD, ["estimate", "10", "--repo", "o/r", "--type", "feat", "--write"], [], en);
+    expect(r.code).toBe(0);
+    expect(r.comment).toStartWith("Estimate: 1 h");
+    expect(r.comment).toContain("Analogs (picked by the script): #1 (actual 0.5 h: label est · type feat · words «est», «оценка» · description ×0.8); #2 (actual 1 h: label est · type feat · word «est» · description ×1); #3 (actual 4 h: description ×1). Correction: ×1.");
+    expect(parseMarker(r.comment, "est")).toMatchObject({ h: 1, analogs: [1, 2, 3], auto: true });
   });
 });
 
