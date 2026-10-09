@@ -6679,6 +6679,13 @@
   "describes": [
    "Флоу написан по-английски: в его документах нет кириллицы"
   ],
+  "name": "в package.json нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
   "name": "в skills/ci-wait/SKILL.md нет кириллицы"
  },
  {
@@ -6770,14 +6777,14 @@
   "describes": [
    "Флоу написан по-английски: в его документах нет кириллицы"
   ],
-  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md"
+  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Флоу написан по-английски: в его документах нет кириллицы"
   ],
-  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов» не пуст"
+  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст"
  },
  {
   "path": "tests/standards/harness-load/harness-load.test.ts",

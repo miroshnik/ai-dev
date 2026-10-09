@@ -3,7 +3,8 @@
 
 Флоу — канон, справочники, скиллы и README — пишется по-английски: репозиторий публичный, а агент работает с
 человеком на языке проекта (`language` в `.agents/ai-dev.json`, capability `install`). Поэтому в документах флоу нет
-кириллицы — ни в прозе, ни в цитатах вывода скриптов, ни в путях и плейсхолдерах.
+кириллицы — ни в прозе, ни в цитатах вывода скриптов, ни в путях и плейсхолдерах. Под правило попадает и
+`package.json`: его описание показывают npm и npx.
 
 Названия, которые скрипты пишут в GitHub и разбирают оттуда, — разделы issue, статусы, типы, метки, поля, последняя
 строка сессии — живут на языке проекта, и у них один дом: `skills/github/locales/<язык>.json`, одни ключи у каждого
@@ -16,10 +17,10 @@
 
 ## Флоу написан по-английски: в его документах нет кириллицы
 
-<details><summary>✅ 24 теста</summary>
+<details><summary>✅ 25 тестов</summary>
 
-- ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов» не пуст
-- ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md
+- ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст
+- ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md
 - ✅ нарушитель не проходит: справочник с русской цитатой вывода скрипта
 - ✅ в AGENTS.md нет кириллицы
 - ✅ в README.md нет кириллицы
@@ -30,6 +31,7 @@
 - ✅ в docs/parallel-checkouts.md нет кириллицы
 - ✅ в docs/pr-checks.md нет кириллицы
 - ✅ в docs/testing.md нет кириллицы
+- ✅ в package.json нет кириллицы
 - ✅ в skills/ci-wait/SKILL.md нет кириллицы
 - ✅ в skills/dashboard/SKILL.md нет кириллицы
 - ✅ в skills/est/SKILL.md нет кириллицы
