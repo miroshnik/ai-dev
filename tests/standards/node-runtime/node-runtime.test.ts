@@ -63,6 +63,7 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
   });
 
   it("spec-diff печатает тот же раздел для PR, что под Bun", () => {
+    setLanguage(dir, "ru");
     const repo = gitRepo(dir);
     const base = repo.commit({ [BILLING]: source("черновик удаляется") });
     repo.commit({ [BILLING]: source("выставляется за месяц") });
@@ -70,6 +71,17 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     const node = runScript("spec-diff", ["--base", base], dir, "node");
     expect([bun.code, node.code]).toEqual([0, 0]);
     expect(node.stdout).toContain("**Удалены (1):**\n\n- `tests/capabilities/billing` · Счета › черновик удаляется");
+    expect(node.stdout).toBe(bun.stdout);
+  });
+
+  it("spec-diff в проекте на en печатает под Node тот же раздел для PR, что под Bun", () => {
+    const repo = gitRepo(dir);
+    const base = repo.commit({ [BILLING]: sourceIn("Invoices", "a draft is deleted") });
+    repo.commit({ [BILLING]: sourceIn("Invoices", "an invoice is issued for a month") });
+    const bun = runScript("spec-diff", ["--base", base], dir);
+    const node = runScript("spec-diff", ["--base", base], dir, "node");
+    expect([bun.code, node.code]).toEqual([0, 0]);
+    expect(node.stdout).toContain("**Removed (1):**\n\n- `tests/capabilities/billing` · Invoices › a draft is deleted");
     expect(node.stdout).toBe(bun.stdout);
   });
 

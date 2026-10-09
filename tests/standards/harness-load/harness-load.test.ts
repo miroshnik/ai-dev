@@ -18,7 +18,10 @@ let cleanup: () => void;
 beforeEach(() => ({ dir, cleanup } = tmpDir()));
 afterEach(() => cleanup());
 
-/** Проект с копией скилла, как после установки флоу, и e2e-тестом, который импортирует харнесс и модель; без браузера. */
+/**
+ * Проект с копией скиллов, как после установки флоу (харнесс берёт названия из словаря скилла github), и e2e-тестом,
+ * который импортирует харнесс и модель; без браузера.
+ */
 function project(type?: "module"): void {
   writeTree(dir, {
     "package.json": JSON.stringify({ name: "app", type }),
@@ -33,6 +36,7 @@ function project(type?: "module"): void {
       "});\n",
   });
   cpSync(path.join(SCRIPTS, ".."), path.join(dir, ".agents/skills/spec"), { recursive: true });
+  cpSync(path.join(SCRIPTS, "../../github"), path.join(dir, ".agents/skills/github"), { recursive: true });
   symlinkSync(path.join(REPO, "node_modules"), path.join(dir, "node_modules"));
 }
 

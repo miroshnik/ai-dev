@@ -3,16 +3,18 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { gitRepo, runScript, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { gitRepo, runScript, setLanguage, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;
 let repo: ReturnType<typeof gitRepo>;
+// проект на ru: тесты файла ждут русский вывод, без манифеста проект — en
 beforeEach(() => {
   ({ dir, cleanup } = tmpDir());
   repo = gitRepo(dir);
+  setLanguage(dir, "ru");
 });
 afterEach(() => cleanup());
 
@@ -1014,5 +1016,85 @@ describe("--json — то же для машины", () => {
     expect(j.added[0].name).toBe("новое");
     expect(j.changed).toEqual([]);
     expect(j.out_of_tree_files).toEqual(["src/a.test.ts"]);
+  });
+});
+
+/**
+ * Раздел идёт в тело PR, его читают люди проекта — он на языке проекта. Задачу пишут на нём же, но проект мог сменить
+ * язык: раздел сценариев узнаётся на любом языке словаря.
+ */
+describe("Раздел PR — на языке проекта", () => {
+  it("spec-diff в проекте на en сверяет сценарии из ## Scenarios", () => {
+    setLanguage(dir, "en");
+    const base = repo.commit({
+      [BILLING]: ts(`describe("Invoices", () => { it("an invoice is issued", () => {}); }); describe("Refunds", () => { it("a refund is sent by mail", () => {}); });`),
+    });
+    repo.commit({
+      [BILLING]: ts(`describe("Invoices", () => { it("an invoice is issued for a month", () => {}); it("a draft is deleted", () => {}); it("in a foreign currency", () => {}); });`),
+      "issue.md": "## Context\n\nInvoices.\n\n## Scenarios\n\n- a draft is deleted\n- [ ] paid by card\n\n## Questions\n\n- not a scenario\n",
+    });
+    const r = diffFrom(base, "--scenarios", "issue.md");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe(
+      [
+        "## Spec (tests)",
+        "",
+        `_Base: \`${base} (merge-base)\`._`,
+        "",
+        "**Removed (1):**",
+        "",
+        "- `tests/capabilities/billing` · Refunds › a refund is sent by mail",
+        "",
+        "**Changed (1):**",
+        "",
+        "- `tests/capabilities/billing` · Invoices › ~~an invoice is issued~~ → an invoice is issued for a month — beyond scenarios",
+        "",
+        "**Added (2):**",
+        "",
+        "- `tests/capabilities/billing` · Invoices › a draft is deleted",
+        "- `tests/capabilities/billing` · Invoices › in a foreign currency — beyond scenarios",
+        "",
+        "### Task scenarios (2)",
+        "",
+        "**Became tests (1):** in the lists above.",
+        "",
+        "- ❌ paid by card — no test",
+        "",
+        "**Tests beyond scenarios (2):** in the lists above, with the «beyond scenarios» mark.",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("в проекте на en перенос в дерево, сводка по папкам и решения вне названий — по-английски", () => {
+    setLanguage(dir, "en");
+    const SUM = ts(`describe("Sum", () => { it("adds numbers", () => {}); });`);
+    const base = repo.commit({ "src/sum.test.ts": SUM, "src/other.test.ts": ts(`it("works", () => {});`) });
+    repo.commit({
+      "src/sum.test.ts": null,
+      "src/other.test.ts": ts(`it("works", () => {}); it("works twice", () => {});`),
+      "tests/capabilities/math/sum.test.ts": SUM,
+      [BILLING]: ts(`it("an invoice is issued", () => {}); it("a draft is deleted", () => {});`),
+      "tests/architecture/model.ts": `export default { modules: { domain: { path: "src/domain", purpose: "rules", dependsOn: ["db"], packages: ["zod"] } } };\n`,
+      "tests/standards/audit/exceptions/importLegacy.json": JSON.stringify({ item: "importLegacy", issue: 12, reason: "audit in #12" }),
+      "issue.md": "## Context\n\nno scenarios\n",
+    });
+    const out = diffFrom(base, "--limit", "1", "--scenarios", "issue.md").stdout;
+    expect(out).toContain(
+      "**Summary by folder** — 2 tests, over the threshold of 1: the full list — `spec-diff --full` (in CI — the job summary).\n\n" +
+        "| Folder | Removed | Changed | Added |\n|---|--:|--:|--:|\n| `tests/capabilities/billing` | 0 | 0 | 2 |\n| **Total** | 0 | 0 | 2 |\n",
+    );
+    expect(out).toContain("**Moved into the tree (1):** the same names as outside `tests/` on the base; from 1 file.\n\n- `tests/capabilities/math` — 1 test from 1 file\n");
+    expect(out).toContain("**Outside the `tests/` tree** changed test files: `src/other.test.ts`.");
+    expect(out).toContain("**Architecture model — added (3), as a summary:**\n\n- dependency — 1\n- module — 1\n- package — 1\n");
+    expect(out).toContain("**Exceptions — added (1):**\n\n- `tests/standards/audit` · importLegacy (#12) — audit in #12\n");
+    expect(out).toContain("### Task scenarios\n\nThe issue has no `## Scenarios` section — nothing to check against.");
+  });
+
+  it("в проекте на ru раздел сценариев задачи на английском тоже сверяется", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("x", () => {}); it("выставляется за месяц", () => {});`), "issue.md": "## Scenarios\n\n- выставляется за месяц\n" });
+    const out = diffFrom(base, "--scenarios", "issue.md").stdout;
+    expect(out).toContain("### Сценарии задачи (1)\n\n**Стали тестами (1):** в списках выше.");
   });
 });
