@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * github — проект и задачи GitHub репозитория по канону AGENTS.md (раздел «Ведение задач»; правила целиком —
+ * github — проект и задачи GitHub репозитория по канону AGENTS.md (раздел «Task tracking»; правила целиком —
  * reference.md рядом со SKILL.md: типы, метки решений, эпики, проект, milestones, актуализация блока).
  *
  * Подкоманды:
@@ -1547,11 +1547,11 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 // Закрытие задачи одной командой
 // ----------------------------------------------------------------------------
 
-/** Пять проверок актуализации — из reference.md скилла, одного места канона: список между «Пять проверок:» и «Что поправил». */
+/** Пять проверок актуализации — из reference.md скилла, одного места канона: список между «Five checks:» и «What was fixed». */
 function actualizeChecks(): string {
   const file = path.resolve(import.meta.dir, "../reference.md");
-  const m = existsSync(file) ? /Пять проверок:\n\n([\s\S]*?)\n\nЧто поправил/.exec(readFileSync(file, "utf8")) : null;
-  if (!m) throw new GhError(`пять проверок актуализации не найдены в ${file}: ожидается список между «Пять проверок:» и «Что поправил»`);
+  const m = existsSync(file) ? /Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(readFileSync(file, "utf8")) : null;
+  if (!m) throw new GhError(`пять проверок актуализации не найдены в ${file}: ожидается список между «Five checks:» и «What was fixed»`);
   return m[1]!;
 }
 
@@ -1581,7 +1581,7 @@ export function cmdTaskActualize(io: Io, slug: string, number: number): number {
     `Эпик #${epic.number} ${q(epic.title)}. Открытые задачи эпика:`,
     ...open.map((x) => `- #${x.number} ${q(x.title)}`),
     "",
-    "Пять проверок (канон — reference.md скилла github, «Актуализация блока при закрытии задачи»):",
+    "Пять проверок (канон — reference.md скилла github, «Epic refresh on task close»):",
     "",
     checks,
     "",

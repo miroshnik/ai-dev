@@ -1422,7 +1422,7 @@ export function parseCodexFile(file: string): Session {
 }
 
 
-/** Выгрузка облачной сессии: то, что сохраняет браузерный сниппет из SKILL.md (раздел «Облачная сессия»). */
+/** Выгрузка облачной сессии: то, что сохраняет браузерный сниппет из SKILL.md (раздел «Cloud session»). */
 export interface CloudExport {
   v: number;
   session: string;
@@ -3118,7 +3118,7 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
   }
   for (const x of res.taken ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч по названию/первому промпту уже в факте #${x.issue} — здесь не засчитано; если там ошибка — est fact ${x.issue} --write, потом снова эту задачу`);
   for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (закрепление, ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
-  for (const sid of res.cloud_missing ?? []) console.log(`ВНИМАНИЕ: часть работы — облачная сессия https://claude.ai/code/${sid}, её события не импортированы: выгрузить браузером и est cloud-import (SKILL.md est, «Облачная сессия»)`);
+  for (const sid of res.cloud_missing ?? []) console.log(`ВНИМАНИЕ: часть работы — облачная сессия https://claude.ai/code/${sid}, её события не импортированы: выгрузить браузером и est cloud-import (SKILL.md est, «Cloud session»)`);
 }
 
 /** Записывает факт (комментарий и поля проекта); возвращает тело комментария. */
@@ -3949,7 +3949,7 @@ const USAGE = `est — оценка задач по истории проект�
   est estimate <N> [--repo o/r] --type <type> --hours H [--write]
   est backtest [--repo o/r] [--all-repos]   — механика против ручных оценок по закрытым задачам
   est period --since ДАТА [--until ДАТА] [--since ДАТА [--until ДАТА]] [--repo o/r] [--gap 30]   — все сессии репо за период; два периода — рядом, «после / до»
-  est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Облачная сессия») в источники факта
+  est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Cloud session») в источники факта
   <type> — ${EST_TYPES.join(" ")}`;
 
 /** Выгрузки облачных сессий → каталог состояния; сводка по каждой, чтобы было видно, что легло. */
