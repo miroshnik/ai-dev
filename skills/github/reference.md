@@ -1,301 +1,321 @@
-# github — справочник канона: проект и задачи GitHub
+# github — canon reference: GitHub project and tasks
 
-Принципы — `AGENTS.md`, раздел «Ведение задач». Здесь — действующие правила
-целиком: устройство задач (типы, метки решений, эпики, зависимости), проект
-GitHub, milestones и пять проверок актуализации блока при закрытии задачи;
-в конце — ручные команды для того, чего нет в командах скилла (правка уже
-созданной задачи и milestones). Создание задачи, статус, закрытие —
-`task new`, `task status`, `task actualize`, `task close`, `task drop`
-(`SKILL.md`). Примеры —
-с вымышленными владельцами и номерами.
+Principles — `AGENTS.md`, section "Task tracking". Here are the rules in force
+in full: how tasks are organized (types, decision labels, epics, dependencies),
+the GitHub project, milestones and the five epic-refresh checks on task close;
+at the end — manual commands for what the skill's commands don't cover
+(editing an already created task and milestones). Creating a task, status,
+closing — `task new`, `task status`, `task actualize`, `task close`,
+`task drop` (`SKILL.md`). Examples use made-up owners and numbers.
 
-## Ведение задач — устройство
+## Task tracking — structure
 
-- Задачи ведём в **GitHub Issues** репозитория проекта (скилл `github`:
-  `task new`, `task status`, `task drop`), а не в локальных списках,
-  TODO-файлах или встроенном списке задач агента.
-- **У каждого issue есть тип** (Issue type организации, не метка) — ровно
-  три: **«Задача»** (по умолчанию: единица работы на один PR), **«Баг»**
-  (дефект: то, что уже есть, работает не так), **«Эпик»** (большая задача с
-  подзадачами). Других типов нет: Task/Bug переименованы, Feature выключен.
-  Тип ставится при создании (`github task new --type`), типы организации
-  настраивает `github project fix`. В репозиториях личного
-  аккаунта типов нет — там эпик помечаем меткой `epic`, это единственное
-  исключение.
-- **Метки решений** — имя решения (папка `tests/…/<name>` или модуль модели)
-  без префикса вида; вид — цветом: capability зелёный, standard синий,
-  architecture оранжевый; одно имя у разных видов — одна метка. У задачи с
-  кодом — метка каждого решения, которое она вводит или меняет
-  (`github task new --labels`, по диффу PR — `github pr labels <PR>`;
-  механическая правка — удаление, переименование без правки, файл
-  исключений папки решения, который spec читает исключением:
-  `exceptions/*.json`, `names.exceptions/*.json`, прежние `exceptions.*` и
-  `names.exceptions.*` — решения не меняет и метку не даёт); без меток — только задача без кода. У эпика — объединение меток подзадач. Набор
-  сверяет с деревом спеки основной ветки `github project check`.
-- **Метки-разрезы проекта** — свой разрез задач команды (приложения `web`,
-  `api`, `admin`; команды), не решения: признак — описание
-  `Разрез: <разрез>[ — пояснение]` (у метки решения — `Решение: …`).
-  Имя может совпасть с модулем модели: тогда `project check` пишет строку
-  `○` с разрезом, `fix` метку не трогает, а решение остаётся без метки (имя
-  занято); `pr labels` такую метку как метку решения не ставит, `task new
-  --labels api` ставит её обычной меткой. Цвет разреза — не цвет вида
-  решения: вид решения виден только цветом.
-- **Маленькая задача** — один issue типа «Задача» или «Баг».
-- **Большая задача** — эпик + подзадачи:
-  - эпик — issue типа «Эпик»: цель, контекст, план (по этапам, если они
-    есть), критерии готовности;
-  - у эпика есть **короткий префикс** (`Биллинг`, `Импорт`, `API`): с него
-    начинаются заголовки эпика и всех его подзадач (`<Префикс> · <заголовок>`),
-    он же идёт в названия milestones;
-  - каждая подзадача — отдельный issue, привязанный к эпику как **sub-issue**
-    (нативные sub-issues GitHub; `github task new --epic N`);
-  - подзадача должна быть законченной единицей работы, которую можно сделать
-    одним PR;
-  - эпик может разбить план на этапы — тогда этап это milestone (раздел
-    «Milestones — наборы задач» ниже) и каждая подзадача принадлежит одному
-    этапу; эпик без этапов — без milestones.
-- **Зависимости — только встроенными связями GitHub** (Relationships), не
-  текстом в описании: родитель — sub-issue (эпик), «блокируется» —
-  *blocked by*, «блокирует» — *blocking*; при создании —
+- Tasks live in the project repository's **GitHub Issues** (the `github`
+  skill: `task new`, `task status`, `task drop`), not in local lists,
+  TODO files or the agent's built-in task list.
+- **Every issue has a type** (the organization's Issue type, not a label) —
+  exactly three: **Task** (the default: a unit of work for one PR), **Bug**
+  (a defect: something that already exists works wrong), **Epic** (a big task
+  with subtasks). There are no other types: Task/Bug are renamed
+  (to `Задача`/`Баг`), Feature is disabled. The type is set on creation
+  (`github task new --type`); `github project fix` configures the
+  organization's types. Repositories of a personal account have no types —
+  there an epic gets the `epic` label; this is the only exception.
+- **Decision labels** — the decision's name (folder `tests/…/<name>` or a
+  model module) without a kind prefix; the kind is shown by color: capability
+  green, standard blue, architecture orange; one name across different kinds
+  is one label. A code task carries the label of every decision it introduces
+  or changes (`github task new --labels`, from the PR diff —
+  `github pr labels <PR>`; a mechanical edit — a deletion, a rename without
+  changes, the decision folder's exceptions file that spec reads as an
+  exception: `exceptions/*.json`, `names.exceptions/*.json`, the former
+  `exceptions.*` and `names.exceptions.*` — doesn't change the decision and
+  gives no label); no labels — only a task without code. An epic has the
+  union of its subtasks' labels. `github project check` checks the set
+  against the spec tree of the main branch.
+- **Project slice labels** — the team's own slice of tasks (apps `web`,
+  `api`, `admin`; teams), not decisions: the marker is the description
+  `Разрез: <slice>[ — note]` ("Slice: …"; a decision label has `Решение: …`,
+  "Decision: …"). The name may coincide with a model module: then
+  `project check` prints a `○` line with the slice, `fix` doesn't touch the
+  label, and the decision stays without a label (the name is taken);
+  `pr labels` doesn't set such a label as a decision label, `task new
+  --labels api` sets it as a regular label. A slice's color is not a decision
+  kind's color: a decision's kind is visible only by color.
+- **A small task** — one issue of type Task or Bug.
+- **A big task** — an epic + subtasks:
+  - the epic is an issue of type Epic: goal, context, plan (by stages, if
+    there are any), definition of done;
+  - the epic has a **short prefix** (`Billing`, `Import`, `API`): the titles
+    of the epic and all its subtasks start with it (`<Prefix> · <title>`),
+    and it also goes into milestone names;
+  - each subtask is a separate issue attached to the epic as a **sub-issue**
+    (native GitHub sub-issues; `github task new --epic N`);
+  - a subtask must be a complete unit of work that can be done in one PR;
+  - an epic may split its plan into stages — then a stage is a milestone
+    (section "Milestones — sets of tasks" below) and each subtask belongs to
+    one stage; an epic without stages has no milestones.
+- **Dependencies — only GitHub's built-in links** (Relationships), not text
+  in the description: the parent — sub-issue (the epic), "is blocked by" —
+  *blocked by*, "blocks" — *blocking*; on creation —
   `github task new --blocked-by`.
-  Разделов «Зависит от» / «После #N» не пишем; зависимость не issue (ответ
-  заказчика, внешний срок) — заводим под неё задачу или пишем в «Контекст».
-  *Relates to* — только в UI и только если связь не «блокирует». Задача с
-  непустым *blocked by* не берётся в работу, пока блокеры не закрыты.
-- Перед созданием новой задачи проверяем, нет ли уже такой
-  (`gh issue list --search`); перед началом работы — не идёт ли она уже в
-  параллельной сессии (`AGENTS.md`, раздел «Git, PR и мерж»).
-- Статус ведём только в поле `Status` проекта (раздел «Проект (GitHub
-  Projects)» ниже), в самом issue ничего не дублируем; PR связываем с
-  задачей (`Closes #N`); эпик закрываем, когда закрыты все подзадачи.
-- Нет GitHub-репозитория — сказать и спросить, где вести задачи, а не
-  заводить их молча в другом месте.
+  We don't write "Depends on" / "After #N" sections; a dependency that isn't
+  an issue (a client's answer, an external deadline) — we file a task for it
+  or write it in "Context". *Relates to* — only in the UI and only if the
+  link isn't "blocks". A task with a non-empty *blocked by* isn't taken into
+  work until its blockers are closed.
+- Before creating a new task we check that it doesn't exist yet
+  (`gh issue list --search`); before starting work — that it isn't already
+  going in a parallel session (`AGENTS.md`, section "Git, PRs and merging").
+- Status is kept only in the project's `Status` field (section "Project
+  (GitHub Projects)" below), nothing is duplicated in the issue itself; a PR
+  is linked to its task (`Closes #N`); an epic is closed when all its
+  subtasks are closed.
+- No GitHub repository — say so and ask where to keep tasks, rather than
+  silently filing them somewhere else.
 
-## Проект (GitHub Projects)
+## Project (GitHub Projects)
 
-У каждого репозитория есть **ровно один** GitHub Project, привязанный к репо
-(`github project fix`); название проекта = имя репозитория. В нём **все** эпики и
-задачи репозитория — отдельных проектов под эпик/направление не заводим
-(направление = эпик внутри общего проекта). Все задачи добавляются в
-проект сразу при создании (`github task new`). Обязательно:
+Every repository has **exactly one** GitHub Project linked to the repo
+(`github project fix`); the project name = the repository name. It holds
+**all** epics and tasks of the repository — we don't create separate projects
+per epic/area (an area = an epic inside the shared project). All tasks are
+added to the project right on creation (`github task new`). Required:
 
-- **Три представления**, ровно с такими именами: `Доска` (BOARD_LAYOUT,
-  колонки по `Status`), `Таблица` (TABLE_LAYOUT), `Роадмэп` (ROADMAP_LAYOUT).
-- **Поле `Status`** с вариантами: `Бэклог` → `В работе` → `Готово`.
-  Статус меняю **сам, сразу**, не дожидаясь просьбы
-  (`github task status <N> <статус>`):
-  - новая задача — при создании ставлю `Бэклог`;
-  - взял задачу в работу — до начала работы ставлю `В работе`;
-  - закончил (PR смёржен / задача закрыта) — `github task close <N>` ставит
-    `Готово` вместе с фактом, эпиком, milestone и уборкой влитой ветки;
-  - задачу переоткрыли (баг вернулся, PR откатили) — возвращаю `В работе`
-    (или `Бэклог`, если работа не ведётся); уже закрытые milestone и эпик
-    при этом переоткрываю;
-  - **закрыта без выполнения** (не будем делать, дубль, заменена другими
-    задачами) — закрываю как not planned и **убираю из проекта**
-    (`github task drop <N>`): в `Готово` она не попадает, в оценке эпика не
-    считается.
-  Эпик: `В работе`, когда взята первая подзадача; `Готово`, когда готовы все
-  (закрытые как not planned не в счёт — их в проекте уже нет).
-  Страховка — встроенные workflow проекта «Item added to project» →
-  `Бэклог`, «Item closed» → `Готово` и «Auto-add to project» (новые
-  открытые issues репозитория сами попадают в проект): статус встанет, даже
-  если ставить его некому (облачная сессия, другой агент, закрытие из UI
-  GitHub). Агент статус ставит всё равно; закрытую как not planned убирает
-  из проекта — иначе workflow запишет её в `Готово`.
-- **Поле `Оценка, ч`** (Number) — активные часы агента (`AGENTS.md`, раздел
-  «Оценка и факт»). Ставится **только через скилл `est`** — по аналогам с
-  фактом, не из головы: у каждой подзадачи и маленькой задачи при создании;
-  у эпика — сумма оценок подзадач, пересчитываю при добавлении подзадачи или
-  изменении её оценки. После начала работы оценку не переписываю —
-  расхождение объясняется в комментарии «Факт».
-- **Поля `Факт, ч`, `Токены, млн`, `Стоимость, $`** (Number) — факт: активные
-  часы, все токены привязанных ответов модели (вход, выход, запись и чтение
-  кэша, включая субагентов) и их цена по публичным API-тарифам —
-  **API-эквивалент**, на подписке не списывается, но сравним между задачами
-  и моделями. Заполняет только `est fact --write` при закрытии задачи, руками
-  не трогать; у эпика — сумма подзадач.
-- **Приоритет — встроенное поле issue `Priority`** (Issue field организации,
-  есть у неё по умолчанию: `Urgent` → `High` → `Medium` → `Low`), а **не**
-  своё поле проекта.
-  Обязателен у каждой открытой задачи: новой ставлю `Medium`, если
-  пользователь не сказал иначе; у эпика — не ниже самой срочной открытой
-  подзадачи. Поле подключено в проект, `Таблица` и `Доска` **сортируются по
-  нему**; внутри приоритета порядок ручной. Берём в работу самое
-  срочное из незаблокированного. В личном аккаунте полей issue нет —
-  приоритет не ведём. Ставит `github task new` (`--priority`, по умолчанию
-  `Medium`).
+- **Three views**, with exactly these names: `Доска` (Board; BOARD_LAYOUT,
+  columns by `Status`), `Таблица` (Table; TABLE_LAYOUT), `Роадмэп` (Roadmap;
+  ROADMAP_LAYOUT).
+- **The `Status` field** with options `Бэклог` → `В работе` → `Готово`
+  (Backlog → In progress → Done). I change the status **myself,
+  immediately**, without waiting to be asked
+  (`github task status <N> <status>`):
+  - a new task — I set Backlog on creation;
+  - took a task into work — I set In progress before starting the work;
+  - finished (PR merged / task closed) — `github task close <N>` sets Done
+    together with the actual, the epic, the milestone and removing the merged
+    branch;
+  - the task was reopened (the bug came back, the PR was reverted) — I set
+    In progress again (or Backlog if no one is working on it); an already
+    closed milestone and epic I reopen as well;
+  - **closed without being done** (won't do, duplicate, replaced by other
+    tasks) — I close it as not planned and **remove it from the project**
+    (`github task drop <N>`): it doesn't get into Done and doesn't count in
+    the epic's estimate.
+  Epic: In progress when its first subtask is taken; Done when all are done
+  (those closed as not planned don't count — they are no longer in the
+  project).
+  Safety net — the project's built-in workflows "Item added to project" →
+  Backlog, "Item closed" → Done and "Auto-add to project" (new open issues of
+  the repository get into the project by themselves): the status gets set
+  even if there is no one to set it (a cloud session, another agent, closing
+  from the GitHub UI). The agent sets the status anyway; a task closed as not
+  planned it removes from the project — otherwise the workflow puts it into
+  Done.
+- **The `Оценка, ч` field** (Estimate, h; Number) — the agent's active hours
+  (`AGENTS.md`, section "Estimate and actual — the `est` skill"). Set **only
+  via the `est` skill** — from analogs with actuals, not off the top of my
+  head: for every subtask and small task on creation; for an epic — the sum
+  of its subtasks' estimates, recalculated when a subtask is added or its
+  estimate changes. After work starts I don't rewrite the estimate — the
+  discrepancy is explained in the actual comment.
+- **The `Факт, ч`, `Токены, млн`, `Стоимость, $` fields** (Actual, h;
+  Tokens, millions; Cost, $; Number) — the actual: active hours, all tokens
+  of the linked model responses (input, output, cache write and read,
+  including subagents) and their price at public API rates — an **API
+  equivalent**: not charged on a subscription, but comparable across tasks
+  and models. Filled only by `est fact --write` when the task is closed,
+  never touched by hand; for an epic — the sum of its subtasks.
+- **Priority — the issue's built-in `Priority` field** (an organization Issue
+  field it has by default: `Urgent` → `High` → `Medium` → `Low`), **not** a
+  project field of our own.
+  Required on every open task: a new one gets `Medium` unless the user said
+  otherwise; an epic — no lower than its most urgent open subtask. The field
+  is added to the project, `Таблица` and `Доска` are **sorted by it**; within
+  a priority the order is manual. We take into work the most urgent of the
+  unblocked. A personal account has no issue fields — no priority is kept.
+  `github task new` sets it (`--priority`, `Medium` by default).
 
-Ничего лишнего: других полей (Iteration, Готовность…) и представлений нет,
-пока их не внесли сюда. Готовность — статус и *blocked by*, этапы —
-milestones (поле `Milestone`).
+Nothing extra: there are no other fields (Iteration, Readiness…) or views
+until they are added here. Readiness — the status and *blocked by*; stages —
+milestones (the `Milestone` field).
 
-Проект — скилл `github`: `project check` раз в сессию перед работой с
-задачами, ❌ — `project fix`. Проекта нет — `fix` привяжет, скопирует эталон
-или создаст; чего нет в API (workflow, сортировка) — шаги UI: агент проходит
-их браузером сессии без отдельного спроса, без браузера — ссылки
-пользователю. Удалять или переименовывать в проекте, которым уже
-пользовались, и менять настройки организации — только после подтверждения
-(`fix --confirm`). Что именно сверяет `check` по пунктам — `SKILL.md`,
-раздел «Что проверяется».
+The project — the `github` skill: `project check` once per session before
+working with tasks, ❌ — `project fix`. No project — `fix` links one, copies
+the template or creates one; what the API lacks (workflows, sorting) — UI
+steps: the agent goes through them with the session's browser without asking
+separately, without a browser — links to the user. Deleting or renaming in a
+project that has already been used and changing organization settings — only
+after confirmation (`fix --confirm`). What exactly `check` verifies, item by
+item — `SKILL.md`, section "What is checked".
 
-## Milestones — наборы задач
+## Milestones — sets of tasks
 
-Milestone (встроенная сущность репозитория) — **просто именованный набор
-задач** с общей целью и, если есть, сроком; ничего другого для группировки
-(спринты, своё поле «Этап»/«Фаза»/«Релиз») не используем. Состав решает
-смысл: простые задачи (`Релиз 2026-10`), эпики целиком (milestone у самих
-эпиков), **этап эпика** (набор его подзадач).
+A milestone (a built-in repository entity) is **just a named set of tasks**
+with a common goal and, if there is one, a due date; we use nothing else for
+grouping (sprints, our own "Stage"/"Phase"/"Release" field). Meaning decides
+the contents: plain tasks (`Release 2026-10`), whole epics (the milestone is
+on the epics themselves), **an epic's stage** (a set of its subtasks).
 
-- **Не обязателен** ни задаче, ни эпику: заводим, только когда группу надо
-  отслеживать как целое. Эпик без плана по этапам — без milestones.
-- **Название** этапа: `<Эпик> · <N> · <Название этапа>`
-  (`Биллинг · 1 · Модель данных`), `N` — номер этапа в плане (с 0 или с 1);
-  набор без эпика — осмысленное имя без префикса; имена не должны путаться. **Описание** этапа: `Эпик: #<номер>`;
-  иного набора — цель в одну-две строки.
-- **У issue только один milestone**, поэтому уровни не смешиваем: подзадачи —
-  в этапах своего эпика, в сквозной набор (релиз, демо) кладём сам эпик или
-  простые задачи.
-- **Ставлю при создании** задачи, если она входит в набор; milestones
-  этапов создаю вместе с эпиком,
-  как только план согласован (поздние этапы могут уточняться).
-- **Этап ещё не разбит** → в milestone одна задача-этап с чеклистом
-  (`<Эпик> · Этап N. …`, sub-issue эпика, оценка на весь этап; исключение из
-  правила «одним PR»). Декомпозиция: issue из пунктов чеклиста (тот же
-  milestone, sub-issues, с оценками), затем задача-этап — not planned и из
-  проекта.
-- **Срок** — только реальный дедлайн (тогда набор виден на роадмэпе).
-- **Закрываю сам**, когда закрыта последняя задача набора; переоткрываю,
-  если задачу переоткрыли. При создании задачи — `github task new --milestone`,
-  остальные команды — раздел «Ручные команды» ниже.
+- **Optional** for both a task and an epic: created only when a group has to
+  be tracked as a whole. An epic without a stage plan has no milestones.
+- **Name** of a stage: `<Epic> · <N> · <Stage name>`
+  (`Billing · 1 · Data model`), `N` — the stage number in the plan (from 0 or
+  from 1); a set without an epic — a meaningful name without a prefix; names
+  must not be confusable. **Description** of a stage: `Epic: #<number>`; of
+  another set — the goal in one or two lines.
+- **An issue has only one milestone**, so we don't mix levels: subtasks go
+  into their epic's stages; into a cross-cutting set (a release, a demo) we
+  put the epic itself or plain tasks.
+- **I set it on creation** of a task if the task belongs to a set; stage
+  milestones I create together with the epic, as soon as the plan is agreed
+  (later stages may be refined).
+- **A stage not yet broken down** → the milestone has one stage task with a
+  checklist (`<Epic> · Stage N. …`, a sub-issue of the epic, an estimate for
+  the whole stage; an exception to the "one PR" rule). Decomposition: issues
+  from the checklist items (the same milestone, sub-issues, with estimates),
+  then the stage task — not planned and out of the project.
+- **Due date** — only a real deadline (then the set shows on the roadmap).
+- **I close it myself** when the set's last task is closed; I reopen it if a
+  task is reopened. On task creation — `github task new --milestone`, the
+  other commands — section "Manual commands" below.
 
-## Актуализация блока при закрытии задачи
+## Epic refresh on task close
 
-PR задачи влит — сразу после мержа **субагент со свежим контекстом**
-проходит по всем открытым задачам того же эпика/блока и приводит их в
-соответствие с выкаченным; сессия на пиковом контексте сама этого не
-делает — каждый её ход стоит в разы дороже. Это часть закрытия задачи, а не
-отдельная просьба. От деплоя актуализация не зависит: субагент и ожидание
-деплоя (`ci-wait`) идут в фоне параллельно, `github task close` — после
-обоих. Задание субагенту целиком — задача и её PR, эпик, его открытые
-задачи, пять проверок ниже — печатает `github task actualize <N>`; нет
-эпика или открытых задач в нём — строка «актуализация не нужна», субагента
-нет. Пять проверок:
+The task's PR is merged — right after the merge **a subagent with a fresh
+context** goes through all open tasks of the same epic and brings them in line
+with what shipped; the session at peak context doesn't do it itself — each of
+its turns costs several times more. This is part of closing the task, not a
+separate request. The refresh doesn't depend on the deploy: the subagent and
+the deploy wait (`ci-wait`) run in the background in parallel,
+`github task close` — after both. The whole assignment for the subagent — the
+task and its PR, the epic, its open tasks, the five checks below — is printed
+by `github task actualize <N>`; no epic or no open tasks in it — the line
+«○ актуализация не нужна» (refresh not needed), no subagent. Five checks:
 
-1. **Сделанное — закрыто.** Нет открытых задач, уже вошедших в выкаченное
-   (сделана — закрываю, потеряла смысл — not planned и убрать из проекта).
-   Статусы и milestones соответствуют: закрыта последняя задача набора —
-   закрываю milestone.
-2. **Отвеченные вопросы — помечены.** Каждый уже отвеченный вопрос в
-   «## Вопросы» (комментарии, другая задача, код) помечен ✅ с ответом;
-   нумерация не меняется — на неё ссылаются. Открытых нет — снимаю лейбл
-   «вопросы».
-3. **Описания — не врут.** Формулировки открытых задач сверены с кодом и
-   спеками: убрано то, чего после выкатки не существует (поля, таблицы,
-   маршруты, права). После **отмены принятого решения** правлю все задачи,
-   где оно процитировано.
-4. **Зависимости — реальные.** Связи GitHub (sub-issue, blocked by) отражают
-   положение дел: снят blocked by на закрытые задачи, новая задача привязана
-   к эпику, пометки «⛔» в тексте совпадают со связями.
-5. **Повторы — стандарт.** Решение, которое в выкаченном повторяет уже
-   существующее в двух и более местах, — issue «Стандарт · …» (правило в
-   `tests/standards/` и рефакторинг). Сначала поиск среди открытых
-   «Стандарт · …»: такой уже есть — не заводить, расширение соседнего —
-   комментарием в нём. Приоритет стандарта — по цене ошибки, которую он
-   предотвращает; стандарты одной области — эпиком: иначе они рождаются
-   быстрее, чем их разбирают. Отложенное «не в этом PR» — issue или снято
-   явно, а не забыто.
+1. **Done is closed.** No open tasks that are already part of what shipped
+   (done — I close it; lost its point — not planned and out of the project).
+   Statuses and milestones match: the set's last task is closed — I close the
+   milestone.
+2. **Answered questions are marked.** Every already answered question in
+   `## Вопросы` (comments, another task, code) is marked ✅ with the answer;
+   the numbering doesn't change — it is referenced. None open — I remove the
+   `вопросы` (questions) label.
+3. **Descriptions don't lie.** The wording of open tasks is checked against
+   the code and specs: what doesn't exist after the rollout (fields, tables,
+   routes, permissions) is removed. After **a reversal of an accepted
+   decision** I edit every task where it is quoted.
+4. **Dependencies are real.** GitHub links (sub-issue, blocked by) reflect
+   the actual state: blocked by on closed tasks is removed, a new task is
+   attached to the epic, "⛔" marks in the text match the links.
+5. **Repetition is a standard.** A decision that, in what shipped, repeats an
+   existing one in two or more places — a `Стандарт · …` (Standard · …) issue
+   (a rule in `tests/standards/` and a refactoring). First a search among the
+   open `Стандарт · …`: one exists — don't file another; an extension of a
+   neighboring one — a comment in it. A standard's priority — by the cost of
+   the mistake it prevents; standards of one area — as an epic: otherwise
+   they are born faster than they are worked off. Something deferred as "not
+   in this PR" — an issue or dropped explicitly, not forgotten.
 
-Что поправил — одной строкой в комментарии к эпику: история решений в одном
-месте.
+What was fixed — one line in a comment on the epic: the history of decisions
+in one place.
 
-**Конец сессии — одной строкой, одной из трёх.** Отсутствие строки не
-отличить от забытой, поэтому последняя строка ответа есть всегда:
+**End of session — one line, one of three.** A missing line can't be told
+from a forgotten one, so the answer always has the last line:
 
-- **«Всё сделано. Сессию можно закрывать.»** — выполнено всё: PR влит;
-  деплой после мержа дождались (где мерж выкатывает); `task close` прошёл
-  без строк `!`; актуализация сделана; открытых вопросов к пользователю и в
-  issue нет; предложенные задачи заведены в «Бэклог».
-- **«Всё сделано, но есть вопросы: …»** — выполнено то же, но владельцу есть
-  что решать за пределами задачи: заводить ли задачу по наблюдению
-  («решение за вами»), возвращать ли настройку, выпускать ли релиз. Сами
-  вопросы — в этой же строке, коротко, по одному на решение; «Сессию можно
-  закрывать» не пишется: с ней вопросы читаются как «решать нечего».
-- **«Осталось: …»** — выполнено не всё: чего и от кого сессия ждёт (мерж от
-  владельца, ответ на вопрос задачи, красный чек).
+- **«Всё сделано. Сессию можно закрывать.»** (All done. The session can be
+  closed.) — everything is done: the PR is merged; the post-merge deploy was
+  awaited (where the merge deploys); `task close` passed without `!` lines;
+  the epic refresh is done; there are no open questions to the user or in
+  issues; proposed tasks are filed in Backlog.
+- **«Всё сделано, но есть вопросы: …»** (All done, but there are questions:
+  …) — the same is done, but the owner has something to decide beyond the
+  task: whether to file a task for an observation ("your call"), whether to
+  revert a setting, whether to cut a release. The questions themselves — in
+  this same line, briefly, one per decision; «Сессию можно закрывать» (The
+  session can be closed) is not written: with it the questions read as
+  "nothing to decide".
+- **«Осталось: …»** (Remaining: …) — not everything is done: what the session
+  waits for and from whom (a merge from the owner, an answer to the task's
+  question, a red check).
 
-Информация без решения — срок, который надо выждать, предупреждение («в
-релиз не вошло»), наблюдение, по которому решать нечего, — не вопрос: она
-идёт в отчёте выше, строка — «Всё сделано. Сессию можно закрывать.». Отчёт о
-сделанном (что влито, ссылки на PR и задачи) — тоже не вопрос. Сессия без
-задачи (планирование эпика, разбор) заканчивает так же — по порученному.
+Information without a decision — a period to wait out, a warning ("didn't
+make it into the release"), an observation with nothing to decide — is not a
+question: it goes into the report above, and the line is
+«Всё сделано. Сессию можно закрывать.». A report of what was done (what was
+merged, links to PRs and tasks) is not a question either. A session without a
+task (epic planning, an investigation) ends the same way — by what it was
+assigned.
 
-**В режиме auto сессия в конце архивируется.** Проект с `"auto": true` в
-`.agents/ai-dev.json` ведёт задачу целиком без спроса, и закрыть сессию —
-последний шаг, оставшийся человеку: после строки «Всё сделано. Сессию можно
-закрывать.» сессия архивирует себя сама — последним действием, после него
-разговор заканчивается. После двух других строк и вне режима auto — нет:
-архивная сессия уходит из списка, и вопросы в её последнем ответе владелец
-уже не прочтёт. Чем архивировать — в файле агента (`claude/CLAUDE.md`); у
-агента без такого инструмента (Codex, облачная сессия) остаётся строка.
-Архив — не удаление: сессию можно вернуть.
+**In auto mode the session archives itself at the end.** A project with
+`"auto": true` in `.agents/ai-dev.json` runs the task entirely without asking,
+and closing the session is the last step left to a human: after the line
+«Всё сделано. Сессию можно закрывать.» the session archives itself — as its
+last action, after which the conversation ends. After the other two lines and
+outside auto mode — no: an archived session leaves the list, and the owner
+will no longer read the questions in its last answer. How to archive — in the
+agent's file (`claude/CLAUDE.md`); an agent without such a tool (Codex, a
+cloud session) keeps the line. Archiving isn't deletion: the session can be
+restored.
 
-## Ручные команды
+## Manual commands
 
-То, чего нет в командах скилла: правка уже созданной задачи и milestones.
+What the skill's commands don't cover: editing an already created task and
+milestones.
 
-### Типы issue
+### Issue types
 
-В организации типы проверяет и настраивает `project fix --confirm`
-(Task → Задача, Bug → Баг, Эпик, Feature выключен; нужен scope `admin:org`).
-В личном аккаунте типов нет — эпик помечен меткой `epic`.
+In an organization `project fix --confirm` checks and configures the types
+(Task → `Задача`, Bug → `Баг`, `Эпик`, Feature disabled; needs the
+`admin:org` scope). A personal account has no types — an epic is marked with
+the `epic` label.
 
 ```bash
-gh api -X PATCH repos/{owner}/{repo}/issues/<N> -f type=Баг     # сменить тип
+gh api -X PATCH repos/{owner}/{repo}/issues/<N> -f type=Баг     # change the type
 gh issue list --json number,issueType --jq '.[]|select(.issueType.name=="Эпик")'
 ```
 
-### Priority у существующей задачи (организация)
+### Priority on an existing task (organization)
 
 ```bash
-# id поля и вариантов
+# ids of the field and its options
 gh api graphql -f query='{organization(login:"<org>"){issueFields(first:10){nodes{... on IssueFieldSingleSelect{id name options{id name}}}}}}'
-# поставить; issueId — node_id issue
+# set it; issueId — the issue's node_id
 gh api graphql -f query='mutation{setIssueFieldValue(input:{issueId:"<node_id>",issueFields:[{fieldId:"<field id>",singleSelectOptionId:"<option id>"}]}){issue{number}}}'
-# прочитать: issue.issueFieldValues{nodes{... on IssueFieldSingleSelectValue{field{... on IssueFieldSingleSelect{name}} name}}}
+# read: issue.issueFieldValues{nodes{... on IssueFieldSingleSelectValue{field{... on IssueFieldSingleSelect{name}} name}}}
 ```
 
-### Подзадачи и зависимости у существующей задачи
+### Subtasks and dependencies on an existing task
 
 ```bash
-SUB_ID=$(gh api repos/{owner}/{repo}/issues/<подзадача> --jq .id)   # id, не номер!
-gh api repos/{owner}/{repo}/issues/<эпик>/sub_issues -X POST -F sub_issue_id=$SUB_ID
-gh api repos/{owner}/{repo}/issues/<эпик>/sub_issues                # список подзадач
-BY_ID=$(gh api repos/{owner}/{repo}/issues/<блокер> --jq .id)       # id, не номер!
+SUB_ID=$(gh api repos/{owner}/{repo}/issues/<subtask> --jq .id)     # id, not the number!
+gh api repos/{owner}/{repo}/issues/<epic>/sub_issues -X POST -F sub_issue_id=$SUB_ID
+gh api repos/{owner}/{repo}/issues/<epic>/sub_issues                # list of subtasks
+BY_ID=$(gh api repos/{owner}/{repo}/issues/<blocker> --jq .id)      # id, not the number!
 gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by -X POST -F issue_id=$BY_ID
-gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by      # кто блокирует N
-gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocking        # кого блокирует N
+gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by      # who blocks N
+gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocking        # whom N blocks
 gh api -X DELETE repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by/$BY_ID
 ```
 
 ### Milestones
 
 ```bash
-gh api -X GET repos/{owner}/{repo}/milestones -f state=all           # список
-gh api repos/{owner}/{repo}/milestones -f title="Биллинг · 1 · Проектирование" -f description="Эпик: #42"
-gh issue edit <N> --milestone "Биллинг · 1 · Проектирование"
+gh api -X GET repos/{owner}/{repo}/milestones -f state=all           # list
+gh api repos/{owner}/{repo}/milestones -f title="Billing · 1 · Design" -f description="Epic: #42"
+gh issue edit <N> --milestone "Billing · 1 · Design"
 gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -f state=closed
 ```
 
-### Числовые поля проекта
+### Numeric project fields
 
-«Оценка, ч», «Факт, ч», «Токены, млн», «Стоимость, $» ставит только скилл
-`est`. Руками — лишь «Оценка, ч» эпика, сумма оценок подзадач:
+`Оценка, ч`, `Факт, ч`, `Токены, млн`, `Стоимость, $` are set only by the
+`est` skill. By hand — only an epic's `Оценка, ч`, the sum of its subtasks'
+estimates:
 
 ```bash
-gh project item-edit --id <item-id> --project-id <project-id> --field-id <id-поля-Оценка> --number 4.5
+gh project item-edit --id <item-id> --project-id <project-id> --field-id <estimate-field-id> --number 4.5
 ```
 
-ID проекта, полей и вариантов — `gh project view` / `gh project field-list`
-(в JSON `gh project item-list` ключи кириллических полей искажены — не
-полагаться на них; `est` ищет поля по точному имени через GraphQL).
+Project, field and option IDs — `gh project view` / `gh project field-list`
+(in the JSON of `gh project item-list` the keys of Cyrillic-named fields are
+garbled — don't rely on them; `est` finds fields by exact name via GraphQL).
