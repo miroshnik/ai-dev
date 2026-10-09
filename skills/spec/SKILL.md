@@ -1,280 +1,311 @@
 ---
 name: spec
-description: Спецификация из тестов — канон спеки (правило «Спецификация — решения», вынесенное из ядра AGENTS.md) в canon.md скилла, детерминированные скрипты и харнесс проверок. spec-doc строит документацию docs/spec из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML от bun test) по дереву tests/capabilities/<name>, tests/architecture/<name> и tests/standards/<name>, с прозой из JSDoc тестов; spec-diff печатает для тела PR список удалённых, изменённых и добавленных названий тестов между базовой веткой и HEAD; spec-publish после мержа публикует docs/spec в ветку spec (в main документации нет), spec-run находит для неё зелёный прогон PR, проверивший дерево мержа; spec-claims после прогона сверяет точки входа с журналом вызовов тестами capability; spec-break поломкой доказывает, что проверка умеет упасть (сломать → прогнать → всегда откатить); spec-exceptions переносит exceptions.ts проекта в каталог exceptions/ — файл на исключение; harness.ts — тесты механических проверок («реестр + инвариант»: соглашение на каждом элементе реестра из кода). Когда — перед созданием PR (раздел «Спека» в тело PR); в CI на PR (spec-doc --strict) и после мержа (публикация в ветку spec); когда надо прочитать спеку проекта (git show origin/spec:README.md); когда проект подключает spec к своему CI (копия скилла в проекте, Node без Bun, шарды Vitest и Playwright); когда соглашение («каждая мутация пишет аудит») надо проверить на всех элементах, а не на примере; когда надо доказать, что унаследованный или новый тест ловит поломку («покрыто» ли на деле); когда просят документацию по функциональности, спрашивают «что делает система», «какие требования сняты в этом PR» — даже если слова «спецификация» не прозвучало.
+description: Specification from tests — the spec canon (the "Specification — decisions" rule moved out of the AGENTS.md core) in the skill's canon.md, deterministic scripts and a checks harness. spec-doc builds the docs/spec documentation from runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML from bun test) along the tree tests/capabilities/<name>, tests/architecture/<name> and tests/standards/<name>, with prose from the tests' JSDoc; spec-diff prints for the PR body the lists of removed, changed and added test names between the base branch and HEAD; spec-publish publishes docs/spec to the spec branch after a merge (main has no documentation), spec-run finds for it the green PR run that checked the merge tree; spec-claims, after a run, checks entry points against the log of calls by capability tests; spec-break proves by breaking that a check can fail (break → run → always revert); spec-exceptions moves a project's exceptions.ts into an exceptions/ directory — one file per exception; harness.ts — tests of mechanical checks ("registry + invariant" — a convention on every item of a registry taken from the code). When — before creating a PR (the spec section in the PR body); in CI on a PR (spec-doc --strict) and after a merge (publishing to the spec branch); when you need to read a project's spec (git show origin/spec:README.md); when a project wires spec into its CI (a copy of the skill in the project, Node without Bun, Vitest and Playwright shards); when a convention ("every mutation writes an audit record") must be checked on all items, not on an example; when you need to prove that an inherited or new test catches a breakage (whether it is really "covered"); when asked for documentation of functionality, "what does the system do", "which requirements does this PR remove" — even if the word "specification" wasn't said.
 allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(node *skills/spec/scripts/spec-break.ts *) Bash(bun *skills/spec/scripts/spec-exceptions.ts *) Bash(node *skills/spec/scripts/spec-exceptions.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
-# spec — документация из названий тестов, дифф спеки в PR
+# spec — documentation from test names, spec diff in the PR
 
-Правило «Спецификация — решения» — `canon.md` рядом (канон спеки, вынесенный
-из ядра `AGENTS.md`; читай его, когда пишешь или переносишь тест, добавляешь
-проверку, исключение, стандарт): решение существует, пока его проверяет
-механизм — тест, линт-правило, проверка над моделью архитектуры; каждый
-обёрнут тестом раннера. Поэтому документация — это дерево `tests/` и
-названия тестов, а дифф тестов в PR — дифф спеки. Скрипты в `scripts/`
-делают это детерминированно, без модели и без конфигурации под репозиторий:
+The "Specification — decisions" rule is `canon.md` next to this file (the spec
+canon moved out of the `AGENTS.md` core; read it when you write or migrate a
+test, add a check, an exception, a standard): a decision exists while a
+mechanism checks it — a test, a lint rule, a check over the architecture
+model; each is wrapped in a runner test. So the documentation is the `tests/`
+tree and the test names, and the diff of tests in a PR is the spec diff. The
+scripts in `scripts/` do this deterministically, without a model and without
+per-repository configuration:
 
-- `spec-doc.ts` — отчёты раннеров и JSDoc тестов → `docs/spec/` (или один
-  документ в stdout);
-- `spec-diff.ts` — названия тестов на базовой ветке и в HEAD → три списка для
-  тела PR: удалены, изменены, добавлены;
-- `spec-publish.ts` — собранный `docs/spec` → ветка `spec` (CI после мержа:
-  прогон на `main` или артефакт прогона PR); в `main` документации нет;
-- `spec-run.ts` — для публикации на мерж PR: зелёный прогон, проверивший
-  ровно дерево коммита мержа; такого нет — публикация пропускается;
-- `spec-claims.ts` — после прогона: каждая точка входа вызвана тестом
-  capability (журнал `journal` харнесса, `resetJournal` — в начале прогона),
-  id реестра не повторяются, id журнала — из реестра; отчёт JUnit — в
-  `spec-doc`;
-- `spec-break.ts` — проверка поломкой: правка кода, прогон теста, откат
-  всегда (и после обрыва); ✅ упал / ❌ не упал по каждой поломке;
-- `spec-exceptions.ts` — перенос `exceptions.ts` папок решений в каталог
-  `exceptions/`, файл на исключение (раздел «spec-exceptions»);
-- `harness.ts` — библиотека для тестов проекта: механическая проверка
-  регистрирует обычные тесты раннера и попадает в спеку (раздел «Проверки»).
+- `spec-doc.ts` — runner reports and test JSDoc → `docs/spec/` (or a single
+  document to stdout);
+- `spec-diff.ts` — test names on the base branch and in HEAD → three lists for
+  the PR body: removed, changed, added;
+- `spec-publish.ts` — the built `docs/spec` → the `spec` branch (CI after a
+  merge: a run on `main` or the PR run's artifact); `main` has no
+  documentation;
+- `spec-run.ts` — for publishing on a PR merge: the green run that checked
+  exactly the tree of the merge commit; none — publishing is skipped;
+- `spec-claims.ts` — after a run: every entry point is called by a capability
+  test (the harness's `journal`, `resetJournal` at the start of the run),
+  registry ids don't repeat, journal ids come from the registry; the JUnit
+  report goes to `spec-doc`;
+- `spec-break.ts` — check by breaking: edit the code, run the test, always
+  revert (even after an interruption); ✅ failed / ❌ didn't fail for each
+  breakage;
+- `spec-exceptions.ts` — moves the decision folders' `exceptions.ts` into an
+  `exceptions/` directory, one file per exception (section "spec-exceptions");
+- `harness.ts` — a library for the project's tests: a mechanical check
+  registers ordinary runner tests and gets into the spec (section "Checks").
 
-Запуск: `bun <каталог скилла>/scripts/spec-doc.ts …` — Bun запускает TypeScript
-без сборки, зависимостей нет (скрипты используют только `node:`-API и парсер
-TypeScript файлом в скилле — `scripts/vendor/`, и идут и под Node ≥ 22.18). Каталог скилла — тот, где лежит этот
-файл (`${CLAUDE_SKILL_DIR}` у Claude Code, `~/.claude/skills/spec`,
-`~/.agents/skills/spec`, `.agents/skills/spec` проекта или клон ai-dev). Корень репозитория — `git toplevel`
-(или `--root DIR`); дерево — `tests/` в корне. В репозитории, подключённом по
-разделу «Подключение в репозиторий», — его `spec:doc` и `spec:diff`, а не
-скрипты из каталога скилла: там версия, закреплённая за CI.
+Running: `bun <skill dir>/scripts/spec-doc.ts …` — Bun runs TypeScript without
+a build, there are no dependencies (the scripts use only the `node:` API and a
+TypeScript parser kept as a file in the skill — `scripts/vendor/` — and also
+run under Node ≥ 22.18). The skill directory is the one holding this file
+(`${CLAUDE_SKILL_DIR}` in Claude Code, `~/.claude/skills/spec`,
+`~/.agents/skills/spec`, the project's `.agents/skills/spec` or an ai-dev
+clone). The repository root is `git toplevel` (or `--root DIR`); the tree is
+`tests/` at the root. In a repository wired up per the "Wiring into a
+repository" section — its `spec:doc` and `spec:diff`, not the scripts from the
+skill directory: that is the version pinned for CI.
 
-## Когда что
+## What to run when
 
-| Момент | Действие |
+| Moment | Action |
 |---|---|
-| Перед PR | 1. прогон тестов с JSON-отчётом (e2e не прогонять: для названий хватит `playwright test --list --reporter=json > .spec-playwright.json`); 2. `spec-doc --strict` с обоими отчётами — дерево и главные файлы в порядке (`docs/spec` в `.gitignore`, не коммитится); 3. `spec-diff --scenarios <тело задачи>` → раздел «Спека (тесты)» со сверкой сценариев в тело PR |
-| В CI на PR | прогон → `spec-doc --strict` (тесты вне дерева, нет главного файла или `<папка>.md`, шапка у файла теста, `rule.test.ts`, название не по-русски — код 1); `spec-diff` в summary |
-| В CI после мержа | прогон на `main` → `spec-doc` → `spec-publish`; без CI на `main` — `docs/spec` из артефакта прогона PR и `spec-publish --source <SHA мержа>` (`ci.md`). Ветка `spec` = собранный `docs/spec`, скрипт сверяет её после пуша |
-| Прочитать спеку проекта | `git fetch origin spec && git show origin/spec:README.md` (страницы — `capabilities/<name>.md`…) или сами тесты |
-| Просят документацию, «что делает система» | `spec-doc <отчёт> --stdout` — один документ, файлы не трогаются |
-| Спрашивают, какие требования снял PR | `spec-diff` — список «Удалены» идёт первым |
-| Проект переходит на тест-спек | раздел «Подключение в репозиторий»: установка флоу, скрипты под Node, workflow; перенос требований старой спеки — `migration.md` (исходы, категории снятия, «спека отстала от кода») |
-| Соглашение для всех элементов (мутации, маршруты, файлы) | `invariant` в `tests/standards/<name>/<name>.test.ts` — раздел «Проверки» |
-| Доказать, что проверка умеет упасть (перенос старой спеки, ревью «покрыто») | `spec-break` — поломка под проверку, по одной на прогон |
-| После прогона всех тестов и шардов | `spec-claims` — каждая точка входа вызвана тестом capability; его отчёт — в `spec-doc` вместе с отчётами раннеров |
-| Харнесс упал «исключения — файлом на элемент в exceptions/, а не в exceptions.ts»; spec-doc — «исключения названий — файл на название в names.exceptions/» | `spec-exceptions` — раздел «spec-exceptions» |
+| Before a PR | 1. a test run with a JSON report (don't run e2e: for the names `playwright test --list --reporter=json > .spec-playwright.json` is enough); 2. `spec-doc --strict` with both reports — the tree and the main files are in order (`docs/spec` is in `.gitignore`, not committed); 3. `spec-diff --scenarios <task body>` → the `## Спека (тесты)` section ("Spec (tests)") with the scenario check, into the PR body |
+| In CI on a PR | run → `spec-doc --strict` (tests outside the tree, no main file or `<folder>.md`, a header on a test file, `rule.test.ts`, a name that isn't a statement — for now: without Cyrillic, #366 — exit code 1); `spec-diff` into the summary |
+| In CI after a merge | a run on `main` → `spec-doc` → `spec-publish`; without CI on `main` — `docs/spec` from the PR run's artifact and `spec-publish --source <merge SHA>` (`ci.md`). The `spec` branch = the built `docs/spec`, the script verifies it after the push |
+| Read a project's spec | `git fetch origin spec && git show origin/spec:README.md` (pages — `capabilities/<name>.md`…) or the tests themselves |
+| Asked for documentation, "what does the system do" | `spec-doc <report> --stdout` — one document, files aren't touched |
+| Asked which requirements a PR removed | `spec-diff` — the «Удалены» (removed) list comes first |
+| A project moves to a test spec | section "Wiring into a repository": installing the flow, scripts under Node, workflow; migrating the old spec's requirements — `migration.md` (outcomes, removal categories, "the spec fell behind the code") |
+| A convention for all items (mutations, routes, files) | `invariant` in `tests/standards/<name>/<name>.test.ts` — section "Checks" |
+| Prove that a check can fail (migrating an old spec, a "covered" review) | `spec-break` — a breakage aimed at the check, one per run |
+| After running all tests and shards | `spec-claims` — every entry point is called by a capability test; its report goes to `spec-doc` together with the runner reports |
+| The harness failed «исключения — файлом на элемент в exceptions/, а не в exceptions.ts» (exceptions — a file per item); spec-doc says «исключения названий — файл на название в names.exceptions/» (name exceptions — a file per name) | `spec-exceptions` — section "spec-exceptions" |
 
-## Отчёты для spec-doc
+## Reports for spec-doc
 
-Формат определяется по содержимому, несколько отчётов можно передать сразу
-(Vitest + Playwright + bun test), одинаковые тесты сливаются.
+The format is detected from the content; several reports can be passed at
+once (Vitest + Playwright + bun test), identical tests are merged.
 
-| Раннер | Команда |
+| Runner | Command |
 |---|---|
-| Vitest (и Jest — формат тот же) | `vitest run --reporter=default --reporter=json --outputFile.json=.spec-report.json` |
-| `bun test` | `bun test --reporter=junit --reporter-outfile=.spec-report.xml` — JUnit с вложенными `testsuite` по describe |
+| Vitest (and Jest — same format) | `vitest run --reporter=default --reporter=json --outputFile.json=.spec-report.json` |
+| `bun test` | `bun test --reporter=junit --reporter-outfile=.spec-report.xml` — JUnit with nested `testsuite` per describe |
 | Playwright | `PLAYWRIGHT_JSON_OUTPUT_NAME=.spec-playwright.json playwright test --reporter=json` |
-| Playwright без прогона (перед PR) | `playwright test --list --reporter=json > .spec-playwright.json` — дерево и названия без браузеров, тесты — «пропущен»: для `spec-doc --strict` и `spec-diff`, не для публикации |
+| Playwright without a run (before a PR) | `playwright test --list --reporter=json > .spec-playwright.json` — the tree and names without browsers, tests show as skipped: for `spec-doc --strict` and `spec-diff`, not for publishing |
 
-Отчёты — временные файлы, в `.gitignore`. Отчёт из CI с чужими абсолютными
-путями годится: путь приводится по сегменту `/tests/`. Шарды склеивает сам
-раннер (blob-отчёты → один JSON, раздел «Подключение в репозиторий»); отчёты
-шардов по отдельности не передавать — Playwright делит файл между шардами, и
-порядок тестов в файле зависел бы от порядка отчётов.
+Reports are temporary files, in `.gitignore`. A report from CI with someone
+else's absolute paths works: the path is normalized by the `/tests/` segment.
+The runner itself merges shards (blob reports → one JSON, section "Wiring into
+a repository"); don't pass shard reports separately — Playwright splits a file
+between shards, and the order of tests in a file would depend on the order of
+the reports.
 
 ## spec-doc
 
 ```bash
-bun <каталог скилла>/scripts/spec-doc.ts .spec-report.json [ещё отчёты] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
+bun <skill dir>/scripts/spec-doc.ts .spec-report.json [more reports] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
 ```
 
-Что получается в `docs/spec/`:
+What ends up in `docs/spec/` (the generated text is in Russian for now):
 
-- `README.md` — индекс: «Что делает система» (по capability), «Из чего
-  состоит» (страница архитектуры первой строкой, затем по правилу
-  архитектуры; нет ни модели, ни правил — нет раздела), «Каким правилам
-  подчиняется код» (по стандарту); у каждой ссылки — первый абзац `<папка>.md`
-  (описание) и, если есть, число пропущенных и падающих; раздел «Вне дерева» —
-  только если такие тесты есть;
-- `architecture.md` — из модели `tests/architecture/model.ts`: схемы Mermaid
-  C1 (`C4Context`, система и внешние системы), C2 (`C4Container`,
-  контейнеры и связи), C3 (`C4Component`, модули по контейнерам) и таблица
-  модулей, ниже — правила архитектуры; уровень без данных в модели не
-  рисуется, модели нет — нет и страницы. Метка `<!-- spec: c4-context -->`
-  (`c4-container`, `c4-component`, `c4-modules`) отдельной строкой в любом
-  `<папка>.md` заменяется той же схемой или таблицей; метка без модели или
-  неизвестная — предупреждение, `--strict` — код 1. Модель не загружается —
-  код 2;
+- `README.md` — the index: «Что делает система» ("what the system does", per
+  capability), «Из чего состоит» ("what it's made of": the architecture page
+  as the first line, then per architecture rule; neither a model nor rules —
+  no section), «Каким правилам подчиняется код» ("which rules the code obeys",
+  per standard); each link has the first paragraph of `<folder>.md` (the
+  description) and, if any, the number of skipped and failing tests; the
+  «Вне дерева» section ("outside the tree") — only if there are such tests;
+- `architecture.md` — from the model `tests/architecture/model.ts`: Mermaid
+  diagrams C1 (`C4Context`, the system and external systems), C2
+  (`C4Container`, containers and links), C3 (`C4Component`, modules per
+  container) and a table of modules, below them — the architecture rules; a
+  level without data in the model isn't drawn, no model — no page. A marker
+  `<!-- spec: c4-context -->` (`c4-container`, `c4-component`, `c4-modules`)
+  on a line of its own in any `<folder>.md` is replaced with the same diagram
+  or table; a marker without a model or an unknown one — a warning,
+  `--strict` — exit code 1. The model doesn't load — exit code 2;
 - `capabilities/<name>.md`, `architecture/<name>.md`, `standards/<name>.md` —
-  по файлу на папку, рассказ
-  в три слоя: заголовок — имя папки, под ним описание `<папка>.md` (**зачем**);
-  `describe` → раздел с прозой из своего JSDoc (**что умеет**; вложенный —
-  уровнем глубже); тесты раздела — свёрнутый блок
-  `<details><summary>✅ 12 тестов</summary>` (**чем проверено**), в нём строки
-  `- ✅ название`. Пропущенный — `⏭️ … — пропущен: <причина>` (причина из
-  аннотации Playwright; Vitest и `bun test` причину в отчёт не кладут),
-  падающий — `❌ … — падает`, `📝 … — todo`; есть такие — счётчик в строке
-  блока (`❌ 12 тестов, 1 пропущен, 1 падает`), и блок раскрыт. Тест в
-  нескольких проектах Playwright — одна строка. Строки «раздел · путь · N
-  тестов» нет: раздел и путь следуют из конвенции. Названия — текст: `<` вне
-  code span экранируется, иначе GitHub съест `<type>` или `<!-- … -->` как
-  HTML (так же в `spec-diff`);
-- первая строка каждого файла — маркер `<!-- spec-doc: … -->`: по нему скрипт
-  удаляет свои устаревшие файлы (capability исчезла) и не трогает чужие.
+  one file per folder, a story
+  in three layers: the heading is the folder name, under it the `<folder>.md`
+  description (**why**); `describe` → a section with prose from its own JSDoc
+  (**what it can do**; a nested one — a level deeper); the section's tests — a
+  collapsed block `<details><summary>✅ 12 тестов</summary>` (**what checks
+  it**), with lines `- ✅ name` inside. A skipped one —
+  `⏭️ … — пропущен: <reason>` (the reason comes from the Playwright
+  annotation; Vitest and `bun test` don't put the reason into the report), a
+  failing one —
+  `❌ … — падает`, `📝 … — todo`; if there are such, the counter is in the
+  block's line (`❌ 12 тестов, 1 пропущен, 1 падает` — 12 tests, 1 skipped,
+  1 failing), and the block is expanded. A test in several Playwright projects
+  — one line. There is no "section · path · N tests" line: the section and
+  path follow from the convention. Names are text: `<` outside a code span is
+  escaped, otherwise GitHub would eat `<type>` or `<!-- … -->` as HTML (same
+  in `spec-diff`);
+- the first line of every file is the marker `<!-- spec-doc: … -->`: by it the
+  script deletes its own stale files (a capability disappeared) and doesn't
+  touch others'.
 
-`tests/lib` пропускается. Тесты вне `tests/capabilities/<name>`,
-`tests/architecture/<name>` и `tests/standards/<name>` (в `src/`, в
-`tests/unit/`, файлом прямо в `tests/capabilities/`) попадают в «Вне дерева» — это сигнал перенести;
-`--strict` при этом возвращает код 1 (для CI). Порядок детерминирован: папки
-по имени; внутри папки первым главный файл — порядок его `describe` и есть
-порядок рассказа, — в монорепо следом главные файлы пакетов, остальные файлы
-по пути; тесты в порядке объявления.
-Одинаковые `describe` из нескольких файлов папки (юнит и e2e одной
-возможности) сливаются в один раздел.
+`tests/lib` is skipped. Tests outside `tests/capabilities/<name>`,
+`tests/architecture/<name>` and `tests/standards/<name>` (in `src/`, in
+`tests/unit/`, a file directly in `tests/capabilities/`) go to «Вне дерева» —
+that's a signal to move them; `--strict` then returns exit code 1 (for CI).
+The order is deterministic: folders by name; inside a folder the main file
+first — the order of its `describe` is the order of the story, — in a monorepo
+the packages' main files next, the remaining files by path; tests in
+declaration order.
+Identical `describe` from several files of a folder (unit and e2e of one
+capability) merge into one section.
 
-**Главный файл папки** — `tests/<вид>/<name>/<name>.*` (`<name>.test.ts`,
-`<name>.e2e.ts`…) у capability, правила архитектуры и стандарта, в монорепо
-— и `tests/<вид>/<name>/<пакет>/<name>.*` (подпапка пакета, глубже — нет):
-его `describe` идут первыми — главный файл корня папки, затем главные файлы
-пакетов по имени пакета, затем остальные файлы по пути; нет главного файла
-ни в корне, ни в подпапках — stderr, `--strict` — код 1. Рядом
-`<name>.test.*` и `<name>.e2e.ts` — главный `.test.*`: страницу открывают
-утверждения юнитов, e2e идёт следом, до остальных файлов папки. **Названия**
-`describe` и `it` — утверждения по-русски: без русских слов (идентификатор,
-имя функции или файла, английская фраза) — stderr с названием и файлом,
-`--strict` — код 1; код в обратных кавычках внутри утверждения — можно.
-Старые названия на существующей спеке — исключениями, файл на название в
-каталоге `names.exceptions/` папки решения их теста
-(`<название>.json`: `{ file, name, issue, reason }`): параллельные PR снимают
-каждый свой файл и не конфликтуют. Файл каталога — не такое исключение (не
-JSON, нет полей) и каталог в подпапке папки решения — код 2 с путём. `--strict` исключения пропускает; ненужное
-(уже утверждение или теста нет — «удали <файл>») и лежащее не в папке своего
-теста — код 1; долг — раздел оглавления «Названия — не утверждения
-(исключения)». Все текущие нарушения одной задачей на переписывание —
-`spec-doc … --names-baseline <N>`: файл на новое название в папку его теста,
-файлы ненужных удаляет (опустевший каталог — тоже). Прежний массив
-(`names.exceptions.ts` папки, общий `tests/standards/spec-names/exceptions.ts`,
-флаг `--names-exceptions`) не читается: stderr с подсказкой `spec-exceptions`,
-`--strict` — код 1, `--names-baseline` и флаг — код 2.
-**Описание** — `tests/<вид>/<name>/<name>.md`: нет —
-`spec-doc` называет файл в stderr, `--strict` — код 1. JSDoc-шапка у файла
-теста в документацию не идёт — в stderr с подсказкой перенести в md,
-`--strict` — код 1. Прежний главный файл стандарта `rule.*` — тоже в stderr с
-подсказкой переименовать в `<name>.*`, `--strict` — код 1.
+**The main file of a folder** — `tests/<kind>/<name>/<name>.*`
+(`<name>.test.ts`, `<name>.e2e.ts`…) for a capability, an architecture rule
+and a standard, in a monorepo also `tests/<kind>/<name>/<package>/<name>.*`
+(a package subfolder, no deeper): its `describe` go first — the main file of
+the folder root, then the packages' main files by package name, then the
+remaining files by path; no main file either at the root or in subfolders —
+stderr, `--strict` — exit code 1. With both `<name>.test.*` and
+`<name>.e2e.ts` side by side, the main one is `.test.*`: the page opens with
+the unit statements, e2e follows, before the folder's other files. **Names**
+of `describe` and `it` are statements in the project language (`language` in
+`.agents/ai-dev.json`); for now `spec-doc --strict` recognizes a statement by
+Cyrillic letters (`isStatement`), English is #366: a name without Russian
+words (an identifier, a function or file name, an English phrase) — stderr
+with the name and file, `--strict` — exit code 1; code in backticks inside a
+statement is fine.
+Old names on an existing spec — as exceptions, one file per name in the
+`names.exceptions/` directory of their test's decision folder
+(`<test name>.json`: `{ file, name, issue, reason }`): parallel PRs each
+remove their own file and don't conflict. A file in the directory that isn't
+such an exception (not JSON, missing fields) and the directory in a subfolder
+of the decision folder — exit code 2 with the path. `--strict` skips
+exceptions; an unneeded one (already a statement or the test is gone —
+`удали <file>` — delete the file) and one lying outside its test's folder —
+exit code 1; the debt — the table-of-contents section «Названия — не
+утверждения (исключения)» ("names that aren't statements (exceptions)"). All
+current violations as one rewrite task — `spec-doc … --names-baseline <N>`: a
+file per new name into its test's folder, deletes the files of unneeded ones
+(an emptied directory too). The former array (the folder's
+`names.exceptions.ts`, the shared `tests/standards/spec-names/exceptions.ts`,
+the `--names-exceptions` flag) isn't read: stderr with a hint to run
+`spec-exceptions`, `--strict` — exit code 1, `--names-baseline` and the flag —
+exit code 2.
+**Description** — `tests/<kind>/<name>/<name>.md`: missing — `spec-doc` names
+the file in stderr, `--strict` — exit code 1. A JSDoc header on a test file
+doesn't go into the documentation — into stderr with a hint to move it to md,
+`--strict` — exit code 1. A standard's former main file `rule.*` — also into
+stderr with a hint to rename it to `<name>.*`, `--strict` — exit code 1.
 
-### Проза — `<папка>.md` и JSDoc
+### Prose — `<folder>.md` and JSDoc
 
-Страница capability — рассказ (правило «Спецификация — решения»,
-`canon.md`): зачем она, что умеет, чем проверено. Названия дают только
-«что умеет» и «чем проверено»; «зачем», причина и отвергнутое — описание
-`<папка>.md` рядом с тестами, то, чего не видно из названия, — JSDoc
-`/** … */` у `describe` и `it` (отчёты раннеров комментариев не несут —
-`spec-doc` читает исходники тем же сканером, что `spec-diff`):
+A capability page is a story (the "Specification — decisions" rule,
+`canon.md`): why it exists, what it can do, what checks it. Names give only
+"what it can do" and "what checks it"; "why", the reason and the rejected
+options are the `<folder>.md` description next to the tests, and what isn't
+visible from the name is JSDoc `/** … */` on `describe` and `it` (runner
+reports carry no comments — `spec-doc` reads the sources with the same scanner
+as `spec-diff`):
 
-| Где проза | Куда в `docs/spec` |
+| Where the prose is | Where it goes in `docs/spec` |
 |---|---|
-| `<папка>.md` | вступление под заголовком папки (заголовки md — под ним); первый абзац — описание в индексе |
-| JSDoc вплотную перед `describe` | абзац под его заголовком |
-| JSDoc вплотную перед `it` / `test` | цитата `>` под строкой теста |
+| `<folder>.md` | the intro under the folder heading (md headings go under it); the first paragraph is the description in the index |
+| JSDoc right before `describe` | a paragraph under its heading |
+| JSDoc right before `it` / `test` | a `>` quote under the test line |
 
 ```md
 <!-- tests/capabilities/billing/billing.md -->
-Биллинг: клиент получает счёт за месяц и оплачивает его картой или переводом.
+Billing: a customer receives a monthly invoice and pays it by card or bank transfer.
 
-Бухгалтер не выставляет счета руками: они приходят сами в первый день
-месяца, ручной счёт — исключение для разовых услуг.
+The accountant doesn't issue invoices by hand: they arrive by themselves on the
+first day of the month; a manual invoice is an exception for one-off services.
 ```
 
 ```ts
-// tests/capabilities/billing/billing.test.ts — главный файл папки billing
+// tests/capabilities/billing/billing.test.ts — the main file of the billing folder
 import { describe, it } from "vitest";
 
-/** Неполный месяц считается пропорционально дням. */
-describe("Счёт выставляется сам в первый день месяца", () => { … });
-describe("Оплаченный счёт закрывается без участия бухгалтера", () => { … });
+/** A partial month is charged in proportion to its days. */
+describe("An invoice is issued by itself on the first day of the month", () => { … });
+describe("A paid invoice is closed without the accountant", () => { … });
 ```
 
-- `<папка>.md` — для кого capability и какую задачу решает, причина решения и
-  отвергнутые альтернативы; первый абзац — описание в оглавлении. Схемы
-  поведения и структуры — только генерируемые, руками не рисуются.
-- `describe` верхнего уровня — возможность утверждением на языке пользователя,
-  а не имя функции, компонента или файла: по одним заголовкам понятно, что
-  capability умеет. Главное — первым в главном файле.
-- Проза перед `describe` и `it` — там, где имени мало: одна-три фразы, не
-  пересказ теста. Непонятное имя `it` — переписать, а не объяснять.
-- `//` и `/* … */` в документацию не идут: имена файлов, номера issue и
-  устройство теста — для читателя кода. Блочные теги (`@see`, `@param`) и всё
-  после первого из них — тоже.
-- JSDoc относится к ближайшему коду: между ним и `describe`/`it` — только
-  пробелы и комментарии. Первый JSDoc файла, за которым идёт не вызов
-  (импорты), — шапка файла; в файле без импортов JSDoc вплотную к первому
-  `describe` — проза этого `describe`.
-- Шапка файла теста в документацию не идёт (раздел «spec-doc» выше): её
-  текст — в `<папка>.md` или в `//`.
-- Исходник читается по пути из отчёта от корня (`--root`); нет файла (отчёт с
-  другой машины) — документация без прозы, в stderr список таких файлов.
+- `<folder>.md` — who the capability is for and which problem it solves, the
+  reason for the decision and the rejected alternatives; the first paragraph
+  is the description in the table of contents. Diagrams of behavior and
+  structure — only generated ones, never drawn by hand.
+- A top-level `describe` is a capability as a statement in the user's terms,
+  not the name of a function, component or file: the headings alone show what
+  the capability can do. The most important goes first in the main file.
+- Prose before `describe` and `it` — where the name isn't enough: one to three
+  sentences, not a retelling of the test. An unclear `it` name — rewrite it,
+  don't explain it.
+- `//` and `/* … */` don't go into the documentation: file names, issue
+  numbers and the test's internals are for the code reader. Block tags
+  (`@see`, `@param`) and everything after the first of them — neither.
+- A JSDoc belongs to the nearest code: between it and `describe`/`it` — only
+  whitespace and comments. The file's first JSDoc followed by something other
+  than a call (imports) is the file header; in a file without imports a JSDoc
+  right before the first `describe` is that `describe`'s prose.
+- A test file's header doesn't go into the documentation (section "spec-doc"
+  above): its text belongs in `<folder>.md` or in `//`.
+- The source is read by the path from the report, from the root (`--root`); no
+  file (a report from another machine) — documentation without prose, the list
+  of such files in stderr.
 
 ## spec-diff
 
 ```bash
-bun <каталог скилла>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -] [--report отчёт … [--spec-branch origin/spec]] [--limit 100 | --full]
+bun <skill dir>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -] [--report report … [--spec-branch origin/spec]] [--limit 100 | --full]
 ```
 
-Решения вне названий тестов — отдельными разделами, только если менялись:
-«Модель архитектуры — снято / добавлено» (модули, зависимости, пакеты из
-`tests/architecture/model.ts`), «Исключения» (файлы `exceptions/` и `names.exceptions/` папок решений — не
-в подпапке и `.json`, как их читают харнесс и spec-doc, — пункты
-прежних `exceptions.ts` и `names.exceptions.ts` — элемент и `rule` харнесса
-или файл и название теста — и
-отключения линта `eslint-disable … -- #N` в изменённых файлах, кроме копии
-флоу `.agents/` и `.claude/`; каждый пункт
-— своя строка, одинаковые не схлопываются), «Проверки
-харнесса» (реестры `invariant` и правила `examples` — опции `registry` /
-`rule` объекта в аргументах вызова по разбору исходника, со строкой,
-известной без прогона; запуски `deadCode` — «код без потребителя», с `rule`
-или `production: true` — в скобках; `architecture` — «модель архитектуры»;
-их тесты появляются только при прогоне). Модель и
-исключения читаются импортом файла данных ревизии: модуль с импортами за его
-пределы не читается, его решения не показываются.
+Decisions outside test names — as separate sections, only if they changed:
+«Модель архитектуры — снято / добавлено» ("architecture model — removed /
+added": modules, dependencies, packages from `tests/architecture/model.ts`),
+«Исключения» ("exceptions": the files of the decision folders' `exceptions/`
+and `names.exceptions/` — not in a subfolder and `.json`, as the harness and
+spec-doc read them, — entries of the former `exceptions.ts` and
+`names.exceptions.ts` — the item and the harness `rule` or the file and the
+test name — and lint disables `eslint-disable … -- #N` in changed files,
+except the flow copy `.agents/` and `.claude/`; each entry
+is its own line, identical ones aren't collapsed), «Проверки
+харнесса» ("harness checks": `invariant` registries and `examples` rules — the
+`registry` / `rule` options of the object in the call's arguments, by parsing
+the source, with a string known without a run; `deadCode` runs — «код без
+потребителя» ("code without a consumer"), with `rule` or `production: true` in
+parentheses; `architecture` — «модель архитектуры» ("architecture model");
+their tests appear only in a run). The model and
+exceptions are read by importing the revision's data file: a module with
+imports outside its own boundaries isn't read, its decisions aren't shown.
 
-`--scenarios` — тело задачи (`gh issue view N --json body --jq .body | … --scenarios -`):
-раздел «## Сценарии» сверяется с добавленными и изменёнными тестами —
-«### Сценарии задачи»; каждое название — одной строкой, один раз. Сценарий,
-ставший тестом, назван так же, как тест: пока тесты в списках выше — он
-только в счёте «Стали тестами», тест сверх сценариев — пометкой «сверх
-сценариев» в списке; в сводке по папкам (списков нет) — ✅ и строка теста.
-❌ — сценарий без теста, своим текстом. Тесты с названием сценария в
-нескольких папках (сервер и интерфейс) — все тесты этого сценария; в
-`--json` у сценария — `tests`. Совпадение — с названием `it` или
-цепочкой «describe › it», без учёта регистра, внешних кавычек (`«…»`, `"…"`,
-`` `…` ``) и знака в конце (`.`, `;`, `,` — до и после кавычек). Теста нет —
-с названием или цепочкой `describe`, в котором вызван `invariant`,
-`examples`, `deadCode` или `architecture` (сценарий стандарта «реестр +
-инвариант»): по исходникам, без отчёта и ветки `spec`; только describe, где
-проверка новая (describe новый, переименован, сменился реестр, правило или
-`rule` запуска `deadCode`), — строка называет реестр, правило, «код без
-потребителя» или «модель архитектуры». Вызова в исходниках нет (отчёт
-`spec-claims` пишет скрипт после прогона) — describe новых тестов из отчёта
-(`--report`), строка «по отчёту». Тесты из отчёта, которые эта проверка породила, — тесты её
-сценария, не сверх сценариев. Нет раздела — сверка так и говорит.
+`--scenarios` — the task body (`gh issue view N --json body --jq .body | … --scenarios -`):
+the `## Сценарии` section (scenarios; the script reads only the `ru` name so
+far) is checked against the added and changed tests — «### Сценарии задачи»
+("task scenarios"); each name on one line, once. A scenario that became a test
+is named the same as the test: while the tests are in the lists above, it is
+only in the «Стали тестами» ("became tests") count, and a test beyond the
+scenarios gets the «сверх сценариев» ("beyond scenarios") mark in the list; in
+the per-folder summary (no lists) — ✅ and the test's line.
+❌ — a scenario without a test, in its own wording. Tests with the scenario's
+name in several folders (server and UI) — all tests of this scenario; in
+`--json` the scenario has `tests`. A match — with the `it` name or the chain
+"describe › it", case-insensitive, ignoring outer quotes (`«…»`, `"…"`,
+`` `…` ``) and a trailing mark (`.`, `;`, `,` — before and after the quotes).
+No test — with the name or chain of a `describe` in which `invariant`,
+`examples`, `deadCode` or `architecture` is called (a scenario of a "registry
++ invariant" standard): from the sources, without a report or the `spec`
+branch; only a describe where the check is new (the describe is new, renamed,
+or the registry, the rule or the `rule` of a `deadCode` run changed), — the
+line names the registry, the rule, «код без потребителя» or «модель
+архитектуры». No call in the sources (the `spec-claims` report is written by a
+script after the run) — the describes of new tests from the report
+(`--report`), the line says «по отчёту» ("from the report"). Tests from the
+report that this check generated are tests of its scenario, not beyond the
+scenarios. No section — the check says so.
 
-Сравнивает названия тестов **статически** — разбирает файлы `tests/` на двух
-ревизиях через `git show`, прогонять тесты и переключать ветки не нужно.
-База — merge-base базовой ветки и HEAD, как дифф PR на GitHub (тест,
-добавленный в `main` после ветвления, не считается удалённым);
-`--no-merge-base` — сравнение с веткой как есть. `--worktree` — рабочее дерево
-вместо HEAD, чтобы посмотреть до коммита. Перед запуском — `git fetch origin`,
-иначе `origin/main` устарел.
+Compares test names **statically** — parses the `tests/` files at two
+revisions via `git show`, no need to run tests or switch branches.
+The base is the merge-base of the base branch and HEAD, like a PR diff on
+GitHub (a test added to `main` after branching isn't counted as removed);
+`--no-merge-base` — comparison with the branch as is. `--worktree` — the
+working tree instead of HEAD, to look before a commit. Before running —
+`git fetch origin`, otherwise `origin/main` is stale.
 
-Тестов, которые порождает харнесс (по элементу реестра, «не пуст»,
-нарушитель, исключения, примеры), в исходниках нет — их видит только отчёт.
-`--report <отчёт>` (повторяется) добавляет их к разобранным: голова — из
-отчёта прогона PR, база — `tests.json` ветки `spec` (его пишет `spec-doc`,
-публикует `spec-publish`) из коммита, чей `Source:` — merge-base или его
-предок (`--spec-branch`, по умолчанию `origin/spec`). Такого коммита нет —
-дифф по исходникам, и строка под «База» это говорит. `Source:` старше базы
-диффа (публикацию на мерж PR пропустили, `spec-run`) — строка называет оба
-коммита: в списках возможны тесты PR, влитых между ними. Мерж, не менявший
-спеку, разрыва не даёт: `spec-publish` подтверждает публикацию новым
-`Source:`.
+Tests that the harness generates (per registry item, «не пуст» ("not empty"),
+violator, exceptions, examples) aren't in the sources — only the report sees
+them. `--report <report>` (repeatable) adds them to the parsed ones: the head
+— from the PR run's report, the base — `tests.json` of the `spec` branch
+(written by `spec-doc`, published by `spec-publish`) from the commit whose
+`Source:` is the merge-base or its ancestor (`--spec-branch`, default
+`origin/spec`). No such commit — a diff by sources, and the line under «База»
+("base") says so. `Source:` older than the diff base (publishing on a PR merge
+was skipped, `spec-run`) — the line names both commits: the lists may contain
+tests of PRs merged between them. A merge that didn't change the spec doesn't
+create a gap: `spec-publish` confirms the publication with a new `Source:`.
 
-Идентичность теста — путь папки + цепочка `describe` + `it`: перенос между
-файлами одной папки не изменение, перенос в другую папку — удалён и добавлен
-(требование сменило дом). Вывод — готовый раздел для тела PR:
+A test's identity is the folder path + the `describe` chain + `it`: a move
+between files of one folder isn't a change, a move to another folder is
+removed and added (the requirement changed home). The output is a ready
+section for the PR body:
 
 ```markdown
 ## Спека (тесты)
@@ -283,47 +314,53 @@ _База: `origin/main (merge-base)`._
 
 **Удалены (1):**
 
-- `tests/capabilities/billing` · Счета › черновик удаляется без счёта
+- `tests/capabilities/billing` · Invoices › a draft is deleted without an invoice
 
 **Изменены (1):**
 
-- `tests/capabilities/billing` · Счета › ~~выставляется счёт~~ → выставляется счёт за месяц
+- `tests/capabilities/billing` · Invoices › ~~an invoice is issued~~ → a monthly invoice is issued
 
 **Добавлены (1):**
 
-- `tests/capabilities/billing` · Счета › счёт за неполный месяц пропорционален дням
+- `tests/capabilities/billing` · Invoices › an invoice for a partial month is proportional to its days
 
 **Вне дерева `tests/`** изменены файлы тестов: `src/utils/sum.test.ts`.
 ```
 
-Удалённые — первыми: удалённый тест — снятое требование, это должно быть видно.
-«Изменены» — переименования: тест с тем же телом в том же файле, даже если
-сменились и `describe`, и имя (перевод названий в утверждения; тело
-единственное в файле среди снятых и новых, пустое — не признак; сравнивается
-без пробелов и завершающих запятых — перенос вызова prettier тела не меняет), тест с
-похожим именем в том же файле и том же `describe` (похожесть ≥ 0,6) или тест
-с тем же именем под другим `describe` той же папки, в том числе из другого
-файла (так выглядит перекладка юнитов и e2e в раздел-возможность главного
-файла); непохожее имя с другим телом — честно удалён и добавлен. Пустой список печатается как
-«нет», чтобы было видно, что проверка была. Тесты внутри `tests/`, но вне
-capabilities/standards помечены `⚠️ вне дерева`; изменённые файлы тестов вне
-`tests/` перечислены по именам. Копия флоу (`.agents/`, `.claude/` от корня)
-— не код проекта: её ставит `install`, линтеры проекта её не видят — ни её
-тестов, ни отключений линта в диффе спеки нет. `--json` — то же машинно.
+The removed come first: a removed test is a removed requirement, it must be
+visible. «Изменены» ("changed") are renames: a test with the same body in the
+same file, even if both the `describe` and the name changed (translating names
+into statements; the body is the only one in the file among the removed and
+new ones, an empty one isn't a sign; compared without whitespace and trailing
+commas — prettier re-wrapping a call doesn't change the body), a test with a
+similar name in the same file and the same `describe` (similarity ≥ 0.6) or a
+test with the same name under another `describe` of the same folder,
+including from another file (that's what moving unit and e2e tests into the
+main file's capability section looks like); a dissimilar name with a
+different body is honestly removed and added. An empty list prints as «нет»
+("none"), so it's visible that the check ran. Tests inside `tests/` but
+outside capabilities/standards are marked `⚠️ вне дерева` ("outside the
+tree"); changed test files outside `tests/` are listed by name. The flow copy
+(`.agents/`, `.claude/` from the root) is not project code: `install` puts it
+there, the project's linters don't see it — neither its tests nor its lint
+disables are in the spec diff. `--json` — the same, machine-readable.
 
-**Большой PR.** Тестов в списках (удалены, изменены, добавлены) больше порога
-`--limit` (по умолчанию 100) — вместо списков сводка по папкам: таблица
-«Удалены | Изменены | Добавлены», с `--report` — и «Из них харнесса».
-Удалённые над таблицей — списком (снятое требование видно поимённо), пока их
-самих не больше порога; разделы
-решений и «Тесты сверх сценариев» выше порога — число на папку или файл.
-Полный список — `--full`; CI пишет его в summary джоба, в тело PR идёт сводка.
+**A big PR.** More tests in the lists (removed, changed, added) than the
+`--limit` threshold (default 100) — a per-folder summary instead of the lists:
+a table «Удалены | Изменены | Добавлены», with `--report` also «Из них
+харнесса» ("of them, from the harness"). The removed ones go above the table
+as a list (a removed requirement is visible by name) as long as there are no
+more of them than the threshold; the decision
+sections and «Тесты сверх сценариев» ("tests beyond scenarios") above the
+threshold — a number per folder or file. The full list — `--full`; CI writes
+it to the job summary, the summary goes to the PR body.
 
-**Перенос в дерево** (проект переходит на тест-спек): тест, который на базе
-был в файле вне `tests/`, там исчез и появился в дереве с той же цепочкой
-`describe` и именем, — не «добавлен», а перенесён. Такие тесты идут одним
-разделом — сводкой по папкам, без построчного списка (PR с тысячами
-перенесённых тестов иначе не влез бы в тело PR):
+**A move into the tree** (a project moves to a test spec): a test that on the
+base was in a file outside `tests/`, disappeared there and appeared in the
+tree with the same `describe` chain and name is not "added" but moved. Such
+tests go in one section, «Перенесены в дерево» ("moved into the tree"), — a
+per-folder summary without a line-by-line list (otherwise a PR with thousands
+of moved tests wouldn't fit into the PR body):
 
 ```markdown
 **Перенесены в дерево (3):** названия те же, что вне `tests/` на базе; из 2 файлов.
@@ -332,232 +369,251 @@ capabilities/standards помечены `⚠️ вне дерева`; измен
 - `tests/capabilities/math` — 2 теста из 1 файла
 ```
 
-Файл, перенесённый целиком (удалён, все тесты нашли пару), в список «вне
-дерева» не попадает; остался или часть тестов без пары — по имени: при
-переносе что-то переименовано или потеряно. Переименованный при переносе
-тест — «добавлен», тест, оставшийся и вне дерева, — копия, тоже «добавлен».
-В `--json` — `moved` с исходным (`from`) и новым путём каждого теста.
+A file moved entirely (deleted, all its tests found a pair) doesn't go into
+the "outside the tree" list; one that stayed or has some tests without a pair
+— by name: something was renamed or lost in the move. A test renamed during
+the move is "added", a test that also stayed outside the tree is a copy, also
+"added". In `--json` — `moved` with the original (`from`) and the new path of
+each test.
 
-Раздел вставляется в тело PR целиком (после `Closes #N`); при новых коммитах
-с тестами — перегенерировать и заменить.
+The section is inserted into the PR body as a whole (after `Closes #N`); on
+new commits with tests — regenerate it and replace it.
 
 ## spec-publish
 
 ```bash
-bun <каталог скилла>/scripts/spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check]
+bun <skill dir>/scripts/spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check]
 ```
 
-Корень ветки `spec` — содержимое `docs/spec`; в сообщении коммита — `Source:
-<SHA>`, из которого собрано (по умолчанию `HEAD`; публикация на мерж PR без
-CI на `main` — SHA мержа, `ci.md`: его предков ищет `spec-diff`). Рабочая
-копия и `HEAD` не трогаются: дерево собирается во временном индексе, коммит — поверх
-опубликованного, история публикаций сохраняется. Тот же исходник — без
-нового коммита («без изменений»); то же содержимое из нового исходника —
-коммит с тем же деревом и новым `Source:` («без изменений — … подтверждена
-для …»): ветка называет последний проверенный `main`, и разрыв с базой диффа
-в `spec-diff` — только пропущенная публикация. `Source:` опубликованного —
-потомок нового исходника — «уже новее», код 0, ветка не трогается: публикации
-приходят не по порядку мержей (прогоны `main` параллельны, `ci.md`); сравнить
-можно только при истории (в мелком клоне прежний исходник неизвестен —
-публикует), checkout в CI — с ней. Отклонённый пуш (ветку между `fetch` и
-`push` сдвинула другая публикация, сбой хостинга) — не падение: в логе причина
-из stderr `git push`, пауза `--interval` × номер попытки (5 с, 10 с…), ветка
-перечитывается, и решение принимается заново — собранная из потомка даёт «уже
-новее», иначе коммит поверх новой головы; до `--attempts` попыток. После пуша ветка
-читается с remote и сверяется с каталогом: опубликовано ровно собранное, а не
-«пуш прошёл». `--check` — только сверка (код 1, если ветка отстала или её нет).
-Коды: 0 — опубликовано, совпадает или уже новее, 1 — расхождение или пуш
-отклонён на всех попытках, 2 — нет каталога или не git. Без настроенного `git user` коммит —
-от бота GitHub Actions.
+The root of the `spec` branch is the contents of `docs/spec`; the commit
+message has `Source: <SHA>` it was built from (default `HEAD`; publishing on a
+PR merge without CI on `main` — the merge SHA, `ci.md`: `spec-diff` searches
+its ancestors). The working copy and `HEAD` aren't touched: the tree is
+assembled in a temporary index, the commit goes on top of the published one,
+the publication history is kept. The same source — no new commit («без
+изменений», "no changes"); the same content from a new source — a commit with
+the same tree and a new `Source:` («без изменений — … подтверждена для …»,
+"no changes — … confirmed for …"): the branch names the last checked `main`,
+and a gap with the diff base in `spec-diff` is only a skipped publication. The
+published `Source:` is a descendant of the new source — «уже новее» ("already
+newer"), exit code 0, the branch isn't touched: publications arrive out of
+merge order (`main` runs are parallel, `ci.md`); comparing is possible only
+with history (in a shallow clone the previous source is unknown — it
+publishes), the checkout in CI has it. A rejected push (another publication
+moved the branch between `fetch` and `push`, a hosting failure) is not a
+failure: the log gets the reason from `git push` stderr, a pause of
+`--interval` × the attempt number (5 s, 10 s…), the branch is re-read, and the
+decision is made again — built from a descendant gives «уже новее», otherwise
+a commit on top of the new head; up to `--attempts` attempts. After the push
+the branch is read from the remote and compared with the directory: exactly
+what was built is published, not "the push went through". `--check` —
+comparison only (exit code 1 if the branch is behind or missing).
+Exit codes: 0 — published, matches or already newer, 1 — mismatch or the push
+rejected on all attempts, 2 — no directory or not git. Without a configured
+`git user` the commit is from the GitHub Actions bot.
 
 ## spec-run
 
 ```bash
-bun <каталог скилла>/scripts/spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
+bun <skill dir>/scripts/spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
 ```
 
-Публикация на мерж PR без CI на `main` (`ci.md`): id зелёного прогона,
-проверившего дерево коммита мержа (`git rev-parse 'HEAD^{tree}'`), — в
-stdout, для `gh run download`. Прогон PR называет артефакт по дереву,
-которое проверил (merge-ref): `docs-spec-<hash>`. Скрипт берёт не истёкшие
-артефакты с этим именем от прогонов этого репозитория (не форка) и
-спрашивает исход каждого прогона: артефакт выкладывается посреди прогона и
-зелёного исхода не доказывает. Есть прогон с `success` — он; есть идущий —
-опрос до исхода (в лог — только смена состояния), к потолку не завершился —
-код 1. Иначе — артефакта нет (влит отставший PR: такого `main` не проверял
-ни один прогон), истёк, из форка, прогон не зелёный — код 0, stdout пуст, в
-stderr «дерево main … не проверено целиком — публикация пропущена» с
-причиной: ветка `spec` отстаёт до следующего мержа с совпавшим деревом, но
-не откатывается. Коды: 0 — найден или публикация пропущена, 1 — прогон не
-завершился к потолку, 2 — ошибка вызова или `gh`.
+Publishing on a PR merge without CI on `main` (`ci.md`): the id of the green
+run that checked the merge commit's tree (`git rev-parse 'HEAD^{tree}'`) — to
+stdout, for `gh run download`. A PR run names its artifact after the tree it
+checked (merge-ref): `docs-spec-<hash>`. The script takes the unexpired
+artifacts with this name from runs of this repository (not a fork) and asks
+for the outcome of each run: an artifact is uploaded mid-run and doesn't
+prove a green outcome. There is a run with `success` — that one; there is one
+in progress — polling until the outcome (only state changes go to the log),
+not finished by the ceiling — exit code 1. Otherwise — no artifact (a PR that
+fell behind was merged: no run checked such a `main`), expired, from a fork,
+the run isn't green — exit code 0, stdout empty, in stderr «дерево main … не
+проверено целиком — публикация пропущена» ("main tree … not fully checked —
+publishing skipped") with the reason: the `spec` branch lags until the next
+merge with a matching tree, but isn't rolled back. Exit codes: 0 — found or
+publishing skipped, 1 — the run didn't finish by the ceiling, 2 — a call
+error or `gh`.
 
 ## spec-break
 
 ```bash
-bun <каталог скилла>/scripts/spec-break.ts --file <файл> --find <фрагмент> --replace <замена> [--name <название>] [--no-baseline] -- <команда теста…>
-bun <каталог скилла>/scripts/spec-break.ts --plan breaks.json [--no-baseline] [-- <команда теста…>]
-bun <каталог скилла>/scripts/spec-break.ts --restore
+bun <skill dir>/scripts/spec-break.ts --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>
+bun <skill dir>/scripts/spec-break.ts --plan breaks.json [--no-baseline] [-- <test command…>]
+bun <skill dir>/scripts/spec-break.ts --restore
 ```
 
-Проверка решения обязана уметь упасть: поломка — правка кода, от которой
-она должна покраснеть. Поломку выбирает агент под одну проверку (не
-мутационное тестирование): фрагмент `--find` встречается в файле ровно один
-раз, иначе код 2 до прогона. План — JSON `[{ name, file, find, replace, cmd? }]`
-(`cmd` — строка для `sh -c`, без неё — команда после `--`); каждая поломка —
-отдельный прогон: первый красный тест в serial-группе прячет остальные.
-Перед поломками — базовый прогон каждой команды: красный и без поломки — код
-2, поломки не применяются (`--no-baseline` — пропустить).
+A decision's check must be able to fail: a breakage is a code edit that
+should turn it red. The agent picks the breakage for one check (this is not
+mutation testing): the `--find` fragment occurs in the file exactly once,
+otherwise exit code 2 before the run. A plan is JSON
+`[{ name, file, find, replace, cmd? }]` (`cmd` — a string for `sh -c`,
+without it — the command after `--`); each breakage is a separate run: the
+first red test in a serial group hides the rest.
+Before the breakages — a baseline run of each command: red even without a
+breakage — exit code 2, breakages aren't applied (`--no-baseline` — skip it).
 
-Вывод — `✅ упал: <название> (<файл>)` / `❌ не упал: …` и итог; коды: 0 —
-упали от всех, 1 — есть ❌, 2 — ошибка. Откат — всегда: после прогона; по
-SIGINT/SIGTERM/SIGHUP (команда теста убивается со всеми процессами); после
-обрыва без отката (kill -9, закрытая сессия) — по журналу
-`.git/spec-break.json`, который пишется до правки: следующий запуск или
-`--restore` возвращает файл; файл правили после обрыва — журнал не
-применяется, код 2 — сверить руками.
+Output — `✅ упал: <name> (<file>)` ("failed") / `❌ не упал: …` ("didn't
+fail") and a total; exit codes: 0 — every breakage made it fail, 1 — there is
+a ❌, 2 — an error. Revert — always: after the run; on SIGINT/SIGTERM/SIGHUP
+(the test command is killed with all its processes); after an interruption
+without a revert (kill -9, a closed session) — from the journal
+`.git/spec-break.json`, written before the edit: the next run or `--restore`
+restores the file; the file was edited after the interruption — the journal
+isn't applied, exit code 2 — compare by hand.
 
 ## spec-exceptions
 
 ```bash
-bun <каталог скилла>/scripts/spec-exceptions.ts [--root DIR]
+bun <skill dir>/scripts/spec-exceptions.ts [--root DIR]
 ```
 
-Исключения решения — каталог `exceptions/` папки, файл на исключение
-(`<элемент>.json`: `{ item, rule?, issue, reason }`), а не массив в
-`exceptions.ts`: подзадачи разбора долга параллельно удаляют каждая свой файл
-и не конфликтуют (в массиве каждая следующая получала конфликт соседних строк
-и повторный прогон CI). Команда переносит каждый `exceptions.ts` (`.mts`,
-`.js`, `.mjs`, `.json`) папки решения `tests/<вид>/<имя>` или её подпапки в
-каталог `exceptions/` папки решения (его читает `exceptionsIn()` теста любой
-подпапки): файл на исключение (имя — элемент латиницей, `rule--` впереди),
-старый файл удаляется; импорт в файлах папки и подпапок
-(`import exceptions from "./exceptions.ts"`) — на
-`const exceptions = exceptionsIn()` с импортом из харнесса; путь к старому
-файлу в `package.json` и `.github/workflows/*.yml` (`spec-claims
---exceptions`) — на каталог. Исключения названий spec-doc
-(`{ file, name, issue, reason }`) — `names.exceptions.ts` папки, общий
-`tests/standards/spec-names/exceptions.ts` и файл флага `--names-exceptions`
-из `package.json` и workflow — раскладываются файлом на название в
-`names.exceptions/` папки решения своего теста (тест вне дерева — к папке
-решения прежнего файла: spec-doc назовёт исключение ненужным), флаг
-убирается. Какой файл чей — одно правило `exceptionFile` (`speclib.ts`) на
-харнесс, spec-doc, spec-diff и spec-exceptions (стандарт ai-dev
-`exception-files`); файлы вне папок решений команда не трогает. Вывод
-— строки `-` (перенесён файл), `+` (новый файл), `~` (переписан импорт или
-путь, убран флаг), `!` (поправить руками: ссылка из другой папки, нет
-импорта харнесса). Коды: 0 — перенесено или
-переносить нечего, 1 — есть `!`, 2 — файл исключений не загружается или не
-массив `{ item, … }` (`{ file, name, … }` у названий). Повторный запуск
-ничего не меняет.
+A decision's exceptions are the folder's `exceptions/` directory, one file per
+exception (`<item>.json`: `{ item, rule?, issue, reason }`), not an array in
+`exceptions.ts`: the subtasks paying down the debt delete their own files in
+parallel and don't conflict (with an array each next one got a conflict on
+neighboring lines and a repeated CI run). The command moves each
+`exceptions.ts` (`.mts`, `.js`, `.mjs`, `.json`) of a decision folder
+`tests/<kind>/<name>` or its subfolder into the decision folder's
+`exceptions/` directory (read by `exceptionsIn()` of a test in any
+subfolder): one file per exception (the name is the item in Latin letters,
+`rule--` in front), the old file is deleted; the import in the files of the
+folder and subfolders (`import exceptions from "./exceptions.ts"`) — to
+`const exceptions = exceptionsIn()` with an import from the harness; the path
+to the old file in `package.json` and `.github/workflows/*.yml` (`spec-claims
+--exceptions`) — to the directory. spec-doc name exceptions
+(`{ file, name, issue, reason }`) — the folder's `names.exceptions.ts`, the
+shared `tests/standards/spec-names/exceptions.ts` and the file of the
+`--names-exceptions` flag from `package.json` and the workflow — are laid out
+as a file per name in `names.exceptions/` of their test's decision folder (a
+test outside the tree — to the decision folder of the former file: spec-doc
+will call the exception unneeded), the flag is removed. Which file belongs to
+whom — one rule, `exceptionFile` (`speclib.ts`), for the harness, spec-doc,
+spec-diff and spec-exceptions (the ai-dev standard `exception-files`); the
+command doesn't touch files outside decision folders. Output
+— lines `-` (file moved), `+` (new file), `~` (import or path rewritten, flag
+removed), `!` (fix by hand: a reference from another folder, no harness
+import). Exit codes: 0 — moved or nothing to move, 1 — there is a `!`, 2 — an
+exceptions file doesn't load or isn't an array of `{ item, … }`
+(`{ file, name, … }` for names). A repeated run changes nothing.
 
-## Проверки — `harness.ts`, `architecture.ts`, `spec-claims.ts`
+## Checks — `harness.ts`, `architecture.ts`, `spec-claims.ts`
 
-Механическая проверка — это тесты раннера (или отчёт в формате раннера): они
-в отчёте, а значит в `docs/spec` и в `spec-diff`. Импорт — из копии скилла в
-проекте (`.agents/skills/spec/scripts/…`), раннер не важен — `it` передаёт
-тест. Как подключить каждую — `checks.md` рядом.
+A mechanical check is runner tests (or a report in the runner's format): they
+are in the report, and so in `docs/spec` and in `spec-diff`. Import — from the
+skill's copy in the project (`.agents/skills/spec/scripts/…`), the runner
+doesn't matter — `it` passes the test in. How to wire each one — `checks.md`
+next to this file.
 
-| Что проверить | Чем | Где в `tests/` |
+| What to check | With what | Where in `tests/` |
 |---|---|---|
-| Соглашение на каждом элементе реестра из кода («каждая мутация пишет аудит») | `invariant` | `standards/<name>/` |
-| Линт-правило: «нельзя», «можно», «вне охвата» | `examples`, `eslintLinter` | `standards/<name>/` + фрагмент `eslint.ts` |
-| Правило ESLint в папке стандарта | `collectEslint` в `eslint.config.*` | фрагменты `eslint.ts` дерева |
-| «Вне охвата» и исключение элемента со своим файлом | `fileOf` в `invariant`; отметка `spec-outside(<решение>)` / `spec-exception(<решение>) #N` в файле (`marksIn`), в JSON — значение ключа `"//"` | файл элемента (маршрут, скрипт, миграция, `package.json` пакета workspace) |
-| Исключения с храповиком | `exceptionsIn()` → `exceptions` в `invariant`; отключение `-- #N причина` + `lintExceptions` | `exceptions/<элемент>.json` папки решения; перенос — `spec-exceptions` |
-| Модель архитектуры: границы модулей, каталоги, пакеты | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
-| Внешние системы (C1): хосты, пакеты, ключи и заголовки — только в адаптерах, периметр без адаптера, сеть в тестах, CSP | `externals` в модели, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, настройка тестов |
-| Контейнеры (C2): модули и библиотеки, связи, конфиги деплоя (compose, Supabase, Vercel, Terraform), клиенты хранилищ | `containers` в модели, `architecture`, `deployUnits` | `architecture/model.ts` |
-| Пакеты workspace монорепо — в корнях модели; инструменты разработки вне модели — «вне охвата» с причиной | `architecture` (`outside`), `workspacePackages` | `architecture/model.ts`, отметка в `package.json` пакета |
-| Порядок взаимодействия в сценарии, сиквенс-схема | `trace` в обёртках границ, `sequence` | тест capability |
-| Каждая точка входа вызывается тестом capability | `journal` + `spec-claims` после прогона | `standards/entry-points/` |
-| Нет кода без потребителя (файлы, экспорты, зависимости, конфиг knip; режим production) | `deadCode` по отчёту knip, репортер `knip-hints.cjs` | `standards/dead-code/` |
-| Переменные окружения объявлены и читаются (монорепо — по приложениям) | `envVars`, `dotenvNames`, `configGet` в `readers` | `standards/env/` |
+| A convention on every item of a registry from the code ("every mutation writes an audit record") | `invariant` | `standards/<name>/` |
+| A lint rule: «нельзя» (forbidden), «можно» (allowed), «вне охвата» (out of scope) | `examples`, `eslintLinter` | `standards/<name>/` + an `eslint.ts` fragment |
+| An ESLint rule in a standard's folder | `collectEslint` in `eslint.config.*` | the tree's `eslint.ts` fragments |
+| Out of scope and an item's exception with its own file | `fileOf` in `invariant`; a mark `spec-outside(<decision>)` / `spec-exception(<decision>) #N` in the file (`marksIn`), in JSON — the value of the `"//"` key | the item's file (a route, a script, a migration, a workspace package's `package.json`) |
+| Exceptions with a ratchet | `exceptionsIn()` → `exceptions` in `invariant`; a disable `-- #N reason` + `lintExceptions` | the decision folder's `exceptions/<item>.json`; migration — `spec-exceptions` |
+| Architecture model: module boundaries, directories, packages | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
+| External systems (C1): hosts, packages, keys and headers — only in adapters, a perimeter without an adapter, network in tests, CSP | `externals` in the model, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, test setup |
+| Containers (C2): modules and libraries, links, deploy configs (compose, Supabase, Vercel, Terraform), storage clients | `containers` in the model, `architecture`, `deployUnits` | `architecture/model.ts` |
+| Monorepo workspace packages — in the model's roots; dev tools outside the model — out of scope with a reason | `architecture` (`outside`), `workspacePackages` | `architecture/model.ts`, a mark in the package's `package.json` |
+| Interaction order in a scenario, a sequence diagram | `trace` in boundary wrappers, `sequence` | a capability test |
+| Every entry point is called by a capability test | `journal` + `spec-claims` after the run | `standards/entry-points/` |
+| No code without a consumer (files, exports, dependencies, knip config; production mode) | `deadCode` from the knip report, the `knip-hints.cjs` reporter | `standards/dead-code/` |
+| Environment variables are declared and read (monorepo — per app) | `envVars`, `dotenvNames`, `configGet` in `readers` | `standards/env/` |
 
-## Подключение в репозиторий
+## Wiring into a repository
 
-Как разбирать требования старой спеки (OpenSpec, ТЗ) при переходе — исход у
-каждого, проверка поломкой, что снимается без теста — `migration.md` рядом.
+How to sort out an old spec's requirements (OpenSpec, a requirements
+document) when switching — an outcome for each, check by breaking, what is
+removed without a test — `migration.md` next to this file.
 
-Скрипты берутся из копии скилла в самом проекте и идут под Node — Bun проекту
-на Node не нужен. Копию ставит установка флоу ai-dev, и она коммитится: агент
-перед PR и CI зовут одни и те же `spec:doc` / `spec:diff` проекта над одними и
-теми же файлами, поэтому то, что агент видит локально, совпадает с CI. Почему копия, а не подмодуль, чекаут в workflow или пакет —
+The scripts are taken from the skill's copy in the project itself and run
+under Node — a Node project doesn't need Bun. The ai-dev flow install puts the
+copy there, and it is committed: the agent before a PR and CI call the same
+project `spec:doc` / `spec:diff` over the same files, so what the agent sees
+locally matches CI. Why a copy and not a submodule, a checkout in the workflow or a package —
 `reference.md`.
 
-1. **Установка** в корне проекта, результат (`.agents/`, `.claude/`, блок в
-   `AGENTS.md`) — в коммит:
+1. **Install** at the project root, the result (`.agents/`, `.claude/`, the
+   block in `AGENTS.md`) goes into a commit:
    ```bash
    npx -y github:miroshnik/ai-dev install
    ```
-   - `.agents/` и `.claude/` исключить из линтеров и форматтеров проекта
-     (`ignores` в ESLint, `.prettierignore`, `include` в tsconfig): там код и
-     Markdown ai-dev.
-   - Обновление — та же команда отдельным PR, потом отчёты и `spec:doc
-     --strict`; поменялся формат — после мержа CI опубликует новый.
-2. **Скрипты** в `package.json` — через `node`: Node ≥ 22.18 стирает типы сам,
-   `scripts/package.json` скилла задаёт ESM при любом `type` проекта. Отчёты —
-   те, что есть в проекте:
+   - Exclude `.agents/` and `.claude/` from the project's linters and
+     formatters (`ignores` in ESLint, `.prettierignore`, `include` in
+     tsconfig): they hold ai-dev code and Markdown.
+   - Update — the same command in a separate PR, then the reports and
+     `spec:doc --strict`; if the format changed — CI publishes the new one
+     after the merge.
+2. **Scripts** in `package.json` — via `node`: Node ≥ 22.18 strips types
+   itself, the skill's `scripts/package.json` sets ESM for any project `type`.
+   Reports — those the project has:
    ```json
    "spec:doc": "node .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
    "spec:diff": "node .agents/skills/spec/scripts/spec-diff.ts",
    "spec:publish": "node .agents/skills/spec/scripts/spec-publish.ts",
    "spec:claims": "node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
-   Быстрые проверки — скрипт `test:spec` раннера проекта, стандарты и
-   архитектура (`"test:spec": "vitest run tests/standards tests/architecture"`):
-   его гоняет `github pr premerge` перед мержем на слиянии со свежим `main`
-   (после `typecheck`, если он есть).
-   Перед `spec:doc` локально — полный прогон с отчётами (раздел «Отчёты для
-   spec-doc»). В `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
+   Fast checks — the `test:spec` script of the project's runner, standards and
+   architecture (`"test:spec": "vitest run tests/standards tests/architecture"`):
+   `github pr premerge` runs it before a merge on the merge with a fresh
+   `main` (after `typecheck`, if there is one).
+   Before `spec:doc` locally — a full run with reports (section "Reports for
+   spec-doc"). In `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
    `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,
    `playwright-blob/`.
-3. **`docs/spec/` в `main` не коммитится — его публикует CI в ветку `spec`:**
-   это производная копия тестов, и в `main` параллельные PR конфликтовали бы
-   в её страницах и оглавлении. Дельту требований ревьюер видит в `spec-diff`
-   (тело PR), правку прозы — в диффе JSDoc теста. Переход проекта, где
-   `docs/spec` уже в `main`: `git rm -r --cached docs/spec`, строка в
-   `.gitignore`, шаги CI — п. 4 и `ci.md`.
-4. **CI.** Шарды пишут blob-отчёты, отдельная job `spec` после всех шардов
-   склеивает их средствами раннеров (`vitest --merge-reports`,
-   `playwright merge-reports` — все проекты Playwright в одном отчёте) и
-   собирает `docs/spec` с `--strict`; на `main` отдаёт его артефактом job
-   `spec-publish` — у неё одной токен на запись (`contents: write`), и она не
-   ставит зависимости проекта. Упал тест — `spec` не запускается:
-   собирать документацию из красного прогона незачем. `spec-diff` — своя лёгкая
-   job: ей нужны git-история и Node, не тесты, поэтому раздел в summary есть и
-   при красных тестах. Фрагмент для pnpm (в `package.json` —
-   `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
-   `docs/ci-concurrency.md` — фрагмент workflow в `ci.md` рядом.
-   Весь CI на PR, тестов на `main` нет — публикация на мерж PR из артефакта
-   его прогона, второй вариант в `ci.md`.
-5. **Монорепо** — тесты решения по подпапкам пакетов
-   `tests/<вид>/<name>/<пакет>/` (`canon.md`, «Решение — единица спеки»): у
-   пакета свой проект раннера с его алиасами, окружением и плагинами, он
-   берёт `tests/*/*/<пакет>/`; тесты прямо в папке решения — сквозные, их
-   берёт раннер корня. Запуск — из корня репозитория: харнесс (`exceptionsIn`,
-   `.spec-meta/`, журнал `spec-claims`) считает пути от cwd. Отчёты пакетов —
-   в `spec:doc` одним списком: страница решения одна, главный файл — в корне
-   папки или в подпапке пакета.
+3. **`docs/spec/` isn't committed to `main` — CI publishes it to the `spec`
+   branch:** it is a derived copy of the tests, and in `main` parallel PRs
+   would conflict in its pages and table of contents. The reviewer sees the
+   requirements delta in `spec-diff` (the PR body), a prose edit — in the
+   test's JSDoc diff. Switching a project where `docs/spec` is already in
+   `main`: `git rm -r --cached docs/spec`, a line in `.gitignore`, CI steps —
+   item 4 and `ci.md`.
+4. **CI.** Shards write blob reports, a separate `spec` job after all shards
+   merges them with the runners' own tools (`vitest --merge-reports`,
+   `playwright merge-reports` — all Playwright projects in one report) and
+   builds `docs/spec` with `--strict`; on `main` it hands it as an artifact to
+   the `spec-publish` job — only that job has a write token
+   (`contents: write`), and it doesn't install the project's dependencies. A
+   test failed — `spec` doesn't run: there is no point building documentation
+   from a red run. `spec-diff` is its own light job: it needs git history and
+   Node, not tests, so the section is in the summary even with red tests. A
+   fragment for pnpm (in `package.json` — `packageManager`), Vitest in 3
+   shards, Playwright in 2; concurrency per `docs/ci-concurrency.md` — the
+   workflow fragment is in `ci.md` next to this file.
+   All CI on the PR, no tests on `main` — publishing on a PR merge from its
+   run's artifact, the second variant in `ci.md`.
+5. **Monorepo** — a decision's tests in package subfolders
+   `tests/<kind>/<name>/<package>/` (`canon.md`, "A decision is the unit of
+   the spec, a folder is its home"): a package has its own runner project with
+   its aliases, environment and plugins, which takes `tests/*/*/<package>/`;
+   tests directly in the decision folder are cross-cutting, the root runner
+   takes them. Run from the repository root: the harness (`exceptionsIn`,
+   `.spec-meta/`, the `spec-claims` journal) counts paths from cwd. The
+   packages' reports go into `spec:doc` as one list: there is one decision
+   page, the main file is at the folder root or in a package subfolder.
 
-## Ограничения, о которых надо знать
+## Limitations to know about
 
-- Сканер TS/JS берёт тесты из AST парсера, имя — строка, известная без
-  прогона (литерал, шаблон без подстановок, их сложение), первым аргументом
-  `describe` / `it` / `test` (и `x…`/`f…` варианты, `suite`, `context`,
-  `test.describe`), у `.each`, `.for`, `.runIf`, `.skipIf` — второго вызова:
-  `it.each(...)('имя %s')` — имя с плейсхолдером; аргумент типа
-  (`it.each<T>(…)`, `test<Ctx>(…)`) не мешает. Имя, которое не вычислить
-  (шаблон с подстановкой, переменная), — строкой в stderr с местом: в
-  списках `spec-diff` такого теста нет, `spec-doc` называет его, если у него
-  есть JSDoc. Модификаторы — только известные (`skip`, `only`, `todo`,
-  `each`, `for`, `concurrent`, `serial`, `fixme`, `fails`…): `test.step`,
-  `test.use`, `beforeEach` — не тесты. Файл, который парсер не разобрал, —
-  строкой в stderr с местом ошибки.
-- Отчёты Vitest и `bun test` не содержат причины пропуска — держи её в названии
-  теста или в комментарии рядом (правило: `skip` без причины и номера issue — ошибка линта).
-- Прозу `it.each` и `describe.each` сканер знает под именем с плейсхолдером
-  (`сумма %i + %i`), а отчёт — под подставленным; такие JSDoc в документацию
-  не попадают.
-- Скрипты не оценивают тесты — что падает, скажет раннер. `spec-doc` лишь
-  показывает статус; на `main` всё должно быть ✅ или ⏭️ с причиной.
-- Обоснование выбора форматов и статического разбора — `reference.md`.
+- The TS/JS scanner takes tests from the parser's AST; the name is a string
+  known without a run (a literal, a template without substitutions, their
+  concatenation), the first argument of `describe` / `it` / `test` (and the
+  `x…`/`f…` variants, `suite`, `context`, `test.describe`), for `.each`,
+  `.for`, `.runIf`, `.skipIf` — of the second call: `it.each(...)('name %s')`
+  — a name with a placeholder; a type argument (`it.each<T>(…)`,
+  `test<Ctx>(…)`) doesn't get in the way. A name that can't be computed (a
+  template with a substitution, a variable) — a line in stderr with the
+  location: such a test isn't in the `spec-diff` lists, `spec-doc` names it if
+  it has a JSDoc. Modifiers — only known ones (`skip`, `only`, `todo`, `each`,
+  `for`, `concurrent`, `serial`, `fixme`, `fails`…): `test.step`, `test.use`,
+  `beforeEach` are not tests. A file the parser couldn't parse — a line in
+  stderr with the error location.
+- Vitest and `bun test` reports don't contain the skip reason — keep it in the
+  test name or in a comment next to it (rule: `skip` without a reason and an
+  issue number is a lint error).
+- The scanner knows the prose of `it.each` and `describe.each` under the name
+  with a placeholder (`sum %i + %i`), and the report — under the substituted
+  one; such JSDoc doesn't get into the documentation.
+- The scripts don't judge tests — what fails, the runner will tell. `spec-doc`
+  only shows the status; on `main` everything must be ✅ or ⏭️ with a reason.
+- The rationale for the choice of formats and static parsing — `reference.md`.
