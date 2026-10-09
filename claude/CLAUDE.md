@@ -1,54 +1,59 @@
 # Claude Code
 
-Общие правила — `AGENTS.md`. Здесь только то, что есть у Claude Code; оба
-файла установка в проект кладёт в `.claude/rules/` (`ai-dev.md` и
-`ai-dev-claude.md`), Claude Code грузит их сам, при любом `CLAUDE.md`
-проекта.
+Shared rules — `AGENTS.md`. Only what Claude Code has is here; installing into
+a project puts both files into `.claude/rules/` (`ai-dev.md` and
+`ai-dev-claude.md`), and Claude Code loads them itself, whatever the
+project's `CLAUDE.md`.
 
-- Транскрипты сессий (`~/.claude/projects/<путь-через-дефисы>*/`) — источник
-  факта для скилла `est`; в `~/.claude/settings.json` должно стоять
-  `"cleanupPeriodDays": 365`, иначе история чистится раньше, чем нужна.
-- Worktree приложения называет ветку `claude/<slug>-<hash>` —
-  переименовать до первого push (`git branch -m <type>/<issue>-<slug>`).
-  Панель сессии показывает ветку worktree, её дифф к `main` и кнопку
-  «Create PR» по состоянию git, а не GitHub: после мержа она актуальна только
-  если чекаут переведён на `origin/main` (это делает `github task close`).
-- Монитор CI приложения будит сессию событием только при падении
-  чеков, конфликте и ревью, и только с включённым Auto-fix; об успехе не
-  сообщает. Зелёные чеки перед мержем и деплой после него ждать скиллом
-  `ci-wait` фоновой командой: её завершение будит сессию.
-- Мерж в режиме auto — `gh pr merge <N> --rebase` отдельным вызовом, без
-  `cd`, `|`, `;`: иначе правило `Bash(gh pr merge *)` (ставит владелец) не
-  совпадёт, мерж отклонит классификатор.
-- `install -g` ставит в `~/.claude/settings.json` хук `SessionStart`
-  (`startup|resume|clear`): `check --hook` сверяет скиллы и хук машины и
-  флоу проекта (`AGENTS.md`, «Первый шаг сессии»), вывод — в начале
-  контекста; в git-репозитории без флоу зовёт поставить его. Код хука
-  всегда 0 — иначе Claude Code вывод в контекст не кладёт; таймаут 60 с,
-  ошибка сессию не блокирует. Вывода хука в контексте нет — `check` руками.
-- Сессию переименовывает `set_session_title`, архивирует в режиме auto —
-  `archive_session` с `self`: последним действием, после «…можно
-  закрывать.» — на нём разговор окончен.
-- Скиллы — в `.claude/skills/<name>` проекта и `~/.claude/skills/<name>`
-  (симлинки на `.agents/skills/<name>`), каталог скилла —
-  `${CLAUDE_SKILL_DIR}`; одноимённый на машине главнее проектного. Во
-  frontmatter `SKILL.md` читаются и `when_to_use`, `argument-hint`,
-  `allowed-tools`.
-- Bash на macOS — zsh: переменная на слова не делится (`G="bun x.ts";
-  $G task new` — «command not found», а `| grep` прячет ошибку) —
-  `G=x.ts; bun $G …` или `${=G}`, список через запятую — `${(j:,:)arr}`;
-  `echo ====` и glob без совпадений (`--include=*.ts`) — ошибка: в кавычки.
-- Субагенту с записью — `isolation: worktree`: изолированная сессия не
-  пишет в чужие worktree, агент без него наследует изоляцию родителя.
-  Оборванный лимитом или обрывом сессии агент оставляет в worktree
-  незакоммиченное — перед возобновлением `git status` там; worktree после
-  смены базы — зависимости по lockfile, иначе typecheck на старых пакетах.
-- В облачной сессии (claude.ai/code) ветку назначает облако —
-  переименовывать и пушить в другую только с разрешения пользователя
+- Session transcripts (`~/.claude/projects/<path-with-dashes>*/`) are the
+  source of actuals for the `est` skill; `~/.claude/settings.json` must have
+  `"cleanupPeriodDays": 365`, otherwise history is cleaned before it's needed.
+- The app's worktree names the branch `claude/<slug>-<hash>` — rename it
+  before the first push (`git branch -m <type>/<issue>-<slug>`). The session
+  panel shows the worktree branch, its diff to `main` and the "Create PR"
+  button from git state, not GitHub: after a merge it is accurate only if the
+  checkout is moved to `origin/main` (`github task close` does that).
+- The app's CI monitor wakes the session only on failed checks, conflicts and
+  reviews, and only with Auto-fix on; it doesn't report success. Wait for
+  green checks before a merge and for the deploy after it with the `ci-wait`
+  skill as a background command: its completion wakes the session.
+- Merge in auto mode — `gh pr merge <N> --rebase` as a separate call, without
+  `cd`, `|`, `;`: otherwise the `Bash(gh pr merge *)` rule (set by the owner)
+  won't match and the classifier rejects the merge.
+- `install -g` puts a `SessionStart` hook into `~/.claude/settings.json`
+  (`startup|resume|clear`): `check --hook` checks the machine's skills and
+  hook and the project's flow (`AGENTS.md`, "First step of a session"),
+  including its mode and language; the output goes to the start of the
+  context; in a git repository without the flow it suggests installing it.
+  The hook's exit code is always 0 — otherwise Claude Code doesn't put the
+  output into context; timeout 60 s, an error doesn't block the session. No
+  hook output in context — run `check` by hand.
+- `set_session_title` renames the session; in auto mode `archive_session`
+  with `self` archives it: as the last action, after the "can be closed" line
+  — the conversation ends with it.
+- Skills — in the project's `.claude/skills/<name>` and
+  `~/.claude/skills/<name>` (symlinks to `.agents/skills/<name>`), the skill
+  directory is `${CLAUDE_SKILL_DIR}`; a same-named machine skill wins over the
+  project's. `SKILL.md` frontmatter also reads `when_to_use`,
+  `argument-hint`, `allowed-tools`.
+- Bash on macOS is zsh: a variable isn't split into words (`G="bun x.ts";
+  $G task new` — "command not found", and `| grep` hides the error) — use
+  `G=x.ts; bun $G …` or `${=G}`, a comma-joined list — `${(j:,:)arr}`;
+  `echo ====` and a glob without matches (`--include=*.ts`) are errors: quote
+  them.
+- A subagent that writes gets `isolation: worktree`: an isolated session
+  doesn't write into others' worktrees, an agent without it inherits the
+  parent's isolation. An agent cut off by a limit or a dropped session leaves
+  uncommitted work in its worktree — `git status` there before resuming; a
+  worktree after a base change — dependencies from the lockfile, otherwise
+  typecheck runs on old packages.
+- In a cloud session (claude.ai/code) the cloud assigns the branch — rename
+  it or push to another one only with the user's permission
   (`docs/cloud-sessions.md`).
-- Чип — `spawn_task`: `title` — `#M` и заголовок задачи, сколько влезет в
-  60 символов, `prompt` начинается с `#M`, `cwd` — репозиторий задачи;
-  лишний снимает `dismiss_task`. Чип одноразовый, список задач — «Бэклог»:
-  пересоздаю из issue. Промпт чипа, пришедший в эту же сессию, не исполняю.
-- В клоне ai-dev канон грузится из корня (`AGENTS.md`), этот файл —
-  через закоммиченный симлинк `.claude/rules/ai-dev-claude.md`.
+- A chip is `spawn_task`: `title` — `#M` and the task title, as much as fits
+  in 60 characters, `prompt` starts with `#M`, `cwd` — the task's repository;
+  `dismiss_task` removes an extra one. A chip is single-use, the task list is
+  Backlog: I recreate chips from issues. A chip prompt arriving in this same
+  session — I don't execute it.
+- In an ai-dev clone the canon loads from the root (`AGENTS.md`), this file —
+  via the committed symlink `.claude/rules/ai-dev-claude.md`.
