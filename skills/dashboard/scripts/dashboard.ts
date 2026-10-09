@@ -14,7 +14,8 @@
 import { spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 
-import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo, sharesTxt, TARIFF_NOTE, usdByModel, usdShares } from "../../est/scripts/est.ts";
+import locale from "../../github/scripts/locale.cjs";
+import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo, sharesTxt, usdByModel, usdShares } from "../../est/scripts/est.ts";
 import type { Registry, Row } from "../../est/scripts/est.ts";
 import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, repoTranscripts, SESSIONS_CSS, sessionsBody, sessionsView } from "./sessions.ts";
 import type { Live, SessionsInput, SessionsView } from "./sessions.ts";
@@ -52,7 +53,9 @@ export interface Point {
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const isEpic = (r: Row) => r.labels.includes("epic") || ["эпик", "epic"].includes((r.issueType ?? "").toLowerCase());
+// дашборд общий на все репозитории: подписи — по-английски, разбор — названия любого языка словаря locales скилла github
+const EPIC_TYPES = locale.every((n) => n.issueTypes.epic).map((t) => t.toLowerCase());
+const isEpic = (r: Row) => r.labels.includes("epic") || EPIC_TYPES.includes((r.issueType ?? "").toLowerCase());
 
 /** Закрытые задачи периода без эпиков: эпик — сумма подзадач, они уже в списке. */
 function taskRows(rows: Row[], since: number | null): Row[] {
@@ -163,10 +166,10 @@ const times = (v: number) => `×${fmtH(v)}`;
 const tick = (v: number) => String(v);
 // Панели, а не несколько шкал на одной: часы, отношение, токены и доллары — разные единицы (tests/capabilities/dashboard).
 const PANELS: Panel[] = [
-  { key: "h", title: "Часы на задачу", fact: (p) => p.fact, est: (p) => p.est, tick, fmt: (v) => fmtH(v) },
-  { key: "ratio", title: "Факт к оценке — полоса допуска ×0.5…×2", fact: (p) => (p.est ? p.fact / p.est : null), est: none, tick: (v) => `×${v}`, fmt: times, ref: { at: 1, band: [0.5, 2] } },
-  { key: "tok", title: "Токены на задачу, млн", fact: (p) => p.tok, est: (p) => p.tokEst, tick, fmt: fmtTok },
-  { key: "usd", title: "Стоимость задачи, $", fact: (p) => p.usd, est: (p) => p.usdEst, tick, fmt: (v) => v.toFixed(v < 10 ? 2 : 0) },
+  { key: "h", title: "Hours per task", fact: (p) => p.fact, est: (p) => p.est, tick, fmt: (v) => fmtH(v) },
+  { key: "ratio", title: "Actual to estimate — tolerance band ×0.5…×2", fact: (p) => (p.est ? p.fact / p.est : null), est: none, tick: (v) => `×${v}`, fmt: times, ref: { at: 1, band: [0.5, 2] } },
+  { key: "tok", title: "Tokens per task, M", fact: (p) => p.tok, est: (p) => p.tokEst, tick, fmt: fmtTok },
+  { key: "usd", title: "Cost per task, $", fact: (p) => p.usd, est: (p) => p.usdEst, tick, fmt: (v) => v.toFixed(v < 10 ? 2 : 0) },
 ];
 
 // Геометрия в единицах viewBox: слева — подписи шкалы, справа — подпись конца тренда, снизу — общая ось времени.
@@ -227,7 +230,7 @@ function panelSvg(p: Panel, i: number, pts: Point[], lay: Layout): { svg: string
   if (values.length && p.ref) values.push(...p.ref.band);
   const out = [`<g class="panel" data-panel="${p.key}">`, `<text class="panel-title" x="${LEFT}" y="${top - 10}">${esc(p.title)}</text>`];
   if (!values.length) {
-    out.push(`<text class="empty" x="${LEFT}" y="${top + PLOT / 2}">нет данных</text>`, "</g>");
+    out.push(`<text class="empty" x="${LEFT}" y="${top + PLOT / 2}">no data</text>`, "</g>");
     return { svg: out.join(""), ys: pts.map(() => null) };
   }
   const ticks = logTicks(Math.min(...values), Math.max(...values));
@@ -268,7 +271,7 @@ function chart(pts: Point[]): Chart {
     return `<text class="x-tick" x="${r1(lay.x(t))}" y="${axisY + 20}">${two(d.getDate())}.${two(d.getMonth() + 1)}</text>`;
   });
   const svg = [
-    `<svg class="chart" viewBox="0 0 ${W} ${HEIGHT}" role="img" aria-label="Часы, токены и стоимость задач по дате закрытия; значения — в таблице ниже">`,
+    `<svg class="chart" viewBox="0 0 ${W} ${HEIGHT}" role="img" aria-label="Hours, tokens and cost of tasks by close date; the values are in the table below">`,
     ...panels.map((p) => p.svg),
     `<g class="x-axis">${axis.join("")}</g>`,
     `<line class="crosshair" x1="0" x2="0" y1="${HEAD}" y2="${axisY}" visibility="hidden"/>`,
@@ -296,7 +299,7 @@ export interface Model {
   errors: string[];
 }
 
-const PRESETS: [string, string][] = [["30d", "30 дней"], ["90d", "90 дней"], ["all", "всё время"]];
+const PRESETS: [string, string][] = [["30d", "30 days"], ["90d", "90 days"], ["all", "all time"]];
 
 // Палитра — проверенная пара «синий / оранжевый» и служебные тона для светлой и тёмной темы.
 const CSS = `
@@ -399,43 +402,43 @@ function tile(label: string, value: string, delta: string, hint: string): string
 
 /** Плитка величины: медиана последних задач и её изменение к предыдущим; меньше — лучше, знак дублирует цвет. */
 function shiftTile(label: string, s: Shift, f: (v: number) => string): string {
-  if (s.now === null) return tile(label, "—", "", "нет данных");
-  let delta = `<div class="delta">сравнивать пока не с чем</div>`;
+  if (s.now === null) return tile(label, "—", "", "no data");
+  let delta = `<div class="delta">nothing to compare with yet</div>`;
   if (s.prev) {
     const pct = Math.round((s.now / s.prev - 1) * 100);
-    delta = pct === 0 ? `<div class="delta">без изменений к предыдущим ${WINDOW}</div>` : `<div class="delta ${pct < 0 ? "good" : "bad"}">${pct < 0 ? "▼" : "▲"} ${pct < 0 ? "−" : "+"}${Math.abs(pct)} % к предыдущим ${WINDOW} (${esc(f(s.prev))})</div>`;
+    delta = pct === 0 ? `<div class="delta">no change vs the previous ${WINDOW}</div>` : `<div class="delta ${pct < 0 ? "good" : "bad"}">${pct < 0 ? "▼" : "▲"} ${pct < 0 ? "−" : "+"}${Math.abs(pct)} % vs the previous ${WINDOW} (${esc(f(s.prev))})</div>`;
   }
-  return tile(label, f(s.now), delta, `медиана последних ${s.n}`);
+  return tile(label, f(s.now), delta, `median of the last ${s.n}`);
 }
 
 /** Плитка тарифа: доля $ ведущей модели последних задач, остальные и предыдущие — строками; смена модели двигает тренд $. */
 function modelsTile(m: ModelShift): string {
-  const label = "Стоимость по моделям";
-  const hint = `доля $ последних ${WINDOW}: ${TARIFF_NOTE}`;
+  const label = "Cost by model";
+  const hint = `share of $ over the last ${WINDOW}: the $ trend mixes the flow with the model's rate — compare the flow by tokens and output`;
   if (!m.now.length) return tile(label, "—", "", hint);
   const [top, share] = m.now[0]!;
   let delta = `<div class="delta">${esc(top)}${m.now.length > 1 ? `; ${esc(sharesTxt(m.now.slice(1)))}` : ""}</div>`;
-  if (m.prev.length) delta += `<div class="delta">предыдущие ${WINDOW}: ${esc(sharesTxt(m.prev))}</div>`;
+  if (m.prev.length) delta += `<div class="delta">previous ${WINDOW}: ${esc(sharesTxt(m.prev))}</div>`;
   return tile(label, `${Math.round(share * 100)} %`, delta, hint);
 }
 
 function tiles(v: View): string {
   const c = v.calib;
   const accuracy = c.n
-    ? tile("Точность оценок", `×${c.k}`, `<div class="delta">в допуске ×0.5…×2 — ${Math.trunc(c.share! * 100)} % задач</div>`, `факт к оценке, медиана ${c.n} последних пар`)
-    : tile("Точность оценок", "—", "", "нет задач с оценкой est и фактом");
-  return `<section class="tiles">${accuracy}${shiftTile("Часы на задачу", v.h, (x) => `${fmtH(x)} ч`)}${shiftTile("Токены на задачу", v.tok, (x) => `${fmtH(x, 1)} млн`)}${shiftTile("Стоимость задачи", v.usd, fmtUsd)}${modelsTile(v.models)}</section>`;
+    ? tile("Estimate accuracy", `×${c.k}`, `<div class="delta">within ×0.5…×2 — ${Math.trunc(c.share! * 100)} % of tasks</div>`, `actual to estimate, median of the last ${c.n} pairs`)
+    : tile("Estimate accuracy", "—", "", "no tasks with an est estimate and an actual");
+  return `<section class="tiles">${accuracy}${shiftTile("Hours per task", v.h, (x) => `${fmtH(x)} h`)}${shiftTile("Tokens per task", v.tok, (x) => `${fmtH(x, 1)}M`)}${shiftTile("Cost per task", v.usd, fmtUsd)}${modelsTile(v.models)}</section>`;
 }
 
 const LEGEND = [
-  `<span class="key"><svg viewBox="0 0 22 12"><circle class="est" cx="11" cy="6" r="3.5"/></svg>оценка</span>`,
-  `<span class="key"><svg viewBox="0 0 22 12"><circle class="fact" cx="11" cy="6" r="4"/></svg>факт</span>`,
-  `<span class="key"><svg viewBox="0 0 22 12"><path class="trend" d="M1 6L21 6"/></svg>медиана последних ${WINDOW} задач</span>`,
-  `<span>шкалы логарифмические: равный шаг — равное отношение</span>`,
+  `<span class="key"><svg viewBox="0 0 22 12"><circle class="est" cx="11" cy="6" r="3.5"/></svg>estimate</span>`,
+  `<span class="key"><svg viewBox="0 0 22 12"><circle class="fact" cx="11" cy="6" r="4"/></svg>actual</span>`,
+  `<span class="key"><svg viewBox="0 0 22 12"><path class="trend" d="M1 6L21 6"/></svg>median of the last ${WINDOW} tasks</span>`,
+  `<span>log scales: an equal step is an equal ratio</span>`,
 ].join("");
 
 function table(pts: Point[], many: boolean): string {
-  const head = ["Закрыта", "Задача", "Тип", "Оценка, ч", "Факт, ч", "Факт к оценке", "Токены, млн: прогноз", "Токены, млн: факт", "Стоимость: прогноз", "Стоимость: факт", "Покрытие"];
+  const head = ["Closed", "Task", "Type", "Estimate, h", "Actual, h", "Actual to estimate", "Tokens, M: forecast", "Tokens, M: actual", "Cost: forecast", "Cost: actual", "Coverage"];
   const body = [...pts].reverse().map((p) => {
     const cells = [
       fmtLocal(p.t).slice(0, 10),
@@ -449,17 +452,17 @@ function table(pts: Point[], many: boolean): string {
 
 type Tab = "sessions" | "est";
 // «Сессии» — главная: на ней видно, чего ждут задачи в работе; график — вторая вкладка
-const TABS: [Tab, string, string][] = [["sessions", "/", "Сессии"], ["est", "/est", "Оценка и факт"]];
-const EST_TITLE = "Задачи: оценка, факт и цена";
-const SESSIONS_TITLE = "Сессии: задачи в работе";
+const TABS: [Tab, string, string][] = [["sessions", "/", "Sessions"], ["est", "/est", "Estimate and actual"]];
+const EST_TITLE = "Tasks: estimate, actual and cost";
+const SESSIONS_TITLE = "Sessions: tasks in progress";
 
 /** Каркас страницы: вкладки, заголовок, строка под ним (HTML), ошибки чтения GitHub — плашкой, содержимое вкладки; `tail` — после `<main>`. */
 function shell(o: { tab: Tab; title: string; repos: string[]; sub: string; errors: string[]; body: string; tail?: string }): string {
   const tabs = TABS.map(([k, href, label]) => `<a href="${href}"${k === o.tab ? ' aria-current="page"' : ""}>${label}</a>`).join("");
   return [
-    `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`,
     `<title>${esc(o.title)} — ${esc(o.repos.join(", "))}</title><style>${CSS}</style></head><body><main>`,
-    `<nav class="tabs" aria-label="Вкладки">${tabs}</nav>`,
+    `<nav class="tabs" aria-label="Tabs">${tabs}</nav>`,
     `<h1>${esc(o.title)}</h1>`,
     `<div class="sub">${o.sub}</div>`,
     o.errors.length ? `<div class="card errors">${o.errors.map((e) => `<div>${esc(e)}</div>`).join("")}</div>` : "",
@@ -479,18 +482,18 @@ export function page(m: Model): string {
   const hover = {
     w: W,
     pts: pts.map((p, i) => ({
-      ...c.hover[i]!, task: taskId(p), head: `${many ? p.repo : ""}#${p.number} ${p.title}`, when: [fmtLocal(p.t), p.type, p.cov === "full" ? "" : `покрытие ${p.cov}`].filter(Boolean).join(" · "),
-      rows: [["Часы: оценка → факт", `${pair(p.est, p.fact, fmtH)}${p.est ? ` (${ratio(p)})` : ""}`], ["Токены, млн", pair(p.tokEst, p.tok, fmtTok)], ["Стоимость", pair(p.usdEst, p.usd, fmtUsd)]],
+      ...c.hover[i]!, task: taskId(p), head: `${many ? p.repo : ""}#${p.number} ${p.title}`, when: [fmtLocal(p.t), p.type, p.cov === "full" ? "" : `coverage ${p.cov}`].filter(Boolean).join(" · "),
+      rows: [["Hours: estimate → actual", `${pair(p.est, p.fact, fmtH)}${p.est ? ` (${ratio(p)})` : ""}`], ["Tokens, M", pair(p.tokEst, p.tok, fmtTok)], ["Cost", pair(p.usdEst, p.usd, fmtUsd)]],
     })),
   };
   const body = pts.length
     ? `${tiles(m.view)}<figure class="card"><figcaption>${LEGEND}</figcaption>${c.svg}<div id="tip" hidden></div></figure>${table(pts, many)}` +
       `<script id="pts" type="application/json">${JSON.stringify(hover).replace(/</g, "\\u003c")}</script><script>${SCRIPT}</script>`
-    : `<p class="card">Закрытых задач с фактом нет${since === "all" ? "" : " за этот период"} — факт пишет <code>est fact --write</code> при закрытии задачи.</p>`;
+    : `<p class="card">No closed tasks with an actual${since === "all" ? "" : " in this period"} — <code>est fact --write</code> records the actual when a task is closed.</p>`;
   return shell({
     tab: "est", title: EST_TITLE, repos: m.repos, errors: m.errors,
-    sub: `${esc(m.repos.join(", "))} · закрытые задачи с фактом по дате закрытия · GitHub прочитан ${esc(fmtLocal(m.at))} · <a href="/est?since=${esc(since)}&amp;refresh=1">Обновить</a>`,
-    body: `<nav class="filters"><span>Период:</span>${presets.map(([k, label]) => `<a${k === since ? ' class="cur"' : ""} href="/est?since=${esc(k)}">${esc(label)}</a>`).join("")}</nav>${body}`,
+    sub: `${esc(m.repos.join(", "))} · closed tasks with an actual by close date · GitHub read ${esc(fmtLocal(m.at))} · <a href="/est?since=${esc(since)}&amp;refresh=1">Refresh</a>`,
+    body: `<nav class="filters"><span>Period:</span>${presets.map(([k, label]) => `<a${k === since ? ' class="cur"' : ""} href="/est?since=${esc(k)}">${esc(label)}</a>`).join("")}</nav>${body}`,
   });
 }
 
@@ -508,7 +511,7 @@ interface SessionsModel {
 function sessionsPage(m: SessionsModel): string {
   return shell({
     tab: "sessions", title: SESSIONS_TITLE, repos: m.repos, errors: m.errors,
-    sub: `${esc(m.repos.join(", "))} · задачи «В работе», их сессии и чего они ждут · обновляется каждые ${REFRESH} с · GitHub прочитан ${esc(fmtLocal(m.at))} · <a href="/?refresh=1">Обновить</a>`,
+    sub: `${esc(m.repos.join(", "))} · tasks in progress, their sessions and what they wait for · refreshes every ${REFRESH} s · GitHub read ${esc(fmtLocal(m.at))} · <a href="/?refresh=1">Refresh</a>`,
     body: sessionsBody(m.view, m.now, m.repos.length > 1),
     tail: refreshScript(REFRESH),
   });
@@ -592,7 +595,7 @@ function serve(o: Options) {
     })().finally(() => (pending = null)));
   const html = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   const failure = (msg: string, status: number, tab: Tab) =>
-    html(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Дашборд: ошибка</title><style>${CSS}</style><main><h1>${tab === "est" ? EST_TITLE : SESSIONS_TITLE}</h1><p class="card errors">${esc(msg)}</p><p><a href="${tab === "est" ? "/est" : "/"}?refresh=1">Обновить</a></p></main></html>`, status);
+    html(`<!doctype html><html lang="en"><meta charset="utf-8"><title>Dashboard: error</title><style>${CSS}</style><main><h1>${tab === "est" ? EST_TITLE : SESSIONS_TITLE}</h1><p class="card errors">${esc(msg)}</p><p><a href="${tab === "est" ? "/est" : "/"}?refresh=1">Refresh</a></p></main></html>`, status);
   /** Вкладка «Оценка и факт»: период — из адреса, иначе из --since. */
   const estTab = (url: URL) => {
     const since = url.searchParams.get("since") ?? o.since;
@@ -618,9 +621,9 @@ function serve(o: Options) {
     async fetch(req) {
       const url = new URL(req.url);
       // страница называет задачи непубличных репозиториев: чужой Host — сайт, навёдший своё имя на 127.0.0.1 (DNS rebinding)
-      if (!["127.0.0.1", "localhost"].includes(url.hostname)) return new Response("чужой Host", { status: 403 });
+      if (!["127.0.0.1", "localhost"].includes(url.hostname)) return new Response("foreign Host", { status: 403 });
       const tab = TABS.find(([, href]) => href === url.pathname)?.[0];
-      if (!tab) return new Response("нет такой страницы", { status: 404 });
+      if (!tab) return new Response("no such page", { status: 404 });
       if (url.searchParams.has("refresh")) {
         cache = live = null;
         // адрес без refresh: перезагрузка вкладки не перечитывает GitHub заново

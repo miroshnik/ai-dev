@@ -84,9 +84,9 @@ describe("Сводка — точность оценок и цена задач�
     const rs = Array.from({ length: 20 }, (_, i) => row(i + 1, { fact_marker: i < 10 ? by({ "claude-fable-5": 3, "claude-opus-5": 1 }) : by({ "claude-opus-5-5": 1 }) }));
     expect(view({ "o/r": rs }, null).models).toEqual({ now: [["claude-opus-5-5", 1]], prev: [["claude-fable-5", 0.75], ["claude-opus-5", 0.25]] });
     const html = model(rs);
-    expect(html).toContain("Стоимость по моделям");
+    expect(html).toContain("Cost by model");
     expect(html).toContain("claude-fable-5 75 %, claude-opus-5 25 %");
-    expect(html).toContain("тренд $ смешивает флоу с тарифом модели");
+    expect(html).toContain("the $ trend mixes the flow with the model&#39;s rate");
   });
 });
 
@@ -159,7 +159,7 @@ describe("Страница — один график: часы, токены и 
 
   it("задач с фактом нет — страница говорит об этом, а не рисует пустой график", () => {
     const html = model([row(1, { fact: null, fact_marker: null })]);
-    expect(html).toContain("Закрытых задач с фактом нет");
+    expect(html).toContain("No closed tasks with an actual");
     expect(html).not.toContain("<svg");
   });
 });
@@ -188,8 +188,9 @@ else if (query.includes("projectV2(number:$n)")) {
 } else if (query.includes("pullRequests(")) {
   // задачи — элементы проекта со статусом из фильтра $q, как отбирает GitHub; эпик задачи — из live.parents
   const l = repo.live ?? {};
-  const status = /status:"([^"]+)"/.exec(v.q)?.[1];
-  const items = repo.items.filter((it) => it.fieldValues.nodes.some((f) => f.field?.name === "Status" && f.name === status)).map((it) => ({ content: { ...it.content, parent: (l.parents ?? {})[it.content.number] ?? null } }));
+  // значения фильтра через запятую — любое из них
+  const statuses = [...(/status:((?:"[^"]+",?)+)/.exec(v.q)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const items = repo.items.filter((it) => it.fieldValues.nodes.some((f) => f.field?.name === "Status" && statuses.includes(f.name))).map((it) => ({ content: { ...it.content, parent: (l.parents ?? {})[it.content.number] ?? null } }));
   print({ data: { project: { items: { nodes: items } }, repository: { open: { nodes: l.open ?? [] }, merged: { nodes: l.merged ?? [] }, questions: { nodes: l.questions ?? [] } } } });
 } else { console.error("fake gh: " + query.slice(0, 80)); process.exit(1); }
 `;
@@ -274,7 +275,7 @@ describe("Команда dashboard сервит страницу сама и о�
     const r = await fetch(d.url);
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toContain("text/html");
-    expect(await r.text()).toContain("Сессии: задачи в работе");
+    expect(await r.text()).toContain("Sessions: tasks in progress");
   });
 
   it("запрос с чужим Host — отказ: сайт, навёдший своё имя на 127.0.0.1, страницу не прочтёт", async () => {
@@ -344,12 +345,12 @@ describe("Команда dashboard сервит страницу сама и о�
   it("вкладка «Сессии» открыта по умолчанию, «Оценка и факт» — второй вкладкой", async () => {
     const d = await start(["--repo", "o/a", "--no-open"]);
     const main = await (await fetch(d.url)).text();
-    expect(main).toContain('<nav class="tabs" aria-label="Вкладки"><a href="/" aria-current="page">Сессии</a><a href="/est">Оценка и факт</a></nav>');
-    expect(main).toContain("Ждут владельца");
+    expect(main).toContain('<nav class="tabs" aria-label="Tabs"><a href="/" aria-current="page">Sessions</a><a href="/est">Estimate and actual</a></nav>');
+    expect(main).toContain("Waiting for the owner");
     expect(main).not.toContain("<svg");
     const est = await (await fetch(new URL("/est", d.url))).text();
-    expect(est).toContain('<a href="/">Сессии</a>');
-    expect(est).toContain('<a href="/est" aria-current="page">Оценка и факт</a>');
+    expect(est).toContain('<a href="/">Sessions</a>');
+    expect(est).toContain('<a href="/est" aria-current="page">Estimate and actual</a>');
     expect(est).toContain("<svg");
     expect((await fetch(new URL("/other", d.url))).status).toBe(404);
   });
@@ -373,7 +374,7 @@ describe("Команда dashboard сервит страницу сама и о�
       repos: {
         "o/a": {
           project: 1,
-          items: [...ONE.repos["o/a"].items, openItem(5, "Импорт банков", "В работе"), openItem(6, "Отчёт по ROI", "В работе"), openItem(10, "Банки · эпик", "В работе", "Эпик"), openItem(11, "Поиск", "Бэклог")],
+          items: [...ONE.repos["o/a"].items, openItem(5, "Импорт банков", "В работе"), openItem(6, "Отчёт по ROI", "В работе"), openItem(10, "Банки · эпик", "В работе", "Эпик"), openItem(11, "Поиск", "Бэклог"), openItem(12, "Export", "In progress"), openItem(13, "Banks", "In progress", "Epic")],
           live: {
             open: [{ number: 50, url: "https://github.com/o/a/pull/50", headRefName: "feat/5-bank-import", mergeable: "MERGEABLE", closingIssuesReferences: { nodes: [{ number: 5 }] }, commits: commit("SUCCESS") }],
             parents: { 5: { number: 10, title: "Банки · эпик" } },
@@ -385,14 +386,17 @@ describe("Команда dashboard сервит страницу сама и о�
     const d = await start(["--repo", "o/a", "--no-open"]);
     const html = await (await fetch(d.url)).text();
     const row = (n: number) => (new RegExp(`<tr[^>]*data-task="o/a#${n}"[\\s\\S]*?</tr>`).exec(html)?.[0] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    expect(row(5)).toContain("эпик #10 Банки · эпик");
-    expect(row(5)).toContain("2 мин назад");
-    expect(row(5)).toContain("мерж");
-    expect(row(5)).toContain("#50 чеки зелёные");
-    expect(row(6)).toContain("сессии нет");
+    expect(row(5)).toContain("epic #10 Банки · эпик");
+    expect(row(5)).toContain("2 min ago");
+    expect(row(5)).toContain("merge");
+    expect(row(5)).toContain("#50 checks green");
+    expect(row(6)).toContain("no session");
     // эпик и задача не «В работе» — не строки
     expect(html).not.toContain('data-task="o/a#10"');
     expect(html).not.toContain('data-task="o/a#11"');
+    // статус и тип — на любом языке словаря: доска проекта на en — тоже строки, эпик на en — не строка
+    expect(row(12)).toContain("#12 Export");
+    expect(html).not.toContain('data-task="o/a#13"');
     const asks = /<section class="asks[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
     for (const q of ["Осталось: мерж — от владельца.", "1. Делить импорт?", "1. Валюта отчёта?"]) expect(asks).toContain(q);
     // обновляется сама: раз в 30 с страница заново, подменой <main> — раскрытое остаётся раскрытым

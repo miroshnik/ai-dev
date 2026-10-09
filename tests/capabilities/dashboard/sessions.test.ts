@@ -92,17 +92,17 @@ describe("Строка задачи «В работе» — её сессия и
     expect(Object.fromEntries(v.rows.map((r) => [r.number, r.wait.key]))).toEqual({ 1: "ci", 2: "merge", 3: "deploy", 4: "human" });
     expect(v.rows.find((r) => r.number === 3)?.pr?.number).toBe(73);
     const html = sessionsBody(v, NOW, false);
-    expect(rowText(html, "o/r#1")).toContain("CI идёт");
+    expect(rowText(html, "o/r#1")).toContain("CI running");
     // сессия названа по задаче — название не повторяется, видно только время последней записи
-    expect(rowText(html, "o/r#1")).toContain("4 мин назад");
+    expect(rowText(html, "o/r#1")).toContain("4 min ago");
     expect(rowText(html, "o/r#1").match(/Задача 1/g)).toHaveLength(1);
-    expect(rowText(html, "o/r#2")).toContain("мерж");
-    expect(rowText(html, "o/r#3")).toContain("деплой");
-    expect(rowText(html, "o/r#4")).toContain("ответ человека");
-    expect(rowText(html, "o/r#4")).toContain("2 ч 5 мин назад #4 Порог тишины");
+    expect(rowText(html, "o/r#2")).toContain("merge");
+    expect(rowText(html, "o/r#3")).toContain("deploy");
+    expect(rowText(html, "o/r#4")).toContain("human reply");
+    expect(rowText(html, "o/r#4")).toContain("2 h 5 min ago #4 Порог тишины");
     // PR: номер, чеки, конфликт
-    expect(rowText(html, "o/r#1")).toContain("#71 чеки идут");
-    expect(rowText(html, "o/r#3")).toContain("#73 влит");
+    expect(rowText(html, "o/r#1")).toContain("#71 checks running");
+    expect(rowText(html, "o/r#3")).toContain("#73 merged");
   });
 
   it("красные чеки при фоновом ожидании — «CI красный», конфликт PR — в его ячейке", () => {
@@ -111,7 +111,7 @@ describe("Строка задачи «В работе» — её сессия и
       live: { "o/r": live({ tasks: [task(7, "Экспорт")], prs: [pr({ checks: "failure", conflict: true })] }) },
     }), NOW);
     expect(v.rows[0]!.wait.key).toBe("ci-red");
-    expect(rowText(sessionsBody(v, NOW, false), "o/r#7")).toContain("#70 чеки красные · конфликт");
+    expect(rowText(sessionsBody(v, NOW, false), "o/r#7")).toContain("#70 checks red · conflict");
   });
 
   it("сессия без записей дольше порога, у которой ничего не идёт в фоне, помечена «тишина»", () => {
@@ -127,7 +127,7 @@ describe("Строка задачи «В работе» — её сессия и
     // фоновая без уведомления дольше потолка — потеряна (сессию закрыли)
     expect(wait(...bgCommand(NOW - BG_MAX - MIN, "b1", "Тесты в фоне")).key).toBe("silent");
     const html = sessionsBody(sessionsView(one(call(NOW - 40 * MIN, "Bash")), NOW), NOW, false);
-    expect(rowText(html, "o/r#7")).toContain("тишина");
+    expect(rowText(html, "o/r#7")).toContain("silence");
     expect(html).toMatch(/<span class="wait silent"/);
   });
 
@@ -137,10 +137,10 @@ describe("Строка задачи «В работе» — её сессия и
     }), NOW);
     expect(v.rows.map((r) => [r.number, r.wait.key, r.session])).toEqual([[7, "none", null], [8, "cloud", null]]);
     const html = sessionsBody(v, NOW, false);
-    expect(rowText(html, "o/r#7")).toContain("сессии нет");
+    expect(rowText(html, "o/r#7")).toContain("no session");
     // эпик задачи — под её названием
-    expect(rowText(html, "o/r#7")).toContain("эпик #5 Биллинг");
-    expect(rowText(html, "o/r#8")).toContain("облако, состояние не видно");
+    expect(rowText(html, "o/r#7")).toContain("epic #5 Биллинг");
+    expect(rowText(html, "o/r#8")).toContain("cloud, state not visible");
   });
 
   it("из нескольких сессий задачи — та, что писала последней; ответ «Всё сделано. Сессию можно закрывать.» — не вопрос", () => {
@@ -164,6 +164,14 @@ describe("Ждут владельца — вопросы сессий и зад�
     expect(questionOf("Отдельная задача не нужна.", true)).toBeNull();
     expect(questionOf("Нашёл два варианта.\n\nКакой берём — **A или B?**", true)).toBe("Какой берём — **A или B?**");
     expect(questionOf("Сделал.\n\nОсталось: мерж — от владельца.", true)).toBe("Осталось: мерж — от владельца.");
+  });
+
+  it("строки конца сессии и раздел вопросов — на любом языке словаря: дашборд общий на репозитории разных языков", () => {
+    expect(questionOf("Merged.\n\nAll done, but there are questions:\n1. Threshold?")).toBe("All done, but there are questions:\n1. Threshold?");
+    expect(questionOf("Green.\n**Remaining:** merge — from the owner.", true)).toBe("**Remaining:** merge — from the owner.");
+    expect(questionOf("Merged.\n\nAll done. The session can be closed.")).toBeNull();
+    expect(questionOf("Влито.\n\n**Всё сделано. Сессию можно закрывать.**")).toBeNull();
+    expect(openQuestions("## Questions\n1. Threshold?\n   ✅ 15 min.\n2. Cloud?\n\n## Scenarios\n- x\n")).toEqual(["2. Cloud?"]);
   });
 
   it("рутина — сессия, начатая промптом <scheduled-task>", () => {
@@ -210,14 +218,14 @@ describe("Ждут владельца — вопросы сессий и зад�
     ]);
     const html = sessionsBody(v, NOW, false);
     const block = /<section class="asks[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
-    expect(text(block)).toContain("Ждут владельца");
-    expect(text(block)).toContain("#7 Экспорт сессия · 4 мин назад");
+    expect(text(block)).toContain("Waiting for the owner");
+    expect(text(block)).toContain("#7 Экспорт session · 4 min ago");
     // задача с меткой — строкой с числом открытых вопросов, сами вопросы под раскрытием
-    expect(text(block)).toContain("#9 Отчёт по ROI метка «вопросы» · открытых: 1");
+    expect(text(block)).toContain("#9 Отчёт по ROI questions label · open: 1");
     expect(block).toMatch(/<details[^>]*><summary>[^<]*<\/summary>[\s\S]*1\. Валюта\?/);
     // задачи бэклога с вопросами — их десятки — свёрнуты группой; задача «В работе» — на виду
     const backlog = /<details class="backlog"[\s\S]*<\/details>/.exec(block)?.[0] ?? "";
-    expect(text(backlog)).toContain("задачи с вопросами вне работы: 1");
+    expect(text(backlog)).toContain("tasks with questions, not in progress: 1");
     expect(backlog).toContain("#9 Отчёт по ROI");
     expect(backlog).not.toContain("#8 Импорт");
     expect(block.indexOf("#8 Импорт")).toBeLessThan(block.indexOf('<details class="backlog"'));
@@ -229,8 +237,8 @@ describe("Ждут владельца — вопросы сессий и зад�
 
   it("никто не ждёт — блок говорит об этом", () => {
     const html = sessionsBody(sessionsView(input(), NOW), NOW, false);
-    expect(text(html)).toContain("Ждут владельца");
-    expect(text(html)).toContain("вопросов нет");
-    expect(text(html)).toContain("Задач «В работе» нет");
+    expect(text(html)).toContain("Waiting for the owner");
+    expect(text(html)).toContain("no questions");
+    expect(text(html)).toContain("No tasks in progress");
   });
 });
