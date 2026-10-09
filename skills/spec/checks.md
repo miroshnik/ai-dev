@@ -44,9 +44,9 @@ describe("every mutation writes an audit record", () => {
 });
 ```
 
-Tests: «реестр «mutations» не пуст» (the registry isn't empty) — a typo in a
+Tests: «registry «mutations» is not empty» — a typo in a
 path or a query gives an empty registry and a green check that checks nothing;
-«нарушитель не проходит: …» (the violator doesn't pass) — the check must fail
+«violator does not pass: …» — the check must fail
 on a known violator; one test per element, named with a statement; element
 tests are ordered by name, not by registry order — the order of files and
 queries depends on the machine, and `docs/spec` mustn't. No counters in names:
@@ -58,13 +58,13 @@ On real code:
 
 - *several conventions over one registry in a folder* — each has a `rule`
   ("audit", "cancel"): the service tests name it
-  («реестр «forms» не пуст (audit)»), an exception in the folder's shared
+  («registry «forms» is not empty (audit)»), an exception in the folder's shared
   `exceptions/` carries the same `rule` (without `rule` — it applies to all of
   the folder's conventions; a `rule` the folder doesn't have is red, below);
 - *outside scope* — `outside: [{ item, reason }]` (by `key`): the login form, a
-  section that differs on purpose — its own test «вне охвата: <key>» (outside
-  scope) with the reason on the page, not a filter in the test code; the element
-  dropped out of the registry — «убери из охвата» (remove from scope); an element
+  section that differs on purpose — its own test «outside scope: <key>»
+  with the reason on the page, not a filter in the test code; the element
+  dropped out of the registry — «remove from scope»; an element
   with its own file — a mark in it (below, "Mark on the element");
 - *required elements* — `includes: ["invoice", …]`: the not-empty test won't
   notice that the query lost half the registry;
@@ -75,8 +75,8 @@ On real code:
   the violator is `source("src/fake.ts", "…text…")`.
 
 **`examples` — examples for a lint rule.** A rule is checked on code where it
-must fire («нельзя», not allowed), stay silent («можно», allowed) and not apply
-(«вне охвата», outside scope — a file the rule doesn't cover). The linter goes
+must fire («not allowed»), stay silent («allowed») and not apply
+(«outside scope» — a file the rule doesn't cover). The linter goes
 through an adapter: `eslintLinter()` takes the project's ESLint and
 `eslint.config.*`, and an example is checked the same way `lint` would check a
 file at that path.
@@ -96,14 +96,14 @@ describe("the domain doesn't write to the console", () => {
 });
 ```
 
-Tests — «нельзя: …», «можно: …», «вне охвата: …»; for «нельзя», `count` is how
+Tests — «not allowed: …», «allowed: …», «outside scope: …»; for «not allowed», `count` is how
 many times the rule must fire (by default — at least once). A config with heavy
 plugins takes seconds to load — `const linter = eslintLinter();
 await linter.ready();` at the top level of the file: loading happens while
 collecting tests, not under the first example's timeout. Another rule firing
 counts neither for nor against; an example that doesn't parse is a failed test;
-no «нельзя» — a failed test «у правила … есть пример «нельзя»» (the rule has a
-not-allowed example). There is only one adapter so far — ESLint: ast-grep and
+no «not allowed» — a failed test «rule … has a «not allowed» example».
+There is only one adapter so far — ESLint: ast-grep and
 Biome will be added when a project needs them (the core doesn't depend on the
 linter, `Linter` is an interface with one required method, `lint`).
 
@@ -150,26 +150,23 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
   file in parallel and don't conflict. The file name is the element in Latin
   letters (the check doesn't require it); the same element in two files, a
   non-JSON file or one without `item` is an error with the path. An excepted
-  element gets «исключение: <key> (#N)» (exception) instead of the regular test:
+  element gets «exception: <key> (#N)» instead of the regular test:
   green while it violates the convention; once it complies — red
-  «убери исключение: удали <file>» (remove the exception: delete <file>) (a
+  «remove the exception: delete <file>» (a
   ratchet: debt only goes down; the path is from the repository root, even when
   a package's runner runs from the package's directory). An exception without a
   task, without a reason, or for an element outside the registry is red. An
   exception with a `rule` that no invariant in the folder has (a typo, the rule
   was renamed or deleted) is picked up by no invariant — a red test
-  «исключения с rule — к правилам инвариантов папки» (exceptions with a rule
-  belong to the folder's invariant rules) with the file path; the rules of the
+  «exceptions with a rule belong to the folder's invariant rules» with the file path; the rules of the
   folder's other files (subfolders sharing `exceptions/`) are looked up as a
   string in their code. The form of `rule` isn't checked: the file name is
   normalized. One directory per decision folder: `exceptions/` in a subfolder or
   a non-`.json` file in the directory — a red test
-  «исключения — файлы <элемент>.json в exceptions/ папки решения» (exceptions
-  are <element>.json files in the decision folder's exceptions/) with the paths
+  «exceptions are <element>.json files in the decision folder's exceptions/» with the paths
   (an exception from a subfolder isn't read). A leftover `exceptions.ts` in the
   decision folder or its subfolder — a red test
-  «исключения — файлом на элемент в exceptions/, а не в exceptions.ts» (one file
-  per element in exceptions/, not exceptions.ts) with a migration hint:
+  «exceptions are one file per element in exceptions/, not exceptions.ts» with a migration hint:
   `node .agents/skills/spec/scripts/spec-exceptions.ts` spreads each file into
   the decision folder's directory, changes the import in the folder's tests to
   `exceptionsIn()`, and the path in `package.json` and the CI workflow to the
@@ -198,17 +195,15 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
   `"//": "spec-outside(modules): shared ESLint config — a development
   tool"`; another key or a nested `"//"` isn't a mark, JSONC
   (`tsconfig.json`) takes a regular comment. The tests are the same:
-  «вне охвата: <key>» with the reason on the page, «исключение: <key> (#N)» with
-  the ratchet «убери отметку в <file>:<line>» (remove the mark in
-  <file>:<line>); without a task or a reason — red with the mark's location; a
+  «outside scope: <key>» with the reason on the page, «exception: <key> (#N)» with
+  the ratchet «remove the mark in <file>:<line>»; without a task or a reason — red with the mark's location; a
   `rule` that no folder invariant has — red
-  «отметки с rule — к правилам инвариантов папки» (marks with a rule belong to
-  the folder's invariant rules). `fileOf` returns `null` — the element has no
+  «marks with a rule belong to the folder's invariant rules». `fileOf` returns `null` — the element has no
   file of its own (a schema line, a router entry): `outside` and `exceptions/`.
-  A mark in a file of two elements — red «отметка — в файле одного элемента» (a
-  mark belongs in one element's file; to which one is unknown); a mark plus a
+  A mark in a file of two elements — red «a mark belongs in one element's file» (to
+  which one is unknown); a mark plus a
   record in `outside` or `exceptions/` for the same element — red
-  «у элемента одна запись» (one record per element). Existing registries aren't
+  «one record per element». Existing registries aren't
   converted all at once — only new ones and the one you are editing.
 - *Lint rule:* an exception is a disable in the code, right where the violation
   is: `// eslint-disable-next-line no-console -- #12 reason`. `collectEslint`
@@ -223,8 +218,8 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
   lintExceptions(it, { root: process.cwd(), dirs: ["src"] });
   ```
 
-  One test per file with disables («исключения в <file>: <rules> (#N)» —
-  exceptions in the file; the disables' tasks are in the name, the spec shows
+  One test per file with disables («exceptions in <file>: <rules> (#N)» —
+  the disables' tasks are in the name, the spec shows
   them): each disable names its rule and has `-- #N reason`; a blanket
   `eslint-disable` without rules is forbidden — it silences both the rules and
   the check inside the linter, so the format is checked by a test, not by an
@@ -256,15 +251,14 @@ export default {
   `boundaries.test.ts` — `examples` for that rule.
 - *Model against code* — `architecture(it, { root, model })` in
   `tests/architecture/modules/modules.test.ts`:
-  «каталог <dir> — в модуле <module>» (the directory is in the module) for every
+  «directory <dir> is in module <module>» for every
   code directory (outside modules — red; module paths nest — `src` and
   `src/lib`: a directory belongs to the module with the longest path, which comes
-  first in the ESLint rules), «<module> импортирует <package>» (imports; a
+  first in the ESLint rules), «<module> imports <package>» (a
   package not allowed for the module — red),
-  «<module> использует разрешённый пакет <package>» (uses an allowed package;
-  not imported — red: the model diverged from the code). In a monorepo —
-  «пакет workspace <path> — в корнях кода» (the workspace package is in the code
-  roots) for every package from `workspaces` (`package.json`) and
+  «<module> uses allowed package <package>» (not imported — red: the model
+  diverged from the code). In a monorepo —
+  «workspace package <path> is in the code roots» for every package from `workspaces` (`package.json`) and
   `pnpm-workspace.yaml` that has code: `roots` are written by hand, and a new
   package outside them would escape the check entirely (a root inside a package
   — `apps/web/src` — covers the package). An alias specific to each app is a
@@ -276,8 +270,8 @@ export default {
   and tsconfig, a local HTTPS bridge, test helpers, the scripts directory) —
   `outside: [{ item, reason }]`, routed the same way: it's a decision, not debt,
   and an exception with a task would outlive the task's closing. On the page —
-  «вне охвата: <element>» with the reason; the element is gone — red
-  «убери из охвата». A workspace package is an element with its own file: the
+  «outside scope: <element>» with the reason; the element is gone — red
+  «remove from scope». A workspace package is an element with its own file: the
   mark `"//": "spec-outside(<decision>): reason"` in its `package.json`
   (`<decision>` is the test's folder: `modules` for
   `tests/architecture/modules/`). Imports are parsed statically: relative ones,
@@ -416,16 +410,15 @@ claimed behavior").
   node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions]
   ```
 
-  Tests «<entry> вызывается тестом capability» (is called by a capability test)
+  Tests «<entry> is called by a capability test»
   — a call from `tests/capabilities/` (one from a standard or a helper doesn't
-  count); «реестр «точки входа» не пуст» (the entry-points registry isn't
-  empty); «id точек входа в реестре не повторяются» (entry-point ids don't
-  repeat in the registry; a repeat would hide an uncovered entry point behind a
-  covered one); «id из журнала есть в реестре» (ids from the log are in the
-  registry; otherwise the log's id format diverged from the registry, the
+  count); «registry «entry points» is not empty»;
+  «entry-point ids do not repeat in the registry» (a repeat would hide an
+  uncovered entry point behind a covered one); «ids from the log are in the
+  registry» (otherwise the log's id format diverged from the registry, the
   registry is incomplete, or the log is left over from a previous run);
-  «исключение: <entry> (#N)» — green while there is no test, once there is one —
-  «убери исключение» (remove the exception). `--exceptions` is a directory, one
+  «exception: <entry> (#N)» — green while there is no test, once there is one —
+  «remove the exception». `--exceptions` is a directory, one
   file per exception (no directory — no exceptions; a file instead of a
   directory — exit code 2 with a migration hint). Exit code 1 on unclaimed
   entry points. The report is `.spec-claims.xml` (JUnit) in the standard's
@@ -469,20 +462,15 @@ describe("product code is needed by the product", () => deadCode(it, { root: pro
 // knip arguments: deadCode(it, { root, args: ["--tsConfig", "tsconfig.test.json"] }) — tests outside the main tsconfig
 ```
 
-Tests by kind — «нет файлов без потребителя», «нет экспортов без потребителя»,
-«нет типов без потребителя», «нет зависимостей без импорта»,
-«нет импортов неустановленных пакетов», «нет нерезолвящихся импортов» (no
-unused files, exports, types; no dependencies without an import; no imports of
-unlisted packages; no unresolved imports) and the knip 6 kinds —
-«нет членов перечислений без потребителя»,
-«нет членов пространств имён без потребителя», «нет экспортов-дублей»,
-«нет вызовов неустановленных бинарников»,
-«нет лишних записей каталога пакетов»,
-«нет ссылок на отсутствующие записи каталога пакетов» (no unused enum members,
-namespace members, duplicate exports, calls to unlisted binaries, unused
-catalog entries, references to missing catalog entries) — failing with the
-list of findings. «все находки knip — известных видов» (all knip findings are
-of known kinds) fails on a kind the harness doesn't know (new in knip, `cycles`
+Tests by kind — «no files without a consumer», «no exports without a consumer»,
+«no types without a consumer», «no dependencies without an import»,
+«no imports of unlisted packages», «no unresolved imports» and the knip 6 kinds —
+«no enum members without a consumer»,
+«no namespace members without a consumer», «no duplicate exports»,
+«no calls to unlisted binaries»,
+«no unused catalog entries»,
+«no references to missing catalog entries» — failing with the
+list of findings. «all knip findings are of known kinds» fails on a kind the harness doesn't know (new in knip, `cycles`
 with `--cycles`): a finding doesn't disappear silently.
 
 **Finding key** — `<kind>:<file>#<name>`, the file comes from knip's report:
@@ -494,11 +482,10 @@ file and the catalog name (`catalog:pnpm-workspace.yaml#default.vue`,
 `catalogReference:packages/a/package.json#react18.react`); for a file —
 `file:src/legacy.ts`. An exception in one workspace doesn't hide the same
 package in another. An exception is a key with a task: green while knip finds
-it; once it stops — «убери исключение»; an old key without a file
+it; once it stops — «remove the exception»; an old key without a file
 (`dependency:lodash`) — a failed test listing the keys to replace.
 
-**Configuration hints** — the test «нет подсказок конфигурации knip» (no knip
-configuration hints): a redundant `ignore*`, an `entry` or `project` with no
+**Configuration hints** — the test «no knip configuration hints»: a redundant `ignore*`, an `entry` or `project` with no
 matches, a redundant workspace — as a string `<workspace>#<type>:<what>`
 (`packages/a#ignoreDependencies:lodash`, `.#entry-empty:src/main.ts`), an
 exception is `hint:<string>`. knip doesn't put them into the JSON report — the
@@ -559,7 +546,7 @@ that has it in `dependencies`, transitively (`devDependencies` don't get into
 the build). Packages — `workspaces` of the root `package.json` and
 `pnpm-workspace.yaml` (`!` — exclude); `dirs` — from each package's directory,
 an app has its own `dirs`. An element is `<app>/<VAR>`: tests
-«api/DATABASE_URL объявлена» (is declared), exception keys and `outside` are
+«api/DATABASE_URL is declared», exception keys and `outside` are
 the same:
 
 ```ts
@@ -574,17 +561,16 @@ envVars(it, {
 });
 ```
 
-Tests «<VAR> объявлена» (is declared) and «<VAR> читается в коде» (is read in
-the code); service ones (`NODE_ENV`, `CI`, `PORT`… — `ENV_SERVICE`) are outside
+Tests «<VAR> is declared» and «<VAR> is read in the code»; service ones (`NODE_ENV`, `CI`, `PORT`… — `ENV_SERVICE`) are outside
 the check. A project with its own registries on `invariant` takes the same
 parts: `envNamesInCode(codeOnly(text, file), { file, readers })`, `codeFiles`,
 `ENV_SERVICE`. Intentionally outside the check — `outside: [{ item, reason }]`:
-the test «вне охвата: <VAR>» with the reason on the page; the variable is in
-neither the code nor the schema — «убери из охвата»; `ignore` (without a
-reason) — a failed test «перенеси в outside» (move it to outside). An exception
+the test «outside scope: <VAR>» with the reason on the page; the variable is in
+neither the code nor the schema — «remove from scope»; `ignore` (without a
+reason) — a failed test «move it to outside». An exception
 and outside scope belong to the check whose registry has the variable: read
-without being declared — to «объявлена», declared without being read — to
-«читается».
+without being declared — to «is declared», declared without being read — to
+«is read».
 
 **Example code and exception reasons — in the spec.** While registering the
 tests, the harness writes run metadata — `.spec-meta/<process>.jsonl`
@@ -607,25 +593,23 @@ externals: {
 },
 ```
 
-`architecture` then adds: «хост <h> — только в адаптере <a>» (the host is only
-in the adapter; a URL literal outside the adapter or a host outside the model —
+`architecture` then adds: «host <h> is only in adapter <a>» (a URL literal outside the adapter or a host outside the model —
 red; not hosts: comments, `xmlns` and W3C namespace URIs, the example domains
 `example.com` and `.example`, `.invalid` per RFC 2606, navigation links — the
 `href` value of a link and of an object, except `<link href>`: a link is opened
 by the visitor's browser, while `location.href =` is navigation by code, a
-host), «пакет <p> внешней системы <x> — только у адаптера <a>» (the external
-system's package is only with the adapter; the model has no contradictions),
-«ключ <K> внешней системы <x> читает только адаптер <a>» (only the adapter reads
-the external system's key; reading — as in `envVars`, custom ways — the same
+host), «package <p> of external system <x> is only with adapter <a>» (the model
+has no contradictions),
+«key <K> of external system <x> is read only by adapter <a>» (reading — as in
+`envVars`, custom ways — the same
 `readers`: `architecture(it, { root, model, readers: [configGet] })`),
-«заголовок <H> … читает только адаптер <a>» (only the adapter reads the header;
-a string with the header name, case-insensitive — integration through perimeter
+«header <H> … is read only by adapter <a>» (a string with the header name, case-insensitive — integration through perimeter
 headers). An IP in a URL literal is a host of an external system too; not
 hosts — only loopback (`localhost`, `*.localhost`, `127.0.0.0/8`, `[::1]`) and
 `0.0.0.0`. Several adapters — `adapter` as a list: the host, package, key and
 header may be in any of them. No adapter — a perimeter (CDN, WAF in front of the
 system): no module talks to it, so its host, key or header in the code and its
-package in a module are red; on C1 it's a «периметр» (perimeter) in front of the
+package in a module are red; on C1 it's a «perimeter» in front of the
 system.
 
 Network in tests — `networkGuard`, in the test setup **before the mocks**:
@@ -642,8 +626,7 @@ reaches it. It lets out to the network only loopback and the `allow` hosts
 (`networkGuard(model, fetch, { allow: ["db"] })` — a CI service, an integration
 test's sandbox); a request to a declared external system fails with the host and
 system name — a forgotten mock doesn't go out to the network; to a host outside
-the model (and to `.test`, a public IP) — «объяви внешнюю систему» (declare the
-external system). The code under test may catch the `fetch` exception —
+the model (and to `.test`, a public IP) — «declare the external system». The code under test may catch the `fetch` exception —
 `check()` after the test fails on every rejected request. The browser's CSP
 header is `cspConnectSrc(model)`: the project's test compares its `connect-src`
 with it, and a new host not in the model won't get into the browser.
@@ -659,21 +642,21 @@ containers: {
 },
 ```
 
-`architecture` then adds: «модуль <m> — в контейнере <c>» (the module is in the
-container; in none or in several — red),
-«зависимость <a> → <b> — внутри контейнера» (the dependency is within a
-container; the target is in every container of the source; between containers —
-only a `uses` link), «развёртываемая единица <id> — контейнер <c>» (the
-deployable unit is a container; a unit from the configs without the model and a
+`architecture` then adds: «module <m> is in container <c>» (in none or in
+several — red),
+«dependency <a> → <b> is within a container» (the target is in every container
+of the source; between containers —
+only a `uses` link), «deployable unit <id> is container <c>» (a unit from the
+configs without the model and a
 model container without a config are red),
-«клиент <pkg> хранилища <s> — в контейнере <c>» (the storage client is in the
-container; without `uses` to the storage — red).
+«client <pkg> of storage <s> is in container <c>» (without `uses` to the
+storage — red).
 
 A monorepo's shared package, bundled into several apps, is a module with
 `library: true`: its containers are the containers of the modules that depend on
 it (transitively) and those where it's named in `modules`; there's no need to
 list it in every container. The test is
-«библиотека <m> — в контейнерах <c1, c2>» (the library is in the containers; in
+«library <m> is in containers <c1, c2>» (in
 none — red: no module of the containers depends on it); its dependency is within
 each of its containers, its storage client — with a `uses` link from each. On
 C3 a library is outside the container boundaries.
