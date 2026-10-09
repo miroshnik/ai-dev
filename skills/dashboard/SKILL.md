@@ -1,6 +1,6 @@
 ---
 name: dashboard
-description: A browser task dashboard served by the script itself, in two tabs. «Сессии» (Sessions, main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, and the «Ждут владельца» (Waiting for the owner) block with questions from session answers and from tasks with the «вопросы» (questions) label; refreshes itself. «Оценка и факт» (Estimate and actual) — a chart by task close time (estimate and actual in hours, actual to estimate, tokens and cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "which tasks are hanging", "what is the session waiting for", which questions await an answer; asked for a dashboard, a chart or "show it visually", how accurately tasks are estimated, whether they get pricier or cheaper, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
+description: A browser task dashboard served by the script itself, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, and the «Waiting for the owner» block with questions from session answers and from tasks with the «questions» label; refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual in hours, actual to estimate, tokens and cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "which tasks are hanging", "what is the session waiting for", which questions await an answer; asked for a dashboard, a chart or "show it visually", how accurately tasks are estimated, whether they get pricier or cheaper, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
 allowed-tools: Bash(bun *skills/dashboard/scripts/dashboard.ts *)
 ---
 
@@ -13,12 +13,10 @@ estimate accuracy and the cost of a task, while the `est history` table shows
 tasks one at a time, without a trend. The `scripts/dashboard.ts` script brings
 up a page with two tabs:
 
-- **«Сессии»** (Sessions; `/`, the main one) — In progress tasks, their
-  sessions and what each is waiting for, with «Ждут владельца» (Waiting for
-  the owner) at the top;
-- **«Оценка и факт»** (Estimate and actual; `/est`) — a chart by task close
-  date: GitHub project fields and the «Оценка» (estimate) and «Факт» (actual)
-  comment markers.
+- **«Sessions»** (`/`, the main one) — In progress tasks, their sessions and
+  what each is waiting for, with «Waiting for the owner» at the top;
+- **«Estimate and actual»** (`/est`) — a chart by task close date: GitHub
+  project fields and the «Estimate» and «Actual» comment markers.
 
 It writes nothing to GitHub.
 
@@ -30,7 +28,8 @@ The skill dir is the one this file is in (in Claude Code —
 `${CLAUDE_SKILL_DIR}`). The data is read by the `est` script next to it
 (`../est/scripts/est.ts`) — the skills are installed together. It needs `gh`
 with the `project` scope, as for `est`. A task's session is found by the pin
-file written by `github task status <N> "В работе"` (In progress)
+file written by `github task status <N> "In progress"` (in the project
+language — `locales/<language>.json` of the `github` skill)
 (`~/.config/ai-dev/sessions/<session id>` or in `$AI_DEV_CONFIG_DIR`), its
 state — by the transcript `~/.claude/projects/<dir>/<id>.jsonl`.
 
@@ -40,13 +39,12 @@ The script is a server: it prints the address, opens it in the browser and
 lives until stopped. So run it as a **background command**, not a regular
 call: a regular one won't return until the timeout.
 
-1. Before showing «Оценка и факт» — `est fact --sweep --since 90d --write`
-   (the `est` skill): the chart draws only recorded actuals. «Сессии» doesn't
+1. Before showing «Estimate and actual» — `est fact --sweep --since 90d --write`
+   (the `est` skill): the chart draws only recorded actuals. «Sessions» doesn't
    need it.
 2. Run the script in the background and read its output: the first line is
-   `дашборд: http://127.0.0.1:<port>/ — …` (dashboard), the second is
-   `браузер: открываю …` (browser: opening) or `браузер: не открываю (…)`
-   (browser: not opening).
+   `dashboard: http://127.0.0.1:<port>/ — …`, the second is
+   `browser: opening …` or `browser: not opening (…)`.
 3. Give the user the address. If the agent has its own browser (the app
    panel) — run with `--no-open` and open the address there; otherwise the
    script opens the system one itself (`BROWSER=<command>` — what to open it
@@ -57,7 +55,7 @@ call: a regular one won't return until the timeout.
 |---|---|
 | `--repo o/r` | repository; by default — from the directory's `git remote origin` |
 | `--all-repos` | all repositories in the personal `est` registry (`~/.config/ai-dev/repos.json`); each task names its repository |
-| `--since 90d` | default period of «Оценка и факт» (`d`, `w`, `m`); without it — all time. On the page — «30 дней», «90 дней», «всё время» (30 days, 90 days, all time) |
+| `--since 90d` | default period of «Estimate and actual» (`d`, `w`, `m`); without it — all time. On the page — «30 days», «90 days», «all time» |
 | `--port N` | port; by default — a free one, a busy one is an error |
 | `--no-open` | don't open the browser |
 
@@ -72,30 +70,27 @@ call: a regular one won't return until the timeout.
   then silent and red ones.
 - **What it is waiting for.** A session's background task (command,
   subagent, Monitor) without a completion notification — the session is
-  waiting for it: PR open and checks running — «CI идёт» (CI running), red —
-  «CI красный» (CI red), PR merged and the merge commit's checks running —
-  «деплой» (deploy), otherwise «работает» (working) with the background task's
-  description. The last turn is a model answer without a tool call:
-  «ответ человека» (human's reply), and with a green mergeable PR — «мерж»
-  (merge); «Всё сделано. Сессию можно закрывать.» (the "all done, can be
-  closed" line) or self-archiving — «можно закрывать» (can be closed). No
-  records for more than 15 min and nothing in the background — «тишина»
-  (silence) (a tool call without a result is named: waiting for permission
-  or hung). A background task older than 2 h without a notification is
-  considered lost. No pin — «сессии нет» (no session); a PR with the
-  `Claude-Session` trailer — «облако, состояние не видно» (cloud, state not
-  visible): a cloud session doesn't pin its task.
-- **«Ждут владельца».** Questions from the last answers of task sessions
-  («ответ человека», «мерж»): from the line «Всё сделано, но есть вопросы…»
-  (all done, but there are questions) or «Осталось: …» (remaining) to the end
-  of the answer; without them — the last paragraph. Sessions in the
+  waiting for it: PR open and checks running — «CI running», red —
+  «CI red», PR merged and the merge commit's checks running — «deploy»,
+  otherwise «working» with the background task's description. The last
+  turn is a model answer without a tool call: «human reply», and with a
+  green mergeable PR — «merge»; «All done. The session can be closed.» or
+  self-archiving — «can be closed». No records for more than 15 min and
+  nothing in the background — «silence» (a tool call without a result is
+  named: waiting for permission or hung). A background task older than 2 h
+  without a notification is considered lost. No pin — «no session»; a PR
+  with the `Claude-Session` trailer — «cloud, state not visible»: a cloud
+  session doesn't pin its task.
+- **«Waiting for the owner».** Questions from the last answers of task
+  sessions («human reply», «merge»): from the line «All done, but there are
+  questions…» or «Remaining: …» to the end of the answer; without them — the
+  last paragraph. Sessions in the
   repository's directories (`paths` of the `est` registry) without an In
   progress task that wrote within the last day — only with an explicit
   question (these lines or a paragraph ending in "?"); routines
-  (`<scheduled-task>`) don't count. In progress tasks with the «вопросы»
-  (questions) label — as a row, the open items of «## Вопросы» (the questions
-  section) under a disclosure; tasks not in work with the label — as a
-  collapsed group.
+  (`<scheduled-task>`) don't count. In progress tasks with the «questions»
+  label — as a row, the open items of «## Questions» under a disclosure;
+  tasks not in work with the label — as a collapsed group.
 - It refreshes itself every 30 s (and on returning to the tab): what's
   expanded stays expanded. Pins and transcripts are re-read, GitHub — at most
   once a minute and in the background: the page answers from cache, fresh
@@ -107,14 +102,13 @@ call: a regular one won't return until the timeout.
   the last 20 tasks with the `est` marker and `full` coverage) and the share
   of tasks within the ×0.5…×2 tolerance, the same numbers as in
   `est history`. Hours, tokens and cost of a task — the median of the last 10
-  closed tasks and the change against the previous 10. The
-  «Стоимость по моделям» (Cost by model) tile — each model's share of $ for
-  the last 10 tasks and for the previous 10: the model changed — the rate
-  changed.
+  closed tasks and the change against the previous 10. The «Cost by model»
+  tile — each model's share of $ for the last 10 tasks and for the previous
+  10: the model changed — the rate changed.
 - **Chart** — four panels on a shared time axis (close date): hours (ring —
   estimate, dot — actual, the segment between them — the error), actual to
   estimate (the ×1 line — the estimate matched, the band — the ×0.5…×2
-  tolerance), tokens, M, and cost, $ (ring — the forecast from the «Оценка»
+  tolerance), tokens, M, and cost, $ (ring — the forecast from the «Estimate»
   comment). The line is a rolling median of the last 10 tasks, the number at
   its end — the current value. The scales are logarithmic: an equal step — an
   equal ratio.
@@ -135,11 +129,11 @@ no ring and no ratio.
   size: check against the hours panel and the task types in the table,
   otherwise "cheaper" means "tasks got smaller".
 - The $ trend mixes the flow with the model's rate: a model change changes
-  the cost several-fold under the same flow. The «Стоимость по моделям» tile
+  the cost several-fold under the same flow. The «Cost by model» tile
   shows whether the model changed; the flow's effect — by tokens and hours.
 - The effect of a flow change — compare the trend before and after the date
   of an ai-dev release (tags `vYYYY.MM.DD`) or of the
-  `chore(agents): флоу ai-dev …` commit (the flow update) in the project;
+  `chore(agents): ai-dev flow …` commit in the project;
   fewer than ten tasks after the change so far — too early to draw a
   conclusion. The chart doesn't see flow without tasks (PRs without an issue)
   — the period summary over all sessions shows it, `est period`.
@@ -147,11 +141,11 @@ no ring and no ratio.
 ## Pitfalls
 
 - GitHub is re-read when the page opens, but at most once a minute; the
-  «Обновить» (Refresh) link — immediately. A GitHub error is shown on the
+  «Refresh» link — immediately. A GitHub error is shown on the
   page, the server keeps running.
-- «Оценка и факт» reads project rows in full, with comments: with
+- «Estimate and actual» reads project rows in full, with comments: with
   `--all-repos` the first opening of the tab takes tens of seconds.
-  «Сессии» doesn't wait for them: In progress tasks come from a project
+  «Sessions» doesn't wait for them: In progress tasks come from a project
   filter on GitHub's side.
 - An In progress task without a session — `github task status` was run not
   from Claude Code, or the pin was removed; two sessions per task (after
