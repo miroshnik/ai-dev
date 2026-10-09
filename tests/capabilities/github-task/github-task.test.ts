@@ -969,7 +969,7 @@ describe("task close закрывает задачу одной командой
   });
 });
 
-/** Влитое убирается по правилу «влитое удаляю целиком» (скилл github, «Git, PR и мерж — механика»): чекаут — на origin/main, ветка — долой локально и на хостинге. */
+/** Влитое убирается по правилу «влитое удаляю целиком» (скилл github, «Git, PRs and merging — mechanics»): чекаут — на origin/main, ветка — долой локально и на хостинге. */
 describe("task close убирает влитое", () => {
   // репозиторий задачи: bare origin с путём вида …/miroshnik/ai-dev.git, чекаут на ветке задачи
   function checkout(branch: string, { merged = true } = {}) {
