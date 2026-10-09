@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Общие правила и скиллы для агентов; установка — npx github:miroshnik/ai-dev install; скрипты скиллов — TypeScript под Bun, тесты — bun test в tests/",
+  "description": "A development flow with AI agents: shared rules and skills for any agent; install — npx github:miroshnik/ai-dev install; skill scripts — TypeScript under Bun, tests — bun test in tests/",
   "bin": {
     "ai-dev": "bin/ai-dev.mjs"
   },

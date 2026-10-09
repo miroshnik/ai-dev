@@ -15,14 +15,14 @@ interface Doc {
   text: string;
 }
 
-/** Документы флоу — то, что ставит install (AGENTS.md, claude/, docs/*.md, *.md скиллов), и README. */
+/** Документы флоу — то, что ставит install (AGENTS.md, claude/, docs/*.md, *.md скиллов), README и package.json: его описание показывают npm и npx. */
 function flowDocs(): Doc[] {
   const docs = readdirSync(path.join(ROOT, "docs")).filter((f) => f.endsWith(".md")).map((f) => `docs/${f}`);
   const skills = readdirSync(path.join(ROOT, "skills")).flatMap((s) => {
     const dir = path.join(ROOT, "skills", s);
     return existsSync(path.join(dir, "SKILL.md")) ? readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => `skills/${s}/${f}`) : [];
   });
-  return ["AGENTS.md", "claude/CLAUDE.md", "README.md", ...docs, ...skills].map((file) => ({ file, text: read(file) }));
+  return ["AGENTS.md", "claude/CLAUDE.md", "README.md", "package.json", ...docs, ...skills].map((file) => ({ file, text: read(file) }));
 }
 
 /** Строки с кириллицей: «номер: строка». */
@@ -32,7 +32,7 @@ export function cyrillicLines(text: string): string[] {
 
 describe("Флоу написан по-английски: в его документах нет кириллицы", () => {
   invariant(it, {
-    registry: "документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов",
+    registry: "документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов",
     items: flowDocs(),
     key: (d) => d.file,
     name: (d) => `в ${d.file} нет кириллицы`,
@@ -43,7 +43,7 @@ describe("Флоу написан по-английски: в его докум�
       }
     },
     violator: { name: "справочник с русской цитатой вывода скрипта", item: { file: "docs/x.md", text: "# Rule\n\nThe script prints «○ актуализация не нужна».\n" } },
-    includes: ["AGENTS.md", "claude/CLAUDE.md", "README.md", "docs/testing.md", "skills/spec/SKILL.md", "skills/github/reference.md"],
+    includes: ["AGENTS.md", "claude/CLAUDE.md", "README.md", "package.json", "docs/testing.md", "skills/spec/SKILL.md", "skills/github/reference.md"],
   });
 });
 
