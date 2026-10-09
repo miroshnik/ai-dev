@@ -1,140 +1,155 @@
 ---
 name: ci-wait
-description: Ожидание всех чеков PR или коммита (CI в GitHub Actions, деплой хостинга, внешний чек) скриптом с видимым прогрессом и исходами PASS / FAIL / TIMEOUT / ERROR. Когда — после push перед мержем PR; после мержа перед докладом «готово», если мерж запускает деплой (`merged <N>` — SHA мержа скрипт берёт сам); всякий раз, когда нужно дождаться CI или деплоя, вместо `gh pr checks --watch`, `sleep` в цикле и ручного опроса; `issue <N>` — закрытия бага на красный main (`github pr premerge`, код 3).
+description: Waiting for all checks of a PR or commit (CI in GitHub Actions, the host's deploy, an external check) with a script that shows progress and has the outcomes PASS / FAIL / TIMEOUT / ERROR. When — after a push, before merging a PR; after a merge, before reporting "done", if the merge triggers a deploy (`merged <N>` — the script takes the merge SHA itself); whenever you need to wait for CI or a deploy, instead of `gh pr checks --watch`, `sleep` in a loop and manual polling; `issue <N>` — for the closing of the bug on a red main (`github pr premerge`, exit code 3).
 allowed-tools: Bash(bash *skills/ci-wait/scripts/wait-ci.sh *) Bash(gh pr checks *) Bash(gh pr view *) Bash(git rev-parse *)
 ---
 
-# ci-wait — дождаться чеков, а не угадать
+# ci-wait — wait for checks, don't guess
 
-Ожидание CI и деплоя должно быть наблюдаемым, ограниченным по времени и
-полным по исходам. `gh pr checks --watch` сразу после push путает «чеки ещё
-не зарегистрированы» с «прошли», `sleep` в цикле не показывает, что
-происходит, а ручной опрос забывают повторить. Скрипт `scripts/wait-ci.sh`
-рядом с этим файлом делает всё детерминированно; агент только читает исход.
+Waiting for CI and deploys must be observable, time-bounded and complete in
+its outcomes. `gh pr checks --watch` right after a push confuses "checks not
+registered yet" with "passed", `sleep` in a loop doesn't show what is
+happening, and manual polling gets forgotten. The `scripts/wait-ci.sh` script
+next to this file does it all deterministically; the agent only reads the
+outcome.
 
-Запуск — из каталога репозитория (или с `GH_REPO=owner/repo`); фоновый — из
-каталога, который переживёт ожидание (главный чекаут, а не worktree, который
-удалят раньше): удалённый за это время каталог даёт `ERROR getcwd`.
-Фоновой командой — **без `| tail` и других фильтров**: итог — строка
-`RESULT:` в файле вывода, а heartbeat из stderr — единственный способ
-подсмотреть туда прогресс; фильтр копит вывод до конца.
+Run it from the repository directory (or with `GH_REPO=owner/repo`); in the
+background — from a directory that will outlive the wait (the main checkout,
+not a worktree that will be removed earlier): a directory removed meanwhile
+gives `ERROR getcwd`. As a background command — **without `| tail` or other
+filters**: the result is the `RESULT:` line in the output file, and the
+heartbeat from stderr is the only way to peek at progress there; a filter
+holds the output back until the end.
 
 ```bash
-bash <каталог скилла>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
-bash <каталог скилла>/scripts/wait-ci.sh status <sha> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
-bash <каталог скилла>/scripts/wait-ci.sh merged <N> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
-bash <каталог скилла>/scripts/wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
+bash <skill dir>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
+bash <skill dir>/scripts/wait-ci.sh status <sha> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+bash <skill dir>/scripts/wait-ci.sh merged <N> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+bash <skill dir>/scripts/wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
 ```
 
-## Когда что
+## What to run when
 
-| Момент | Команда |
+| Moment | Command |
 |---|---|
-| Запушил ветку PR, перед мержем | `pr <N>` — ждёт чеки головы PR, обязательные чеки базовой ветки и прогон каждого workflow, который по `on:` срабатывает на PR; конфликт с базой — сразу ERROR |
-| Смёржил, мерж запускает деплой или CI на `main` | `merged <N>` фоновой командой тем же ходом, что `github task actualize` — ждёт все чеки коммита мержа PR: check-runs GitHub Actions и статусы хостинга и внешних сервисов; SHA берёт из PR сам, невлитый PR — ERROR |
-| Чеки коммита по SHA (свой коммит без PR) | `status <sha>` — то же, что `merged`, по полному SHA |
-| Нужен один чек коммита (деплой среди прочих) | `merged <N> --context <имя>` или `status <sha> --context <имя>` |
-| `github pr premerge` — код 3, `main` красный | `issue <N>` фоновой командой — ждёт закрытия бага на красный `main`: PASS, когда закрыт (с причиной: `completed`, `not_planned`); нет issue — ERROR; затем снова `premerge` |
+| Pushed the PR branch, before merging | `pr <N>` — waits for the PR head's checks, the base branch's required checks and a run of every workflow whose `on:` fires on the PR; a conflict with the base — ERROR at once |
+| Merged, and the merge triggers a deploy or CI on `main` | `merged <N>` as a background command in the same turn as `github task actualize` — waits for all checks of the PR's merge commit: GitHub Actions check-runs and the statuses of the host and external services; takes the SHA from the PR itself, an unmerged PR — ERROR |
+| A commit's checks by SHA (my own commit without a PR) | `status <sha>` — the same as `merged`, by the full SHA |
+| One check of a commit is needed (the deploy among others) | `merged <N> --context <name>` or `status <sha> --context <name>` |
+| `github pr premerge` — exit code 3, `main` is red | `issue <N>` as a background command — waits for the bug on the red `main` to close: PASS when it is closed (with the reason: `completed`, `not_planned`); no such issue — ERROR; then `premerge` again |
 
-SHA своего мержа не добывать — `merged <N>` берёт его из PR сам: отдельные
-ходы `gh pr view` за ним были главным источником лишних ходов после мержа
-(#285), а `git rev-parse origin/main` при параллельных мержах отдаёт чужой,
-более поздний коммит. `<sha>` у `status` — полный; короткий не достраивать:
-по несуществующему SHA API молча отдаёт пустой статус, и ожидание висит до
-таймаута с ложным «не готово».
+Don't fetch the SHA of your own merge — `merged <N>` takes it from the PR
+itself: separate `gh pr view` turns for it were the main source of extra turns
+after a merge (#285), and `git rev-parse origin/main` with parallel merges
+returns someone else's later commit. The `<sha>` for `status` is the full one;
+don't fill in a short one: for a nonexistent SHA the API silently returns an
+empty status, and the wait hangs until the timeout with a false "not ready".
 
-Имя для `--context` — контекст статуса или имя check-run (job Actions), их
-печатают строки `CHECK` запуска без `--context`.
+The name for `--context` is a status context or a check-run name (an Actions
+job); the `CHECK` lines of a run without `--context` print them.
 
-## Как читать результат
+## How to read the result
 
-- stdout — только события: `CHECK <имя>: <bucket>` при смене состояния чека
-  и финальная строка `RESULT: PASS|FAIL|TIMEOUT|ERROR …`.
-- stderr — heartbeat каждый опрос (сколько чеков, сколько pending, упавшие,
-  `missing=[…]` — незарегистрированные обязательные); в фоновом запуске он
-  попадает в файл вывода, в чат его не тащить.
-- Код выхода: `0` PASS · `1` FAIL (перечислены упавшие) · `2` TIMEOUT ·
-  `3` ERROR (конфликт с базой, PR или SHA не найден, пять ошибок `gh` подряд,
-  неверный вызов).
+- stdout — events only: `CHECK <name>: <bucket>` when a check changes state
+  and the final line `RESULT: PASS|FAIL|TIMEOUT|ERROR …`.
+- stderr — a heartbeat on every poll (how many checks, how many pending, the
+  failed ones, `missing=[…]` — required ones not registered yet); in a
+  background run it lands in the output file, don't drag it into the chat.
+- Exit code: `0` PASS · `1` FAIL (the failed ones are listed) · `2` TIMEOUT ·
+  `3` ERROR (a conflict with the base, PR or SHA not found, five `gh` errors
+  in a row, a wrong invocation).
 
-Что делать дальше:
+What to do next:
 
-- **PASS** — перед мержем PR `github pr premerge <N>` (`main` ушёл после
-  CI — проверка слияния со свежим), код `0` — мерж; после мержа —
-  `github task close` (актуализация блока шла параллельно с ожиданием —
-  скилл `github`, `task actualize`) и доклад «готово». Фоновое ожидание
-  завершилось с кодом `0` — это и есть PASS: следующий шаг сразу, файл
-  вывода отдельным ходом не читать.
-- **PASS только по чекам хостинга, без Actions** (строки `CHECK` — одни
-  статусы превью и комментариев) в репозитории с CI в Actions — подозрительный:
-  `gh run list --commit <sha>` — был ли прогон и чем кончился.
-- **FAIL `workflow not parsed: <путь> <ссылка>`** — файл workflow на этом SHA
-  не разбирается (YAML), прогон без единого job; `workflow failed without
-  jobs` — не стартовал (ссылка на несуществующий reusable workflow, запрет
-  политики). Чинить файл, причина — на странице прогона по ссылке.
-- **FAIL** — пришёл на первом упавшем чеке, остальные могли ещё идти (полный
-  снимок — `--wait-all`). Читать логи упавшего чека
-  (`gh run view <id> --log-failed`), чинить причину; «известный красный
-  первый билд» — перезапустить свой прогон (`gh run rerun <id> --failed`) и
-  снова `ci-wait`. Не мержить. Джобы не стартовали с аннотацией «recent
-  account payments have failed…» — биллинг владельца, не код
+- **PASS** — before merging a PR, `github pr premerge <N>` (if `main` moved
+  after CI — a check of the merge with a fresh one), exit code `0` — merge;
+  after the merge — `github task close` (the epic refresh ran in parallel with
+  the wait — the `github` skill, `task actualize`) and the "done" report. A
+  background wait finished with exit code `0` — that is PASS: the next step
+  right away, don't read the output file in a separate turn.
+- **PASS only on the host's checks, without Actions** (the `CHECK` lines are
+  only preview and comment statuses) in a repository with CI in Actions —
+  suspicious: `gh run list --commit <sha>` — was there a run and how did it
+  end.
+- **FAIL `workflow not parsed: <path> <link>`** — the workflow file on this
+  SHA doesn't parse (YAML), a run without a single job; `workflow failed
+  without jobs` — it didn't start (a reference to a nonexistent reusable
+  workflow, a policy ban). Fix the file; the reason is on the run's page at
+  the link.
+- **FAIL** — came on the first failed check, the others may still have been
+  running (a full snapshot — `--wait-all`). Read the failed check's logs
+  (`gh run view <id> --log-failed`), fix the cause; a "known red first
+  build" — re-run your own run (`gh run rerun <id> --failed`) and `ci-wait`
+  again. Don't merge. Jobs didn't start, with the annotation "recent account
+  payments have failed…" — the owner's billing, not the code
   (`docs/pr-checks.md`).
-- **TIMEOUT** — не считать ни успехом, ни провалом: посмотреть, зарегистрированы
-  ли чеки вообще (`gh pr checks <N>`), не завис ли раннер; `missing required`
-  в итоге — обязательный чек так и не появился (workflow не запустился или
-  переименован); `no run of workflow: <путь>` — workflow по своему `on:`
-  должен был сработать на PR, а прогона на голове нет (Actions выключены,
-  инцидент GitHub, PR из форка с неразобранным файлом); последняя строка
-  `CHECK workflow queued: <путь>` — раннер так и не взял прогон. При необходимости
-  повторить с большим `--timeout`.
-- **ERROR `conflict with base`** — ждать нечего: rebase на `origin/<base>`,
-  `git push --force-with-lease`, снова `ci-wait`. Иной ERROR — проблема
-  доступа или вызова: репозиторий, права `gh`, номер PR, SHA.
+- **TIMEOUT** — count it neither as a success nor as a failure: check whether
+  the checks registered at all (`gh pr checks <N>`), whether the runner is
+  stuck; `missing required` in the result — a required check never appeared
+  (the workflow didn't start or was renamed); `no run of workflow: <path>` —
+  by its `on:` the workflow should have fired on the PR, but there is no run
+  on the head (Actions disabled, a GitHub incident, a PR from a fork with a
+  file that doesn't parse); a last line `CHECK workflow queued: <path>` — the
+  runner never picked up the run. If needed, repeat with a larger
+  `--timeout`.
+- **ERROR `conflict with base`** — nothing to wait for: rebase onto
+  `origin/<base>`, `git push --force-with-lease`, `ci-wait` again. Any other
+  ERROR is an access or invocation problem: the repository, `gh` permissions,
+  the PR number, the SHA.
 
-## Детали, из-за которых скрипт написан
+## Details the script exists for
 
-- Пустой список чеков — это pending, а не «прошли»: чеки регистрируются с
-  опозданием после push.
-- У коммита чеки в двух местах: статусы (`commits/<sha>/status`) пишут
-  хостинги и внешние сервисы, check-runs (`commits/<sha>/check-runs`) —
-  GitHub Actions. Ожидание одних статусов на коммите, где весь CI — Actions,
-  висит до таймаута; `status` ждёт оба. `pr` ждёт так же, по SHA головы PR.
-- На одном SHA лежат check-runs всех прогонов: отменённый новым push остаётся,
-  когда голову вернули на прежний коммит, перезапуск job добавляет новый.
-  Итог — за последним check-run имени у того же приложения, иначе ранний
-  `cancelled` даёт ложный FAIL при зелёном последнем.
-- Только REST: `gh pr checks` ходит в GraphQL, квота которого (5000 очков в
-  час) общая на все сессии пользователя — при параллельных сессиях кончается.
-  Голова PR (`pulls/<N>`) читается каждый опрос: новый push меняет SHA.
-  Лимит REST — ожидание до сброса квоты (`gh api rate_limit`), а не ERROR.
-- Сбой `gh` — не исход, и в запросах до первого опроса (коммит у `status`,
-  обязательные чеки у `pr`): повтор, ERROR — после пяти подряд. «Коммит не
-  найден» — только ответ API «нет» (422, 404), иначе разовый сбой во время
-  инцидента GitHub кончал ожидание ложным «не найден».
-- PR с конфликтом с базой (`mergeable: false`): merge-ref нет, и workflow на
-  `pull_request` не запускаются вовсе — без проверки ожидание кончалось
-  итогом по одним статусам хостинга. `mergeable: null` — GitHub ещё
-  вычисляет, ожидание.
-- Обязательные чеки базовой ветки (ruleset и классическая защита) ждутся по
-  именам: пока любого нет, финала нет, даже если остальные завершились.
-- Прогон Actions, упавший без единого job, check-run не даёт: workflow не
-  разобран — GitHub оставляет прогон-«пустышку» (имя — путь файла, событие
-  `push`, `conclusion: failure`), и итог сводился к одним статусам хостинга —
-  PASS без единого прогона тестов. Поэтому на каждом опросе читаются и
-  прогоны Actions на SHA (`actions/runs?head_sha=`).
-- Прогон в очереди check-runs ещё не дал — без него итог тоже сводился к
-  статусам хостинга (#360). Незавершённый прогон без check-runs — pending
-  `workflow queued: <путь>` (или `in_progress`), пока не появятся чеки его job.
-- `pr` ждёт прогон каждого активного workflow, который по своему `on:` на SHA
-  головы срабатывает на PR (YAML разбирает `bun`; без него проверка
-  пропускается с пометкой в stderr): `pull_request` без фильтров или с
-  ветками, пускающими базовую. Фильтр путей, `types` без `synchronize`,
-  отрицание в ветках без диффа не решить — такой workflow не ждут; файл,
-  который не разбирается, — ждут: у PR из форка нет и «пустышки».
-- Упавший чек — итог уже известен: долгий чек рядом (превью-деплой) его не
-  изменит, поэтому FAIL — сразу.
-- PASS засчитывается, только когда снимок без pending повторился два опроса
-  подряд; `--expect N` — минимальное число чеков, меньше которого ждём дальше.
-- Без branch protection `gh pr merge --auto` мержит, не дожидаясь CI, —
-  поэтому `--auto` не заменяет ожидание.
-- Одно ожидание за раз: не запускать второй `ci-wait` на тот же PR параллельно.
+- An empty check list is pending, not "passed": checks register with a delay
+  after a push.
+- A commit has checks in two places: statuses (`commits/<sha>/status`) are
+  written by hosts and external services, check-runs
+  (`commits/<sha>/check-runs`) by GitHub Actions. Waiting for statuses alone
+  on a commit whose whole CI is Actions hangs until the timeout; `status`
+  waits for both. `pr` waits the same way, by the PR head's SHA.
+- One SHA holds the check-runs of all runs: one cancelled by a new push stays
+  when the head is moved back to the earlier commit, and re-running a job
+  adds a new one. The result follows the latest check-run of a name from the
+  same app, otherwise an early `cancelled` gives a false FAIL while the latest
+  one is green.
+- REST only: `gh pr checks` goes to GraphQL, whose quota (5000 points per
+  hour) is shared by all of the user's sessions — with parallel sessions it
+  runs out. The PR head (`pulls/<N>`) is read on every poll: a new push
+  changes the SHA. A REST rate limit means waiting until the quota resets
+  (`gh api rate_limit`), not ERROR.
+- A `gh` failure isn't an outcome, in the requests before the first poll too
+  (the commit for `status`, the required checks for `pr`): a retry, ERROR
+  after five in a row. "Commit not found" is only the API's answer "no" (422,
+  404); otherwise a one-off failure during a GitHub incident ended the wait
+  with a false "not found".
+- A PR with a conflict with the base (`mergeable: false`): there is no
+  merge-ref, and workflows on `pull_request` don't start at all — without
+  this check the wait ended with a result from the host's statuses alone.
+  `mergeable: null` — GitHub is still computing; keep waiting.
+- The base branch's required checks (ruleset and classic protection) are
+  awaited by name: while any one is missing there is no final result, even if
+  the rest have finished.
+- An Actions run that failed without a single job gives no check-run: when
+  the workflow isn't parsed, GitHub leaves a "dummy" run (the name is the
+  file path, event `push`, `conclusion: failure`), and the result came down
+  to the host's statuses alone — PASS without a single test run. So every
+  poll also reads the Actions runs on the SHA (`actions/runs?head_sha=`).
+- A queued run hasn't produced check-runs yet — without it the result also
+  came down to the host's statuses (#360). An unfinished run without
+  check-runs is pending `workflow queued: <path>` (or `in_progress`) until
+  the checks of its jobs appear.
+- `pr` waits for a run of every active workflow that, by its `on:` on the
+  head SHA, fires on the PR (`bun` parses the YAML; without it the check is
+  skipped with a note in stderr): `pull_request` without filters or with
+  branches that let the base through. A paths filter, `types` without
+  `synchronize`, a negation in branches can't be decided without the diff —
+  such a workflow isn't awaited; a file that doesn't parse is awaited: a PR
+  from a fork doesn't even get the "dummy".
+- A failed check means the result is already known: a long check next to it
+  (a preview deploy) won't change it, so FAIL comes at once.
+- PASS counts only when a snapshot without pending repeats for two polls in
+  a row; `--expect N` — the minimum number of checks, below which we keep
+  waiting.
+- Without branch protection `gh pr merge --auto` merges without waiting for
+  CI — so `--auto` doesn't replace waiting.
+- One wait at a time: don't start a second `ci-wait` on the same PR in
+  parallel.
