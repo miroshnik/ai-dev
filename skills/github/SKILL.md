@@ -41,16 +41,20 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
 
 ## What is checked
 
+Names of views, `Status` options, fields, issue types and label markers here
+and below are the `en` ones (in the project language — `locales/<language>.json`
+of the `github` skill).
+
 1. The project is linked to the repository, it is the only one, its title =
    the repository name.
-2. Views `Доска` (board; BOARD, columns by `Status`), `Таблица` (table; TABLE),
-   `Роадмэп` (roadmap; ROADMAP), filters empty, no others.
-3. `Status`: `Бэклог` → `В работе` → `Готово` (Backlog → In progress → Done).
-4. Fields «Оценка, ч», «Факт, ч», «Токены, млн», «Стоимость, $» (estimate h,
-   actual h, tokens M, cost $; Number), no custom fields beyond the canon.
+2. Views `Board` (BOARD, columns by `Status`), `Table` (TABLE), `Roadmap`
+   (ROADMAP), filters empty, no others.
+3. `Status`: `Backlog` → `In progress` → `Done`.
+4. Fields «Estimate, h», «Actual, h», «Tokens, M», «Cost, $» (Number), no
+   custom fields beyond the canon.
 5. Organization only: `Priority` — the organization's issue field, connected,
-   `Таблица` and `Доска` are sorted by it; issue types — exactly «Задача»,
-   «Баг», «Эпик» (Task, Bug, Epic). A personal account has none — a `➖` line.
+   `Table` and `Board` are sorted by it; issue types — exactly «Task»,
+   «Bug», «Epic». A personal account has none — a `➖` line.
 6. Workflows "Item added to project" (→ Backlog), "Item closed" (→ Done),
    "Auto-add to project" (`is:issue is:open`) are on.
 7. Closed tasks — in Done; those closed without being done (not planned,
@@ -62,8 +66,8 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
    — by color: capability `0E8A16`, standard `1D76DB`, architecture `D93F0B`.
    One name for decisions of different kinds — one label: the color of the
    senior kind (capability → standard → architecture), all paths in the
-   description. A decision label is recognized by the description `Решение: …`
-   (decision: …). A decision without a label — the label is created. A label
+   description. A decision label is recognized by the description
+   `Decision: …`. A decision without a label — the label is created. A label
    without a decision on an open task — a new decision (`task new` puts it, it
    reaches the default branch with the task's PR): an `○` line with the task
    numbers, item ✅, the label is left alone. A label without a decision and
@@ -75,7 +79,7 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
    the old one is deleted). A regular label with a decision's name — ❌, it
    becomes a decision label with `--confirm`. A slice label — another slice of
    the project's tasks (apps, teams), recognized by the description
-   `Разрез: <slice>[ — note]` (slice: …): with a decision's name — an `○` line
+   `Slice: <slice>[ — note]`: with a decision's name — an `○` line
    with the slice, item ✅, `fix` doesn't touch it, the decision stays without a
    label. The model (`tests/architecture/model.ts`) is read by a separate
    process — if it didn't load, module labels are left alone, ❌ with the
@@ -111,13 +115,13 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
   closed without being done from the project, decision labels (creation,
   color), the default-branch ruleset (creation, editing its own), merge
   methods — rebase only (REST). `+` lines.
-- **UI steps** (`Шаги в UI …`, "UI steps …") — what the API lacks. Calling
+- **UI steps** (`UI steps …`) — what the API lacks. Calling
   `fix` is permission to configure this repository's project: the agent goes
   through the steps itself, in a browser where the user is signed in to GitHub
   (Claude in Chrome or the built-in browser after they sign in), without asking
   separately. No browser or sign-in — a list of steps with links for the user.
   The agent doesn't enter a password. After the steps — `check` again.
-- **Confirmation** (`Нужно подтверждение …`, "confirmation needed …") —
+- **Confirmation** (`Confirmation needed …`) —
   deleting and renaming in a project that already has tasks, unlinking extra
   projects, the organization's issue types (shared by all its repositories),
   deleting and renaming decision labels (they are on tasks). Show the list to
@@ -135,8 +139,8 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
   `A value is required` — the `Status` option the workflow pointed at was
   deleted (options were replaced without ids): pick it again.
   - "Item added to project": trigger `issue, pull request` (default), Set
-    value → `Status: Бэклог`.
-  - "Item closed": Set value → `Status: Готово`.
+    value → `Status: Backlog`.
+  - "Item closed": Set value → `Status: Done`.
   - "Auto-add to project": the repository — this project's, filter
     `is:issue is:open`, Enter — the "See N existing items" counter should
     update. Without `is:open` an updated closed task (a not planned one too)
@@ -171,7 +175,7 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
   is unavailable (someone else's account) or `--template none` — the project is
   created from scratch (`createProjectV2`) and brought up via the API:
   `Todo / In Progress / Done` → the canon with the same ids, `View 1` →
-  `Таблица`, the rest is created.
+  `Table`, the rest is created.
 - **The view filter is empty:** `iteration:@current` without an Iteration field
   silently hides tasks from the board.
 - **`Priority` is the organization's issue field** (`isIssueField`), not a
@@ -182,10 +186,10 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
 ## Tasks — task
 
 ```bash
-bun <skill dir>/scripts/github.ts task new --title "…" [--body-file F | --body "…"] [--type Задача|Баг|Эпик] \
+bun <skill dir>/scripts/github.ts task new --title "…" [--body-file F | --body "…"] [--type Task|Bug|Epic] \
     [--epic N] [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] \
     [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
-bun <skill dir>/scripts/github.ts task status <N> "В работе"      # Бэклог | В работе | Готово (Backlog | In progress | Done)
+bun <skill dir>/scripts/github.ts task status <N> "In progress"   # Backlog | In progress | Done
 bun <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
 bun <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
 bun <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, branch removed
@@ -196,7 +200,7 @@ bun <skill dir>/scripts/github.ts pr premerge <PR>               # before the me
 | Moment | Action |
 |---|---|
 | New task, an epic's subtask, an epic | first — whether one already exists (`gh issue list --search`); `task new`; then the estimate — the `est` skill (an epic isn't estimated: its estimate is the sum of its subtasks, `reference.md`) |
-| Took into work · reopened | `task status N "В работе"` — a separate call, no pipeline (`tail` hides the refusal code), before creating the branch |
+| Took into work · reopened | `task status N "In progress"` — a separate call, no pipeline (`tail` hides the refusal code), before creating the branch |
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed assignment; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
@@ -207,7 +211,7 @@ bun <skill dir>/scripts/github.ts pr premerge <PR>               # before the me
 a personal account an Epic gets the `epic` label, created if missing; Task and
 Bug get no label there), the project, the epic (sub-issue), the milestone by
 title among open ones, `Priority` in an organization (`Medium` by default).
-Then `Status: Бэклог` — by itself, without waiting for the workflow — and
+Then `Status: Backlog` — by itself, without waiting for the workflow — and
 blocked by. A subtask's title gets the epic's prefix (`<Prefix> · …`) if it
 lacks it; the epic's `Priority` is raised to the subtask's if the subtask is
 more urgent. Everything is checked before creating — an error (code 2) doesn't
@@ -217,15 +221,14 @@ title, the type is enabled, `Priority` is one of the options; in a personal
 account `--priority` is an error. `--labels` — the task's labels in the same
 mutation: a decision from the default branch — by name (`billing`), a new
 decision — `kind:name` (`capability:export`, the label is `export`, the line
-«новое решение» (new decision): it will appear in the task's PR); no decision
+«new decision»: it will appear in the task's PR); no decision
 label — created with the kind's color; a regular label must exist, otherwise an
 error before creating. A slice label by name (`api`) is a regular task label,
 not passed to the epic; `kind:name` with a slice label's name is an error
 before creating: a decision with that name isn't marked by a label. Prints
-`Создана #N …` (created), `+` lines and the next step; in a session with a
-pinned task (`task status` below) — a second line «Дальше:» (next):
-`сессия ведёт owner/repo#N — #M в новой сессии, первый промпт: #M` (the
-session runs owner/repo#N — #M in a new session, first prompt: #M).
+`Created #N …`, `+` lines and the next step; in a session with a
+pinned task (`task status` below) — a second line «Next:»:
+`the session runs owner/repo#N — #M in a new session, first prompt: #M`.
 
 **`task status`** — sets `Status` (a task outside the project is added). A
 subtask going In progress moves its epic from Backlog to In progress too.
@@ -239,7 +242,7 @@ pinned task, the new session's first prompt (`#M`) and the file path. The same
 task again, an epic, Backlog and Done — no refusal. No command removes the pin:
 a mistaken one is removed by a human, by deleting the file. `est` counts the
 actual by the pin: the whole session goes to this task. No variable (not
-Claude Code) — the line `○ сессия не опознана …` (session not recognized), the
+Claude Code) — the line `○ session not recognized …`, the
 status is set, no guard.
 
 **`pr labels`** — decision labels from the PR's changed files (API):
@@ -263,8 +266,8 @@ task's epic gets the same labels — the union of its subtasks; same with
 
 **`pr premerge`** — before merging a green PR, from a repository checkout: CI
 checked the merge with the default branch as it was at the time of the run,
-and without a merge queue the branch moves ahead. Didn't move — `✅ вливать`
-(merge), nothing is built. Moved — the PR head (`refs/pull/<N>/head`) merged
+and without a merge queue the branch moves ahead. Didn't move — `✅ merge`,
+nothing is built. Moved — the PR head (`refs/pull/<N>/head`) merged
 with a fresh `origin/<base>` in a temporary worktree (`git merge`, like
 GitHub's merge-ref; the worktree is always removed), dependencies by the
 merge's lockfile (`packageManager`, otherwise the lockfile:
@@ -294,18 +297,18 @@ run of each name: `failure`, `timed_out`, `startup_failure`; a cancelled one
 isn't red) or a host status (`failure`, `error`) — the same code `3` before
 checking the merge; checks not read — an `○` line, the check goes on. With
 code `3` the session doesn't merge and doesn't fix it in its PR: one bug for
-everyone — an open issue titled «`<base>` красный…» (`<base>` is red…; REST
+everyone — an open issue titled «`<base>` is red…» (REST
 search) that names the failed check (or script) — the whole name: `test` isn't
 in "test:spec" (#338); open ones about another check — the line
-`○ … про другой чек: не ждать` (about another check: don't wait). Found — a
+`○ … about another check: don't wait`. Found — a
 line with the number and the wait command `wait-ci.sh issue <N>` (the `ci-wait`
 skill, as a background command: its completion wakes the session), then
 `premerge` again; for a failed check that none of them names — a hint to find
 an open bug on the failed test (under another title) or the command
-`task new --type Баг` with the title
-«`<base>` красный: <check | typecheck | test:spec>» (`--priority Urgent` in an
+`task new --type Bug` with the title
+«`<base>` is red: <check | typecheck | test:spec>» (`--priority Urgent` in an
 organization; add the failed test's decision label), a chip for the bug and
-the same wait. A PR that closes any open «`<base>` красный…» bug (`Closes #N`
+the same wait. A PR that closes any open «`<base>` is red…» bug (`Closes #N`
 in the body) is a fix, without matching the check: the same breakage is named
 by a script one time and by a CI check another; a red `main` doesn't stop it
 (an `○` line), its red merge is code `1`, as usual.
@@ -319,14 +322,14 @@ one. A subtask — a hint to recalculate the epic's estimate.
 after the merge: the refresh doesn't depend on the deploy and runs in parallel
 with it, while the session at peak context neither assembles the assignment
 nor reads `reference.md`. It prints the whole assignment — pass it to the
-subagent as is: the first line «Задача #N (эпик #M)» (Task #N (epic #M); `est`
+subagent as is: the first line «Task #N (epic #M)» (`est`
 links the subagent's work to the task by it), the task and its merged PR (the
 link, otherwise the branch or "Closes #N" among recent PRs), the epic and its
 open tasks, the five checks from `reference.md`, what may be changed (only
 GitHub tasks; the task, the epic and their milestone are closed by
 `task close`), where to write the edits (a comment in the epic) and the answer
 form. No epic, or no open tasks in the epic other than this one — the line
-`○ актуализация не нужна` (refresh not needed), no subagent. Read-only, changes
+`○ refresh not needed`, no subagent. Read-only, changes
 nothing. The order after the merge — fewer turns (measurement #285: the extra
 turns were `gh pr view` for the SHA and reading the wait result): in one turn,
 as separate calls, — `task actualize N` and a background
@@ -344,12 +347,12 @@ without a PR): a PR that is open or closed without a merge — an error before
 any changes. GitHub sometimes doesn't link a merged PR to the task for hours —
 then the task's PR is searched among the default branch's recent PRs by the
 branch `<type>/<N>-<slug>` and "Closes #N" in the body: merged — the task is
-closed with the comment «Закрыта по PR #M: GitHub не связал PR с задачей»
-(closed by PR #M: GitHub didn't link the PR to the task), none — a refusal
+closed with the comment «Closed by PR #M: GitHub didn't link the PR to the
+task», none — a refusal
 listing what was checked (no manual `gh issue close` needed). Order:
 close the task if the merged PR didn't; the actual — `est fact <N> --write` by
 the est script next to it (`../est/scripts/est.ts`; missing — the line
-`○ факт недоступен` (actual unavailable), failed — its error as a `!` line, the
+`○ actual unavailable`, failed — its error as a `!` line, the
 rest is done); `Status` Done; the last sub-issue closed — the epic is closed
 and gets Done; no open tasks left in the task's (and the epic's) milestone —
 the milestone is closed (REST); the merged branch — per the "Right after a PR
@@ -357,7 +360,7 @@ merge" item of "Git, PRs and merging — mechanics" below: the checkout moves
 off the task's branch to `origin/<base>` detached, the local and remote
 branches are deleted; not merged, someone else's, or the directory isn't a
 checkout of the repository — an `○` line, nothing is touched; the command
-doesn't delete the session's worktree — the `Дальше` (next) hint. `--no-git` —
+doesn't delete the session's worktree — the `Next` hint. `--no-git` —
 without the git step. The last output line — the end-of-session steps: the
 epic has open tasks — a reminder about the epic refresh (its place is before
 close, in parallel with the deploy; if it didn't happen — a subagent with the
@@ -392,7 +395,7 @@ rules. Waiting for checks, the full SHA and a merge that deploys —
   `main` moved after the PR's CI — `typecheck` and `test:spec` on the merge
   with a fresh `main`; code `1` — don't merge, fix the root cause; code `3` —
   `main` is red by itself: don't merge and don't fix it in my PR — the
-  «`main` красный…» bug (`main` is red), wait for it to close
+  «`main` is red…» bug, wait for it to close
   (`wait-ci.sh issue <N>`) and `premerge` again. A window remains: an
   incompatibility with a PR merged during the check itself shows up as red CI
   of the next PR (it checks the merge-ref on top of a fresh `main`) — fix the
