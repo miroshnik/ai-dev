@@ -2676,7 +2676,7 @@
   "describes": [
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
-  "name": "в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto: с --auto — true, без флага и терминала — прежнее значение"
+  "name": "в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -2859,6 +2859,48 @@
    "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
   ],
   "name": "шаблон файла вне проекта (core.excludesFile) снимается исключением в .gitignore проекта; каталог, исключённый вне проекта, — ❌ с правилом, исключений на него в .gitignore проекта нет"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
+  ],
+  "name": "--lang ru пишет language: ru, повторный install без флага его сохраняет, --lang=pt-BR меняет"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
+  ],
+  "name": "--lang — флаг только install: у update и check он неизвестен"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
+  ],
+  "name": "install -g язык не спрашивает и не хранит — в ~/.agents/ai-dev.json поля language нет"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
+  ],
+  "name": "без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json language: en"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
+  ],
+  "name": "не код языка, --lang без значения и --lang с -g — отказ с кодом 2, ничего не ставится"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
+  ],
+  "name": "установка прошлой версии без поля language — install без флага пишет ru"
  },
  {
   "path": "tests/capabilities/release/release.test.ts",
@@ -5427,7 +5469,7 @@
   "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
-  "name": "вывод хука называет режим проекта; в проекте без флоу строки режима нет"
+  "name": "вывод хука называет режим и язык проекта; в проекте без флоу строк режима и языка нет"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5539,7 +5581,21 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
+  "name": "check называет язык проекта; установка прошлой версии без поля — ru, отставанием не считается"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
   "name": "update настройку сохраняет: auto true остаётся true, у установки прошлой версии без поля — false"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "update язык сохраняет: language ru остаётся ru, у установки прошлой версии без поля — ru"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5952,6 +6008,13 @@
   "name": "реестр «файлы ядра канона с бюджетом» не пуст"
  },
  {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
+  "name": "указатель на скилл — `the `name` skill` или `skill `name``; команда скилла в бэктиках указателем не считается"
+ },
+ {
   "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
   "describes": [
    "Каждый блок concurrency с общей группой — queue: max",
@@ -6316,6 +6379,405 @@
    "Файл исключений папки решения распознаётся одинаково в spec и github"
   ],
   "name": "таблица ловит расхождения pr labels до стандарта: не JSON, прежний файл не .ts, подпапка, скрытый файл"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "в en.json нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "вне охвата: autoAnswer"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "вне охвата: standardIssue"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название comments.actual из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название comments.state из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.actual из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.cost из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.estimate из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.tokens из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название issueTypes.bug из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название issueTypes.epic из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название issueTypes.task из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labelMarkers.decision из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labelMarkers.slice из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labels.questions из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название lastLine.done из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название lastLine.questions из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название lastLine.remaining из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название prSpecSection из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название sections.questions из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название sections.scenarios из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название status.backlog из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название status.done из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название status.inProgress из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название subagentPrompt.epic из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название subagentPrompt.task из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название views.board из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название views.roadmap из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название views.table из ru.json есть в скриптах скиллов"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "нарушитель не проходит: название, которого скрипты не пишут"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "реестр «русские названия skills/github/locales/ru.json» находит status.backlog, sections.questions, subagentPrompt.task, lastLine.done"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "реестр «русские названия skills/github/locales/ru.json» не пуст"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "у каждого языка те же ключи, что у en, и ни одного пустого названия"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в AGENTS.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в README.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в claude/CLAUDE.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в docs/ci-concurrency.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в docs/cloud-sessions.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в docs/judgment.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в docs/parallel-checkouts.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в docs/pr-checks.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в docs/testing.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/ci-wait/SKILL.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/dashboard/SKILL.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/est/SKILL.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/github/SKILL.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/github/reference.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/slot/SKILL.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/spec/SKILL.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/spec/canon.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/spec/checks.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/spec/ci.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/spec/migration.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "в skills/spec/reference.md нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "нарушитель не проходит: справочник с русской цитатой вывода скрипта"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Флоу написан по-английски: в его документах нет кириллицы"
+  ],
+  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, docs/*.md, *.md скиллов» не пуст"
  },
  {
   "path": "tests/standards/harness-load/harness-load.test.ts",
