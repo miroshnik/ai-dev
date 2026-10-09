@@ -1,6 +1,6 @@
 ---
 name: est
-description: Estimates GitHub tasks from the project's history (the «Оценка, ч» field from analogs with actuals) and records the actual from Claude Code, Codex and claude.ai/code cloud session transcripts when a task is closed. When — always when «Оценка, ч» is set on a new task or an epic's subtask; when a task is closed or a PR is merged (actual); in a cloud session when closing a task — its part of the actual («Факт (облако)»); when the cloud part wasn't counted (a Claude-Session trailer in commits, «не импортирована» (not imported) in the actual) — importing the session's events; when asked "how many hours", "estimate it", "how accurate are the estimates", for estimate history, an estimate backtest, the k coefficient, an actuals backfill or estimate vs actual; when comparing the flow before and after a change or spend over a period across all of a repo's sessions (`est period`) — even if the word "estimate" wasn't said but the talk is about planning the amount of work.
+description: Estimates GitHub tasks from the project's history (the «Estimate, h» field from analogs with actuals) and records the actual from Claude Code, Codex and claude.ai/code cloud session transcripts when a task is closed. When — always when «Estimate, h» is set on a new task or an epic's subtask; when a task is closed or a PR is merged (actual); in a cloud session when closing a task — its part of the actual («Actual (cloud)»); when the cloud part wasn't counted (a Claude-Session trailer in commits, «not imported» in the actual) — importing the session's events; when asked "how many hours", "estimate it", "how accurate are the estimates", for estimate history, an estimate backtest, the k coefficient, an actuals backfill or estimate vs actual; when comparing the flow before and after a change or spend over a period across all of a repo's sessions (`est period`) — even if the word "estimate" wasn't said but the talk is about planning the amount of work.
 allowed-tools: Bash(bun *skills/est/scripts/est.ts *) Bash(gh issue view *) Bash(gh pr view *)
 ---
 
@@ -13,10 +13,11 @@ the agent's transcripts (Claude Code, Codex), not reported from memory. The scri
 fields, comments, picking analogs); the agent's part is the correction for a named
 difference and explaining discrepancies.
 
-**Unit:** «Оценка, ч» (estimate, h) = «Факт, ч» (actual, h) = the agent's active
+**Unit:** «Estimate, h» = «Actual, h» (in the project language —
+`locales/<language>.json` of the `github` skill) = the agent's active
 hours on the task (agent work + pauses ≤ 30 min between records). Not
 person-hours, not calendar time. Manual work outside the agent (> 0.5 h) the human
-adds themselves as a line «+ вручную: N ч» ("+ manually: N h") in the actual
+adds themselves as a line «+ manually: N h» in the actual
 comment. Old estimates without the `<!-- est -->` marker (set before `est` was
 introduced, in other units) don't go into calibration (k).
 
@@ -25,10 +26,9 @@ claude.ai/code cloud sessions — section "Cloud session"), not memory and not a
 number by eye. A task done by an agent whose transcripts `est` doesn't read has
 its actual "unavailable" until its source is added.
 
-**Project fields are set only by the skill:** «Оценка, ч» — `est estimate --write`
-(from analogs with actuals, not off the top of the head); «Факт, ч», «Токены, млн»
-(tokens, M), «Стоимость, $» (cost, $) — `est fact --write` when the task is
-closed; never touch them by hand.
+**Project fields are set only by the skill:** «Estimate, h» — `est estimate --write`
+(from analogs with actuals, not off the top of the head); «Actual, h», «Tokens, M»,
+«Cost, $» — `est fact --write` when the task is closed; never touch them by hand.
 
 Run: `bun <skill folder>/scripts/est.ts <subcommand> …` (Bun, no dependencies) —
 the skill folder is the one holding this file (`~/.claude/skills/est`,
@@ -48,7 +48,7 @@ project from its link to the repository.
 |---|---|
 | You create a small task or an epic's subtask | `est estimate <N> --type <type> --write` — section "Estimating a new task" below |
 | PR merged / issue closed | `github task close <N>` — runs `est fact <N> --write` inside; recomputing the actual — `est fact <N> --write` |
-| `est history` prints «закрытых за 90 дней без факта: N» (closed in 90 days without an actual) | `est fact --sweep --since 90d --write` — fill in the actuals of closed tasks |
+| `est history` prints «closed in 90 days without an actual: N» | `est fact --sweep --since 90d --write` — fill in the actuals of closed tasks |
 | A model's rate in the price list was fixed or added | `est fact --sweep --model <id> --write` — recompute the recorded actuals with it and their epics |
 | Asked about accuracy / history | `est history [--grep word]`, `est backtest`; the trend over time — as a chart, the `dashboard` skill |
 | Compare the flow before and after a change, spend over a period without tasks | `est period --since <before> --until <change> --since <change>` — section "Period summary" |
@@ -77,9 +77,7 @@ chore / ci / build / research). Without `--write` everything is only printed.
    3 × |ln| of the ratio of the issue description sizes (characters, without
    answers to questions — those are added after the estimate); on a tie — the
    more recently closed. The comment names the analogs and how they are similar:
-   `Аналоги (подбор скриптом): #24 (факт 0.21 ч: метка est · тип feat · слова «оценка», «аналоги» · описание ×1.3); …`
-   ("Analogs (picked by the script): #24 (actual 0.21 h: label est · type feat ·
-   words "estimate", "analogs" · description ×1.3); …")
+   `Analogs (picked by the script): #24 (actual 0.21 h: label est · type feat · words «estimate», «analogs» · description ×1.3); …`
 2. **Correction** — only for a named difference that the features don't see:
    ×0.5 / ×1 / ×1.5 / ×2 (`--mult`, the reason — `--note`, one sentence). No
    difference — ×1: in the backtest, agents' corrections on top of the mechanics
@@ -94,12 +92,8 @@ chore / ci / build / research). Without `--write` everything is only printed.
 3. The script takes the median of the analogs' actuals × the correction and
    rounds it to the **nearest** step of the scale 0.1 · 0.25 · 0.5 · 1 · 1.5 · 2 ·
    3 · 5 · 8 · 13 h; the correction applies to the token and cost medians too. It
-   sets the «Оценка, ч» field and writes a comment (the marker has `"auto": true`):
-   `Оценка: 1 ч, ≈ 80.7 млн токенов, ≈ $136 (тип fix, доверие A; прогноз по фактам аналогов). Аналоги (подбор скриптом): #4 (факт 0.38 ч: …); #5 (факт 0.51 ч: …); #9 (факт 1.2 ч: …). Поправка: ×2 (вдвое больше правил). k=0.93 (n=20, уровень «репо»; справочно, к прогнозу не применяется).`
-   ("Estimate: 1 h, ≈ 80.7M tokens, ≈ $136 (type fix, confidence A; forecast from
-   the analogs' actuals). Analogs (picked by the script): … Correction: ×2 (twice
-   as many rules). k=0.93 (n=20, level "repo"; for reference, not applied to the
-   forecast).")
+   sets the «Estimate, h» field and writes a comment (the marker has `"auto": true`):
+   `Estimate: 1 h, ≈ 80.7M tokens, ≈ $136 (type fix, confidence A; forecast from the analogs' actuals). Analogs (picked by the script): #4 (actual 0.38 h: …); #5 (actual 0.51 h: …); #9 (actual 1.2 h: …). Correction: ×2 (twice as many rules). k=0.93 (n=20, level «repo»; for reference, not applied to the forecast).`
    If the analogs' actuals spread by more than ×3, the script adds a range; the
    field gets the median × correction rounded to the scale. The scale is capped
    at 13: if the analogs (before rounding) or `--hours` give more, the script
@@ -111,13 +105,13 @@ chore / ci / build / research). Without `--write` everything is only printed.
 **Analogs by hand** — `--analogs 254,260`, when the agent sees a difference the
 features don't catch (a subsystem without a label, a different scope with a
 similar description); then — 2–3 analogs from `est history --repo <r> [--grep
-<word>]` («аг.» — the task's subagents, «ходы» — model responses (turns), a size
+<word>]` («agents» — the task's subagents, «turns» — model responses, a size
 signal), and when in doubt about scope —
 `gh issue view <k> --json body,closedByPullRequestsReferences` and
 `gh pr view <pr> --json additions,deletions,changedFiles`. Only actuals with
-`full` coverage go into analogs (partial is marked «не учтён», "not counted"), at
+`full` coverage go into analogs (partial is marked «not counted»), at
 least two are needed. If parallel subagents will do the task (fan-out) — analogs
-with a similar «аг.» count.
+with a similar «agents» count.
 
 **Backtest** — `est backtest [--repo <r>] [--all-repos]`: every closed task with
 an actual is estimated by the mechanics the way the script would have estimated
@@ -135,7 +129,7 @@ expert estimate (`--hours`, with or without analogs).
 **Cold start — honestly.** If the repo has < 2 actuals closed before the task was
 created, the script won't pick analogs and says so → analogs from other repos by
 hand (`--analogs owner/repo#254`, the list — `est history --all-repos`; in the
-comment they are labeled «из проекта …», "from project …", confidence B). An
+comment they are labeled «from project …», confidence B). An
 analog from a non-public repo isn't written into a public repo: `--write` refuses
 before writing (without it — a warning), since the other task's name and number
 would stay in the comment's edit history too; take analogs from this repo or use
@@ -147,7 +141,7 @@ tokens and cost are recomputed in proportion to the hours. `--hours` is rounded 
 the scale, and the script warns about it.
 
 **Don't rewrite the estimate after work starts.** A discrepancy is explained in
-the actual comment: the actual there is compared with the «Оценка, ч» field, and k
+the actual comment: the actual there is compared with the «Estimate, h» field, and k
 in history — with the hours from the `<!-- est -->` marker.
 
 ## Actual at closing
@@ -172,29 +166,19 @@ repository, a branch with the task number, `#N` in the session's name and first
 prompt or in a subagent's assignment. Then it computes active hours — including
 the work of subagents and workflows inside the session — and writes a comment:
 
-`Факт: 3,1 ч активных в Claude Code (оценка 3 ч, ×1,03). 2 сессии, 14 промптов, 4 субагента, стена 10,2 ч, покрытие full. PR #336; 8 коммитов, дифф 2140 строк.`
-
-("Actual: 3.1 active hours in Claude Code (estimate 3 h, ×1.03). 2 sessions, 14
-prompts, 4 subagents, wall clock 10.2 h, coverage full. PR #336; 8 commits, diff
-2140 lines.")
+`Actual: 3.1 active hours in Claude Code (estimate 3 h, ×1.03). 2 sessions, 14 prompts, 4 subagents, wall clock 10.2 h, coverage full. PR #336; 8 commits, diff 2140 lines.`
 
 ("N subagents" — how many subagents worked on the task; a fan-out signal for
 picking analogs, `agents` in the marker)
 
 and on a second line — the model spend:
 
-`Токены: 150,9 млн (вход 0,01 · выход 0,18 · запись кэша 6,4 · чтение кэша 144,3); стоимость по API-тарифам ≈ $134,61 (claude-opus-5 $83,95, claude-fable-5-1 $50,67).`
-
-("Tokens: 150.9M (input 0.01 · output 0.18 · cache write 6.4 · cache read 144.3);
-cost at API rates ≈ $134.61 (…)")
+`Tokens: 150.9M (input 0.01 · output 0.18 · cache write 6.4 · cache read 144.3); cost at API rates ≈ $134.61 (claude-opus-5 $83.95, claude-fable-5-1 $50.67).`
 
 and on a third — turns and context (absent if there are no linked model
 responses):
 
-`Ходы: 250 (субагентов 2, их ходов 120), преамбула 104 тыс., контекст в конце 581 тыс., ходов с контекстом > 400 тыс. — 31 %.`
-
-("Turns: 250 (subagents 2, their turns 120), preamble 104k, context at the end
-581k, turns with context > 400k — 31 %.")
+`Turns: 250 (subagents 2, their turns 120), preamble 104k, context at the end 581k, turns with context > 400k — 31 %.`
 
 A turn is one model response (by `message.id`); a task's price grows
 quadratically with their number: every turn re-reads the whole context. The
@@ -205,7 +189,7 @@ and 45 % of tokens). Turns of a shared PR aren't split into shares — each task
 gets the whole turn. In the marker — `steps`, `steps_agents`, `tail` (a number),
 `preamble`, `ctx_end`.
 
-plus the fields «Факт, ч», «Токены, млн», «Стоимость, $» (the last two — if the
+plus the fields «Actual, h», «Tokens, M», «Cost, $» (the last two — if the
 project has them). Tokens are taken from `message.usage` of the same linked
 records as the time (including subagents), once per `message.id` — in a
 transcript, usage repeats on every block of a response, and a resumed session
@@ -243,15 +227,14 @@ session, linked like a session from that folder.
 
 Coverage: `full` — all of the task's PRs are visible in transcripts; `partial` —
 part of the work went past Claude Code (a second developer, another tool); `none`
-— no sessions, the field isn't set, the comment says «факт недоступен» ("actual
-unavailable"). Only `full` goes into k and analogs. Don't add a number by eye if
+— no sessions, the field isn't set, the comment says «actual unavailable».
+Only `full` goes into k and analogs. Don't add a number by eye if
 the script found no actual — "no data" is worth more than a made-up number.
 
 If actual/estimate is outside ×0.5…×2 and the estimate is ≥ 2 h — add to the same
 comment the line
-`Причина: <пропущена работа | вырос объём | внешний блокер | неверный аналог | иное>: <1–2 sentences>`
-("Reason: missed work | scope grew | external blocker | wrong analog | other"; the
-script keeps this line on a rerun).
+`Reason: <missed work | scope grew | external blocker | wrong analog | other>: <1–2 sentences>`
+(the script keeps this line on a rerun).
 
 Tasks we "won't do" and duplicates get no actual (they are no longer in the
 project).
@@ -261,19 +244,18 @@ project).
 A Claude Code cloud session (claude.ai/code) counts its own part: when a task is
 closed, `est fact <N>` in the cloud takes this session's transcript in the
 container (linking — the branch `<type>/<N>-…` or "#N" in the first prompt; PRs
-and commits aren't visible from there) and prints the comment «Факт (облако): …»
-("Actual (cloud)") with hours, tokens and a link to the session, with a part
+and commits aren't visible from there) and prints the comment «Actual (cloud): …»
+with hours, tokens and a link to the session, with a part
 marker (`cloud`) — the agent writes it into the issue with a GitHub tool. Project
 fields can't be set from the cloud: they are set by the nearest local `est fact
-<N> --write` or `--sweep` (closed tasks without the «Факт, ч» field), which adds
+<N> --write` or `--sweep` (closed tasks without the «Actual, h» field), which adds
 the cloud part to the local work without double counting; the part is kept in the
 marker on rewrites too.
 
 Cloud session commits carry the trailer `Claude-Session:
 https://claude.ai/code/session_…`: a PR with such a commit, for whose session
 there is neither a part nor an imported export, gets coverage `partial` and the
-line «Облачная сессия … не импортирована — est cloud-import» ("Cloud session …
-not imported") in the actual. This happens with old tasks and when the cloud
+line «Cloud session … not imported — est cloud-import» in the actual. This happens with old tasks and when the cloud
 couldn't link the transcript to the task — then a local session imports the
 events; an export of the same session takes precedence over the part.
 
@@ -336,13 +318,13 @@ ones without commits (the actual discards them as routines), and those pinned to
 its tasks; no guests (sessions of another repo). The script prints the totals and
 the same per PR merged in the period: agent hours (sum over sessions), machine
 hours (union of sessions) and their ratio — parallelism, tokens, output, $, turns,
-subagents, human prompts, $ per 1M tokens; for two periods — the «после / до»
-("after / before") ratio, and below the table — the $ share by model for each
+subagents, human prompts, $ per 1M tokens; for two periods — the «after / before»
+ratio, and below the table — the $ share by model for each
 period.
 
 **$ is flow × model rate.** A model change changes $ per PR several-fold with the
 same flow; the flow's effect shows in tokens, output and hours per PR, a rate
-shift — in «$ за 1 млн токенов» ("$ per 1M tokens") and the $ share by model
+shift — in «$ per 1M tokens» and the $ share by model
 (`est history` prints it too). Work on a PR may have started before the period —
 compare periods longer than a typical task.
 
@@ -350,7 +332,7 @@ compare periods longer than a typical task.
 
 Without this the coverage will be `partial`/`none`, and no history accumulates:
 
-- the task is taken into work (`github task status <N> "В работе"`, In progress)
+- the task is taken into work (`github task status <N> "In progress"`)
   in the session that does it: pinning links the whole session directly; the
   features below are a fallback for sessions without it and for history before it;
 - the session is named `#<number> <task title>` — the name is read from the
@@ -369,8 +351,8 @@ Without this the coverage will be `partial`/`none`, and no history accumulates:
   transcripts count as part of the session, and the number in the assignment
   links their work to its task even when several tasks run in parallel (without a
   number, parallel work is split by commit order — roughly). The task is the
-  number after the word «Задача» ("Task") or at the very start of the assignment
-  (`Задача #263 (эпик #250). …`, `#263 …`); a number after «эпик» ("epic") isn't
+  number after the word «Task» or at the very start of the assignment
+  (`Task #263 (epic #250). …`, `#263 …`); a number after «epic» isn't
   the task; two numbers without these markers (`look at #263 and #261`) give no
   hint;
 - `Closes #263` in the PR body;
@@ -415,35 +397,33 @@ found before writing to GitHub. Comments are idempotent: the markers
 `<!-- est {…} -->` and `<!-- fact {…} -->` at the end of a comment; a rerun
 updates the existing comment instead of adding new ones. `--sweep --write` writes
 only tasks with coverage `full`/`partial` — it doesn't mass-post "unavailable";
-for a single task `est fact <N> --write` does write «факт недоступен» ("actual
-unavailable") (that is the honest record at closing).
+for a single task `est fact <N> --write` does write «actual unavailable»
+(that is the honest record at closing).
 
 A `gh` network failure (timeout, dropped connection, GitHub 5xx) the script
 retries with pauses of 2, 5 and 15 s; a request error (404, permissions,
 validation) — it doesn't; it doesn't retry a new comment after a dropped response:
-GitHub may have accepted it. `--sweep` on one task's error prints `#N: ошибка …`
-("error") and moves on; a network that didn't come back within the retries stops
-the sweep. With `--write`, at the end — «не записано: …» ("not written") and the
+GitHub may have accepted it. `--sweep` on one task's error prints `#N: error …`
+and moves on; a network that didn't come back within the retries stops
+the sweep. With `--write`, at the end — «not written: …» and the
 command to retry, exit code 1.
 
 One record — one task: the `<!-- fact … -->` marker stores intervals per session
 (`iv`), and a record linked only by the session name or the first prompt but
 already included in a recorded actual of another task of the same session isn't
-counted again — the comment says so: «Не засчитано повторно: N ч уже в факте #M»
-("Not counted again: N h already in the actual of #M"). If that actual is the
+counted again — the comment says so: «Not counted again: N h already in the actual of #M».
+If that actual is the
 wrong one — `est fact M --write`, then this task again. A record linked by
 pinning, a branch, a subagent or its own commit stays its own; the overlap is
-printed («Пересечение с фактом #M … — пересчитать #M», "Overlap with the actual
-of #M … — recompute #M"). Actuals recorded before `iv` appeared aren't checked.
+printed («Overlap with the actual of #M … — recompute #M»). Actuals recorded before `iv` appeared aren't checked.
 `--sweep` at the end checks the sum of hours against the union of intervals
 within each session: parallel sessions at the same time aren't double counting; a
 warning comes only when records of one session went into the actuals of two tasks.
 
 The number is the **issue** number, not a PR's: given a PR number the script
 warns and computes the actual for the PR itself. A shared commit/PR that closed
-several tasks is split among them equally (the script's output says «без деления:
-N ч», "unsplit: N h"; the comment — «общий коммит … (доля 1/k)», "shared commit …
-(share 1/k)").
+several tasks is split among them equally (the script's output says «unsplit:
+N h»; the comment — «shared commit … (share 1/k)»).
 
 ## Pitfalls
 
@@ -455,7 +435,7 @@ N ч», "unsplit: N h"; the comment — «общий коммит … (доля 
   tokens — `token_usage_record` (once per response); records have no branch, so
   linking is by the number in the first prompt and by commit hashes. `gpt-*`
   models aren't in the price list — tokens are counted, the cost is marked
-  «без цены» ("no price") until it is set in `prices.json`.
+  «no price» until it is set in `prices.json`.
 - Claude Code transcripts live in `~/.claude/projects/<path-with-dashes>*/` and
   are cleaned up per `cleanupPeriodDays` (`settings.json` must have 365). The
   actual comment and the field are already the archive of the result; transcripts
@@ -464,9 +444,9 @@ N ч», "unsplit: N h"; the comment — «общий коммит … (доля 
   skips; if a task's actual is suspiciously small — check whether the work was in
   such a session or on someone else's branch.
 - A Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`): GraphQL and GitHub
-  Projects are closed there. `est fact <N>` in the cloud prints «Факт (облако)»
-  with this session's hours and tokens (or «Факт недоступен (облако)», "actual
-  unavailable (cloud)", if the transcript isn't linked to the task) — write it
+  Projects are closed there. `est fact <N>` in the cloud prints «Actual (cloud)»
+  with this session's hours and tokens (or «Actual unavailable (cloud)», if the
+  transcript isn't linked to the task) — write it
   into the issue with a GitHub tool; other commands fail with an explanation
   (`docs/cloud-sessions.md` in ai-dev). Project fields are set by a local
   `est fact <N> --write` / `--sweep` (section "Cloud session").
