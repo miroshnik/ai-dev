@@ -1,189 +1,200 @@
-# Спецификация — решения
+# Specification — decisions
 
-Канон спеки, вынесенный из ядра `AGENTS.md`: действует как правило для любого
-проекта, ядро оставляет от него абзац и ссылку сюда. Читать, когда пишешь или
-переносишь тест, добавляешь проверку, исключение или стандарт; как подключить
-каждый механизм — `checks.md` рядом, инструменты — `SKILL.md`.
+The spec canon, moved out of the `AGENTS.md` core: it applies as a rule to any
+project; the core keeps a paragraph of it and a link here. Read it when you
+write or migrate a test, add a check, an exception or a standard; how to wire
+each mechanism — `checks.md` next to this file, the tools — `SKILL.md`.
 
-Спека проекта — **решения с механической проверкой**, функциональные и
-нефункциональные: что система делает, из чего состоит, каким правилам
-подчиняется код и какие качества держит. Проверка — как система должна
-работать, код — как она работает: какой код, так система и работает, поэтому
-источником должного код быть не может. Источник должного — решение и его след
-(issue, коммит с причиной); код лишь показывает, какое решение принято, и тест
-«по коду» пишется, только когда след есть. Отдельных спецификаций нет: решение
-существует, только пока его проверяет механизм — тест, линт-правило,
-проверка над моделью архитектуры. **Нет проверки — нет решения, нет решения —
-нет кода:** поведение без проверки можно менять без согласования, а убрать
-то, чем пользуются, — только решением в issue; стандарт без проверки не
-действует; код, которого не заявляет ни одно решение, — мёртвый и удаляется.
+A project's spec is **decisions with a mechanical check**, functional and
+non-functional: what the system does, what it's made of, which rules the code
+obeys and which qualities it holds. A check is how the system should work,
+code is how it does work: whatever the code is, that's how the system works,
+so code can't be the source of what should be. The source of what should be is
+a decision and its trace (an issue, a commit with a reason); code only shows
+which decision was made, and a test "from code" is written only when the trace
+exists. There are no separate specifications: a decision exists only while a
+mechanism checks it — a test, a lint rule, a check over the architecture
+model. **No check — no decision; no decision — no code:** behavior without a
+check may be changed without agreement, but removing what people use — only
+by a decision in an issue; a standard without a check doesn't apply; code that
+no decision claims is dead and is deleted.
 
-- **Решение — единица спеки, папка — его дом.** Анатомия одна для всех
-  видов:
-  - `<папка>.md` — зачем и для кого, причина и отвергнутые альтернативы;
-    первый абзац — описание в оглавлении; метка `<!-- spec: … -->` ставит в
-    рассказ генерируемую схему (C4, сиквенс). JSDoc-шапок у файлов тестов нет;
-  - главный файл `<папка>.test.ts` — утверждения: разделы страницы идут в
-    порядке его `describe`, главное — первым; `<папка>.e2e.ts` рядом — следом
-    за ним (страницу открывают юниты), затем остальные `*.test.ts`,
-    `*.e2e.ts`;
-  - механизм — в той же папке: фрагмент `eslint.ts`, `rule.yml` ast-grep.
-    Конфиги инструментов проекта (`eslint.config.*`, `sgconfig.yml`) только
-    собирают их из дерева (`collectEslint` харнесса) — у правила один
-    дом;
-  - `exceptions/` — исключения элементов без своего файла, файл на
-    элемент (ниже).
-- **Монорепо — подпапка пакета внутри папки решения:**
-  `tests/<вид>/<name>/<пакет>/`. У пакета свой раннер (алиасы, окружение,
-  плагины) — он берёт `tests/*/*/<пакет>/`; тест прямо в папке решения, без
-  подпапки, — сквозной для репозитория (раннер корня). Решение одно — и
-  страница одна: главный файл — `<папка>.test.ts` в корне папки или в
-  подпапке пакета (`<пакет>/<папка>.test.ts`); рассказ — с главного файла
-  корня, затем главные файлы пакетов по имени пакета, затем остальные файлы.
-  `<папка>.md` и `exceptions/` — одни на папку, в её корне. Раннеры
-  запускаются из корня репозитория (`projects` Vitest или Jest, `-c` конфига
-  пакета): харнесс считает пути элементов от cwd; `exceptions/` читает от
-  файла теста, а путь исключения в подсказке — от корня репозитория, и при
-  раннере в каталоге пакета.
-- **Три корня `tests/` — по вопросу читателя,** вид инструмента в структуре
-  не кодируется:
+- **A decision is the unit of the spec, a folder is its home.** One anatomy
+  for all kinds:
+  - `<folder>.md` — why and for whom, the reason and rejected alternatives;
+    the first paragraph is the description in the table of contents; a
+    `<!-- spec: … -->` marker puts a generated diagram (C4, sequence) into the
+    story. Test files have no JSDoc headers;
+  - the main file `<folder>.test.ts` — the statements: the page's sections
+    follow the order of its `describe`s, the main one first; `<folder>.e2e.ts`
+    next to it comes right after it (the units open the page), then the other
+    `*.test.ts`, `*.e2e.ts`;
+  - the mechanism — in the same folder: an `eslint.ts` fragment, an ast-grep
+    `rule.yml`. The project's tool configs (`eslint.config.*`, `sgconfig.yml`)
+    only collect them from the tree (the harness's `collectEslint`) — a rule
+    has one home;
+  - `exceptions/` — exceptions for elements without a file of their own, one
+    file per element (below).
+- **Monorepo — a package subfolder inside the decision folder:**
+  `tests/<kind>/<name>/<package>/`. A package has its own runner (aliases,
+  environment, plugins) — it takes `tests/*/*/<package>/`; a test right in the
+  decision folder, without a subfolder, is repository-wide (the root runner).
+  One decision — one page: the main file is `<folder>.test.ts` at the folder
+  root or in the package subfolder (`<package>/<folder>.test.ts`); the story
+  starts with the root's main file, then the packages' main files by package
+  name, then the other files. `<folder>.md` and `exceptions/` — one per
+  folder, at its root. Runners are launched from the repository root (Vitest
+  or Jest `projects`, `-c` with the package's config): the harness counts
+  element paths from cwd; it reads `exceptions/` relative to the test file,
+  and the exception path in the hint is from the repository root, even with
+  the runner in the package directory.
+- **Three roots of `tests/` — by the reader's question;** the tool kind isn't
+  encoded in the structure:
   ```
   tests/
-    capabilities/<name>/   что система делает: поведение — юнит, интеграция, e2e
-    architecture/          из чего состоит: model.ts — C1 внешние системы (адаптеры,
-                           хосты, ключи окружения, заголовки), C2 контейнеры (связи,
-                           конфиги деплоя), C3 модули и библиотеки (каталог,
-                           назначение, API, от кого зависит, пакеты); <name>/ —
-                           проверки над моделью
-    standards/<name>/      каким правилам подчиняется весь код: соглашения формы,
-                           сквозные инварианты и качества
-    lib/                   фабрики, база, helpers — не спека, в доку не попадает
+    capabilities/<name>/   what the system does: behavior — unit, integration, e2e
+    architecture/          what it's made of: model.ts — C1 external systems (adapters,
+                           hosts, environment keys, headers), C2 containers (links,
+                           deploy configs), C3 modules and libraries (directory,
+                           purpose, API, what it depends on, packages); <name>/ —
+                           checks over the model
+    standards/<name>/      which rules all code obeys: form conventions,
+                           cross-cutting invariants and qualities
+    lib/                   factories, database, helpers — not the spec, not in the docs
   ```
-  Плоско, без подсистем; имя папки — идентификатор решения на английском.
-  **Один факт — один дом:** общее правило («каждая мутация пишет аудит») — в
-  `standards/`, поведение самого журнала — в своей capability, в остальных
-  capability о нём ни слова.
-- **Решения функциональные и нефункциональные — проверка у тех и других.**
-  Функциональное (что система делает) — capability. Нефункциональное —
-  архитектурное (модель `architecture`: из чего система состоит) и
-  стандарты (`standards/`: каким правилам подчиняется код). Качество —
-  производительность, безопасность, доступность, надёжность — такое же
-  решение с проверкой, а не пожелание прозой: сквозное («каждая мутация
-  пишет аудит», «каждый маршрут проверяет права», «каждая страница проходит
-  axe») — стандарт, «реестр + инвариант»; бюджет одной возможности («поиск
-  отвечает быстрее 300 мс») — в её capability, рядом с поведением. Качество
-  без проверки — не решение.
-- **Механизм — по тому, что фиксируем** (как подключить — `checks.md`
-  рядом); каждый обёрнут тестом раннера, поэтому `spec-doc` и `spec-diff`
-  видят всё одним путём:
-  - поведение — тест: алгоритм — юнит, подсистема — интеграционный,
-    взаимодействие подсистем — e2e; уровень в имени не кодируется, суффикс
-    `.e2e.ts` нужен только раннеру;
-  - соглашение формы («нет `console` в домене») — линт-правило с примерами
-    (`examples` харнесса): «нельзя» даёт ошибку правила, «можно» и файл вне
-    охвата — нет;
-  - поведенческое соглашение — «реестр + инвариант» (`invariant`): реестр из
-    кода (роутер, схема, файлы), тест на каждый элемент, тест «реестр не
-    пуст» и нарушитель, на котором проверка падает;
-  - **реестр, который параллельные PR правят по элементу, — файл на
-    элемент** (исключения — `exceptions/`): удаление и добавление своего
-    файла ни с чем не пересекается, а в общем массиве соседние строки
-    конфликтуют, и каждый следующий PR идёт на повторный прогон CI;
-    сортировка этого не спасает, `merge=union` при удалении соседних строк
-    возвращает обе. **Запись об элементе со своим файлом — отметкой в этом
-    файле** («вне охвата» и исключение): удалили элемент — ушла и запись, а
-    запись в тесте или `exceptions/` переживала элемент, и параллельный PR
-    вносил запись о том, чего уже нет;
-  - границы и зависимости — модель архитектуры: `boundariesConfig` (ESLint,
-    ошибка видна в редакторе) и `architecture` (каталог — в модуле, пакет
-    разрешён модулю и используется, внешняя система — только через адаптер,
-    модуль — в одном контейнере, библиотека — в контейнерах зависящих от неё
-    модулей); граф целиком (циклы, сироты) —
-    dependency-cruiser, только когда он нужен;
-  - порядок взаимодействия, когда он сам решение («сначала резерв, потом
-    списание»), — `sequence` с `order` по трассе `trace` на границах модели.
-- **Проверка умеет упасть и не флачит** (раздел «Тесты и код» в
-  `AGENTS.md`): тест пишется до кода и сначала красный, линт-правило
-  доказывает «нельзя» примером, инвариант — нарушителем, исключение —
-  храповиком. `.only`, `skip` без причины и номера issue, ретраи, моки своих
-  модулей (подменять можно только внешние края) — ошибка линта.
-- **Заявленность — код держится за решения в точках крепления,** а не
-  строками:
-  - каждая точка входа (маршрут, страница, job, команда) вызывается хотя бы
-    одним тестом capability — по журналу вызовов (`journal` и `spec-claims`),
-    а не по покрытию: покрытие говорит «выполнилось», а не «заявлено»;
-  - каждый каталог кода — в модуле модели, каждый пакет разрешён модулю и
-    импортируется;
-  - каждый файл и экспорт достижим из точки входа (`deadCode`, knip);
-  - каждая переменная окружения объявлена и читается (`envVars`).
+  Flat, no subsystems; the folder name is the decision's identifier in
+  English. **One fact — one home:** a general rule ("every mutation writes an
+  audit record") goes in `standards/`, the behavior of the audit log itself —
+  in its own capability; the other capabilities say nothing about it.
+- **Decisions are functional and non-functional — both have a check.** A
+  functional one (what the system does) is a capability. A non-functional one
+  is architectural (the `architecture` model: what the system is made of) or a
+  standard (`standards/`: which rules the code obeys). A quality —
+  performance, security, accessibility, reliability — is the same kind of
+  decision with a check, not a wish in prose: a cross-cutting one ("every
+  mutation writes an audit record", "every route checks permissions", "every
+  page passes axe") is a standard, "registry + invariant"; the budget of a
+  single capability ("search responds in under 300 ms") — in its capability,
+  next to the behavior. A quality without a check isn't a decision.
+- **The mechanism — by what we pin down** (how to wire it — `checks.md` next
+  to this file); each is wrapped in a runner test, so `spec-doc` and
+  `spec-diff` see everything the same way:
+  - behavior — a test: an algorithm — a unit test, a subsystem — an
+    integration test, interaction of subsystems — e2e; the level isn't encoded
+    in the name, the `.e2e.ts` suffix is only for the runner;
+  - a form convention ("no `console` in the domain") — a lint rule with
+    examples (the harness's `examples`): "not allowed" gives a rule error,
+    "allowed" and a file outside scope — don't;
+  - a behavioral convention — "registry + invariant" (`invariant`): a registry
+    from the code (router, schema, files), a test per element, a "registry
+    isn't empty" test and a violator on which the check fails;
+  - **a registry that parallel PRs edit element by element — one file per
+    element** (exceptions — `exceptions/`): deleting and adding your own file
+    overlaps with nothing, while in a shared array neighboring lines conflict,
+    and every next PR goes for a CI rerun; sorting doesn't save it, and
+    `merge=union` brings both back when neighboring lines are deleted. **A
+    record about an element with its own file — a mark in that file** (outside
+    scope and exception): the element is deleted — the record goes too,
+    whereas a record in a test or in `exceptions/` outlived the element, and a
+    parallel PR added a record about what no longer existed;
+  - boundaries and dependencies — the architecture model: `boundariesConfig`
+    (ESLint, the error shows in the editor) and `architecture` (a directory is
+    in a module, a package is allowed for a module and used, an external
+    system only through an adapter, a module in one container, a library in
+    the containers of the modules that depend on it); the whole graph (cycles,
+    orphans) — dependency-cruiser, only when it's needed;
+  - the order of interaction, when it is itself a decision ("reserve first,
+    then charge"), — `sequence` with `order` over a `trace` at the model's
+    boundaries.
+- **A check can fail and doesn't flake** (the "Tests and code" section in
+  `AGENTS.md`): a test is written before the code and is red first, a lint
+  rule proves "not allowed" with an example, an invariant — with a violator,
+  an exception — with a ratchet. `.only`, `skip` without a reason and an issue
+  number, retries, mocks of your own modules (only external edges may be
+  substituted) — a lint error.
+- **Claimedness — code holds on to decisions at attachment points,** not line
+  by line:
+  - every entry point (route, page, job, command) is called by at least one
+    capability test — by the call log (`journal` and `spec-claims`), not by
+    coverage: coverage says "executed", not "claimed";
+  - every code directory is in a model module, every package is allowed for a
+    module and imported;
+  - every file and export is reachable from an entry point (`deadCode`, knip);
+  - every environment variable is declared and read (`envVars`).
 
-  Существующее незаявленное — исключения с issue, а не удаление.
-- **Тест — решению, а не каждой строке,** внутри точки входа тоже. Тест
-  нужен, когда верны все три: это решение (могло быть иначе), поломку не
-  заметят (не ловят типы, не видно глазами), ошибка дорогая (общий код,
-  данные, деньги, внешние системы). Не тестирую гарантии компилятора и
-  библиотек, стили и раскладку, тексты подписей — кроме регрессии после
-  реального бага. Бедная страница спеки — не повод тестировать мелочи: тест на
-  мелочь падает от любой правки, его правят механически, и спекой он быть
-  перестаёт.
-- **Исключения — с храповиком:** у элемента со своим файлом — отметкой в
-  нём (`// spec-exception(<решение>) #N: причина`, «вне охвата» —
-  `spec-outside`), иначе в каталоге `exceptions/` папки решения, файл на
-  исключение (`<элемент>.json`: элемент, `#issue` и причина); исключение,
-  которое больше не нарушает, валит проверку («убери отметку в <файл>»,
-  «убери исключение: удали <файл>»). Прежний `exceptions.ts` переносит
-  `spec-exceptions`, харнесс на нём падает с подсказкой. Отключение линта в коде —
-  только с правилом и `-- #N причина` (`lintExceptions`); общий
-  `eslint-disable` запрещён, лишнее отключение — ошибка `lint`. Исключения
-  видны на странице решения — это долг, а не тайна. Задача на разбор
-  нарушителя — «Задача», не «Баг»: баг — неверное поведение у пользователя,
-  а нарушение действующего стандарта — долг. Новая проверка на
-  существующем коде входит сразу зелёной: текущие нарушения — исключениями с
-  задачей на их разбор, а не выключенной проверкой и не отложенным внедрением.
-- **Непроверяемое спекой не называется.** Где вид или UX — решение,
-  проверка точечная: скриншот-тест, тест job'а; доступность и бюджеты — как
-  любое качество (выше); остальное (вид, тексты, впечатление) — продуктовый
-  документ или приёмка в issue.
-- **Названия — утверждения по-русски.** `describe` — возможность на языке
-  пользователя («историю видит только тот, у кого есть право на саму
-  сущность»), `it` — конкретный пример; не имя функции, компонента или файла
-  (`spec-doc --strict` называет такие). Тесты одной возможности из юнитов и
-  e2e — под одинаковым `describe`. JSDoc перед `describe` или `it` — то,
-  чего не видно из названия, одна-три фразы для читателя спеки; имена
-  файлов, номера issue, устройство теста — в `//`, это для читателя кода.
-  Непонятное название переписать, а не объяснять.
-- **Намерение входит через issue:** реализацию обсуждаем и решения
-  принимаем в задаче («## Вопросы», комментарии). У задачи с кодом при
-  создании — метки решений (раздел «Ведение задач» в `AGENTS.md`) и
-  «## Сценарии»: будущие названия `it` (или «describe › it») списком: по ним
-  пользователь видит требования до кода и может остановить. У стандарта
-  «реестр + инвариант» тесты порождает харнесс по элементам — сценарий —
-  название `describe`, в котором вызван `invariant` (или `examples`). Агент
-  пишет сначала проверки и прогоняет их локально — новые красные
-  (проверка умеет упасть, поведения ещё нет); потом код — зелёные. Push и
-  PR — только зелёного: красный прогон CI ничего не доказывает, это шум.
-  Раздел «Спека» PR — `spec-diff --scenarios`, сверка сценариев с тестами.
-- **Дифф проверок в PR — дифф спеки,** дифф кода — реализация. Тело PR —
-  вывод `spec-diff`: добавленные, изменённые и удалённые названия тестов,
-  изменения модели архитектуры, исключений и реестров. Удалённый тест —
-  снятое требование, это должно быть видно.
-- **Документация генерируется,** руками не пишется: `spec-doc` строит
-  страницу на решение (зачем — `<папка>.md`, что верно — `describe`, чем
-  проверено — тесты, свёрнутые под разделом; у стандарта — код примеров и
-  исключения), страницу архитектуры из модели (схемы C4 и таблица модулей) и
-  сиквенс-схемы из трасс сценариев. `docs/spec` в `main` нет: после мержа CI
-  публикует её в ветку `spec` (`spec-publish`), ревью идёт по `spec-diff`.
-  Продуктовые документы (видение, решения бизнеса, исследования) — не спека
-  и живут отдельно.
-- **Повторяющееся решение — стандарт:** при закрытии задачи (проверка 5 в
-  разделе «Актуализация блока при закрытии задачи» канона) найденный повтор
-  становится issue «Стандарт · …», результат — правило в `tests/standards/`
-  и рефакторинг.
-- **Перенос старой спеки** (OpenSpec, ТЗ) в решения — справочник
-  `migration.md` рядом: исход у каждого требования, проверка поломкой,
-  категории снятия, «спека отстала от кода».
-- **Чего нет:** маркеров состояния и todo как плана (план — в issue), ADR
-  (причина — в `<папка>.md` решения), реестров capability, рукописной
-  документации о поведении и рисованных схем, Gherkin, мутационного
-  тестирования (шум эквивалентных мутантов, давление к тестам на мелочи),
-  точек утверждения кроме issue.
+  Existing unclaimed code — exceptions with an issue, not deletion.
+- **A test is for a decision, not for every line,** inside an entry point too.
+  A test is needed when all three hold: it's a decision (it could have been
+  otherwise), a breakage would go unnoticed (types don't catch it, eyes don't
+  see it), a mistake is costly (shared code, data, money, external systems). I
+  don't test compiler and library guarantees, styles and layout, label texts —
+  except a regression after a real bug. A thin spec page is no reason to test
+  trifles: a test of a trifle fails on any edit, it gets fixed mechanically,
+  and it stops being spec.
+- **Exceptions — with a ratchet:** for an element with its own file — a mark
+  in it (`// spec-exception(<decision>) #N: reason`, outside scope —
+  `spec-outside`), otherwise in the decision folder's `exceptions/` directory,
+  one file per exception (`<element>.json`: the element, `#issue` and the
+  reason); an exception that no longer violates fails the check («убери
+  отметку в <file>» — remove the mark, «убери исключение: удали <file>» —
+  remove the exception: delete the file). The old `exceptions.ts` is migrated
+  by `spec-exceptions`; the harness fails on it with a hint. Disabling lint in
+  code — only with a rule and `-- #N reason` (`lintExceptions`); a blanket
+  `eslint-disable` is forbidden, an unnecessary disable is a `lint` error.
+  Exceptions are visible on the decision's page — it's debt, not a secret. A
+  task to sort out a violator is a Task, not a Bug: a bug is wrong behavior
+  for the user, while a violation of a standard in force is debt. A new check
+  on existing code enters green right away: current violations — as
+  exceptions with a task to sort them out, not a disabled check or a postponed
+  rollout.
+- **What can't be checked isn't called spec.** Where the look or UX is a
+  decision, the check is targeted: a screenshot test, a job test;
+  accessibility and budgets — like any quality (above); the rest (look, texts,
+  impression) — a product document or acceptance in the issue.
+- **Names are statements in the project language** (`language` in
+  `.agents/ai-dev.json`). `describe` — a capability in the user's terms ("only
+  someone with access to the entity itself sees its history"), `it` — a
+  concrete example; not a function, component or file name (`spec-doc
+  --strict` names such ones; so far it recognizes a statement by Cyrillic
+  letters — English is #366). Tests of one capability from units and e2e —
+  under the same `describe`. JSDoc before a `describe` or `it` — what the name
+  doesn't show, one to three sentences for the spec reader; file names, issue
+  numbers, how the test is set up — in `//`, that's for the code reader.
+  Rewrite an unclear name rather than explain it.
+- **Intent comes in through an issue:** we discuss the implementation and make
+  decisions in the task (the questions section, comments). A code task gets at
+  creation its decision labels (the "Task tracking" section in `AGENTS.md`)
+  and the scenarios section: future `it` names (or "describe › it") as a list:
+  from them the user sees the requirements before the code and can stop it.
+  For a "registry + invariant" standard the harness generates the tests per
+  element — the scenario is the name of the `describe` in which `invariant`
+  (or `examples`) is called. The agent first writes the checks and runs them
+  locally — the new ones are red (the check can fail, the behavior doesn't
+  exist yet); then the code — green. Push and PR — only when green: a red CI
+  run proves nothing, it's noise. The PR's spec section — `spec-diff
+  --scenarios`, matching scenarios against tests.
+- **The diff of checks in a PR is the diff of the spec,** the diff of code is
+  the implementation. The PR body is `spec-diff` output: added, changed and
+  removed test names, changes to the architecture model, exceptions and
+  registries. A removed test is a withdrawn requirement; that must be visible.
+- **Documentation is generated,** not written by hand: `spec-doc` builds a
+  page per decision (why — `<folder>.md`, what holds — `describe`, what checks
+  it — the tests, collapsed under the section; for a standard — the examples'
+  code and the exceptions), the architecture page from the model (C4 diagrams
+  and the module table) and sequence diagrams from scenario traces.
+  `docs/spec` isn't in `main`: after a merge CI publishes it to the `spec`
+  branch (`spec-publish`); review goes by `spec-diff`. Product documents
+  (vision, business decisions, research) aren't spec and live separately.
+- **A recurring decision is a standard:** on task close (check 5 in the
+  canon's "Epic refresh on task close" section) a repetition found becomes a
+  "Standard · …" issue; the result is a rule in `tests/standards/` and a
+  refactoring.
+- **Migrating an old spec** (OpenSpec, a technical specification) into
+  decisions — the `migration.md` reference next to this file: an outcome for
+  each requirement, check by breaking, removal categories, "the spec fell
+  behind the code".
+- **What's not here:** state markers and todos as a plan (the plan is in the
+  issue), ADRs (the reason is in the decision's `<folder>.md`), capability
+  registries, handwritten documentation of behavior and hand-drawn diagrams,
+  Gherkin, mutation testing (noise from equivalent mutants, pressure towards
+  tests of trifles), approval points other than the issue.

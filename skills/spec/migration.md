@@ -1,122 +1,128 @@
-# Перенос старой спеки в тесты — справочник скилла spec
+# Migrating an old spec into tests — spec skill reference
 
-Проект со старой спекой (OpenSpec, документ требований, ТЗ) переходит на
-решения с проверкой («Спецификация — решения», `canon.md` рядом). Перенос
-закончен, когда у каждого требования старой спеки есть **исход**; тогда корпус
-старой спеки удаляется. Подключение инструментов — раздел «Подключение в
-репозиторий» в `SKILL.md`, здесь — как разбирать сами требования: решения,
-которые пилотный перенос (≈1050 требований, 13 PR) выводил в каждом PR заново.
+A project with an old spec (OpenSpec, a requirements document, a technical
+specification) moves to decisions with a check ("Specification — decisions",
+`canon.md` next to this file). The migration is finished when every
+requirement of the old spec has an **outcome**; then the old spec's corpus is
+deleted. Wiring the tools — the "Wiring into a repository" section in
+`SKILL.md`; here — how to sort out the requirements themselves: decisions that
+the pilot migration (≈1050 requirements, 13 PRs) re-derived in every PR.
 
-## Порядок
+## Order
 
-- Эпик перехода в репозитории проекта; подзадача — группа требований (домен,
-  capability), один PR на группу. Первая подзадача — каркас `tests/` и CI,
-  последняя — удаление корпуса.
-- В каждом PR группы — таблица исходов (шаблон ниже) и `spec-diff` (большой
-  PR — сводкой по папкам, полный список — в summary джоба).
-- Ссылки на старую спеку в коде (`@see openspec/specs/…`, `design.md`)
-  переписываются на решения по ходу групп, корпус удаляется последним.
+- An epic for the transition in the project repository; a subtask — a group
+  of requirements (a domain, a capability), one PR per group. The first
+  subtask — the `tests/` skeleton and CI, the last — deleting the corpus.
+- Every group PR has an outcome table (template below) and `spec-diff` (a big
+  PR — as a summary by folder, the full list — in the job summary).
+- References to the old spec in code (`@see openspec/specs/…`, `design.md`)
+  are rewritten to decisions group by group; the corpus is deleted last.
 
-## Исходы требования
+## Requirement outcomes
 
-У каждого требования — ровно один исход:
+Each requirement has exactly one outcome:
 
-| Исход | Когда | Что в PR |
+| Outcome | When | What goes in the PR |
 |---|---|---|
-| перепроверено поломкой | тест есть и ловит поломку (`spec-break` — ✅ «упал») | название теста |
-| дописано | теста нет, или `spec-break` — ❌ «не упал» | новый тест: сначала красный, потом зелёный |
-| по коду | спека отстала от кода, у поведения есть след решения (раздел ниже) | тест по коду, причина и след — в `<папка>.md` |
-| снято с причиной | категория снятия (раздел ниже) или требование больше не действует | причина — строкой таблицы |
-| дом в другом решении | повтор общего правила (стандарт) или поведения другой capability | тест там, здесь — ссылка |
-| тест в баге | поведение расходится с требованием, следа решения нет | задача со сценарием; тестом не закрепляется |
+| re-verified by breaking | a test exists and catches the breakage (`spec-break` — ✅ «упал», failed) | the test name |
+| added | no test, or `spec-break` — ❌ «не упал» (didn't fail) | a new test: red first, then green |
+| from code | the spec fell behind the code, the behavior has a decision trace (section below) | a test from code, the reason and the trace — in `<folder>.md` |
+| removed with a reason | a removal category (section below) or the requirement no longer applies | the reason — as a table row |
+| home in another decision | a repeat of a general rule (standard) or of another capability's behavior | the test there, here — a link |
+| test in a bug | the behavior diverges from the requirement, there is no decision trace | a task with a scenario; not pinned by a test |
 
-«Покрыто» из старой спеки или отчёта покрытия — не исход: унаследованный тест
-проверяется поломкой. В пилоте ложных «покрыто» нашлось не меньше 165 на
-3,6 тыс. поломок.
+"Covered" from the old spec or a coverage report isn't an outcome: an
+inherited test is checked by breaking. In the pilot, false "covered" came to no
+fewer than 165 per 3.6k breakages.
 
-Шаблон для тела PR группы:
+Template for the group PR body:
 
 ```markdown
-### Перенос: <группа>
+### Migration: <group>
 
-| Требование | Исход | Тест · причина · задача |
+| Requirement | Outcome | Test · reason · task |
 |---|---|---|
-| <спека> · <требование> | перепроверено поломкой | `tests/capabilities/<name>` · <describe › it> |
-| <спека> · <требование> | снято с причиной | разовая миграция данных |
-| <спека> · <требование> | тест в баге | #N |
+| <spec> · <requirement> | re-verified by breaking | `tests/capabilities/<name>` · <describe › it> |
+| <spec> · <requirement> | removed with a reason | one-off data migration |
+| <spec> · <requirement> | test in a bug | #N |
 
-Итог: перепроверено N · дописано N · по коду N · снято N · в другом решении N · в баге N.
+Total: re-verified N · added N · from code N · removed N · in another decision N · in a bug N.
 ```
 
-Тело PR — не больше 65 536 символов: у большой группы в теле итог и строки
-«снято», «по коду», «в баге» (их проверяют глазами), остальное — комментарием
-к PR.
+The PR body is at most 65,536 characters: for a big group the body has the
+total and the "removed", "from code" and "in a bug" rows (they are checked by
+eye), the rest — as a PR comment.
 
-## Проверка поломкой
+## Check by breaking
 
-`spec-break` (раздел в `SKILL.md`): поломка под одну проверку — правка, от
-которой тест обязан покраснеть; план группы — `--plan`, по поломке на прогон
-(первый красный тест в serial-группе e2e прячет остальные), откат — всегда,
-в том числе после обрыва сессии. Поломку выбирают по смыслу требования: снять
-проверку прав, вернуть не тот статус, пропустить запись аудита — а не
-случайную строку.
+`spec-break` (its section in `SKILL.md`): a breakage for one check — an edit
+that must turn the test red; the group's plan — `--plan`, one breakage per run
+(the first red test in an e2e serial group hides the rest), revert — always,
+including after a session drop. The breakage is chosen by the requirement's
+meaning: remove a permission check, return the wrong status, skip writing the
+audit record — not a random line.
 
-## Категории снятия
+## Removal categories
 
-Критерий — «Тест — решению» канона: тест нужен, когда это решение, поломку не
-заметят и ошибка дорогая. При переносе без теста снимаются:
+The criterion is the canon's "A test is for a decision": a test is needed when
+it's a decision, a breakage would go unnoticed and a mistake is costly. In a
+migration these are removed without a test:
 
-- **разовые миграции данных и схемы** — отработали однажды, их правильность — в
-  самой миграции и её откате, а не в тесте поведения;
-- **производительность** — индексы, планы запросов, число запросов, — когда
-  бюджет не решение; если бюджет — решение, остаётся точечная проверка
-  (бюджет производительности);
-- **инфраструктура вне репозитория** — хостинг, маркетплейс, настройки
-  сервисов, правила ветки: что проверяемо, уже держат `github project check` и
-  смоук прода в CI;
-- **процесс самой старой спеки** — оформление требований, статусы чейнджей,
-  `proposal` и `tasks`;
-- **недостижимый защитный код** — ветка, до которой не дойти через точку входа:
-  удалить код или снять требование, а не тестировать напрямую (моки своих
-  модулей запрещены);
-- **вид, тексты, впечатление** — продуктовый документ или приёмка в issue
-  (канон: «Непроверяемое спекой не называется»).
+- **one-off data and schema migrations** — they ran once; their correctness
+  lives in the migration itself and its rollback, not in a behavior test;
+- **performance** — indexes, query plans, query counts — when the budget isn't
+  a decision; if the budget is a decision, a targeted check stays (a
+  performance budget);
+- **infrastructure outside the repository** — hosting, marketplace, service
+  settings, branch rules: what's checkable is already held by `github project
+  check` and the production smoke test in CI;
+- **the process of the old spec itself** — formatting of requirements, change
+  statuses, `proposal` and `tasks`;
+- **unreachable defensive code** — a branch that can't be reached through an
+  entry point: delete the code or remove the requirement rather than test it
+  directly (mocks of your own modules are forbidden);
+- **look, texts, impression** — a product document or acceptance in the issue
+  (canon: "What can't be checked isn't called spec").
 
-## «Спека отстала от кода»
+## "The spec fell behind the code"
 
-Код — не источник должного: он показывает, как система работает, а не как
-должна. Источник должного — решение и его след: коммит с объяснением, решение
-в issue, архив чейнджа. Код лишь показывает, какое решение реализовано.
+Code isn't the source of what should be: it shows how the system works, not
+how it should. The source of what should be is a decision and its trace: a
+commit with an explanation, a decision in an issue, a change archive. Code only
+shows which decision was implemented.
 
-- **Есть след** — тест по коду; в `<папка>.md` решения — причина и ссылка на
-  след. Требование старой спеки снято этим решением.
-- **Следа нет** — задуманное от случайного не отличить: задача-решение (часто
-  «Баг») со сценарием, тестом текущее поведение не закрепляется. Убрать то, чем
-  пользуются, — только решением в этой задаче.
+- **There is a trace** — a test from code; in the decision's `<folder>.md` —
+  the reason and a link to the trace. The old spec's requirement is removed by
+  this decision.
+- **No trace** — what was intended can't be told from what is accidental: a
+  decision task (often a Bug) with a scenario; the current behavior isn't
+  pinned by a test. Removing what people use — only by a decision in that
+  task.
 
-В пилоте так разбиралось ≈10 % требований.
+In the pilot ≈10 % of requirements were handled this way.
 
-## Параллельный перенос соседних решений
+## Parallel migration of neighboring decisions
 
-- Папка решения — у одного PR за раз: теги и исключения в папке снимает её
-  владелец, соседний PR папку не трогает.
-- Исключения межпапочных проверок — в папке решения, которого касаются
-  (канон: исключения — в `exceptions/` папки решения): исключения названий —
-  файл на название в `names.exceptions/` папки (`spec-doc --names-baseline`
-  раскладывает их сам), переписал название — удали его файл. Прежний массив
-  (`names.exceptions.ts`, общий `tests/standards/spec-names/exceptions.ts`)
-  переносит `spec-exceptions`.
+- A decision folder belongs to one PR at a time: tags and exceptions in the
+  folder are removed by its owner; a neighboring PR doesn't touch the folder.
+- Exceptions of cross-folder checks — in the folder of the decision they
+  concern (canon: exceptions — in the decision folder's `exceptions/`): name
+  exceptions — one file per name in the folder's `names.exceptions/`
+  (`spec-doc --names-baseline` lays them out itself); rewrote a name — delete
+  its file. The old array (`names.exceptions.ts`, the shared
+  `tests/standards/spec-names/exceptions.ts`) is migrated by
+  `spec-exceptions`.
 
-## Скрипты и сиды
+## Scripts and seeds
 
-Логику на верхнем уровне модуля тестом не проверить: импорт запускает её
-побочные эффекты, а мокать свои модули нельзя. Ядро скрипта или сида — в
-модуль (`lib`), тест — ядру; сам скрипт — тонкая обёртка: разбор аргументов и
-вызов ядра.
+Logic at a module's top level can't be checked by a test: the import runs its
+side effects, and mocking your own modules isn't allowed. The core of a script
+or seed goes into a module (`lib`), the test — to the core; the script itself
+is a thin wrapper: argument parsing and a call to the core.
 
-## Удаление корпуса
+## Deleting the corpus
 
-Последняя подзадача эпика: у всех групп есть исходы, в коде не осталось ссылок
-на старую спеку — корпус удаляется одним PR, упоминания в правилах проекта — с
-ним. Сравнение до и после — по фактам `est` (`est history`), отдельной задачей,
-когда наберётся выборка.
+The epic's last subtask: all groups have outcomes and no references to the old
+spec are left in the code — the corpus is deleted in one PR, together with its
+mentions in the project's rules. A before-and-after comparison — from the `est`
+actuals (`est history`), as a separate task, once a sample accumulates.
