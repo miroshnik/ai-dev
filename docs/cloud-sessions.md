@@ -14,7 +14,7 @@ symlinks in `.claude/rules` and `.claude/skills` come with the clone (the
 ai-dev README, "Installation"). It works in the project language, just like a
 local session: `language` in `.agents/ai-dev.json`, which comes with the
 clone too. The version is the committed one: a cloud session doesn't update
-the flow even if `check` says «отстаёт» (behind) — a local session updates it
+the flow even if `check` says it is behind — a local session updates it
 (`update` and committing the copy into the task branch). There is no
 `SessionStart` hook in the cloud: it is installed on the machine.
 
@@ -49,13 +49,12 @@ and prints the same steps:
 
 1. `est fact <N>` computes this session's part of the actual from its
    transcript in the container (linking — the branch `<type>/<N>-…` or `#N`
-   in the first prompt) and prints a «Факт (облако)» comment (actual, cloud)
+   in the first prompt) and prints an `Actual (cloud)` comment
    with hours, tokens, a link to the session and a part marker — post it to
    the issue with a GitHub tool. Project fields (`Actual, h`, tokens, cost)
    are set by the next local session: `est fact <N> --write` or
    `est fact --sweep --write` adds the cloud part to the local work. The
-   transcript didn't link — «Факт недоступен (облако)» (actual unavailable,
-   cloud), and a local session imports the session's events via the browser
+   transcript didn't link — `Actual unavailable (cloud)`, and a local session imports the session's events via the browser
    (the `est` skill, "Cloud session").
 2. `Status` = Done is set by the project's built-in workflow "Item closed"
    (whether it is enabled — a local session checks with the `github` skill);
@@ -81,5 +80,5 @@ task number:
    is Linux, and platform differences (symlinks via `/var` → `/private/var`
    on macOS) aren't visible there.
 4. Then as usual: PR, green checks, merge, actual. The actual sees only the
-   local part of the work — add the line «Причина: пропущена работа: …»
+   local part of the work — add the line `Reason: missed work: …`
    (reason: missed work) with a link to the cloud session.

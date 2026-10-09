@@ -150,7 +150,7 @@ Without `-g` — the same for the project. Claude Code checks the machine and th
 - `.agents/ai-dev/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; `.agents/skills/<name>/` — all skills; `.agents/ai-dev.json` — the SHA and release tag it was installed from, the list of skills (a reinstall removes skills that ai-dev no longer has), `auto` — whether the agent runs a task entirely by itself, without a "yes" for commit, push and merge, and `language` — the project language.
 - Claude Code — symlinks `.claude/rules/ai-dev.md`, `.claude/rules/ai-dev-claude.md` (loaded automatically, whatever the project's `CLAUDE.md`) and `.claude/skills/<name>`.
 - Other agents — a block at the top of the project's `AGENTS.md` linking to `.agents/ai-dev/AGENTS.md` (the whole canon won't fit Codex's budget — 32 KiB for all of a project's `AGENTS.md` files) and `.agents/skills/` — the shared skills location of Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp.
-- Updating — `update` and a commit of the copy, `chore(agents): флоу ai-dev <tag>`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
+- Updating — `update` and a commit of the copy, `chore(agents): ai-dev flow <tag>`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
 - Flow files that the project's git ignores (a `CLAUDE.md` pattern, the `.claude/` directory, `vendor/`) are un-ignored by `install` and `update` with exceptions — an ai-dev block at the end of `.gitignore`, committed with the copy; what an exception can't un-ignore (a directory excluded by a personal rule), and anything ignored until `update` runs — `❌` in the output of the install and of `check`.
 
 **Onto the machine** (`-g`) — only the skills and the hook, no rules on the machine: the project loads them, and a second copy would be read on every turn of every agent (~20k tokens). `~/.agents/skills` — for all agents; Claude Code also gets `~/.claude/skills` and the `SessionStart` hook in `~/.claude/settings.json`. `install -g` removes the rules of a previous install (`~/.agents/ai-dev`, the symlinks in `~/.claude/rules` and the global files of Codex, Gemini CLI, Copilot CLI, OpenCode, Amp); it doesn't touch a file that isn't its own.
@@ -199,14 +199,14 @@ An estimate in one call from analogs with a measured actual, the script picks th
 
 ### [`dashboard`](skills/dashboard/SKILL.md) — sessions at work, estimate, actual and cost
 
-A browser page the script serves itself, with two tabs. Sessions («Сессии», the main one) — tasks In progress, their sessions and what each one waits for: CI, merge, deploy, a human's answer, working or silent; on top — questions to the owner from the sessions' answers and from tasks. When to call it — "what's up with the sessions", "is anything stuck", "which tasks are hanging". Estimate and actual («Оценка и факт») — estimate and actual in hours by task close date, actual to estimate, tokens and cost, with a rolling median and the $ share per model: whether estimates converge and whether a task gets cheaper after a flow change.
+A browser page the script serves itself, with two tabs. Sessions (the main one) — tasks In progress, their sessions and what each one waits for: CI, merge, deploy, a human's answer, working or silent; on top — questions to the owner from the sessions' answers and from tasks. When to call it — "what's up with the sessions", "is anything stuck", "which tasks are hanging". Estimate and actual — estimate and actual in hours by task close date, actual to estimate, tokens and cost, with a rolling median and the $ share per model: whether estimates converge and whether a task gets cheaper after a flow change.
 
 `dashboard [--repo o/r | --all-repos] [--since 90d]`
 
 ### [`spec`](skills/spec/SKILL.md) — specification from tests
 
 - `spec-doc` — runner reports (Vitest/Jest, Playwright, `bun test`) over the `tests/` tree → a page per decision, C4 architecture from the model, sequence diagrams from scenario traces.
-- `spec-diff` — the «Спека» (spec) section for a PR: added, changed and removed requirements, the model, exceptions, a check against the task's scenarios section.
+- `spec-diff` — the spec section for a PR (`## Spec (tests)`): added, changed and removed requirements, the model, exceptions, a check against the task's scenarios section.
 - `spec-publish` — after merge, publishes the documentation to the `spec` branch: it isn't in `main`.
 - `spec-run` — for publishing on PR merge, finds a green run that checked exactly the merge commit's tree; there is none (a PR that fell behind was merged) — publishing is skipped, the `spec` branch isn't rolled back.
 - `spec-claims` — every entry point (route, page, job, command) is called by a capability test — by the call log, not by coverage.

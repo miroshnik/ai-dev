@@ -70,21 +70,23 @@ documents and plans, commit and PR descriptions, `describe`/`it` names and
 decision docs. Always in English: code, identifiers, terms, conventional-commit
 type and scope.
 
-Names that scripts write and parse are written in the project language
-exactly as below (scripts read only the `ru` ones so far):
+Names that scripts write to GitHub and parse back are written exactly, in the
+project language: `en` — as below, another language — the same keys in
+`locales/<language>.json` of the `github` skill. So far scripts write and
+parse only the `ru` names (#366).
 
-| | `en` | `ru` |
+| | key | `en` |
 |---|---|---|
-| issue types | `Task`, `Bug`, `Epic` | `Задача`, `Баг`, `Эпик` |
-| issue sections | `## Questions`, `## Scenarios` | `## Вопросы`, `## Сценарии` |
-| open-questions label | `questions` | `вопросы` |
-| `Status` | `Backlog` → `In progress` → `Done` | `Бэклог` → `В работе` → `Готово` |
-| project fields | `Estimate, h`, `Actual, h` | `Оценка, ч`, `Факт, ч` |
-| comments | `State`, `Actual: …` | `Состояние`, `Факт: …` |
-| subagent prompt | `Task #N`, `epic #M` | `Задача #N`, `эпик #M` |
-| standard issue | `Standard · …` | `Стандарт · …` |
-| auto answer | ✅ auto | ✅ авто |
-| last line | `All done. The session can be closed.` · `All done, but there are questions: …` · `Remaining: …` | `Всё сделано. Сессию можно закрывать.` · `Всё сделано, но есть вопросы: …` · `Осталось: …` |
+| issue types | `issueTypes` | `Task`, `Bug`, `Epic` |
+| issue sections | `sections` | `## Questions`, `## Scenarios` |
+| open-questions label | `labels.questions` | `questions` |
+| `Status` | `status` | `Backlog` → `In progress` → `Done` |
+| project fields | `fields` | `Estimate, h`, `Actual, h`, `Tokens, M`, `Cost, $` |
+| comments | `comments` | `State`, `Actual: …` |
+| subagent prompt | `subagentPrompt` | `Task #N`, `epic #M` |
+| standard issue | `standardIssue` | `Standard · …` |
+| auto answer | `autoAnswer` | ✅ auto |
+| last line | `lastLine` | `All done. The session can be closed.` · `All done, but there are questions: …` · `Remaining: …` |
 
 ## What I do without asking and what needs a yes
 

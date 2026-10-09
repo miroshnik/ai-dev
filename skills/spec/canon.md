@@ -135,9 +135,8 @@ no decision claims is dead and is deleted.
   in it (`// spec-exception(<decision>) #N: reason`, outside scope —
   `spec-outside`), otherwise in the decision folder's `exceptions/` directory,
   one file per exception (`<element>.json`: the element, `#issue` and the
-  reason); an exception that no longer violates fails the check («убери
-  отметку в <file>» — remove the mark, «убери исключение: удали <file>» —
-  remove the exception: delete the file). The old `exceptions.ts` is migrated
+  reason); an exception that no longer violates fails the check (`remove the
+  mark in <file>`, `remove the exception: delete <file>`). The old `exceptions.ts` is migrated
   by `spec-exceptions`; the harness fails on it with a hint. Disabling lint in
   code — only with a rule and `-- #N reason` (`lintExceptions`); a blanket
   `eslint-disable` is forbidden, an unnecessary disable is a `lint` error.

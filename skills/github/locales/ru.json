@@ -1,0 +1,19 @@
+{
+  "issueTypes": { "task": "Задача", "bug": "Баг", "epic": "Эпик" },
+  "sections": { "questions": "## Вопросы", "scenarios": "## Сценарии" },
+  "labels": { "questions": "вопросы" },
+  "status": { "backlog": "Бэклог", "inProgress": "В работе", "done": "Готово" },
+  "fields": { "estimate": "Оценка, ч", "actual": "Факт, ч", "tokens": "Токены, млн", "cost": "Стоимость, $" },
+  "views": { "board": "Доска", "table": "Таблица", "roadmap": "Роадмэп" },
+  "labelMarkers": { "decision": "Решение:", "slice": "Разрез:" },
+  "comments": { "state": "Состояние", "actual": "Факт:" },
+  "subagentPrompt": { "task": "Задача", "epic": "эпик" },
+  "standardIssue": "Стандарт ·",
+  "autoAnswer": "✅ авто",
+  "lastLine": {
+    "done": "Всё сделано. Сессию можно закрывать.",
+    "questions": "Всё сделано, но есть вопросы:",
+    "remaining": "Осталось:"
+  },
+  "prSpecSection": "## Спека (тесты)"
+}

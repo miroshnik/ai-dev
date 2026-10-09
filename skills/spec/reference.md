@@ -57,7 +57,7 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
   error with its location, not an empty test list.
 - There is one parse — `parseCode` in `speclib.ts`: it serves the name
   scanner, the harness (ESLint comments, `codeOnly`, lines of neighboring
-  files) and the «Проверки харнесса» (harness checks) section of `spec-diff` —
+  files) and the "Harness checks" section of `spec-diff` —
   the `registry` option of `invariant` and `rule` of `examples` in the call
   arguments (`callOptions`); regexes over the text took a fixture in a string
   and an invariant's `rule` for a check (#289). Copies of the hand-written
@@ -228,7 +228,7 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
   `main` is checked in full. A PR that fell behind is merged — the trees
   differ, the publication is skipped: `spec` lags until the next merge with a
   matching tree but doesn't roll back, and `spec-diff` names the gap under
-  «База» (Base). `Source:` is the merge SHA: with squash and rebase the head
+  "Base". `Source:` is the merge SHA: with squash and rebase the head
   doesn't land in `main`'s history, and `spec-diff` looks for the publication
   among merge-base's ancestors. Rejected: tests on merge — that is CI on
   `main`; publishing from every PR run — unmerged work would land in `spec`;
