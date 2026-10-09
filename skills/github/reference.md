@@ -16,8 +16,9 @@ closing — `task new`, `task status`, `task actualize`, `task close`,
 - **Every issue has a type** (the organization's Issue type, not a label) —
   exactly three: **Task** (the default: a unit of work for one PR), **Bug**
   (a defect: something that already exists works wrong), **Epic** (a big task
-  with subtasks). There are no other types: Task/Bug are renamed
-  (to `Задача`/`Баг`), Feature is disabled. The type is set on creation
+  with subtasks). There are no other types: the default Task/Bug are
+  named in the project language (`issueTypes` in `locales/<language>.json`
+  of the `github` skill), Feature is disabled. The type is set on creation
   (`github task new --type`); `github project fix` configures the
   organization's types. Repositories of a personal account have no types —
   there an epic gets the `epic` label; this is the only exception.
@@ -35,8 +36,8 @@ closing — `task new`, `task status`, `task actualize`, `task close`,
   against the spec tree of the main branch.
 - **Project slice labels** — the team's own slice of tasks (apps `web`,
   `api`, `admin`; teams), not decisions: the marker is the description
-  `Разрез: <slice>[ — note]` ("Slice: …"; a decision label has `Решение: …`,
-  "Decision: …"). The name may coincide with a model module: then
+  `Slice: <slice>[ — note]` (a decision label has `Decision: …`). The name
+  may coincide with a model module: then
   `project check` prints a `○` line with the slice, `fix` doesn't touch the
   label, and the decision stays without a label (the name is taken);
   `pr labels` doesn't set such a label as a decision label, `task new
@@ -82,12 +83,10 @@ Every repository has **exactly one** GitHub Project linked to the repo
 per epic/area (an area = an epic inside the shared project). All tasks are
 added to the project right on creation (`github task new`). Required:
 
-- **Three views**, with exactly these names: `Доска` (Board; BOARD_LAYOUT,
-  columns by `Status`), `Таблица` (Table; TABLE_LAYOUT), `Роадмэп` (Roadmap;
-  ROADMAP_LAYOUT).
-- **The `Status` field** with options `Бэклог` → `В работе` → `Готово`
-  (Backlog → In progress → Done). I change the status **myself,
-  immediately**, without waiting to be asked
+- **Three views**, with exactly these names: `Board` (BOARD_LAYOUT, columns
+  by `Status`), `Table` (TABLE_LAYOUT), `Roadmap` (ROADMAP_LAYOUT).
+- **The `Status` field** with options `Backlog` → `In progress` → `Done`.
+  I change the status **myself, immediately**, without waiting to be asked
   (`github task status <N> <status>`):
   - a new task — I set Backlog on creation;
   - took a task into work — I set In progress before starting the work;
@@ -111,15 +110,15 @@ added to the project right on creation (`github task new`). Required:
   from the GitHub UI). The agent sets the status anyway; a task closed as not
   planned it removes from the project — otherwise the workflow puts it into
   Done.
-- **The `Оценка, ч` field** (Estimate, h; Number) — the agent's active hours
+- **The `Estimate, h` field** (Number) — the agent's active hours
   (`AGENTS.md`, section "Estimate and actual — the `est` skill"). Set **only
   via the `est` skill** — from analogs with actuals, not off the top of my
   head: for every subtask and small task on creation; for an epic — the sum
   of its subtasks' estimates, recalculated when a subtask is added or its
   estimate changes. After work starts I don't rewrite the estimate — the
   discrepancy is explained in the actual comment.
-- **The `Факт, ч`, `Токены, млн`, `Стоимость, $` fields** (Actual, h;
-  Tokens, millions; Cost, $; Number) — the actual: active hours, all tokens
+- **The `Actual, h`, `Tokens, M`, `Cost, $` fields** (Number) — the actual:
+  active hours, all tokens
   of the linked model responses (input, output, cache write and read,
   including subagents) and their price at public API rates — an **API
   equivalent**: not charged on a subscription, but comparable across tasks
@@ -130,7 +129,7 @@ added to the project right on creation (`github task new`). Required:
   project field of our own.
   Required on every open task: a new one gets `Medium` unless the user said
   otherwise; an epic — no lower than its most urgent open subtask. The field
-  is added to the project, `Таблица` and `Доска` are **sorted by it**; within
+  is added to the project, `Table` and `Board` are **sorted by it**; within
   a priority the order is manual. We take into work the most urgent of the
   unblocked. A personal account has no issue fields — no priority is kept.
   `github task new` sets it (`--priority`, `Medium` by default).
@@ -190,16 +189,16 @@ the deploy wait (`ci-wait`) run in the background in parallel,
 `github task close` — after both. The whole assignment for the subagent — the
 task and its PR, the epic, its open tasks, the five checks below — is printed
 by `github task actualize <N>`; no epic or no open tasks in it — the line
-«○ актуализация не нужна» (refresh not needed), no subagent. Five checks:
+`○ refresh not needed`, no subagent. Five checks:
 
 1. **Done is closed.** No open tasks that are already part of what shipped
    (done — I close it; lost its point — not planned and out of the project).
    Statuses and milestones match: the set's last task is closed — I close the
    milestone.
 2. **Answered questions are marked.** Every already answered question in
-   `## Вопросы` (comments, another task, code) is marked ✅ with the answer;
+   `## Questions` (comments, another task, code) is marked ✅ with the answer;
    the numbering doesn't change — it is referenced. None open — I remove the
-   `вопросы` (questions) label.
+   `questions` label.
 3. **Descriptions don't lie.** The wording of open tasks is checked against
    the code and specs: what doesn't exist after the rollout (fields, tables,
    routes, permissions) is removed. After **a reversal of an accepted
@@ -208,9 +207,9 @@ by `github task actualize <N>`; no epic or no open tasks in it — the line
    the actual state: blocked by on closed tasks is removed, a new task is
    attached to the epic, "⛔" marks in the text match the links.
 5. **Repetition is a standard.** A decision that, in what shipped, repeats an
-   existing one in two or more places — a `Стандарт · …` (Standard · …) issue
+   existing one in two or more places — a `Standard · …` issue
    (a rule in `tests/standards/` and a refactoring). First a search among the
-   open `Стандарт · …`: one exists — don't file another; an extension of a
+   open `Standard · …`: one exists — don't file another; an extension of a
    neighboring one — a comment in it. A standard's priority — by the cost of
    the mistake it prevents; standards of one area — as an epic: otherwise
    they are born faster than they are worked off. Something deferred as "not
@@ -222,26 +221,26 @@ in one place.
 **End of session — one line, one of three.** A missing line can't be told
 from a forgotten one, so the answer always has the last line:
 
-- **«Всё сделано. Сессию можно закрывать.»** (All done. The session can be
-  closed.) — everything is done: the PR is merged; the post-merge deploy was
+- **`All done. The session can be closed.`** — everything is done: the PR is
+  merged; the post-merge deploy was
   awaited (where the merge deploys); `task close` passed without `!` lines;
   the epic refresh is done; there are no open questions to the user or in
   issues; proposed tasks are filed in Backlog.
-- **«Всё сделано, но есть вопросы: …»** (All done, but there are questions:
-  …) — the same is done, but the owner has something to decide beyond the
+- **`All done, but there are questions: …`** — the same is done, but the
+  owner has something to decide beyond the
   task: whether to file a task for an observation ("your call"), whether to
   revert a setting, whether to cut a release. The questions themselves — in
-  this same line, briefly, one per decision; «Сессию можно закрывать» (The
-  session can be closed) is not written: with it the questions read as
+  this same line, briefly, one per decision; `The session can be closed` is
+  not written: with it the questions read as
   "nothing to decide".
-- **«Осталось: …»** (Remaining: …) — not everything is done: what the session
+- **`Remaining: …`** — not everything is done: what the session
   waits for and from whom (a merge from the owner, an answer to the task's
   question, a red check).
 
 Information without a decision — a period to wait out, a warning ("didn't
 make it into the release"), an observation with nothing to decide — is not a
 question: it goes into the report above, and the line is
-«Всё сделано. Сессию можно закрывать.». A report of what was done (what was
+`All done. The session can be closed.`. A report of what was done (what was
 merged, links to PRs and tasks) is not a question either. A session without a
 task (epic planning, an investigation) ends the same way — by what it was
 assigned.
@@ -249,7 +248,7 @@ assigned.
 **In auto mode the session archives itself at the end.** A project with
 `"auto": true` in `.agents/ai-dev.json` runs the task entirely without asking,
 and closing the session is the last step left to a human: after the line
-«Всё сделано. Сессию можно закрывать.» the session archives itself — as its
+`All done. The session can be closed.` the session archives itself — as its
 last action, after which the conversation ends. After the other two lines and
 outside auto mode — no: an archived session leaves the list, and the owner
 will no longer read the questions in its last answer. How to archive — in the
@@ -265,13 +264,13 @@ milestones.
 ### Issue types
 
 In an organization `project fix --confirm` checks and configures the types
-(Task → `Задача`, Bug → `Баг`, `Эпик`, Feature disabled; needs the
+(Task, Bug and Epic named in the project language, Feature disabled; needs the
 `admin:org` scope). A personal account has no types — an epic is marked with
 the `epic` label.
 
 ```bash
-gh api -X PATCH repos/{owner}/{repo}/issues/<N> -f type=Баг     # change the type
-gh issue list --json number,issueType --jq '.[]|select(.issueType.name=="Эпик")'
+gh api -X PATCH repos/{owner}/{repo}/issues/<N> -f type=Bug     # change the type
+gh issue list --json number,issueType --jq '.[]|select(.issueType.name=="Epic")'
 ```
 
 ### Priority on an existing task (organization)
@@ -308,8 +307,8 @@ gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -f state=closed
 
 ### Numeric project fields
 
-`Оценка, ч`, `Факт, ч`, `Токены, млн`, `Стоимость, $` are set only by the
-`est` skill. By hand — only an epic's `Оценка, ч`, the sum of its subtasks'
+`Estimate, h`, `Actual, h`, `Tokens, M`, `Cost, $` are set only by the
+`est` skill. By hand — only an epic's `Estimate, h`, the sum of its subtasks'
 estimates:
 
 ```bash
