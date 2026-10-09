@@ -1,343 +1,388 @@
-# Общие правила для всех проектов
+# Shared rules for all projects
 
-## Этот файл и скиллы
+## This file and skills
 
-Канон правил для любого агента: Claude Code, Codex, Gemini CLI, Cursor,
-Copilot, OpenCode, Amp читают `AGENTS.md` сами или по ссылке из своего
-файла. Живёт в репозитории **miroshnik/ai-dev** вместе со скиллами
-(`skills/*`) и справочниками (`docs/`; пути `docs/…` в правилах — рядом с
-этим файлом). Установка — `npx -y github:miroshnik/ai-dev install`
-(последний релиз): всё копией в `.agents/` проекта, она коммитится; `-g` —
-на машину только скиллы и хук, `-g --link` из клона — симлинками (README,
-«Установка»). Здесь — только общее для всех проектов; частное — в спеке
-проекта `tests/` (раздел «Знание проекта и передача работы»). Правка
-правила или скилла из сессии другого проекта — задача в ai-dev (проект №6)
-без названий и деталей того проекта, её делает отдельная сессия; клон
-ai-dev из чужой сессии не правлю.
+The canon of rules for any agent: Claude Code, Codex, Gemini CLI, Cursor,
+Copilot, OpenCode and Amp read `AGENTS.md` themselves or via a link from
+their own file. It lives in the **miroshnik/ai-dev** repository together
+with the skills (`skills/*`) and references (`docs/`; `docs/…` paths in the
+rules are next to this file). Install: `npx -y github:miroshnik/ai-dev
+install` (latest release): everything is copied into the project's
+`.agents/`, and the copy is committed; `-g` puts only the skills and the hook
+on the machine, `-g --link` from a clone uses symlinks (README,
+"Installation"). Only what is shared by all projects lives here; anything
+project-specific goes into the project's spec in `tests/` (section "Project
+knowledge and handoff"). A change to a rule or skill coming from another
+project's session is a task in ai-dev (project #6), without that project's
+names or details, done by a separate session; I don't edit an ai-dev clone
+from someone else's session.
 
-**Облачная сессия** Claude Code видит только репозиторий: канон и скиллы —
-если флоу установлен в проект; проектов GitHub у неё нет — как закрывать
-задачу оттуда, `docs/cloud-sessions.md`.
+A Claude Code **cloud session** sees only the repository: it has the canon and
+skills only if the flow is installed in the project; it has no GitHub
+Projects — how to close a task from there: `docs/cloud-sessions.md`.
 
-**Репозиторий публичный.** В нём — только общие правила и скиллы: никаких
-названий, владельцев, путей и номеров проектов других репозиториев, имён
-коллег и заказчиков — ни в файлах, ни в истории git, ни в issues ai-dev;
-примеры — вымышленные. Личная конфигурация (реестр репозиториев для `est`) —
-только локально.
+**The repository is public.** It holds only shared rules and skills: no
+names, owners, paths or project numbers of other repositories, no names of
+colleagues or clients — not in files, git history or ai-dev issues; examples
+are made up. Personal configuration (the repository registry for `est`)
+stays local.
 
-**Скилл = `SKILL.md` + `scripts/`** на TypeScript под Bun по стандарту Agent
-Skills (README, «Устройство репозитория»); зависящее от конкретных
-репозиториев — в локальную конфигурацию, не в скилл. **Ядро канона — этот
-файл — не больше 32 КиБ** (стандарт `canon-size`): справочное живёт в
-скиллах и `docs/`, здесь — что действует всегда и куда идти. Правила читают
-и автономные рутины; правка правил доходит до проекта с релизом ai-dev и
-`update` (раздел ниже).
+**A skill is `SKILL.md` + `scripts/`** in TypeScript under Bun, following the
+Agent Skills standard (README, "Repository layout"); anything that depends on
+specific repositories goes into local configuration, not into the skill.
+**The core of the canon — this file — is at most 32 KiB** (standard
+`canon-size`): reference material lives in skills and `docs/`; here is what
+always applies and where to go. Autonomous routines read the rules too; a
+rule change reaches a project with an ai-dev release and `update` (next
+section).
 
-## Первый шаг сессии — актуальный флоу
+## First step of a session — an up-to-date flow
 
-Правила грузятся в контекст на старте сессии: на отставшем флоу сессия
-работает по старым правилам. Поэтому первым делом, до задачи, —
-`npx -y github:miroshnik/ai-dev check -g` (машина) и `check` (проект); в
-Claude Code их запускает хук `SessionStart`, вывод — в начале контекста.
+Rules are loaded into context when a session starts: with a stale flow, the
+session works by old rules. So the very first thing, before the task, is
+`npx -y github:miroshnik/ai-dev check -g` (machine) and `check` (project); in
+Claude Code the `SessionStart` hook runs them and puts the output at the start
+of the context. The project's `check` also prints its mode and language.
 
-Копия (проект; скиллы машины без `--link`) следует за релизами ai-dev —
-тегами `vГГГГ.ММ.ДД` (патч того же дня — `.N`), клон `--link` — за
-`origin/main`. Релиз — шаг владельца (`ai-dev release` из клона), строка «не
-в релизе» — напоминание ему; агент выпускает релиз только по его просьбе.
+A copy (project; machine skills without `--link`) follows ai-dev releases —
+tags `vYYYY.MM.DD` (a same-day patch is `.N`); a `--link` clone follows
+`origin/main`. A release is the owner's step (`ai-dev release` from the
+clone); the `check` line about flow changes not yet released is a reminder to
+them; the agent cuts a release only when the owner asks.
 
-- **Отстаёт** — `update` (`-g` — машина): клон `--link` — `git pull
-  --ff-only`, копия — переустановка. Копию в проекте — отдельным коммитом
-  `chore(agents): флоу ai-dev <тег>` в ветку текущей задачи, без отдельного
-  спроса; ветки задачи нет — не коммитить, сказать. Затем перечитать
-  обновлённое и следовать ему, а не загруженному на старте.
-- **`update` отказал** (клон не на `main`, грязный) или **проверка
-  недоступна** — клон не чинить, работать по текущему флоу и сказать.
-- **Облачная сессия** не обновляет — работает по копии в проекте.
+- **Behind** — `update` (`-g` for the machine): a `--link` clone does `git
+  pull --ff-only`, a copy is reinstalled. Commit the project copy as a
+  separate `chore(agents): …` commit with the ai-dev tag (`update` prints the
+  command) into the current task's branch, without asking; no task branch —
+  don't commit, say so. Then re-read what was updated and follow it, not what
+  was loaded at the start.
+- **`update` refused** (clone not on `main`, dirty) or **the check is
+  unavailable** — don't fix the clone; work by the current flow and say so.
+- **A cloud session** doesn't update — it works by the copy in the project.
 
-## Язык
+## Language
 
-Общение, issues (заголовки, описания, комментарии, чек-листы), документы и
-планы — по-русски и коротко. Код, идентификаторы, термины, тип и
-scope conventional commit — по-английски; описание коммита и PR — по-русски.
+The flow is written in English; the agent works in the **project language** —
+`language` in `.agents/ai-dev.json` (set by `install --lang <code>`, printed by
+`check` and the hook). In it, and briefly: talking with the user, issues
+(titles, descriptions, comments, checklists), prompts to subagents and chips,
+documents and plans, commit and PR descriptions, `describe`/`it` names and
+decision docs. Always in English: code, identifiers, terms, conventional-commit
+type and scope.
 
-## Что делаю без спроса, а что — по разрешению
+Names that scripts write and parse are written in the project language
+exactly as below (scripts read only the `ru` ones so far):
 
-- **Без спроса:** чтение и поиск, тесты, lint, typecheck, build, локальные
-  правки в своём чекауте, локальная инфраструктура (Docker, dev-база),
-  чтение логов и read-only запросы к внешним системам; ведение задач по
-  разделу «Ведение задач» (issues, комментарии, поля проекта, milestones,
-  лейблы); перезапуск своего прогона CI, закрытие своего дубль-PR, удаление
-  своего влитого после мержа; обновление флоу и коммит его копии.
-- **Только по явному «да»** — всё необратимое или внешнее: `git commit`,
-  `git push`, мерж, деплой, тег, миграции и записи в живые базы, настройки
-  внешних сервисов, удаление чужих или невлитых удалённых веток и данных,
-  исходящие сообщения.
-- **Разрешение — на конкретное действие и на этот раз.** «Закоммить» ≠ «и
-  запушь», «правь что нужно» ≠ согласие на мерж; прошлое «да» не
-  переносится; одно «закоммить» покрывает всю текущую работу логическими
-  шагами. Репозиторий может задать иной режим в своём `AGENTS.md`. «Делай
-  полностью сам» снимает промежуточные подтверждения на названную задачу;
-  стоп только при расхождении, меняющем объём или подход. У автономной
-  рутины разрешение — её задание: ровно то, что названо; мерж, деплой,
-  внешние настройки — только если названы явно.
-- **`"auto": true` в `.agents/ai-dev.json` — задача целиком без спроса**
-  (настройка проекта, задаёт `install`): commit, push, починка CI и мерж
-  своего PR по зелёным чекам — сам; на открытые вопросы задачи отвечаю
-  записанной рекомендацией, в issue — ✅ с пометкой «авто». Свой вопрос, о
-  котором без auto спросил бы, — туда же, в «## Вопросы», с решением и ✅
-  «авто», до кода: в чате решение теряется. Нет явной рекомендации, решение
-  критичное или нужно именно от человека — спрашиваю; стоп и при
-  расхождении, меняющем объём или подход. Остальное необратимое и внешнее —
-  по-прежнему по «да».
-- **Секреты и обходы защиты — только с разрешения:** токены, ключи,
-  bypass-секреты, отключение проверок у хостинга, CI или облака — сначала
-  называю, что появится и где. Секрет из чата нигде не сохраняю; по
-  завершении напоминаю ротировать.
+| | `en` | `ru` |
+|---|---|---|
+| issue types | `Task`, `Bug`, `Epic` | `Задача`, `Баг`, `Эпик` |
+| issue sections | `## Questions`, `## Scenarios` | `## Вопросы`, `## Сценарии` |
+| open-questions label | `questions` | `вопросы` |
+| `Status` | `Backlog` → `In progress` → `Done` | `Бэклог` → `В работе` → `Готово` |
+| project fields | `Estimate, h`, `Actual, h` | `Оценка, ч`, `Факт, ч` |
+| comments | `State`, `Actual: …` | `Состояние`, `Факт: …` |
+| subagent prompt | `Task #N`, `epic #M` | `Задача #N`, `эпик #M` |
+| standard issue | `Standard · …` | `Стандарт · …` |
+| auto answer | ✅ auto | ✅ авто |
+| last line | `All done. The session can be closed.` · `All done, but there are questions: …` · `Remaining: …` | `Всё сделано. Сессию можно закрывать.` · `Всё сделано, но есть вопросы: …` · `Осталось: …` |
 
-## Ведение задач
+## What I do without asking and what needs a yes
 
-- Задачи ведём в **GitHub Issues** репозитория проекта, а не в локальных
-  списках, TODO-файлах или списке задач агента; нет репозитория — спросить,
-  где вести. Заводит и ведёт задачи скилл `github` (`task new`, `task
-  status`, `task close`, `task drop`, `pr labels`); устройство задач,
-  проекта и milestones целиком — его `reference.md`.
-- **У каждого issue есть тип** — ровно три: «Задача» (на один PR), «Баг»,
-  «Эпик»; в личном аккаунте типов нет — эпик помечаем меткой `epic`.
-  **Метки решений** — имя решения (`tests/…/<name>` или модуль модели), вид
-  — цветом; у задачи с кодом — метки решений, которые она вводит или
-  меняет, у эпика — объединение.
-- **Большая задача — эпик + подзадачи** (sub-issues, у эпика короткий
-  префикс `<Префикс> · …`, подзадача — на один PR); **зависимости — только
-  связями GitHub** (sub-issue, blocked by), не текстом: задача с непустым
-  *blocked by* в работу не берётся. Перед созданием — нет ли уже такой
-  (`gh issue list --search`).
-- **Проект GitHub** — ровно один на репозиторий, с именем репозитория, в нём
-  все задачи и эпики; `project check` раз в сессию, ❌ — `project fix`.
-  Статус — только поле `Status` проекта: `Бэклог` → `В работе` → `Готово`,
-  ставлю **сам, сразу** (`task status`; закрытие — `task close`; не будем
-  делать, дубль — `task drop`: not planned и из проекта). Поля оценки и
-  факта — только через скилл `est`. Приоритет — поле issue `Priority`
-  (`Urgent` → `Low`), обязателен у открытой задачи, `Medium` по умолчанию.
-  Milestone — именованный набор задач (этап эпика `<Эпик> · <N> ·
-  <Название>`, релиз), не обязателен; закрываю сам с последней задачей.
+- **Without asking:** reading and search, tests, lint, typecheck, build, local
+  edits in my own checkout, local infrastructure (Docker, dev database),
+  reading logs and read-only requests to external systems; task tracking per
+  "Task tracking" (issues, comments, project fields, milestones, labels);
+  re-running my own CI run, closing my own duplicate PR, deleting my own
+  merged branch after the merge; updating the flow and committing its copy.
+- **Only on an explicit "yes"** — anything irreversible or external: `git
+  commit`, `git push`, merge, deploy, tag, migrations and writes to live
+  databases, external service settings, deleting others' or unmerged remote
+  branches and data, outgoing messages.
+- **Permission is for a specific action and for this time.** "Commit" ≠ "and
+  push", "fix whatever is needed" ≠ consent to merge; a past "yes" doesn't
+  carry over; one "commit" covers all current work in logical steps. A
+  repository may set a different mode in its `AGENTS.md`. "Do it all
+  yourself" lifts intermediate confirmations for the named task; stop only on
+  a discrepancy that changes scope or approach. An autonomous routine's
+  permission is its assignment: exactly what is named; merge, deploy and
+  external settings only if named explicitly.
+- **`"auto": true` in `.agents/ai-dev.json` — the whole task without asking**
+  (a project setting, set by `install`): commit, push, fixing CI and merging
+  my own PR on green checks — myself; I answer the task's open questions with
+  a recorded recommendation, marked ✅ auto in the issue. A question of my own
+  that I'd ask without auto goes there too, into the questions section, with
+  the decision and ✅ auto, before code: in chat the decision gets lost. No
+  clear recommendation, a critical decision, or one that must come from a
+  human — I ask; I also stop on a discrepancy that changes scope or approach.
+  Everything else irreversible or external still needs a "yes".
+- **Secrets and bypassing protections — only with permission:** tokens, keys,
+  bypass secrets, disabling checks at the host, CI or cloud — I first say
+  what will appear and where. I never store a secret from chat; when done I
+  remind to rotate it.
 
-### Сессия и ветка — одна задача
+## Task tracking
 
-- **Сессия = задача:** вторую `task status` не возьмёт. Другая — в «Бэклог»
-  и чипом `#263 …` в новую сессию (нет чипов — первый промпт `#263`);
-  «делай тут» и кнопка чипа «здесь» — отказ одной фразой и чип заново. Своя
-  регрессия и правка ради зелёного PR — та же задача. Сессия эпика
-  планирует и раздаёт, «В работе» не берёт.
-- **Сессия называется `#<номер> <название задачи>`** — заголовок issue с
-  номером впереди: `#42 Биллинг · Экспорт счетов в PDF`. Переименовываю сам,
-  как только задача ясна (нет инструмента — прошу пользователя): по
-  названию `est` привязывает сессию к задаче. Сессия без задачи — по
-  смыслу, без номера.
-- **Ветка = `<type>/<issue>-<slug>`**: `feat/42-invoice-export`,
-  `research/73-search-engine-choice` — один слеш, номер через дефис.
-  `type` — типы conventional commits (`feat fix docs refactor perf test chore
-  ci build`) плюс `research` (спайк без кода); тот же список — тип задачи в
-  `est`. Slug — латиница, kebab-case, 2–5 слов; принятый в репозитории
-  префикс области идёт первым: `backend/fix/263-…`. Ветку, которую назвал
-  инструмент worktree, переименовываю до первого push (`git branch -m`).
-- **PR:** заголовок — conventional commit (`feat(scope): описание`), в теле
-  `Closes #263`. **Мерж — только rebase** (`gh pr merge <N> --rebase`, иные
-  способы выключает `github project fix`): в `main` уходят сами коммиты —
-  conventional commit у каждого, и `Closes` в любом закроет задачу: в
-  коммитах — `Refs #263`. В репо без PR — `Closes #N` в последнем коммите.
+- Tasks live in the project repository's **GitHub Issues**, not in local
+  lists, TODO files or the agent's task list; no repository — ask where to
+  keep them. The `github` skill creates and runs tasks (`task new`, `task
+  status`, `task close`, `task drop`, `pr labels`); how tasks, the project and
+  milestones are organized — its `reference.md`.
+- **Every issue has a type** — exactly three: Task (one PR), Bug, Epic; a
+  personal account has no types — an epic gets the `epic` label. **Decision
+  labels** — the decision's name (`tests/…/<name>` or a model module), kind
+  by color; a code task carries the labels of the decisions it introduces or
+  changes, an epic — their union.
+- **A big task is an epic + subtasks** (sub-issues; the epic has a short
+  prefix `<Prefix> · …`, a subtask is one PR); **dependencies only as GitHub
+  links** (sub-issue, blocked by), not in text: a task with a non-empty
+  *blocked by* isn't taken into work. Before creating — check that it doesn't
+  exist yet (`gh issue list --search`).
+- **GitHub Project** — exactly one per repository, named after the
+  repository, holding all tasks and epics; `project check` once per session,
+  ❌ — `project fix`. Status is only the project's `Status` field: Backlog →
+  In progress → Done, which I set **myself, immediately** (`task status`;
+  closing — `task close`; won't do or duplicate — `task drop`: not planned
+  and out of the project). Estimate and actual fields — only via the `est`
+  skill. Priority — the issue field `Priority` (`Urgent` → `Low`), required
+  on an open task, `Medium` by default. A milestone is a named set of tasks
+  (an epic stage `<Epic> · <N> · <Name>`, a release), optional; I close it
+  myself with its last task.
 
-### Открытые вопросы — в начале работы
+### Session and branch — one task
 
-Вопросы по задаче живут в её описании, в разделе «## Вопросы» (нумерованный
-список; пока есть неотвеченные — лейбл «вопросы»). Беря задачу в работу,
-**первым делом** — до плана, кода и субагентов — читаю «## Вопросы» задачи и
-эпика и **задаю все открытые (без ✅) пользователю** одним сообщением, с
-вариантами и рекомендацией по каждому: ответ может поменять объём и подход.
+- **Session = task:** `task status` won't take a second one. Another task
+  goes to Backlog and, as a chip `#263 …`, into a new session (no chips —
+  first prompt `#263`); "do it here" and the chip's "here" button — a
+  one-sentence refusal and the chip again. My own regression and a fix for a
+  green PR are the same task. An epic's session plans and hands out work and
+  doesn't take In progress.
+- **The session is named `#<number> <task title>`** — the issue title with
+  the number in front: `#42 Billing · Export invoices to PDF`. I rename it
+  myself as soon as the task is clear (no tool — ask the user): `est` links
+  the session to the task by its name. A session without a task — named by
+  meaning, without a number.
+- **Branch = `<type>/<issue>-<slug>`**: `feat/42-invoice-export`,
+  `research/73-search-engine-choice` — one slash, number joined by a hyphen.
+  `type` — conventional-commit types (`feat fix docs refactor perf test chore
+  ci build`) plus `research` (a spike without code); the same list is the
+  task type in `est`. Slug — Latin, kebab-case, 2–5 words; an area prefix
+  adopted in the repository goes first: `backend/fix/263-…`. A branch named
+  by a worktree tool — I rename it before the first push (`git branch -m`).
+- **PR:** the title is a conventional commit (`feat(scope): description`),
+  the body has `Closes #263`. **Merge — rebase only** (`gh pr merge <N>
+  --rebase`; `github project fix` turns other methods off): the commits
+  themselves land in `main` — each a conventional commit, and `Closes` in any
+  of them would close the task, so commits say `Refs #263`. In a repo without
+  PRs — `Closes #N` in the last commit.
 
-- Сначала отсеиваю то, на что ответ уже есть (комментарии, код): ✅ с
-  ответом. Свои вопросы — тем же сообщением и в «## Вопросы», продолжая
-  нумерацию.
-- Пока жду ответа, делаю то, что от него не зависит; зависящее не начинаю и
-  ответ допущением не подменяю.
-- Ответ получен — сразу в issue: ✅ и ответ у вопроса, нумерация не меняется;
-  открытых не осталось — снимаю лейбл «вопросы».
-- Автономная рутина (спросить некого) задачу с открытыми вопросами не берёт.
+### Open questions — at the start of work
 
-### Оценка и факт — скилл `est`
+A task's questions live in its description, in the questions section (a
+numbered list; while any are unanswered — the questions label). Taking a task
+into work, **first of all** — before the plan, code and subagents — I read the
+questions of the task and its epic and **ask the user all open ones (without
+✅)** in one message, with options and a recommendation for each: the answer
+may change scope and approach.
 
-- **Единица** — активные часы агента по задаче (работа + паузы ≤ 30 мин), не
-  человеко-часы и не календарь.
-- **Оценка** — только скилл `est`, по аналогам с фактом; аналогов нет —
-  «экспертная, доверие C». Руками поле «Оценка, ч» не пишется, после начала
-  работы не переписывается.
-- **Факт при закрытии** (PR смёржен / issue закрыт) — `github task close <N>`
-  (внутри `est fact <N> --write`): комментарий «Факт: …» и поля факта;
-  руками их не трогать; факта нет — «факт недоступен», не цифра на глаз.
-- **Работа привязывается к задаче** закреплением сессии (`task status` «В
-  работе»), без него — названием сессии, веткой `<type>/<issue>-<slug>`,
-  `Closes #N` в PR и номером задачи в задании каждому субагенту (форма —
-  «Субагенты и worktree») — иначе факта не будет. Подробнее — скилл `est`.
+- First I filter out what already has an answer (comments, code): ✅ with the
+  answer. My own questions — in the same message and in the questions
+  section, continuing the numbering.
+- While waiting, I do what doesn't depend on the answer; what depends on it I
+  don't start, and I don't replace the answer with an assumption.
+- Answer received — straight into the issue: ✅ and the answer at the
+  question, numbering unchanged; no open ones left — I remove the label.
+- An autonomous routine (no one to ask) doesn't take a task with open
+  questions.
 
-### Актуализация блока при закрытии задачи
+### Estimate and actual — the `est` skill
 
-Задача влита — **субагент со свежим контекстом** приводит открытые задачи
-того же эпика в соответствие с выкаченным; сессия на пиковом контексте сама
-этого не делает. Задание с пятью проверками печатает
-`github task actualize <N>` (нет эпика или открытых задач в нём — не
-нужна) — тем же ходом, что `ci-wait merged <PR>` в фоне; субагент и
-ожидание деплоя — параллельно, после обоих — `github task close`. Влито,
-деплой дождались, ветка убрана, блок актуализирован, вопросов нет —
-последняя строка ответа: «Всё сделано. Сессию можно закрывать.»; сделано,
-но владельцу есть что решать — «Всё сделано, но есть вопросы: …» с самими
-вопросами; иначе — «Осталось: …» с тем, чего и от кого сессия ждёт. В
-режиме auto после «…можно закрывать.» сессия архивирует себя, где у агента
-есть инструмент; информация без решения (срок, предупреждение) этому не
-мешает.
+- **Unit** — the agent's active hours on the task (work + pauses ≤ 30 min),
+  not person-hours and not calendar time.
+- **Estimate** — only via the `est` skill, from analogs with actuals; no
+  analogs — "expert, confidence C". The estimate field is never written by
+  hand and never rewritten after work starts.
+- **Actual at closing** (PR merged / issue closed) — `github task close <N>`
+  (runs `est fact <N> --write` inside): the actual comment and the actual
+  fields; never touch them by hand; no actual — "actual unavailable", not a
+  number by eye.
+- **Work is linked to the task** by pinning the session (`task status` In
+  progress), otherwise by the session name, the branch
+  `<type>/<issue>-<slug>`, `Closes #N` in the PR and the task number in every
+  subagent's assignment (form — "Subagents and worktrees") — otherwise there
+  will be no actual. More — the `est` skill.
 
-## Git, PR и мерж
+### Epic refresh on task close
 
-- **Беря задачу в работу** — не идёт ли она уже в параллельной сессии
-  (открытый PR, ветка `*/<N>-*` после `git fetch --prune`). Идёт —
-  продолжаю ту работу или жду мержа; два PR на одно — второй закрываю.
-- **Ветка — только от свежего `origin/main`** (`git fetch origin &&
-  git switch -c feat/263-slug origin/main --no-track`); локальный `main` и
-  снимок статуса при старте сессии устарели. В `main` — только через PR;
-  прямой push в `main` и `gh pr merge --admin` — только по прямому указанию
-  владельца.
-- **Коммичу логическими шагами** (conventional commits), не одним коммитом
-  на PR; тесты — в одном коммите с кодом.
-- **PR вливаю, как только его CI зелёный и GitHub вливает без конфликта**,
-  отставшую ветку тоже. Rebase и повторный push (`--force-with-lease`) —
-  только при текстовом конфликте или своих правках. **Перед мержем —
-  `github pr premerge`:** `main` ушёл после CI PR — быстрые проверки
-  (`typecheck`, `test:spec`) на слиянии со свежим `main`; красное — не
-  вливаю, чиню корень; `main` красный и сам (код 3) — не вливаю и в PR не
-  чиню: один баг на него, жду его закрытия. **Перед push** — своя ли ветка.
-- **Мерж — только при всех зелёных чеках**, включая превью-деплой; пустой
-  список чеков — «ещё не зарегистрированы», не «прошли»; мерж, который
-  выкатывает, — ждать деплой на SHA мержа (скилл `ci-wait`), параллельно —
-  актуализация блока. **Затем — `github task close`**: факт, «Готово», эпик
-  и milestone, влитая ветка долой; чужие ветки и невлитое не трогаю.
-- **Перед коммитом — ровно те проверки, что гоняет CI**, репозиторными
-  скриптами (`lint`, `typecheck`, `test`), перед мержем — полная сборка;
-  в цепочках `script | tail` — `set -o pipefail`.
-- Механика — скилл `github`, «Git, PR и мерж — механика»; полный SHA,
-  ожидание чеков и деплоя — `docs/pr-checks.md`.
+Once a task is merged, **a subagent with a fresh context** brings the open
+tasks of the same epic in line with what shipped; the session at peak context
+doesn't do it itself. `github task actualize <N>` prints the assignment with
+the five checks (no epic or no open tasks in it — not needed) — in the same
+turn as `ci-wait merged <PR>` in the background; the subagent and the deploy
+wait run in parallel, after both — `github task close`. Merged, deploy
+awaited, branch removed, epic refreshed, no questions — the last line of the
+answer is the "all done, can be closed" line; done, but the owner has
+something to decide — the "all done, but there are questions" line with the
+questions themselves; otherwise — the "remaining" line with what the session
+waits for and from whom (exact wording — "Language"). In auto mode, after the
+"can be closed" line the session archives itself where the agent has the tool;
+information without a decision (a deadline, a warning) doesn't prevent it.
 
-## Спецификация — решения
+## Git, PRs and merging
 
-Спека проекта — **решения с механической проверкой**, функциональные и
-нефункциональные: тест, линт-правило, проверка над моделью архитектуры.
-**Нет проверки — нет решения, нет решения — нет кода:** поведение без
-проверки можно менять без согласования, код, которого не заявляет ни одно
-решение, — мёртвый. Тест пишется до кода и сначала красный. Три корня
-`tests/` — по вопросу читателя: `capabilities/<name>` (что система делает),
-`architecture` (из чего состоит — модель с проверками), `standards/<name>`
-(правила кода и сквозные качества); решение = папка (`<папка>.md` — зачем,
-`<папка>.test.ts` — утверждения, механизм рядом).
-Исключения — отметкой в файле элемента или в `exceptions/` папки решения,
-файл на исключение, с `#issue` и причиной, с храповиком. Названия `describe` и `it` — утверждения по-русски. У задачи
-с кодом до кода — «## Сценарии» (будущие названия `it`). Тело PR — вывод
-`spec-diff`: дифф проверок — дифф спеки. Документация генерируется
-(`spec-doc`), в `main` её нет — CI публикует в ветку `spec`. Повторяющееся
-решение — issue «Стандарт · …» и правило в `tests/standards/`. Канон целиком
-и как подключить каждый механизм — скилл `spec` (`canon.md`, `checks.md`).
+- **Taking a task into work** — check it isn't already going in a parallel
+  session (an open PR, a branch `*/<N>-*` after `git fetch --prune`). It is —
+  I continue that work or wait for the merge; two PRs for one thing — I close
+  the second.
+- **Branch only from a fresh `origin/main`** (`git fetch origin && git switch
+  -c feat/263-slug origin/main --no-track`); the local `main` and the status
+  snapshot at session start are stale. Into `main` only via a PR; a direct
+  push to `main` and `gh pr merge --admin` — only on the owner's direct
+  instruction.
+- **I commit in logical steps** (conventional commits), not one commit per
+  PR; tests go in the same commit as the code.
+- **I merge a PR as soon as its CI is green and GitHub merges it without a
+  conflict**, a branch that fell behind too. Rebase and a re-push
+  (`--force-with-lease`) — only on a textual conflict or my own changes.
+  **Before merging — `github pr premerge`:** if `main` moved after the PR's
+  CI — fast checks (`typecheck`, `test:spec`) on the merge with a fresh
+  `main`; red — I don't merge and fix the root cause; `main` is red by itself
+  (exit code 3) — I don't merge and don't fix it in the PR: one bug for it,
+  and I wait for it to close. **Before a push** — is it my branch.
+- **Merge only with all checks green**, including the preview deploy; an
+  empty check list means "not registered yet", not "passed"; for a merge that
+  deploys — wait for the deploy on the merge SHA (the `ci-wait` skill), the
+  epic refresh in parallel. **Then — `github task close`**: actual, Done, epic
+  and milestone, the merged branch removed; I don't touch others' branches or
+  unmerged work.
+- **Before a commit — exactly the checks CI runs**, via the repository's
+  scripts (`lint`, `typecheck`, `test`), before merging — a full build; in
+  `script | tail` chains — `set -o pipefail`.
+- Mechanics — the `github` skill, "Git, PRs and merging — mechanics"; the full
+  SHA, waiting for checks and deploys — `docs/pr-checks.md`.
 
-## Тесты и код
+## Specification — decisions
 
-- **Упал тест — чиню корень** (тест или логику), даже если падение не связано
-  с моими правками и зелёный повтор есть; не «пре-существующая флака», не
-  таймауты и ретраи: гонку убираю по причине (ждать реального события, не
-  паузы). Подозрение на флаку сверяю тем же прогоном на базовой ветке:
-  красно и там — сравниваю дельту, иначе чужая флака станет моей регрессией.
-- **Итог прогона — по сводке раннера**, а не по коду выхода обёртки: убитый
-  посреди тестов прогон бывает «зелёным».
-  Проверки проекта идут очередью машины (скилл `slot`), полный прогон — фоном.
-  Прогон, e2e, UI в браузере — `docs/testing.md`.
-- **Регрессионный тест и сторож «дефекта нет» обязаны уметь упасть**:
-  откатываю фикс, вижу красный, возвращаю. Не упал — либо стережёт от
-  перекоррекции (так и называю), либо удаляется.
-- **Контракт внешнего API — по схеме или документации**, не по интуиции о
-  REST; при расхождении со схемой чиню тест, а не код под тест.
-- **Намеренно разное поведение в двух местах** — встречные комментарии с
-  причиной в обоих, иначе следующий читатель «починит».
-- **Проверяю то, что дошло до человека,** а не свой выход: доставленное
-  письмо, страницу у получателя — чужая система меняет результат после нас
-  при зелёных своих проверках. Компонент на нескольких поверхностях (сайт и
-  письмо) проверяю в изоляции каждой.
-- **Вывод и правка:** до запуска — какая наша ошибка даст тот же исход;
-  подписи равняю, сверив смысл чисел; правлю ровно названное; «не
-  воспроизводится» — чем мерил. `docs/judgment.md`.
+A project's spec is **decisions with a mechanical check**, functional and
+non-functional: a test, a lint rule, a check over the architecture model.
+**No check — no decision; no decision — no code:** behavior without a check
+may be changed without agreement; code that no decision claims is dead. The
+test is written before the code and is red first. Three roots of `tests/`, by
+the reader's question: `capabilities/<name>` (what the system does),
+`architecture` (what it's made of — a model with checks), `standards/<name>`
+(code rules and cross-cutting qualities); a decision is a folder
+(`<folder>.md` — why, `<folder>.test.ts` — the statements, the mechanism next
+to it). Exceptions — a mark in the element's file or in the decision folder's
+`exceptions/`, one file per exception, with an `#issue` and a reason, with a
+ratchet. `describe` and `it` names are statements in the project language. A
+code task gets the scenarios section (future `it` names) before code. The PR
+body is `spec-diff` output: the diff of checks is the diff of the spec.
+Documentation is generated (`spec-doc`), it isn't in `main` — CI publishes it
+to the `spec` branch. A recurring decision — a "Standard · …" issue and a rule
+in `tests/standards/`. The full canon and how to wire each mechanism — the
+`spec` skill (`canon.md`, `checks.md`).
 
-## Прод и отладка
+## Tests and code
 
-- **Прод-база — только чтение.** Изменения данных и схемы — миграцией в PR
-  штатной выкаткой. DDL на проде — только по прямому указанию владельца:
-  миграция файлом в репозитории, при отказе окружения — объяснить, не искать
-  обход. Данные под управлением приложения (роли, права, настройки с
-  аудитом) прямым DML не менять — теряется аудит и обходятся гарды; чего
-  нет в UI — код-чендж, а не DML.
-- **Прод-цифры — сначала та ли база:** первым запросом сверить её с
-  репозиторием (миграции, колонки, порядок объёмов); не сходится — стоп.
-- **«Не помогло» → прод-факты, не третье воспроизведение:** сначала логи
-  реального запроса и прод-данные (строка, `updated_at`, аудит), потом
-  новая гипотеза.
+- **A test failed — I fix the root cause** (the test or the logic), even if
+  the failure is unrelated to my changes and a green rerun exists; not "a
+  pre-existing flake", not timeouts and retries: I remove a race by its cause
+  (wait for the real event, not a pause). A flake suspicion is checked with
+  the same run on the base branch: red there too — I compare the delta,
+  otherwise someone else's flake becomes my regression.
+- **A run's result — by the runner's summary**, not the wrapper's exit code:
+  a run killed mid-tests can be "green". Project checks go through the
+  machine queue (the `slot` skill), a full run — in the background. Runs, e2e,
+  UI in a browser — `docs/testing.md`.
+- **A regression test and a "no defect" guard must be able to fail**: I
+  revert the fix, see red, restore it. It didn't fail — either it guards
+  against overcorrection (and I name it so) or it is deleted.
+- **An external API contract — by its schema or docs**, not by intuition
+  about REST; on a mismatch with the schema I fix the test, not the code to
+  fit the test.
+- **Intentionally different behavior in two places** — mirrored comments with
+  the reason in both, otherwise the next reader will "fix" it.
+- **I check what reached the human,** not my own output: the delivered email,
+  the page at the recipient — someone else's system changes the result after
+  us while our checks are green. A component on several surfaces (site and
+  email) — I check it in the isolation of each.
+- **Judgment and edits:** before a run — which of our mistakes would give the
+  same outcome; I align labels after checking what the numbers mean; I edit
+  exactly what was named; "doesn't reproduce" — say what I measured with.
+  `docs/judgment.md`.
 
-## Субагенты и worktree
+## Production and debugging
 
-- **Субагенты не делят грязный worktree.** Агенту, который может ставить
-  пакеты или трогать файлы «на попробовать», — изолированный worktree либо
-  «только чтение плюс временная папка» с запретом на
-  `git checkout/restore/stash/clean`: «прибраться за собой» для него значит
-  откатить всё незакоммиченное, включая чужую работу.
-  Несколько агентов в одном worktree — по непересекающимся файлам, без
-  git-команд, у общих файлов один владелец, зависимые группы конвейером.
-  После фан-аута — `git status` и `git diff --stat` до продолжения.
-- **Временная папка сессии общая с субагентами:** временные файлы — с
-  уникальным префиксом (задача, роль), иначе субагент молча перезапишет
-  одноимённый файл.
-- **Свежий worktree пуст по неотслеживаемым файлам** (зависимости,
-  `.env*.local`): ставлю и копирую из главного чекаута. Все пути в командах
-  и заданиях субагентам ведут в worktree: путь «по памяти» уходит в главный
-  чекаут, и правка ложится на `main`. До и после правки — `git -C <worktree>
-  status`.
-- **Параллельные чекауты делят порты, базы и `.git/config`:** сервер и
-  e2e каждого worktree — на своём порту и своей базе из переменных
-  окружения, чужой занятый порт не гашу; правило, фрагмент конфига и
-  чек-лист «что переезжает» — `docs/parallel-checkouts.md`.
-- **Субагенту — единица на ~50 ходов** (папка одного решения, один файл,
-  одна спека), а не зона на 200: субагент несёт ту же преамбулу и стоит как
-  сессия, а цена ≈ N×P + N²×r/2 — квадратична от числа ходов N (P —
-  преамбула ≈ 100 тыс. токенов, r — прирост контекста за ход ≈ 1,6 тыс.).
-  В задании — номер задачи после слова «Задача» или в начале, эпик — после
-  слова «эпик»: так `est` привязывает его работу.
-- **Ходов меньше:** файл — одним чтением целиком, не ломтиками по 1–2 тыс.;
-  независимые вызовы инструментов — в одном ходе; читать до начала — только
-  нужное единице. Ходы и хвост задачи видны в её факте (`est`).
+- **The production database is read-only.** Data and schema changes — via a
+  migration in a PR through the regular rollout. DDL on production — only on
+  the owner's direct instruction: a migration file in the repository; if the
+  environment refuses — explain, don't look for a workaround. Data managed by
+  the application (roles, permissions, audited settings) is never changed by
+  direct DML — the audit is lost and guards are bypassed; what the UI lacks
+  is a code change, not DML.
+- **Production numbers — first, is it the right database:** the first query
+  checks it against the repository (migrations, columns, orders of
+  magnitude); doesn't match — stop.
+- **"Didn't help" → production facts, not a third reproduction:** first the
+  logs of the real request and production data (the row, `updated_at`,
+  audit), then a new hypothesis.
 
-## Знание проекта и передача работы
+## Subagents and worktrees
 
-- **Общее — в ai-dev, частное — в тестах проекта.** Правило для любого
-  проекта живёт только в ai-dev: этот файл, `docs/`, скиллы; в проекте —
-  установленная копия. Частное — в спеке
-  проекта: что система делает — `tests/capabilities`, из чего состоит —
-  модель `tests/architecture`, каким правилам подчиняется код —
-  `tests/standards`, причина — в `<папка>.md` решения. Не общее и не
-  проверяемое механически (эксплуатация, продуктовые документы) — `docs/`
-  проекта. `AGENTS.md` проекта — блок установки и
-  только отличия режима от канона (разрешения). Договорённость
-  из чата записываю туда же, а не в память агента: память — кэш, не источник.
-- **Стек не пересматриваю** и лишних зависимостей не тащу; мешает — вопрос
-  пользователю, не тихая замена. Версии — последние стабильные; вопрос по
-  инструменту — сначала его официальная документация, не предположение.
-- **Перед паузой или сменой агента — комментарий «Состояние» в issue:** что
-  сделано, ветка, что дальше, что блокирует — чтобы любой агент продолжил.
+- **Subagents don't share a dirty worktree.** An agent that may install
+  packages or touch files "to try" gets an isolated worktree or "read-only
+  plus a temp folder" with `git checkout/restore/stash/clean` forbidden: for
+  it, "cleaning up after itself" means reverting everything uncommitted,
+  including others' work. Several agents in one worktree — on non-overlapping
+  files, without git commands, shared files have one owner, dependent groups
+  run as a pipeline. After a fan-out — `git status` and `git diff --stat`
+  before continuing.
+- **The session's temp folder is shared with subagents:** temp files get a
+  unique prefix (task, role), otherwise a subagent silently overwrites a file
+  with the same name.
+- **A fresh worktree lacks untracked files** (dependencies, `.env*.local`): I
+  install them and copy from the main checkout. All paths in commands and
+  subagent assignments lead into the worktree: a path "from memory" goes to
+  the main checkout, and the edit lands on `main`. Before and after an edit —
+  `git -C <worktree> status`.
+- **Parallel checkouts share ports, databases and `.git/config`:** the server
+  and e2e of each worktree run on their own port and database from
+  environment variables; I don't kill someone else's busy port; the rule, a
+  config fragment and the "what moves" checklist — `docs/parallel-checkouts.md`.
+- **A subagent gets a unit of ~50 turns** (one decision's folder, one file,
+  one spec), not a 200-turn zone: a subagent carries the same preamble and
+  costs like a session, and the price ≈ N×P + N²×r/2 is quadratic in the
+  number of turns N (P — preamble ≈ 100k tokens, r — context growth per turn
+  ≈ 1.6k). The assignment has the task number after the word for "task" or at
+  the start, the epic after the word for "epic" (exact words — "Language"):
+  that's how `est` links its work.
+- **Fewer turns:** a file in one full read, not slices of 1–2k; independent
+  tool calls in one turn; read up front only what the unit needs. Turns and
+  the task's tail show up in its actual (`est`).
 
-## CI: параллельные задачи
+## Project knowledge and handoff
 
-- **Ветки и PR — параллельно:** отменяется только свой устаревший прогон той
-  же ветки.
-- **`main`, теги и ручной запуск — никогда не отменяются** (`queue: max`);
-  деплой — очередь на окружение; CI и деплой — в разных workflow.
-- **Чужие прогоны не отменяю и не перезапускаю.** Правило целиком и
-  фрагменты workflow — `docs/ci-concurrency.md`.
+- **Shared — in ai-dev, project-specific — in the project's tests.** A rule
+  for any project lives only in ai-dev: this file, `docs/`, skills; the
+  project has the installed copy. Project-specific goes into the project's
+  spec: what the system does — `tests/capabilities`, what it's made of — the
+  `tests/architecture` model, which rules the code obeys — `tests/standards`,
+  the reason — in the decision's `<folder>.md`. What is neither shared nor
+  mechanically checkable (operations, product documents) — the project's
+  `docs/`. The project's `AGENTS.md` — the install block and only how its
+  mode differs from the canon (permissions). An agreement from chat I write
+  there too, not into the agent's memory: memory is a cache, not a source.
+- **I don't revisit the stack** and don't drag in extra dependencies; if
+  something is in the way — a question to the user, not a silent
+  replacement. Versions — latest stable; a question about a tool — its
+  official documentation first, not a guess.
+- **Before a pause or an agent change — a State comment in the issue:** what
+  is done, the branch, what's next, what blocks — so any agent can continue.
+
+## CI: parallel tasks
+
+- **Branches and PRs run in parallel:** only my own stale run of the same
+  branch is cancelled.
+- **`main`, tags and manual runs are never cancelled** (`queue: max`);
+  deploy — a queue per environment; CI and deploy — in different workflows.
+- **I don't cancel or re-run others' runs.** The full rule and workflow
+  fragments — `docs/ci-concurrency.md`.

@@ -21,14 +21,17 @@ const CORE: Core[] = [
 /** Размер как его увидит контекст: байты UTF-8 целиком, блоки кода не исключаются. */
 export const sizeOf = (text: string): number => Buffer.byteLength(text, "utf8");
 
-/** Куда ядро отправляет читателя: скилл `name` (`скилл \`name\``) или справочник `docs/<name>.md`. */
+/** Куда ядро отправляет читателя: скилл `name` (``the `name` skill`` или ``skill `name` ``) или справочник `docs/<name>.md`. */
 interface Pointer {
   kind: "skill" | "doc";
   name: string;
 }
-function pointers(md: string): Pointer[] {
+export function pointers(md: string): Pointer[] {
   const out = new Map<string, Pointer>();
-  for (const m of md.matchAll(/скилл[а-я]*\s+`([a-z][\w-]*)`/g)) out.set(`skill:${m[1]}`, { kind: "skill", name: m[1]! });
+  for (const m of md.matchAll(/`([a-z][\w-]*)`\s+skills?\b|\bskills?\s+`([a-z][\w-]*)`/g)) {
+    const name = (m[1] ?? m[2])!;
+    out.set(`skill:${name}`, { kind: "skill", name });
+  }
   for (const m of md.matchAll(/`docs\/([\w-]+\.md)`/g)) out.set(`doc:${m[1]}`, { kind: "doc", name: m[1]! });
   return [...out.values()];
 }
@@ -46,6 +49,15 @@ describe("Ядро канона умещается в бюджет контек�
     },
     violator: { name: "файл на байт больше бюджета", item: { file: "AGENTS.md", limit: sizeOf(read("AGENTS.md")) - 1 } },
     includes: ["AGENTS.md", "claude/CLAUDE.md"],
+  });
+
+  it("указатель на скилл — `the `name` skill` или `skill `name``; команда скилла в бэктиках указателем не считается", () => {
+    const md = "The `github` skill creates tasks; skill `est` estimates; `github project fix` turns it off; `docs/testing.md`.";
+    expect(pointers(md)).toEqual([
+      { kind: "skill", name: "github" },
+      { kind: "skill", name: "est" },
+      { kind: "doc", name: "testing.md" },
+    ]);
   });
 
   it("бюджет считается по байтам файла в UTF-8, блоки кода не исключаются", () => {
