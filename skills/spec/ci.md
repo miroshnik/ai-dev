@@ -199,7 +199,7 @@ jobs:
   commit's tree. Nothing was merged into `main` between the run's start and
   the merge — the trees are equal with merge, squash and rebase. A PR that
   fell behind is merged — there is no such artifact: `spec-run` writes
-  `main tree not checked in full — publication skipped`, the job is green, the `spec` branch
+  `main tree … not fully checked — publishing skipped`, the job is green, the `spec` branch
   lags until the next merge with a matching tree but doesn't roll back. This
   doesn't require the PR's branch to be up to date.
 - An artifact doesn't yet mean a green run: `spec-run` takes only a run of

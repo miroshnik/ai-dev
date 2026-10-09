@@ -61,7 +61,7 @@ skill directory: that is the version pinned for CI.
 | A convention for all items (mutations, routes, files) | `invariant` in `tests/standards/<name>/<name>.test.ts` — section "Checks" |
 | Prove that a check can fail (migrating an old spec, a "covered" review) | `spec-break` — a breakage aimed at the check, one per run |
 | After running all tests and shards | `spec-claims` — every entry point is called by a capability test; its report goes to `spec-doc` together with the runner reports |
-| The harness failed «exceptions — a file per item in exceptions/, not in exceptions.ts»; spec-doc says «name exceptions — a file per name in names.exceptions/» | `spec-exceptions` — section "spec-exceptions" |
+| The harness failed «exceptions are one file per element in exceptions/, not exceptions.ts»; spec-doc says «name exceptions — a file per name in names.exceptions/» | `spec-exceptions` — section "spec-exceptions" |
 
 ## Reports for spec-doc
 
@@ -508,7 +508,7 @@ next to this file.
 | What to check | With what | Where in `tests/` |
 |---|---|---|
 | A convention on every item of a registry from the code ("every mutation writes an audit record") | `invariant` | `standards/<name>/` |
-| A lint rule: «forbidden», «allowed», «out of scope» | `examples`, `eslintLinter` | `standards/<name>/` + an `eslint.ts` fragment |
+| A lint rule: «not allowed», «allowed», «outside scope» | `examples`, `eslintLinter` | `standards/<name>/` + an `eslint.ts` fragment |
 | An ESLint rule in a standard's folder | `collectEslint` in `eslint.config.*` | the tree's `eslint.ts` fragments |
 | Out of scope and an item's exception with its own file | `fileOf` in `invariant`; a mark `spec-outside(<decision>)` / `spec-exception(<decision>) #N` in the file (`marksIn`), in JSON — the value of the `"//"` key | the item's file (a route, a script, a migration, a workspace package's `package.json`) |
 | Exceptions with a ratchet | `exceptionsIn()` → `exceptions` in `invariant`; a disable `-- #N reason` + `lintExceptions` | the decision folder's `exceptions/<item>.json`; migration — `spec-exceptions` |
