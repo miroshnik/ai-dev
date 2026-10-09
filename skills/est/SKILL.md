@@ -1,249 +1,287 @@
 ---
 name: est
-description: Оценка задач GitHub по истории проекта («Оценка, ч» по аналогам с фактом) и запись факта из транскриптов Claude Code, Codex и облачных сессий claude.ai/code при закрытии задачи. Когда — всегда, когда ставится «Оценка, ч» новой задаче или подзадаче эпика; когда задача закрывается или PR смёржен (факт); в облачной сессии при закрытии задачи — её часть факта («Факт (облако)»); когда облачная часть не посчитана (трейлер Claude-Session в коммитах, «не импортирована» в факте) — импорт событий сессии; когда спрашивают «сколько часов», «оцени», «насколько точны оценки», просят историю оценок, бэктест оценки, коэффициент k, бэкфилл фактов или сравнение оценки с фактом; сравнивают флоу до и после правки или расход за период по всем сессиям репо (`est period`) — даже если слово «оценка» не прозвучало, а речь о планировании объёма работ.
+description: Estimates GitHub tasks from the project's history (the «Оценка, ч» field from analogs with actuals) and records the actual from Claude Code, Codex and claude.ai/code cloud session transcripts when a task is closed. When — always when «Оценка, ч» is set on a new task or an epic's subtask; when a task is closed or a PR is merged (actual); in a cloud session when closing a task — its part of the actual («Факт (облако)»); when the cloud part wasn't counted (a Claude-Session trailer in commits, «не импортирована» (not imported) in the actual) — importing the session's events; when asked "how many hours", "estimate it", "how accurate are the estimates", for estimate history, an estimate backtest, the k coefficient, an actuals backfill or estimate vs actual; when comparing the flow before and after a change or spend over a period across all of a repo's sessions (`est period`) — even if the word "estimate" wasn't said but the talk is about planning the amount of work.
 allowed-tools: Bash(bun *skills/est/scripts/est.ts *) Bash(gh issue view *) Bash(gh pr view *)
 ---
 
-# est — оценка по истории, факт по транскриптам
+# est — estimate from history, actual from transcripts
 
-Оценка «из головы» ничем не проверяема. Здесь оценка выводится из фактов по
-уже закрытым задачам, а факт измеряется по транскриптам агента (Claude Code,
-Codex), а не сообщается по памяти. Скрипт `scripts/est.ts` делает всё детерминированное
-(транскрипты, GraphQL, поля проекта, комментарии, подбор аналогов); за
-агентом — поправка на названное отличие и объяснение расхождений.
+An estimate "off the top of the head" can't be checked. Here the estimate is
+derived from the actuals of already closed tasks, and the actual is measured from
+the agent's transcripts (Claude Code, Codex), not reported from memory. The script
+`scripts/est.ts` does everything deterministic (transcripts, GraphQL, project
+fields, comments, picking analogs); the agent's part is the correction for a named
+difference and explaining discrepancies.
 
-**Единица:** «Оценка, ч» = «Факт, ч» = активные часы агента по задаче
-(работа агента + паузы ≤ 30 мин между записями). Не человеко-часы, не
-календарь. Ручную работу вне агента (> 0,5 ч) человек дописывает сам строкой
-«+ вручную: N ч» в комментарий «Факт». Старые оценки без маркера
-`<!-- est -->` (поставленные до внедрения `est`, в других единицах) в
-калибровку (k) не идут.
+**Unit:** «Оценка, ч» (estimate, h) = «Факт, ч» (actual, h) = the agent's active
+hours on the task (agent work + pauses ≤ 30 min between records). Not
+person-hours, not calendar time. Manual work outside the agent (> 0.5 h) the human
+adds themselves as a line «+ вручную: N ч» ("+ manually: N h") in the actual
+comment. Old estimates without the `<!-- est -->` marker (set before `est` was
+introduced, in other units) don't go into calibration (k).
 
-**Источник факта — транскрипты агента** (Claude Code, Codex, облачные сессии
-claude.ai/code — раздел «Облачная сессия»), не память и не цифра на глаз. У
-задачи, сделанной агентом, чьих транскриптов `est` не читает, факт
-«недоступен», пока не добавлен его источник.
+**The source of the actual is the agent's transcripts** (Claude Code, Codex,
+claude.ai/code cloud sessions — section "Cloud session"), not memory and not a
+number by eye. A task done by an agent whose transcripts `est` doesn't read has
+its actual "unavailable" until its source is added.
 
-**Поля проекта ставит только скилл:** «Оценка, ч» — `est estimate --write`
-(по аналогам с фактом, не из головы), «Факт, ч», «Токены, млн»,
-«Стоимость, $» — `est fact --write` при закрытии задачи; руками их не трогать.
+**Project fields are set only by the skill:** «Оценка, ч» — `est estimate --write`
+(from analogs with actuals, not off the top of the head); «Факт, ч», «Токены, млн»
+(tokens, M), «Стоимость, $» (cost, $) — `est fact --write` when the task is
+closed; never touch them by hand.
 
-Запуск: `bun <каталог скилла>/scripts/est.ts <подкоманда> …` (Bun, без зависимостей) — каталог
-скилла тот, где лежит этот файл (`~/.claude/skills/est`, `~/.agents/skills/est`,
-`.agents/skills/est` проекта или клон ai-dev; у Claude Code — `${CLAUDE_SKILL_DIR}`); ниже сокращённо `est`. `--repo owner/repo` можно опустить, если работаешь в
-каталоге репозитория. Реестр репозиториев (какие есть, где лежат локально,
-номер проекта) — личный файл `~/.config/ai-dev/repos.json` (или
-`$AI_DEV_CONFIG_DIR/repos.json`; старый `~/.claude/est` переезжает сам), в скилл не входит;
-формат описан в начале `est.ts`. Без записи в реестре скрипт определяет репо
-по `git remote origin`, а проект — по привязке к репозиторию.
+Run: `bun <skill folder>/scripts/est.ts <subcommand> …` (Bun, no dependencies) —
+the skill folder is the one holding this file (`~/.claude/skills/est`,
+`~/.agents/skills/est`, the project's `.agents/skills/est` or an ai-dev clone; in
+Claude Code — `${CLAUDE_SKILL_DIR}`); below abbreviated to `est`. `--repo
+owner/repo` can be omitted when you work in the repository's folder. The
+repository registry (which ones exist, where they live locally, the project
+number) is a personal file `~/.config/ai-dev/repos.json` (or
+`$AI_DEV_CONFIG_DIR/repos.json`; the old `~/.claude/est` moves by itself), not
+part of the skill; the format is described at the top of `est.ts`. Without a
+registry entry the script determines the repo from `git remote origin`, and the
+project from its link to the repository.
 
-## Когда что запускать
+## What to run when
 
-| Момент | Действие |
+| Moment | Action |
 |---|---|
-| Создаёшь маленькую задачу или подзадачу эпика | `est estimate <N> --type <тип> --write` — раздел «Оценка» ниже |
-| PR смёржен / issue закрыт | `github task close <N>` — внутри `est fact <N> --write`; пересчёт факта — `est fact <N> --write` |
-| `est history` пишет «закрытых за 90 дней без факта: N» | `est fact --sweep --since 90d --write` — добить факты закрытым |
-| Тариф модели в прайсе исправлен или добавлен | `est fact --sweep --model <id> --write` — пересчитать записанные факты с ней и их эпики |
-| Спрашивают про точность / историю | `est history [--grep слово]`, `est backtest`; тренд по времени — графиком, скилл `dashboard` |
-| Сравнить флоу до и после правки, расход за период без задач | `est period --since <до> --until <правка> --since <правка>` — раздел «Сводка периода» |
+| You create a small task or an epic's subtask | `est estimate <N> --type <type> --write` — section "Estimating a new task" below |
+| PR merged / issue closed | `github task close <N>` — runs `est fact <N> --write` inside; recomputing the actual — `est fact <N> --write` |
+| `est history` prints «закрытых за 90 дней без факта: N» (closed in 90 days without an actual) | `est fact --sweep --since 90d --write` — fill in the actuals of closed tasks |
+| A model's rate in the price list was fixed or added | `est fact --sweep --model <id> --write` — recompute the recorded actuals with it and their epics |
+| Asked about accuracy / history | `est history [--grep word]`, `est backtest`; the trend over time — as a chart, the `dashboard` skill |
+| Compare the flow before and after a change, spend over a period without tasks | `est period --since <before> --until <change> --since <change>` — section "Period summary" |
 
-Эпик отдельно не оценивается: его «Оценка, ч» и «Факт, ч» — сумма подзадач
-(`est fact <эпик>` сам суммирует и говорит, у скольких подзадач факта нет).
+An epic isn't estimated separately: its estimate and actual are the sum of its
+subtasks (`est fact <epic>` sums them itself and says how many subtasks have no
+actual).
 
-## Оценка новой задачи
+## Estimating a new task
 
-Оценка — это **прогноз по фактам похожих задач**, один вызов: скрипт сам
-подбирает аналоги и считает часы, токены и стоимость по их фактам.
+An estimate is a **forecast from the actuals of similar tasks**, in one call: the
+script picks the analogs itself and computes hours, tokens and cost from their
+actuals.
 
 ```bash
 est estimate <N> --repo <r> --type feat --write
 ```
 
-`--type` — как префикс ветки (feat / fix / docs / refactor / perf / test /
-chore / ci / build / research). Без `--write` всё только печатается.
+`--type` — like the branch prefix (feat / fix / docs / refactor / perf / test /
+chore / ci / build / research). Without `--write` everything is only printed.
 
-1. **Аналоги** — три самых похожих закрытых задачи с фактом (покрытие `full`,
-   не эпики), **закрытые до создания оцениваемой**. Сходство — сумма
-   признаков: общая метка решения ×3, тот же тип ×2, общее слово заголовка ×1
-   (слова сравниваются по первым четырём буквам), минус 3 × |ln| отношения
-   размеров описаний issue (знаков, без ответов на вопросы — их дописывают
-   после оценки); при равенстве — недавно закрытые. Комментарий называет
-   аналоги и чем они похожи:
+1. **Analogs** — the three most similar closed tasks with an actual (coverage
+   `full`, not epics), **closed before the estimated one was created**.
+   Similarity is a sum of features: a shared decision label ×3, the same type ×2,
+   a shared title word ×1 (words are compared by their first four letters), minus
+   3 × |ln| of the ratio of the issue description sizes (characters, without
+   answers to questions — those are added after the estimate); on a tie — the
+   more recently closed. The comment names the analogs and how they are similar:
    `Аналоги (подбор скриптом): #24 (факт 0.21 ч: метка est · тип feat · слова «оценка», «аналоги» · описание ×1.3); …`
-2. **Поправка** — только на названное отличие, которого признаки не видят:
-   ×0,5 / ×1 / ×1,5 / ×2 (`--mult`, причина — `--note` одной фразой). Без
-   отличия — ×1: в бэктесте поправки агентов поверх механики точности не
-   добавили. Поправка вниз к аналогам из другого репо без `--note` не
-   пишется (`--write` отказывает, без него — предупреждение): «чужой проект
-   медленнее» без названного отличия занижал крупные задачи втрое. Фан-аут
-   отличается от аналогов — ещё `--tok-mult` (×0,5 / ×1 / ×1,5 / ×2 / ×3,
-   причина — `--tok-note`): у параллельных субагентов часы
-   сжимаются, а токены растут (каждый заново читает контекст), поэтому
-   поправка токенов и стоимости своя; без неё — та же, что у часов.
-3. Скрипт берёт медиану фактов аналогов × поправку, округляет к
-   **ближайшей** ступени шкалы 0,1 · 0,25 · 0,5 · 1 · 1,5 · 2 · 3 · 5 · 8 ·
-   13 ч; поправка применяется и к медианам токенов и стоимости. Ставит поле
-   «Оценка, ч» и пишет комментарий (в маркере — `"auto": true`):
+   ("Analogs (picked by the script): #24 (actual 0.21 h: label est · type feat ·
+   words "estimate", "analogs" · description ×1.3); …")
+2. **Correction** — only for a named difference that the features don't see:
+   ×0.5 / ×1 / ×1.5 / ×2 (`--mult`, the reason — `--note`, one sentence). No
+   difference — ×1: in the backtest, agents' corrections on top of the mechanics
+   didn't add accuracy. A downward correction against analogs from another repo
+   isn't written without `--note` (`--write` refuses, without it — a warning):
+   "someone else's project is slower" without a named difference underestimated
+   big tasks threefold. If the fan-out differs from the analogs — also
+   `--tok-mult` (×0.5 / ×1 / ×1.5 / ×2 / ×3, the reason — `--tok-note`): with
+   parallel subagents hours shrink while tokens grow (each one re-reads the
+   context), so tokens and cost get their own correction; without it — the same
+   as for hours.
+3. The script takes the median of the analogs' actuals × the correction and
+   rounds it to the **nearest** step of the scale 0.1 · 0.25 · 0.5 · 1 · 1.5 · 2 ·
+   3 · 5 · 8 · 13 h; the correction applies to the token and cost medians too. It
+   sets the «Оценка, ч» field and writes a comment (the marker has `"auto": true`):
    `Оценка: 1 ч, ≈ 80.7 млн токенов, ≈ $136 (тип fix, доверие A; прогноз по фактам аналогов). Аналоги (подбор скриптом): #4 (факт 0.38 ч: …); #5 (факт 0.51 ч: …); #9 (факт 1.2 ч: …). Поправка: ×2 (вдвое больше правил). k=0.93 (n=20, уровень «репо»; справочно, к прогнозу не применяется).`
-   Разброс фактов аналогов больше ×3 — скрипт добавляет диапазон, в поле —
-   медиана × поправка, округлённая к шкале. Шкала обрезается на 13: если по
-   аналогам (до округления) или по `--hours` выходит больше, скрипт
-   предупреждает — задачу надо разбить.
-4. k (факт/оценка по истории) — справочный: к прогнозу по аналогам он не
-   применяется (прогноз уже из фактов), `est history` показывает его с числом
-   пар, чтобы видеть, сходятся ли оценки с фактами.
+   ("Estimate: 1 h, ≈ 80.7M tokens, ≈ $136 (type fix, confidence A; forecast from
+   the analogs' actuals). Analogs (picked by the script): … Correction: ×2 (twice
+   as many rules). k=0.93 (n=20, level "repo"; for reference, not applied to the
+   forecast).")
+   If the analogs' actuals spread by more than ×3, the script adds a range; the
+   field gets the median × correction rounded to the scale. The scale is capped
+   at 13: if the analogs (before rounding) or `--hours` give more, the script
+   warns — the task should be split.
+4. k (actual/estimate over history) is for reference: it isn't applied to the
+   analog forecast (the forecast already comes from actuals); `est history` shows
+   it with the number of pairs, to see whether estimates match actuals.
 
-**Аналоги вручную** — `--analogs 254,260`, когда агент видит отличие,
-которого признаки не ловят (подсистема без метки, иной объём при похожем
-описании); тогда — 2–3 аналога из `est history --repo <r> [--grep <слово>]`
-(«аг.» — субагенты задачи, «ходы» — ответы модели, признак размера), при
-сомнении в объёме — `gh issue view <k> --json body,closedByPullRequestsReferences`
-и `gh pr view <pr> --json additions,deletions,changedFiles`. В аналоги идут
-только факты с покрытием `full` (partial помечается «не учтён»), нужно
-минимум два. Задачу будут делать параллельные субагенты (фан-аут) — аналоги
-с похожим числом «аг.».
+**Analogs by hand** — `--analogs 254,260`, when the agent sees a difference the
+features don't catch (a subsystem without a label, a different scope with a
+similar description); then — 2–3 analogs from `est history --repo <r> [--grep
+<word>]` («аг.» — the task's subagents, «ходы» — model responses (turns), a size
+signal), and when in doubt about scope —
+`gh issue view <k> --json body,closedByPullRequestsReferences` and
+`gh pr view <pr> --json additions,deletions,changedFiles`. Only actuals with
+`full` coverage go into analogs (partial is marked «не учтён», "not counted"), at
+least two are needed. If parallel subagents will do the task (fan-out) — analogs
+with a similar «аг.» count.
 
-**Бэктест** — `est backtest [--repo <r>] [--all-repos]`: каждая закрытая
-задача с фактом оценивается механикой так, как её оценил бы скрипт в день
-создания (аналоги — только закрытые раньше), и печатаются доля в допуске
-×0,5…×2 и k механики, ручных оценок и механики с поправкой агента — на одной
-выборке (задачи, где есть и ручная оценка). Им проверяется правка правила
-подбора: веса выше выбраны по нему (#279) — на истории ~470 задач механика
-попадает в допуск так же часто, как ручной выбор.
+**Backtest** — `est backtest [--repo <r>] [--all-repos]`: every closed task with
+an actual is estimated by the mechanics the way the script would have estimated
+it on its creation day (analogs — only those closed earlier), and it prints the
+share within the ×0.5…×2 tolerance and k for the mechanics, for manual estimates
+and for the mechanics with the agent's correction — on one sample (tasks that also
+have a manual estimate). It is how a change to the picking rule is checked: the
+weights above were chosen with it (#279) — on a history of ~470 tasks the
+mechanics lands within tolerance as often as manual picking.
 
-Доверие: A — ≥ 3 аналога с фактом и ≥ 5 закрытых задач того же типа с фактом
-(покрытие full) в этом репо; B — ≥ 2 аналога с фактом; C — экспертная
-оценка (`--hours`, с аналогами или без).
+Confidence: A — ≥ 3 analogs with an actual and ≥ 5 closed tasks of the same type
+with an actual (coverage full) in this repo; B — ≥ 2 analogs with an actual; C — an
+expert estimate (`--hours`, with or without analogs).
 
-**Холодный старт — честно.** В репо < 2 закрытых до создания задачи фактов
-скрипт аналогов не подберёт и скажет об этом → аналоги из других репо вручную
-(`--analogs owner/repo#254`, список — `est history --all-repos`; в комментарии
-они подписаны «из проекта …», доверие B). В публичный репо аналог из
-непубличного не пишется: `--write` отказывает до записи (без него —
-предупреждение), ведь имя и номер чужой задачи остались бы и в истории правок
-комментария; бери аналоги из этого репо или `--hours`. Аналогов с фактом нет
-нигде → `--hours H` как экспертная оценка (доверие C), в комментарии так и
-написано; никаких «стартовых ставок за операцию» — это выдуманная точность. `--hours` вместе с аналогами — экспертная оценка поверх
-прогноза (доверие C): в комментарии видно, сколько вышло бы по аналогам, токены
-и стоимость пересчитаны пропорционально часам. `--hours` округляется к шкале,
-скрипт об этом предупреждает.
+**Cold start — honestly.** If the repo has < 2 actuals closed before the task was
+created, the script won't pick analogs and says so → analogs from other repos by
+hand (`--analogs owner/repo#254`, the list — `est history --all-repos`; in the
+comment they are labeled «из проекта …», "from project …", confidence B). An
+analog from a non-public repo isn't written into a public repo: `--write` refuses
+before writing (without it — a warning), since the other task's name and number
+would stay in the comment's edit history too; take analogs from this repo or use
+`--hours`. No analogs with an actual anywhere → `--hours H` as an expert estimate
+(confidence C), and the comment says so; no "starting rates per operation" — that
+is made-up precision. `--hours` together with analogs is an expert estimate on top
+of the forecast (confidence C): the comment shows what the analogs would give,
+tokens and cost are recomputed in proportion to the hours. `--hours` is rounded to
+the scale, and the script warns about it.
 
-**После начала работы оценку не переписывать.** Расхождение объясняется в
-комментарии «Факт»: факт там сравнивается с полем «Оценка, ч», а k в истории —
-с часами из маркера `<!-- est -->`.
+**Don't rewrite the estimate after work starts.** A discrepancy is explained in
+the actual comment: the actual there is compared with the «Оценка, ч» field, and k
+in history — with the hours from the `<!-- est -->` marker.
 
-## Факт при закрытии
+## Actual at closing
 
-После мержа PR и деплоя (или закрытия issue без PR) — `github task close <N>`
-(скилл `github`: факт, статус, эпик, milestone, ветка одним вызовом); факт
-в нём считает:
+After the PR is merged and deployed (or the issue is closed without a PR) —
+`github task close <N>` (the `github` skill: actual, status, epic, milestone,
+branch in one call); the actual in it is computed by:
 
 ```bash
 est fact <N> --repo <r> --write
 ```
 
-Скрипт находит сессии задачи. Сначала — по закреплению: сессия, в которой
-`github task status` поставил задаче «В работе» (файл
-`~/.config/ai-dev/sessions/<id сессии>` со строкой `owner/repo#N`), целиком её
-— с субагентами (у них тот же id) и временем до «В работе»; транскрипт
-ищется по id в любом каталоге `~/.claude/projects`. Закреплённая за другой
-задачей сессия этой не достаётся, какие бы признаки в ней ни были. Сессии без
-закрепления (раньше него, облако, Codex, сессия эпика, файл удалён) — по
-признакам: хешам коммитов PR в выводах инструментов, записям `pr-link` её
-репозитория, ветке с номером задачи, `#N` в названии и первом промпте сессии
-или в задании субагенту. Затем считает активные часы — включая работу
-субагентов и workflow внутри сессии — и пишет комментарий:
+The script finds the task's sessions. First — by pinning: the session in which
+`github task status` set the task to In progress (the file
+`~/.config/ai-dev/sessions/<session id>` with the line `owner/repo#N`), all of it
+— with its subagents (they have the same id) and the time before In progress; the
+transcript is looked up by id in any folder of `~/.claude/projects`. A session
+pinned to another task doesn't go to this one, whatever features it has. Sessions
+without pinning (before it, cloud, Codex, an epic's session, the file deleted) —
+by features: the PR's commit hashes in tool outputs, `pr-link` records of its
+repository, a branch with the task number, `#N` in the session's name and first
+prompt or in a subagent's assignment. Then it computes active hours — including
+the work of subagents and workflows inside the session — and writes a comment:
 
 `Факт: 3,1 ч активных в Claude Code (оценка 3 ч, ×1,03). 2 сессии, 14 промптов, 4 субагента, стена 10,2 ч, покрытие full. PR #336; 8 коммитов, дифф 2140 строк.`
 
-(«N субагентов» — сколько субагентов работало на задачу; признак фан-аута для
-подбора аналогов, в маркере — `agents`)
+("Actual: 3.1 active hours in Claude Code (estimate 3 h, ×1.03). 2 sessions, 14
+prompts, 4 subagents, wall clock 10.2 h, coverage full. PR #336; 8 commits, diff
+2140 lines.")
 
-и второй строкой — расход модели:
+("N subagents" — how many subagents worked on the task; a fan-out signal for
+picking analogs, `agents` in the marker)
+
+and on a second line — the model spend:
 
 `Токены: 150,9 млн (вход 0,01 · выход 0,18 · запись кэша 6,4 · чтение кэша 144,3); стоимость по API-тарифам ≈ $134,61 (claude-opus-5 $83,95, claude-fable-5-1 $50,67).`
 
-и третьей — ходы и контекст (её нет, если привязанных ответов модели нет):
+("Tokens: 150.9M (input 0.01 · output 0.18 · cache write 6.4 · cache read 144.3);
+cost at API rates ≈ $134.61 (…)")
+
+and on a third — turns and context (absent if there are no linked model
+responses):
 
 `Ходы: 250 (субагентов 2, их ходов 120), преамбула 104 тыс., контекст в конце 581 тыс., ходов с контекстом > 400 тыс. — 31 %.`
 
-Ход — один ответ модели (по `message.id`), цена задачи растёт квадратично
-от их числа: каждый ход заново читает весь контекст. Преамбула — контекст
-первого хода верхнего уровня самой ранней сессии (правила и инструменты),
-контекст в конце — последнего хода самой поздней; хвост — доля ходов с
-контекстом больше 400 тыс. (они были 20 % ходов и 45 % токенов). Ходы у
-общего PR не делятся долей — ход целый у каждой задачи. В маркере — `steps`,
-`steps_agents`, `tail` (число), `preamble`, `ctx_end`.
+("Turns: 250 (subagents 2, their turns 120), preamble 104k, context at the end
+581k, turns with context > 400k — 31 %.")
 
-плюс поля «Факт, ч», «Токены, млн», «Стоимость, $» (два последних — если есть в
-проекте). Токены берутся из `message.usage` тех же привязанных записей, что и
-время (включая субагентов), один раз на `message.id` — в транскрипте usage
-повторяется на каждом блоке ответа, а возобновлённая сессия копирует историю.
-Стоимость — **API-эквивалент** по публичным тарифам (таблица `PRICES` в начале
-`est.ts`, дата там же; запись кэша = вход ×1,25 для TTL 5 мин и ×2 для 1 ч;
-fast-режим — по своему тарифу). На подписке эти деньги не списываются — это
-мера для сравнения задач и моделей. Ключ прайса — id модели без даты: дата
-в id (`-20251001`, у Vertex AI `@20251101`) тариф не меняет, а другое
-продолжение имени — другая версия (`claude-opus-5-5` при ключе
-`claude-opus-5`), и тариф прежней ей не достаётся. Новая модель или свои
-цены — в личный `~/.config/ai-dev/prices.json`: `{"<id модели>": [вход,
-выход, чтение_кэша]}`; модель вне прайса даёт токены без цены, и комментарий
-это помечает. Факты, записанные до исправления тарифа, пересчитывает
-`est fact --sweep --model <id> --write`: закрытые задачи окна `--since`, в
-расходе которых (маркер факта, `models`) есть эта версия модели, затем их
-закрытые эпики — эпик складывает уже исправленные факты подзадач. Основную
-массу токенов всегда составляет чтение кэша — смотри на стоимость и на выход,
-а не на общий объём.
+A turn is one model response (by `message.id`); a task's price grows
+quadratically with their number: every turn re-reads the whole context. The
+preamble is the context of the first top-level turn of the earliest session
+(rules and tools), the context at the end — of the last turn of the latest one;
+the tail is the share of turns with context over 400k (they were 20 % of turns
+and 45 % of tokens). Turns of a shared PR aren't split into shares — each task
+gets the whole turn. In the marker — `steps`, `steps_agents`, `tail` (a number),
+`preamble`, `ctx_end`.
 
-Сессия из каталога другого репозитория реестра (разговор там перерос в задачу
-этого: задачу завели, сессию переименовали, коммит и PR — здесь) — гость:
-кандидат, только если в транскрипте есть имя репозитория задачи, а привязка —
-только признаками этого репозитория (PR и коммиты задачи, точная ветка её PR,
-URL issue); номер в названии и в первом промпте — лишь вместе с ними, ветки
-того репозитория не в счёт. Записи до переименования остаются задаче того
-репозитория, а период «#N …» с PR этого — ей не достаётся. Сессия приложения
-без выбранной папки (временная папка `…/Claude/scratch-workspaces/…`) —
-кандидат-гость любого репозитория реестра: перейдя в репозиторий, она пишет
-транскрипт в каталог временной папки, пока приложение не перенесёт его в
-каталог репозитория. Перешла в каталог репозитория задачи — своя, привязка
-как у сессии из этого каталога.
+plus the fields «Факт, ч», «Токены, млн», «Стоимость, $» (the last two — if the
+project has them). Tokens are taken from `message.usage` of the same linked
+records as the time (including subagents), once per `message.id` — in a
+transcript, usage repeats on every block of a response, and a resumed session
+copies the history. Cost is the **API equivalent** at public rates (the `PRICES`
+table at the top of `est.ts`, the date is there too; cache write = input ×1.25 for
+a 5-min TTL and ×2 for 1 h; fast mode — at its own rate). On a subscription this
+money isn't charged — it is a measure for comparing tasks and models. The price
+key is the model id without the date: a date in the id (`-20251001`, on Vertex AI
+`@20251101`) doesn't change the rate, while a different continuation of the name
+is a different version (`claude-opus-5-5` with the key `claude-opus-5`), and the
+previous version's rate doesn't carry over to it. A new model or your own prices
+— in the personal `~/.config/ai-dev/prices.json`: `{"<model id>": [input,
+output, cache_read]}`; a model outside the price list gives tokens without a
+price, and the comment marks that. Actuals recorded before a rate was fixed are
+recomputed by `est fact --sweep --model <id> --write`: closed tasks in the
+`--since` window whose spend (the actual marker, `models`) includes this model
+version, then their closed epics — an epic adds up the already fixed actuals of
+its subtasks. The bulk of tokens is always cache reads — look at the cost and the
+output, not the total volume.
 
-Покрытие: `full` — все PR задачи видны в транскриптах;
-`partial` — часть работы прошла мимо Claude Code (второй разработчик, другой
-инструмент); `none` — сессий нет, поле не ставится, в комментарии «факт
-недоступен». В k и в аналоги идут только `full`. Не дописывай цифру на глаз,
-если скрипт факта не нашёл — «нет данных» ценнее выдуманного числа.
+A session from the folder of another registry repository (the conversation there
+grew into a task of this one: the task was created, the session renamed, the
+commit and PR are here) is a guest: a candidate only if its transcript contains
+the task repository's name, and linked only by this repository's features (the
+task's PR and commits, the exact branch of its PR, the issue URL); the number in
+the name and in the first prompt counts only together with them, that
+repository's branches don't count. Records before the rename stay with that
+repository's task, and the "#N …" period with this repository's PR doesn't go to
+it. An app session without a chosen folder (a temp folder
+`…/Claude/scratch-workspaces/…`) is a guest candidate for any registry
+repository: having moved into a repository, it writes its transcript into the
+temp folder's directory until the app moves it into the repository's directory.
+If it moved into the task repository's folder, it is the repository's own
+session, linked like a session from that folder.
 
-Если факт/оценка вне ×0,5…×2 и оценка ≥ 2 ч — добавь в тот же комментарий
-строку `Причина: <пропущена работа | вырос объём | внешний блокер | неверный аналог | иное>: <1–2 предложения>`
-(скрипт при повторном запуске эту строку сохраняет).
+Coverage: `full` — all of the task's PRs are visible in transcripts; `partial` —
+part of the work went past Claude Code (a second developer, another tool); `none`
+— no sessions, the field isn't set, the comment says «факт недоступен» ("actual
+unavailable"). Only `full` goes into k and analogs. Don't add a number by eye if
+the script found no actual — "no data" is worth more than a made-up number.
 
-Задачи «не будем делать» и дубли факта не получают (их в проекте уже нет).
+If actual/estimate is outside ×0.5…×2 and the estimate is ≥ 2 h — add to the same
+comment the line
+`Причина: <пропущена работа | вырос объём | внешний блокер | неверный аналог | иное>: <1–2 sentences>`
+("Reason: missed work | scope grew | external blocker | wrong analog | other"; the
+script keeps this line on a rerun).
 
-### Облачная сессия
+Tasks we "won't do" and duplicates get no actual (they are no longer in the
+project).
 
-Облачная сессия Claude Code (claude.ai/code) считает свою часть сама: при
-закрытии задачи `est fact <N>` в облаке берёт транскрипт этой сессии в
-контейнере (привязка — ветка `<type>/<N>-…` или «#N» в первом промпте; PR и
-коммиты оттуда не видны) и печатает комментарий «Факт (облако): … ч, токены,
-ссылка на сессию» с маркером части (`cloud`) — агент записывает его в issue
-инструментом GitHub. Поля проекта из облака не поставить: их ставит ближайший
-локальный `est fact <N> --write` или `--sweep` (закрытые без поля «Факт, ч»),
-складывая часть облака с локальной работой без двойного счёта; часть хранится
-в маркере и при перезаписи.
+### Cloud session
 
-Коммиты облачной сессии несут трейлер `Claude-Session:
-https://claude.ai/code/session_…`: PR с таким коммитом, для сессии которого
-нет ни части, ни импортированной выгрузки, даёт покрытие `partial` и строку
-«Облачная сессия … не импортирована — est cloud-import» в «Факте». Так бывает
-у старых задач и когда облако не смогло привязать транскрипт к задаче — тогда
-события импортирует локальная сессия; выгрузка той же сессии важнее части.
+A Claude Code cloud session (claude.ai/code) counts its own part: when a task is
+closed, `est fact <N>` in the cloud takes this session's transcript in the
+container (linking — the branch `<type>/<N>-…` or "#N" in the first prompt; PRs
+and commits aren't visible from there) and prints the comment «Факт (облако): …»
+("Actual (cloud)") with hours, tokens and a link to the session, with a part
+marker (`cloud`) — the agent writes it into the issue with a GitHub tool. Project
+fields can't be set from the cloud: they are set by the nearest local `est fact
+<N> --write` or `--sweep` (closed tasks without the «Факт, ч» field), which adds
+the cloud part to the local work without double counting; the part is kept in the
+marker on rewrites too.
 
-Импорт делает локальная сессия браузером, где пользователь вошёл в claude.ai
-(Claude in Chrome): во вкладке claude.ai выполнить сниппет ниже — он берёт
-метаданные сессии и все её события и сохраняет `<session>.json` в загрузки
-(скачивание — с разрешения пользователя: имя файла, источник, размер); затем
+Cloud session commits carry the trailer `Claude-Session:
+https://claude.ai/code/session_…`: a PR with such a commit, for whose session
+there is neither a part nor an imported export, gets coverage `partial` and the
+line «Облачная сессия … не импортирована — est cloud-import» ("Cloud session …
+not imported") in the actual. This happens with old tasks and when the cloud
+couldn't link the transcript to the task — then a local session imports the
+events; an export of the same session takes precedence over the part.
+
+The import is done by a local session through a browser where the user is signed
+in to claude.ai (Claude in Chrome): in a claude.ai tab, run the snippet below — it
+takes the session's metadata and all its events and saves `<session>.json` to
+downloads (the download — with the user's permission: file name, source, size);
+then
 
 ```bash
 est cloud-import ~/Downloads/session_….json   # → ~/.config/ai-dev/cloud/<owner>/<repo>/
@@ -251,7 +289,7 @@ est fact <N> --write
 ```
 
 ```js
-// во вкладке claude.ai; save=false — только сводка, без скачивания
+// in a claude.ai tab; save=false — summary only, no download
 async function cloudExport(session, save) {
   const h = { "anthropic-version": "2023-06-01" };
   const get = async (u) => { const r = await fetch(u, { headers: h }); if (!r.ok) throw new Error(`${u}: ${r.status}`); return r.json(); };
@@ -273,155 +311,162 @@ async function cloudExport(session, save) {
 await cloudExport("session_…", true)
 ```
 
-Облачная сессия считается по тем же правилам, что локальная: название «#N …»
-привязывает, ветка — из событий коммита (до первого коммита — нейтральная),
-человек — промпты клиента, токены — раз на ответ, субагенты — своими потоками.
-Выгрузка личная (промпты, выводы инструментов) — только в каталоге состояния,
-не в репозитории.
+A cloud session is counted by the same rules as a local one: the name "#N …"
+links, the branch comes from commit events (before the first commit — neutral),
+the human is the client's prompts, tokens — once per response, subagents — by
+their own streams. The export is personal (prompts, tool outputs) — only in the
+state folder, not in the repository.
 
-## Сводка периода — флоу до и после
+## Period summary — the flow before and after
 
-Факт задачи видит только работу, привязанную к задаче. Во флоу без задач
-(PR без issue, ветка worktree до переименования, общая ветка нескольких PR)
-он занижен или делится неверно — сравнивать по нему флоу до и после правки
-нельзя. `est period` берёт **все сессии репо за период**, без привязки:
+A task's actual sees only the work linked to the task. In a flow without tasks (a
+PR without an issue, a worktree branch before the rename, a shared branch of
+several PRs) it is understated or split wrongly — you can't compare the flow
+before and after a change by it. `est period` takes **all of the repo's sessions
+over the period**, without linking:
 
 ```bash
-est period --since 2026-08-01 --until 2026-09-05 --since 2026-09-05   # до правки флоу и после
+est period --since 2026-08-01 --until 2026-09-05 --since 2026-09-05   # before the flow change and after
 ```
 
-Период — пара `--since … [--until …]` (i-й `--until` закрывает i-й
-`--since`, без него — до сейчас; дата `ГГГГ-ММ-ДД` — полночь по местному
-времени, время ISO или `90d`). Сессии — из каталогов репо, включая короткие
-без коммитов (факт их отбрасывает как рутину), и закреплённые за его
-задачами; гостей (сессий другого репо) нет. Скрипт печатает итоги и они же
-на влитой за период PR: часы агента (сумма по сессиям), часы машины
-(объединение сессий) и их отношение — параллельность, токены, выход, $,
-ходы, субагентов, промпты человека, $ за 1 млн токенов; у двух периодов —
-отношение «после / до», под таблицей — доля $ по моделям каждого периода.
+A period is a pair `--since … [--until …]` (the i-th `--until` closes the i-th
+`--since`; without it — up to now; a date `YYYY-MM-DD` is midnight local time, or
+an ISO time, or `90d`). Sessions come from the repo's folders, including short
+ones without commits (the actual discards them as routines), and those pinned to
+its tasks; no guests (sessions of another repo). The script prints the totals and
+the same per PR merged in the period: agent hours (sum over sessions), machine
+hours (union of sessions) and their ratio — parallelism, tokens, output, $, turns,
+subagents, human prompts, $ per 1M tokens; for two periods — the «после / до»
+("after / before") ratio, and below the table — the $ share by model for each
+period.
 
-**$ — это флоу × тариф модели.** Смена модели меняет $ на PR в разы при
-том же флоу; эффект флоу — в токенах, выходе и часах на PR, сдвиг тарифа —
-в «$ за 1 млн токенов» и доле $ по моделям (её же печатает `est history`).
-Работа над PR могла начаться до периода — сравнивай периоды длиннее типичной
-задачи.
+**$ is flow × model rate.** A model change changes $ per PR several-fold with the
+same flow; the flow's effect shows in tokens, output and hours per PR, a rate
+shift — in «$ за 1 млн токенов» ("$ per 1M tokens") and the $ share by model
+(`est history` prints it too). Work on a PR may have started before the period —
+compare periods longer than a typical task.
 
-## Чтобы факт находился — привязка работы к задаче
+## So the actual is found — linking work to the task
 
-Без этого покрытие будет `partial`/`none`, и история не накопится:
+Without this the coverage will be `partial`/`none`, and no history accumulates:
 
-- задача взята в работу (`github task status <N> "В работе"`) в той сессии,
-  что её делает: закрепление привязывает всю сессию прямо, признаки ниже —
-  запасной путь для сессий без него и для истории до него;
-- сессия названа `#<номер> <название задачи>` — название читается из
-  транскрипта и привязывает к задаче явно (сильнее первого промпта), причём
-  с момента переименования: первое название действует с начала сессии,
-  каждое следующее — с переименования. Так делятся старые сессии, которые
-  вели задачи подряд: записи на ветке без номера достаются той задаче, под
-  чьим названием сделаны, а не последней. Теперь новая задача — новая сессия:
-  вторую `github task status` в работу не возьмёт;
-- одна сессия — одна задача; ветка по конвенции `<type>/<issue>-<slug>`
-  (`feat/42-invoice-export`, допустим префикс области
-  `backend/fix/42-…`; старое `issue-42-…` тоже распознаётся) — из неё
-  скрипт берёт и номер задачи, и тип для истории;
-- номер задачи (`#263` или ссылка) — в первом промпте сессии **и в задании
-  каждому субагенту / агенту workflow**, который делает эту задачу: транскрипты
-  субагентов считаются частью сессии, и по номеру в задании их работа
-  привязывается к своей задаче даже когда несколько задач идут параллельно
-  (без номера параллельная работа делится по порядку коммитов — грубо).
-  Задача — номер после слова «Задача» или в самом начале задания
-  (`Задача #263 (эпик #250). …`, `#263 …`); номер после «эпик» — не задача;
-  два номера без этих примет (`посмотри #263 и #261`) подсказки не дают;
-- в теле PR — `Closes #263`;
-- коммитить логическими шагами, не одним коммитом на PR;
-- в репо, где задачи закрывают коммитами без PR, — `Closes #N` в сообщении
-  коммита;
-- работать в каталоге сессии, переключая ветку, а не в соседнем worktree из
-  той же сессии: у записей транскрипта ветка — это ветка каталога сессии, и
-  работа на «чужой» ветке в факт не попадает (покрытие `none`);
-- не глушить вывод `git commit`, `git push`, `git worktree add`, `gh pr create`
-  флагом `-q`: сессия привязывается по имени ветки и хешам коммитов в
-  **выводах** инструментов; перед `est fact` полезно напечатать
-  `gh pr view <N> --json headRefName,mergeCommit,commits` отдельным вызовом.
-  Хеш в выводе листинга (`git worktree list`, `git branch`, `git log`,
-  `git fetch`, чтение через `gh`, кроме `gh pr view`; команда только из них и
-  утилит вроде `head`, `grep`, в том числе в цикле `for`, `while` и условии
-  `if`) привязывает, лишь если этот коммит есть и в
-  выводе самой сессии: `git log` соседнего worktree не отдаёт время сессии
-  чужой задаче.
+- the task is taken into work (`github task status <N> "В работе"`, In progress)
+  in the session that does it: pinning links the whole session directly; the
+  features below are a fallback for sessions without it and for history before it;
+- the session is named `#<number> <task title>` — the name is read from the
+  transcript and links to the task explicitly (stronger than the first prompt),
+  and from the moment of the rename: the first name applies from the start of the
+  session, each next one — from its rename. That's how old sessions that ran
+  tasks one after another are split: records on a branch without a number go to
+  the task under whose name they were made, not to the last one. Now a new task
+  is a new session: `github task status` won't take a second one into work;
+- one session — one task; a branch by the convention `<type>/<issue>-<slug>`
+  (`feat/42-invoice-export`, an area prefix is allowed: `backend/fix/42-…`; the
+  old `issue-42-…` is recognized too) — the script takes from it both the task
+  number and the type for history;
+- the task number (`#263` or a link) — in the session's first prompt **and in the
+  assignment of every subagent / workflow agent** that does this task: subagent
+  transcripts count as part of the session, and the number in the assignment
+  links their work to its task even when several tasks run in parallel (without a
+  number, parallel work is split by commit order — roughly). The task is the
+  number after the word «Задача» ("Task") or at the very start of the assignment
+  (`Задача #263 (эпик #250). …`, `#263 …`); a number after «эпик» ("epic") isn't
+  the task; two numbers without these markers (`look at #263 and #261`) give no
+  hint;
+- `Closes #263` in the PR body;
+- commit in logical steps, not one commit per PR;
+- in a repo where tasks are closed by commits without a PR — `Closes #N` in the
+  commit message;
+- work in the session's folder, switching the branch, not in a neighboring
+  worktree from the same session: a transcript record's branch is the branch of
+  the session's folder, and work on a "foreign" branch doesn't get into the
+  actual (coverage `none`);
+- don't silence the output of `git commit`, `git push`, `git worktree add`,
+  `gh pr create` with `-q`: a session is linked by the branch name and commit
+  hashes in tool **outputs**; before `est fact` it helps to print
+  `gh pr view <N> --json headRefName,mergeCommit,commits` in a separate call.
+  A hash in a listing's output (`git worktree list`, `git branch`, `git log`,
+  `git fetch`, reading via `gh` other than `gh pr view`; a command made only of
+  these and utilities like `head`, `grep`, including inside a `for` or `while`
+  loop and an `if` condition) links only if that commit is also in the session's
+  own output: `git log` of a neighboring worktree doesn't hand the session's time
+  to someone else's task.
 
-## Справочник команд
+## Command reference
 
 ```bash
-est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
+est history [--repo o/r] [--grep WORD] [--all-repos] [--last N]
 est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
 est fact --sweep [--since 90d] [--repo o/r] [--write]
-est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   # пересчёт записанных фактов с моделью и их эпиков
+est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   # recompute recorded actuals with the model and their epics
 est estimate <N> [--repo o/r] --type <type> \
-    [--mult 0.5|1|1.5|2] [--note "причина"] \
-    [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]   # аналоги подбирает скрипт; часы, токены, $ — по их фактам
-est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--write]   # аналоги вручную
-est estimate <N> [--repo o/r] --type <type> --hours H [--write]   # экспертная, когда аналогов нет
-est backtest [--repo o/r] [--all-repos]   # механика против ручных оценок по закрытым задачам
-est period --since ДАТА [--until ДАТА] [--since ДАТА [--until ДАТА]] [--repo o/r] [--gap 30]   # все сессии репо за период
-# аналог из другого репо реестра: --analogs owner/repo#254
-# <type> — как префикс ветки: feat fix docs refactor perf test chore ci build research
+    [--mult 0.5|1|1.5|2] [--note "reason"] \
+    [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]   # the script picks analogs; hours, tokens, $ from their actuals
+est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--write]   # analogs by hand
+est estimate <N> [--repo o/r] --type <type> --hours H [--write]   # expert, when there are no analogs
+est backtest [--repo o/r] [--all-repos]   # mechanics vs manual estimates on closed tasks
+est period --since DATE [--until DATE] [--since DATE [--until DATE]] [--repo o/r] [--gap 30]   # all of the repo's sessions over the period
+# an analog from another registry repo: --analogs owner/repo#254
+# <type> — like the branch prefix: feat fix docs refactor perf test chore ci build research
 ```
 
-Без `--write` всё только печатается — так можно проверить, что скрипт нашёл,
-прежде чем писать в GitHub. Комментарии идемпотентны: маркеры
-`<!-- est {…} -->` и `<!-- fact {…} -->` в конце комментария, повторный
-запуск обновляет существующий, а не плодит новые. `--sweep --write` пишет
-только задачи с покрытием `full`/`partial` — «недоступен» массово не
-рассылает; для одной задачи `est fact <N> --write` запись «факт недоступен»
-делает (это и есть честная запись при закрытии).
+Without `--write` everything is only printed — so you can check what the script
+found before writing to GitHub. Comments are idempotent: the markers
+`<!-- est {…} -->` and `<!-- fact {…} -->` at the end of a comment; a rerun
+updates the existing comment instead of adding new ones. `--sweep --write` writes
+only tasks with coverage `full`/`partial` — it doesn't mass-post "unavailable";
+for a single task `est fact <N> --write` does write «факт недоступен» ("actual
+unavailable") (that is the honest record at closing).
 
-Сбой сети `gh` (таймаут, обрыв соединения, 5xx GitHub) скрипт повторяет с
-паузами 2, 5 и 15 с, ошибку запроса (404, права, валидация) — нет; новый
-комментарий после обрыва ответа не повторяет: GitHub мог его принять.
-`--sweep` на ошибке одной задачи пишет `#N: ошибка …` и идёт дальше; сеть, не
-вернувшаяся за повторы, свип останавливает. С `--write` в конце —
-«не записано: …» и команда повтора, код выхода 1.
+A `gh` network failure (timeout, dropped connection, GitHub 5xx) the script
+retries with pauses of 2, 5 and 15 s; a request error (404, permissions,
+validation) — it doesn't; it doesn't retry a new comment after a dropped response:
+GitHub may have accepted it. `--sweep` on one task's error prints `#N: ошибка …`
+("error") and moves on; a network that didn't come back within the retries stops
+the sweep. With `--write`, at the end — «не записано: …» ("not written") and the
+command to retry, exit code 1.
 
-Одна запись — одной задаче: маркер `<!-- fact … -->` хранит интервалы по
-сессиям (`iv`), и запись, привязанная только названием сессии или первым
-промптом, но уже вошедшая в записанный факт другой задачи той же сессии,
-повторно не засчитывается — комментарий так и пишет: «Не засчитано повторно:
-N ч уже в факте #M». Если неверен тот факт — `est fact M --write`, затем снова
-эту задачу. Запись, привязанная закреплением, веткой, субагентом или своим
-коммитом, остаётся своей; пересечение выводится («Пересечение с фактом #M … —
-пересчитать #M»). Факты, записанные до появления `iv`, не проверяются.
-`--sweep` в конце сверяет сумму часов с объединением интервалов внутри
-каждой сессии: параллельные сессии в одно время — не двойной счёт,
-предупреждение — только когда записи одной сессии вошли в факты двух задач.
+One record — one task: the `<!-- fact … -->` marker stores intervals per session
+(`iv`), and a record linked only by the session name or the first prompt but
+already included in a recorded actual of another task of the same session isn't
+counted again — the comment says so: «Не засчитано повторно: N ч уже в факте #M»
+("Not counted again: N h already in the actual of #M"). If that actual is the
+wrong one — `est fact M --write`, then this task again. A record linked by
+pinning, a branch, a subagent or its own commit stays its own; the overlap is
+printed («Пересечение с фактом #M … — пересчитать #M», "Overlap with the actual
+of #M … — recompute #M"). Actuals recorded before `iv` appeared aren't checked.
+`--sweep` at the end checks the sum of hours against the union of intervals
+within each session: parallel sessions at the same time aren't double counting; a
+warning comes only when records of one session went into the actuals of two tasks.
 
-Номер — это номер **issue**, не PR: на номер PR скрипт предупредит и посчитает
-факт по самому PR. Общий коммит/PR, закрывший несколько задач, делится между
-ними поровну (в выводе скрипта — «без деления: N ч», в комментарии — «общий
-коммит … (доля 1/k)»).
+The number is the **issue** number, not a PR's: given a PR number the script
+warns and computes the actual for the PR itself. A shared commit/PR that closed
+several tasks is split among them equally (the script's output says «без деления:
+N ч», "unsplit: N h"; the comment — «общий коммит … (доля 1/k)», "shared commit …
+(share 1/k)").
 
-## Подводные камни
+## Pitfalls
 
-- Поля проекта ищутся по точному имени через GraphQL; в JSON
-  `gh project item-list` ключи кириллических полей искажены — не полагайся
-  на них.
-- Сессии Codex (`~/.codex/sessions/**/*.jsonl`, `archived_sessions`) читаются
-  так же: промпты — `UserMessage`, хеши коммитов — из выводов инструментов,
-  токены — `token_usage_record` (раз на ответ); ветки у записей нет, поэтому
-  привязка — по номеру в первом промпте и по хешам коммитов. Модели `gpt-*` в
-  прайсе нет — токены считаются, стоимость помечается «без цены», пока не
-  задана в `prices.json`.
-- Транскрипты Claude Code живут в `~/.claude/projects/<путь-через-дефисы>*/` и
-  чистятся через `cleanupPeriodDays` (в `settings.json` должно быть 365).
-  Комментарий «Факт» и поле — уже архив результата; транскрипты нужны
-  только для пересчёта.
-- Сессии с < 3 промптами без PR и коммитов (автоматические рутины) скрипт
-  пропускает; если факт у задачи подозрительно мал — проверь, не была ли
-  работа в такой сессии или в чужой ветке.
-- Облачная сессия Claude Code (`CLAUDE_CODE_REMOTE=true`): GraphQL и проекты
-  GitHub там закрыты. `est fact <N>` в облаке печатает «Факт (облако)» с
-  часами и токенами этой сессии (или «Факт недоступен (облако)», если
-  транскрипт не привязан к задаче) — записать в issue инструментом GitHub;
-  остальные команды — ошибка с объяснением (`docs/cloud-sessions.md` в
-  ai-dev). Поля проекта ставит локальный `est fact <N> --write` / `--sweep`
-  (раздел «Облачная сессия»).
+- Project fields are looked up by exact name via GraphQL; in the JSON of
+  `gh project item-list` the keys of fields with Cyrillic names are mangled —
+  don't rely on them.
+- Codex sessions (`~/.codex/sessions/**/*.jsonl`, `archived_sessions`) are read
+  the same way: prompts — `UserMessage`, commit hashes — from tool outputs,
+  tokens — `token_usage_record` (once per response); records have no branch, so
+  linking is by the number in the first prompt and by commit hashes. `gpt-*`
+  models aren't in the price list — tokens are counted, the cost is marked
+  «без цены» ("no price") until it is set in `prices.json`.
+- Claude Code transcripts live in `~/.claude/projects/<path-with-dashes>*/` and
+  are cleaned up per `cleanupPeriodDays` (`settings.json` must have 365). The
+  actual comment and the field are already the archive of the result; transcripts
+  are needed only for recomputing.
+- Sessions with < 3 prompts and no PR or commits (automatic routines) the script
+  skips; if a task's actual is suspiciously small — check whether the work was in
+  such a session or on someone else's branch.
+- A Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`): GraphQL and GitHub
+  Projects are closed there. `est fact <N>` in the cloud prints «Факт (облако)»
+  with this session's hours and tokens (or «Факт недоступен (облако)», "actual
+  unavailable (cloud)", if the transcript isn't linked to the task) — write it
+  into the issue with a GitHub tool; other commands fail with an explanation
+  (`docs/cloud-sessions.md` in ai-dev). Project fields are set by a local
+  `est fact <N> --write` / `--sweep` (section "Cloud session").
