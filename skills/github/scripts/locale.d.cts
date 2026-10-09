@@ -14,13 +14,17 @@ declare namespace locale {
   interface Names {
     issueTypes: { task: string; bug: string; epic: string };
     sections: { questions: string; scenarios: string };
-    labels: { questions: string };
+    labels: { questions: string; epicDescription: string };
     status: { backlog: string; inProgress: string; done: string };
     fields: { estimate: string; actual: string; tokens: string; cost: string };
     views: { board: string; table: string; roadmap: string };
-    labelMarkers: { decision: string; slice: string };
-    comments: { state: string; actual: string };
+    labelMarkers: { decision: string; slice: string; architecturePath: string };
+    comments: { state: string; actual: string; closedByPr: string };
     subagentPrompt: { task: string; epic: string };
+    /** Баг на красную основную ветку: заголовок «<base> is red: <чеки>». */
+    mainRed: { title: string; check: string; checks: string };
+    /** Задание субагенту актуализации блока (`github task actualize`). */
+    actualize: { lead: string; shipped: string; prs: string; noPr: string; epic: string; openTask: string; checks: string; scope: string; comment: string; answer: string };
     standardIssue: string;
     autoAnswer: string;
     lastLine: { done: string; questions: string; remaining: string };

@@ -9,7 +9,8 @@
     "scenarios": "## Scenarios"
   },
   "labels": {
-    "questions": "questions"
+    "questions": "questions",
+    "epicDescription": "Epic: a large task with subtasks"
   },
   "status": {
     "backlog": "Backlog",
@@ -29,15 +30,34 @@
   },
   "labelMarkers": {
     "decision": "Decision:",
-    "slice": "Slice:"
+    "slice": "Slice:",
+    "architecturePath": "tests/architecture — rule or module {name}"
   },
   "comments": {
     "state": "State",
-    "actual": "Actual:"
+    "actual": "Actual:",
+    "closedByPr": "Closed by PR {prs}: GitHub didn't link the PR to the task"
   },
   "subagentPrompt": {
     "task": "Task",
     "epic": "epic"
+  },
+  "mainRed": {
+    "title": "{base} is red",
+    "check": "check {names}",
+    "checks": "checks {names}"
+  },
+  "actualize": {
+    "lead": "{task} #{number} ({epicWord} #{epic}): epic refresh after the merge — bring the epic's open tasks in line with what shipped.",
+    "shipped": "Repository {repo}. Shipped: #{number} «{title}», {shipped}.",
+    "prs": "PR {list}",
+    "noPr": "no PR found — commits {command}",
+    "epic": "Epic #{epic} «{title}». The epic's open tasks:",
+    "openTask": "- #{number} «{title}»",
+    "checks": "Five checks (canon — reference.md of the github skill, «Epic refresh on task close»):",
+    "scope": "You change only GitHub tasks — description, «{questions}», links, status; the github skill script — `{script}`: not done — `task drop <N>`, a new one — `task new … --epic {epic}` and an estimate with the est skill. Don't touch code, branches or git; don't close #{number}, epic #{epic} or their milestones — task close does that after you.",
+    "comment": "What you fixed — one line in a comment on epic #{epic} (`gh issue comment {epic} --repo {repo}`); nothing to fix — no comment.",
+    "answer": "Answer — fixes one per line with task numbers and questions to the owner, if any; otherwise «The block is current»."
   },
   "standardIssue": "Standard ·",
   "autoAnswer": "✅ auto",

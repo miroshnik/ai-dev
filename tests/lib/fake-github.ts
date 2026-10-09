@@ -395,15 +395,20 @@ export class FakeGitHub {
     this.rec[keyOf("OwnerProjects", { login: this.repo.owner.login, query: this.repo.name })] = { data: { repositoryOwner: { projectsV2: { nodes: [] } } } };
   }
 
-  // Задачу, добавленную в проект, «Item added to project» сразу ставит в Бэклог — если он включён; повторное
-  // добавление возвращает тот же элемент.
+  // Задачу, добавленную в проект, «Item added to project» сразу ставит в Бэклог (первый вариант Status — на языке доски)
+  // — если он включён; повторное добавление возвращает тот же элемент.
   private addItem(projectId: string, issue: Any): string {
     const have = this.items(projectId).find((it: Any) => it.content?.id === issue.id);
     if (have) return have.id;
     const added = this.project(projectId).workflows.nodes.some((w: Any) => w.name === "Item added to project" && w.enabled);
-    const it = { id: this.id("PVTI"), content: { __typename: "Issue", id: issue.id, number: issue.number, state: issue.state ?? "OPEN", stateReason: issue.stateReason ?? null }, status: added ? { name: "Бэклог" } : null };
+    const it = { id: this.id("PVTI"), content: { __typename: "Issue", id: issue.id, number: issue.number, state: issue.state ?? "OPEN", stateReason: issue.stateReason ?? null }, status: added ? { name: this.statusOptions(projectId).at(0) } : null };
     this.items(projectId).push(it);
     return it.id;
+  }
+
+  /** Имена вариантов Status проекта по порядку. */
+  private statusOptions(projectId: string): string[] {
+    return (this.project(projectId).fields.nodes.find((f: Any) => f.name === "Status")?.options ?? []).map((o: Any) => o.name);
   }
 
   private statusName(p: Any, optionId: string): string {
@@ -475,13 +480,13 @@ export class FakeGitHub {
       return { setIssueFieldValue: { issue: { id: issueId } } };
     },
     AddComment: ({ subjectId }: Any) => ({ addComment: { subject: { id: subjectId } } }),
-    // Закрытую задачу «Item closed» (если включён) переводит в «Готово».
+    // Закрытую задачу «Item closed» (если включён) переводит в «Готово» — последний вариант Status, на языке доски.
     CloseIssue: ({ issueId, stateReason }: Any) => {
       const i = this.allIssues().find((x) => x.id === issueId);
       this.closed(i.number, stateReason);
       for (const p of this.allProjects()) {
         const on = p.workflows.nodes.some((w: Any) => w.name === "Item closed" && w.enabled);
-        for (const it of this.items(p.id)) if (it.content?.id === issueId && on) it.status = { name: "Готово" };
+        for (const it of this.items(p.id)) if (it.content?.id === issueId && on) it.status = { name: this.statusOptions(p.id).at(-1) };
       }
       return { closeIssue: { issue: { id: issueId, state: "CLOSED" } } };
     },
@@ -534,10 +539,18 @@ export class FakeGitHub {
       this.project(projectId).fields.nodes.push(f);
       return { createProjectV2Field: { clientMutationId: null } };
     },
-    // Вариант с id переименовывается и сохраняет значения задач; без id — новый вариант.
-    UpdateField: ({ fieldId, singleSelectOptions }: Any) => {
-      const f = this.allProjects().flatMap((p) => p.fields.nodes).find((x: Any) => x.id === fieldId);
-      f.options = singleSelectOptions.map((o: Any) => ({ ...o, id: o.id ?? this.id("opt") }));
+    // Поле с тем же id переименовывается; вариант с id переименовывается и сохраняет значения задач — у них новое имя
+    // варианта; без id — новый вариант.
+    UpdateField: ({ fieldId, name, singleSelectOptions }: Any) => {
+      const project = this.allProjects().find((p) => p.fields.nodes.some((x: Any) => x.id === fieldId));
+      const f = project.fields.nodes.find((x: Any) => x.id === fieldId);
+      if (name) f.name = name;
+      if (singleSelectOptions) {
+        const before = new Map<string, string>((f.options ?? []).map((o: Any) => [o.id, o.name]));
+        f.options = singleSelectOptions.map((o: Any) => ({ ...o, id: o.id ?? this.id("opt") }));
+        const renamed = new Map<string, string>(f.options.filter((o: Any) => before.has(o.id)).map((o: Any) => [before.get(o.id)!, o.name]));
+        for (const it of this.items(project.id)) if (it.status && renamed.has(it.status.name)) it.status = { name: renamed.get(it.status.name) };
+      }
       return { updateProjectV2Field: { clientMutationId: null } };
     },
     DeleteField: ({ fieldId }: Any) => {
