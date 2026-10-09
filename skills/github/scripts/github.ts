@@ -1708,7 +1708,7 @@ function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): v
 }
 
 /**
- * Влитое — долой (SKILL.md, «Git, PR и мерж — механика», пункт «Сразу после мержа PR»): чекаут с ветки задачи на
+ * Влитое — долой (SKILL.md, «Git, PRs and merging — mechanics», пункт «Right after a PR merge»): чекаут с ветки задачи на
  * origin/<base> detached, локальная и
  * удалённая ветка удаляются. «Влито» — PR merged, без PR — `git cherry`; не влита, чужая или не тот чекаут — не трогаем.
  */
