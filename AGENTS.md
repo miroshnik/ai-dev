@@ -72,8 +72,8 @@ type and scope.
 
 Names that scripts write to GitHub and parse back are written exactly, in the
 project language: `en` — as below, another language — the same keys in
-`locales/<language>.json` of the `github` skill. So far scripts write and
-parse only the `ru` names (#366).
+`locales/<language>.json` of the `github` skill. Scripts write them in the
+project language and parse the names of any language there.
 
 | | key | `en` |
 |---|---|---|

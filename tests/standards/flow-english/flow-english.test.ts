@@ -1,9 +1,13 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
-import { invariant } from "../../../skills/spec/scripts/harness.ts";
+import localeModule from "../../../skills/github/scripts/locale.cjs";
+import type { Names as LocaleNames } from "../../../skills/github/scripts/locale.cjs";
+import en from "../../../skills/github/locales/en.json" with { type: "json" };
+import { codeOnly, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
+import { tmpDir } from "../../lib/spec.ts";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -47,21 +51,21 @@ describe("Флоу написан по-английски: в его докум�
   });
 });
 
-/** Названия файла языка: ключ через точку → название. */
+/** Названия файла языка: ключ через точку → название; формы числа ({one, few, many, other}) — одно название. */
 type Names = { [key: string]: string | Names };
-function leaves(names: Names, prefix = ""): [string, string][] {
-  return Object.entries(names).flatMap(([k, v]) => (typeof v === "string" ? [[prefix + k, v] as [string, string]] : leaves(v, `${prefix}${k}.`)));
+const PLURAL = ["few", "many", "one", "other"];
+const isPlural = (v: Names) => Object.keys(v).sort().join() === PLURAL.join();
+function leaves(names: Names, prefix = "", plural = false): [string, string][] {
+  return Object.entries(names).flatMap(([k, v]) =>
+    typeof v === "string" ? [[prefix + k, v] as [string, string]] : plural && isPlural(v) ? [[prefix + k, v.other as string] as [string, string]] : leaves(v, `${prefix}${k}.`, plural),
+  );
 }
 
 const LOCALES = "skills/github/locales";
-const locale = (lang: string) => leaves(JSON.parse(read(`${LOCALES}/${lang}.json`)) as Names);
-/** Исходники скриптов скиллов: русские названия скрипты пока держат в коде (#366). */
-const SOURCES = readdirSync(path.join(ROOT, "skills"))
-  .flatMap((s) => {
-    const dir = path.join(ROOT, "skills", s, "scripts");
-    return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".ts")).map((f) => read(`skills/${s}/scripts/${f}`)) : [];
-  })
-  .join("\n");
+const dictionary = (lang: string) => JSON.parse(read(`${LOCALES}/${lang}.json`)) as Names;
+const locale = (lang: string) => leaves(dictionary(lang));
+/** Код скриптов скиллов и установщика без комментариев: названия словаря они читают по пути ключа. */
+const CODE = sources(ROOT, ["skills", "bin"]).map((f) => codeOnly(f.text, f.file)).join("\n");
 
 describe("Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи", () => {
   it("у каждого языка те же ключи, что у en, и ни одного пустого названия", () => {
@@ -78,19 +82,74 @@ describe("Названия, которые пишут и разбирают ск
     expect(cyrillicLines(read(`${LOCALES}/en.json`))).toEqual([]);
   });
 
+  it("словарь en соответствует типам модуля locale (Names в locale.d.cts)", () => {
+    // проверка — typecheck этого присваивания: ключ из Names, которого нет в en.json, — ошибка tsc
+    const typed: LocaleNames = en;
+    expect(Object.keys(typed)).toEqual(Object.keys(dictionary("en")));
+  });
+
+  /**
+   * Скрипты не держат названия строкой в коде, а читают словарь — по полному пути ключа от объекта названий
+   * (`N.status.backlog`, `n.spec.doc.title`; формы числа — путь до объекта). Ключ, которого не читает ни один скрипт, —
+   * название, которое скрипты пишут мимо словаря, или мёртвый ключ.
+   */
   invariant<[string, string]>(it, {
-    registry: "русские названия skills/github/locales/ru.json",
-    items: locale("ru"),
+    registry: "названия словаря skills/github/locales/en.json",
+    items: leaves(dictionary("en"), "", true),
     key: ([k]) => k,
-    name: ([k]) => `название ${k} из ru.json есть в скриптах скиллов`,
-    check: ([k, v]) => {
-      if (!SOURCES.includes(v)) throw new Error(`${LOCALES}/ru.json ${k}: «${v}» нет в скриптах скиллов — название разошлось с тем, что они пишут и разбирают (tests/standards/flow-english)`);
+    name: ([k]) => `название ${k} скрипты читают из словаря`,
+    check: ([k]) => {
+      const path = new RegExp(`(?<![\\w$])${k.replace(/\./g, "\\??\\.")}(?![\\w$])`);
+      if (!path.test(CODE)) throw new Error(`${LOCALES}/en.json ${k}: ни один скрипт не читает это название по пути ключа — скрипт пишет его мимо словаря или ключ мёртвый (tests/standards/flow-english)`);
     },
-    violator: { name: "название, которого скрипты не пишут", item: ["status.done", "Сделано"] },
+    violator: { name: "название, которого скрипты не читают", item: ["status.archived", "Archived"] },
     outside: [
-      { item: "standardIssue", reason: "соглашение агента: issue «Стандарт · …» заводит он сам, скрипты название не разбирают" },
+      { item: "standardIssue", reason: "соглашение агента: issue «Standard · …» заводит он сам, скрипты название не разбирают" },
       { item: "autoAnswer", reason: "пометку ответа в разделе вопросов ставит агент, скрипты её не читают" },
+      { item: "comments.state", reason: "комментарий «State» перед паузой пишет агент, скрипты его не пишут и не разбирают" },
     ],
     includes: ["status.backlog", "sections.questions", "subagentPrompt.task", "lastLine.done"],
+  });
+});
+
+/**
+ * Язык проекта — `language` в `.agents/ai-dev.json`, без поля — `ru`, без манифеста — `en`: скрипты скиллов берут его
+ * модулем `locale.cjs`, установщик — своей `languageOf` (npx запускает его из node_modules, где Node не стирает типы, и
+ * модуль скилла он не импортирует). Правило в двух местах держат одинаковые константы.
+ */
+describe("Язык проекта у скриптов скиллов и у установщика — по одному правилу", () => {
+  const BIN = read("bin/ai-dev.mjs");
+  const constant = (name: string) => new RegExp(`const ${name} = (.+);`).exec(BIN)?.[1];
+
+  it("код языка, язык по умолчанию и язык установки прошлой версии — те же, что у установщика", () => {
+    expect({ code: constant("LANGUAGE_CODE"), byDefault: constant("DEFAULT_LANGUAGE"), legacy: constant("LEGACY_LANGUAGE") }).toEqual({
+      code: String(localeModule.LANGUAGE_CODE),
+      byDefault: JSON.stringify(localeModule.DEFAULT_LANGUAGE),
+      legacy: JSON.stringify(localeModule.LEGACY_LANGUAGE),
+    });
+  });
+
+  it("манифест с языком — его язык, без поля — ru, битый — ru, без манифеста — en", () => {
+    const { dir, cleanup } = tmpDir();
+    try {
+      const project = (name: string, manifest: string | null) => {
+        const root = path.join(dir, name);
+        mkdirSync(path.join(root, ".git"), { recursive: true });
+        if (manifest !== null) {
+          mkdirSync(path.join(root, ".agents"));
+          writeFileSync(path.join(root, ".agents/ai-dev.json"), manifest);
+        }
+        mkdirSync(path.join(root, "src"));
+        return path.join(root, "src");
+      };
+      expect([
+        localeModule.projectLanguage(project("pt", '{ "language": "pt-BR" }')),
+        localeModule.projectLanguage(project("legacy", '{ "auto": true }')),
+        localeModule.projectLanguage(project("broken", "{")),
+        localeModule.projectLanguage(project("none", null)),
+      ]).toEqual(["pt-BR", "ru", "ru", "en"]);
+    } finally {
+      cleanup();
+    }
   });
 });
