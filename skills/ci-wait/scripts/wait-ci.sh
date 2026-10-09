@@ -1,39 +1,39 @@
 #!/usr/bin/env bash
 #
-# wait-ci.sh — ожидание чеков PR или коммита с видимым прогрессом и полным набором
-# исходов. Запускать из каталога репозитория (gh резолвит {owner}/{repo}) или задать
+# wait-ci.sh — waiting for the checks of a PR or a commit with visible progress and the full set
+# of outcomes. Run from the repository directory (gh resolves {owner}/{repo}) or set
 # GH_REPO.
 #
 #   wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
-#       Ждёт чеки головы PR (как status), обязательные чеки базовой ветки — по именам, и прогон
-#       каждого workflow, который по своему `on:` на SHA головы срабатывает на PR (нужен bun).
-#       Конфликт с базой — сразу ERROR: CI на таком PR не запустится.
+#       Waits for the checks of the PR head (like status), the base branch's required checks — by name, and the run
+#       of each workflow that, by its `on:` at the head SHA, fires on the PR (needs bun).
+#       A conflict with the base — ERROR right away: CI won't start on such a PR.
 #
-#   wait-ci.sh status <sha> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
-#       Ждёт все чеки коммита: commit statuses (хостинг, внешние сервисы) и
-#       check-runs (GitHub Actions). --context — один чек по имени, среди обоих.
-#       SHA — полный, из git.
+#   wait-ci.sh status <sha> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+#       Waits for all checks of a commit: commit statuses (hosting, external services) and
+#       check-runs (GitHub Actions). --context — one check by name, among both.
+#       The SHA is the full one, from git.
 #
-#   wait-ci.sh merged <N> [--context <имя>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
-#       Ждёт все чеки коммита мержа PR (как status): SHA берёт из PR сам — после мержа
-#       его не добывать. PR не влит — ERROR.
+#   wait-ci.sh merged <N> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
+#       Waits for all checks of the PR's merge commit (like status): takes the SHA from the PR itself — don't
+#       look it up after the merge. PR not merged — ERROR.
 #
 #   wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
-#       Ждёт закрытия issue — бага на красный main (github pr premerge, код 3):
-#       PASS, когда закрыт; нет такого issue — ERROR.
+#       Waits for an issue to close — the bug on a red main (github pr premerge, code 3):
+#       PASS when it is closed; no such issue — ERROR.
 #
-# Прогон Actions на SHA, упавший без единого job (workflow не разобран, не стартовал), — FAIL с путём файла:
-# check-run он не даёт, и без него итог сводился к одним статусам хостинга. Незавершённый прогон без check-runs (в
-# очереди) — pending: прогон на SHA есть, а чеков у него ещё нет.
-# Пустой список чеков — pending; PASS засчитывается, когда снимок без pending повторился
-# два опроса подряд (поздно регистрирующиеся чеки не проскакивают) и чеков не меньше
-# --expect. Первый упавший чек — сразу FAIL; --wait-all — FAIL, когда завершились все.
-# Только REST: квота GraphQL общая на все сессии; лимит REST — ожидание до сброса. Сбой gh
-# (и в запросах до первого опроса) — повтор, ERROR — после пяти подряд; «не найден» — только по 404/422.
+# An Actions run at the SHA that failed without a single job (workflow not parsed, not started) — FAIL with the file path:
+# it gives no check-run, and without it the outcome came down to hosting statuses alone. An unfinished run without
+# check-runs (queued) — pending: there is a run at the SHA, but it has no checks yet.
+# An empty list of checks — pending; PASS counts when a snapshot without pending repeats
+# two polls in a row (late-registering checks don't slip through) and there are no fewer checks
+# than --expect. The first failed check — FAIL right away; --wait-all — FAIL when all have finished.
+# REST only: the GraphQL quota is shared by all sessions; a REST rate limit — waiting until the reset. A gh failure
+# (also in requests before the first poll) — retry, ERROR after five in a row; "not found" — only on 404/422.
 #
-# Вывод: stdout — только события («CHECK <имя>: <bucket>») и финальная строка
-#        «RESULT: PASS|FAIL|TIMEOUT|ERROR …»; stderr — heartbeat каждый опрос.
-# Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR или неверный вызов.
+# Output: stdout — only events ("CHECK <name>: <bucket>") and the final line
+#         "RESULT: PASS|FAIL|TIMEOUT|ERROR …"; stderr — a heartbeat on every poll.
+# Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call.
 set -uo pipefail
 
 usage() { awk 'NR > 2 && !/^#/ { exit } NR > 2' "$0" >&2; exit 3; }
@@ -56,14 +56,16 @@ ts() { date +%H:%M:%S; }
 finish() { echo "RESULT: $1"; exit "$2"; }
 rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 
-# checks <sha>: чеки коммита в $out — JSON-массив {name, bucket}; bucket как у `gh pr checks`:
-# pending | pass | fail | cancel | skipping; пути workflow, давших прогон на SHA, — в $ran. Код 1 — ошибка gh, текст в $out.
-# Статусы API уже сводит к последнему на контекст, check-runs — нет: на SHA лежат check-runs всех
-# прогонов (отменённый новым push, когда голову вернули на прежний коммит; перезапуск job), и итог —
-# за последним check-run имени у того же приложения (id растёт с созданием). Прогон Actions, упавший без job, —
-# check-run не даёт: workflow не разобран (имя прогона — путь файла) или не стартовал (в его check suite нет
-# check-runs); такой прогон — упавший чек с путём файла и ссылкой. Незавершённый прогон без check-runs (в очереди) —
-# pending с путём: прогон на SHA есть, и без этой строки итог сводился к статусам хостинга (#360).
+# checks <sha>: the commit's checks into $out — a JSON array {name, bucket}; bucket as in `gh pr checks`:
+# pending | pass | fail | cancel | skipping; paths of the workflows that produced a run at the SHA — into $ran. Code 1 — a gh
+# error, the text in $out.
+# The API already reduces statuses to the latest per context, but not check-runs: the SHA holds check-runs of all
+# runs (one cancelled by a new push when the head went back to an earlier commit; a job rerun), and the outcome is
+# the last check-run of a name from the same app (the id grows with creation). An Actions run that failed without jobs
+# gives no check-run: the workflow wasn't parsed (the run's name is the file path) or didn't start (its check suite has
+# no check-runs); such a run is a failed check with the file path and a link. An unfinished run without check-runs
+# (queued) — pending with the path: there is a run at the SHA, and without this line the outcome came down to hosting
+# statuses (#360).
 ran='[]'
 checks() {
   local statuses runs wruns
@@ -93,9 +95,9 @@ checks() {
     | if $ctx == "" then . else map(select(.name == $ctx)) end' 2>&1)
 }
 
-# required: имена обязательных чеков базовой ветки — ruleset и классическая защита. Нет
-# правил или прав их читать (приватный репо на Free отвечает 403, ветки нет — 404) — обязательных нет;
-# лимит и иной сбой — код 1, как ошибка опроса: разовый сбой не должен стереть обязательные.
+# required: names of the base branch's required checks — a ruleset and classic protection. No rules
+# or no right to read them (a private repo on Free answers 403, no branch — 404) — no required checks;
+# a rate limit or another failure — code 1, like a poll error: a one-off failure must not erase the required checks.
 required='[]'; required_loaded=""
 absent() { [[ "$1" == *"HTTP 403"* || "$1" == *"HTTP 404"* ]] && ! rate_limited "$1"; }
 load_required() {
@@ -111,12 +113,13 @@ load_required() {
   return 0
 }
 
-# expected: пути workflow, которые на событие PR должны дать прогон на голове, — по `on:` их файлов на её SHA (#356).
-# Ждём `pull_request` без фильтров или с ветками, пускающими базовую; фильтр путей, `types` без `synchronize`,
-# отрицание и иные спецсимволы в ветках без диффа PR не решить — не ждём: ложный TIMEOUT хуже. Файл, который не
-# разбирается, — ждём: прогон-«пустышка» даст FAIL, а у PR из форка её нет вовсе. Только активные workflow.
+# expected: paths of the workflows that should produce a run at the head on a PR event — by the `on:` of their files at
+# its SHA (#356). We wait for `pull_request` without filters or with branches that let the base in; a path filter, `types`
+# without `synchronize`, negation and other special characters in branches can't be decided without the PR diff — we
+# don't wait: a false TIMEOUT is worse. A file that doesn't parse — we wait: a "dummy" run will give FAIL, and a PR from a
+# fork has none at all. Active workflows only.
 expected='[]'; expected_for=""; workflows=""
-pr_expects() {  # stdin — workflow в JSON (null — не разобран); код 0 — ждать его прогона на PR в ветку $1
+pr_expects() {  # stdin — a workflow as JSON (null — not parsed); code 0 — wait for its run on a PR into branch $1
   jq -e --arg base "$1" '
     def list: if type == "array" then . else [.] end;
     def rx: "^" + (split("**") | map(split("*") | map(gsub("(?<c>[.^$(){}|\\\\])"; "\\\(.c)")) | join("[^/]*")) | join(".*")) + "$";
@@ -147,7 +150,7 @@ load_expected() {  # <sha> <base>
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     raw=$(gh api "repos/{owner}/{repo}/contents/$path?ref=$1" 2>&1) || { [[ "$raw" == *"HTTP 404"* ]] && continue; out=$raw; return 1; }
-    # не разобран — null; упал сам bun — ошибка опроса, а не «не разобран»: повтор
+    # not parsed — null; bun itself failing is a poll error, not "not parsed": retry
     doc=$(jq -r '.content // "" | gsub("\n"; "") | @base64d' <<<"$raw" | bun -e '
       const t = await Bun.stdin.text();
       let d = null; try { d = Bun.YAML.parse(t) ?? null } catch {}
@@ -159,7 +162,7 @@ load_expected() {  # <sha> <base>
   return 0
 }
 
-# poll: чеки в $out (см. checks). Код 1 — ошибка gh, 2 — ждать бессмысленно (ERROR); текст в $out.
+# poll: checks into $out (see checks). Code 1 — a gh error, 2 — waiting is pointless (ERROR); the text in $out.
 case "$mode" in
   pr)
     [[ "$target" =~ ^[0-9]+$ ]] || finish "ERROR PR number expected, got: $target" 3
@@ -170,13 +173,13 @@ case "$mode" in
       pull=$(gh api "repos/{owner}/{repo}/pulls/$target" 2>&1) || {
         out=$pull; [[ "$pull" == *"HTTP 404"* ]] && { out="PR #$target not found: $pull"; return 2; }; return 1; }
       base=$(jq -r .base.ref <<<"$pull")
-      # mergeable GitHub вычисляет в фоне: null — ещё не знает, false — конфликт, merge-ref
-      # нет, и workflow на pull_request не запустятся вовсе
+      # GitHub computes mergeable in the background: null — doesn't know yet, false — a conflict, there is no
+      # merge-ref, and workflows on pull_request won't start at all
       if [ "$(jq -r .mergeable <<<"$pull")" == false ]; then
         out="conflict with base $base — CI will not run; rebase onto origin/$base"; return 2
       fi
       [ -n "$required_loaded" ] || load_required "$base" || return 1
-      # голова — каждый опрос: новый push меняет SHA, ждать надо чеки текущей
+      # the head — on every poll: a new push changes the SHA, we must wait for the checks of the current one
       head_sha=$(jq -r .head.sha <<<"$pull")
       label="pr#$target@${head_sha:0:7}"
       [ "$expected_for" == "$head_sha" ] || load_expected "$head_sha" "$base" || return 1
@@ -189,8 +192,8 @@ case "$mode" in
     label="${context:-commit}@${target:0:7}"; commit_found=""
     poll() {
       local commit
-      # по несуществующему SHA API молча отдаёт пустой статус — коммит проверяем до чеков. «Не найден» —
-      # только 422 «No commit found» или 404; иной сбой — ошибка опроса: разовый сбой API не исход
+      # for a nonexistent SHA the API silently returns an empty status — the commit is checked before the checks. "Not
+      # found" — only 422 "No commit found" or 404; another failure is a poll error: a one-off API failure is not an outcome
       if [ -z "$commit_found" ]; then
         commit=$(gh api "repos/{owner}/{repo}/commits/$target" --jq .sha 2>&1) || {
           out=$commit; [[ "$commit" == *"HTTP 422"* || "$commit" == *"HTTP 404"* ]] && { out="commit $target not found in repository: $commit"; return 2; }; return 1; }
@@ -209,7 +212,7 @@ case "$mode" in
         pull=$(gh api "repos/{owner}/{repo}/pulls/$target" 2>&1) || {
           out=$pull; [[ "$pull" == *"HTTP 404"* ]] && { out="PR #$target not found: $pull"; return 2; }; return 1; }
         [ "$(jq -r .merged <<<"$pull")" == true ] || { out="PR #$target not merged (state $(jq -r .state <<<"$pull")) — nothing to wait for"; return 2; }
-        # SHA своего мержа — из PR: git rev-parse origin/main при параллельных мержах отдаёт чужой коммит
+        # the SHA of our own merge — from the PR: with parallel merges git rev-parse origin/main returns someone else's commit
         merge_sha=$(jq -r .merge_commit_sha <<<"$pull")
         label="${context:-merge#$target}@${merge_sha:0:7}"
       fi
@@ -224,7 +227,7 @@ case "$mode" in
       local issue
       issue=$(gh api "repos/{owner}/{repo}/issues/$target" 2>&1) || {
         out=$issue; [[ "$issue" == *"HTTP 404"* ]] && { out="issue #$target not found: $issue"; return 2; }; return 1; }
-      # закрыт — исход известен сразу: повторный опрос, как у чеков, нужен поздно регистрирующимся, а не issue
+      # closed — the outcome is known right away: a repeated poll, as for checks, is needed for late-registering checks, not for an issue
       [ "$(jq -r .state <<<"$issue")" == closed ] && finish "PASS issue #$target closed ($(jq -r '.state_reason // "closed"' <<<"$issue"))" 0
       out=$(jq -nc --arg n "issue #$target" '[{ name: $n, bucket: "pending" }]')
     }
@@ -232,7 +235,7 @@ case "$mode" in
   *) usage ;;
 esac
 
-# rate_limit_wait: секунды до сброса квоты core; вторичный лимит (квота не исчерпана) — минута
+# rate_limit_wait: seconds until the core quota resets; a secondary limit (the quota isn't exhausted) — a minute
 rate_limit_wait() {
   local core w=60
   core=$(gh api rate_limit 2>/dev/null | jq -c .resources.core 2>/dev/null)
@@ -255,7 +258,7 @@ while :; do
     pending=$(printf '%s' "$out" | jq '[.[] | select(.bucket=="pending")] | length')
     failed=$(printf '%s' "$out" | jq -r '[.[] | select(.bucket=="fail" or .bucket=="cancel") | .name] | join(", ")')
     missing=$(printf '%s' "$out" | jq -r --argjson req "$required" '$req - map(.name) | join(", ")')
-    # workflow, который по `on:` срабатывает на PR, но прогона на голове не дал, — не финал, как обязательный чек
+    # a workflow that by its `on:` fires on the PR but produced no run at the head is not final, like a required check
     unrun=$(jq -rn --argjson e "$expected" --argjson r "$ran" '$e - $r | join(", ")')
     if [ "$snapshot" != "$prev_snapshot" ]; then
       comm -13 <(printf '%s\n' "$prev_snapshot") <(printf '%s\n' "$snapshot") \
@@ -263,7 +266,7 @@ while :; do
       prev_snapshot=$snapshot
     fi
     echo "$(ts) $label total=$total pending=$pending failed=[${failed}]${missing:+ missing=[$missing]}${unrun:+ no-run=[$unrun]}" >&2
-    # упавший чек — исход известен: долгие чеки рядом (превью-деплой) его не изменят
+    # a failed check — the outcome is known: long checks alongside it (a preview deploy) won't change it
     [ -n "$failed" ] && [ -z "$wait_all" ] && finish "FAIL $failed" 1
     if [ "$total" -gt 0 ] && [ "$total" -ge "$expect" ] && [ "$pending" -eq 0 ] && [ -z "$missing" ] && [ -z "$unrun" ]; then
       if [ "$snapshot" == "$prev_terminal" ]; then
@@ -277,7 +280,7 @@ while :; do
   elif [ "$rc" -eq 2 ]; then
     finish "ERROR $out" 3
   elif rate_limited "$out"; then
-    # лимит — не ошибка вызова: чеки идут своим ходом, ждём квоту
+    # a rate limit is not a call error: the checks go on by themselves, we wait for the quota
     nap=$(rate_limit_wait)
     echo "$(ts) $label: rate limit, next poll in ${nap}s" >&2
   else
