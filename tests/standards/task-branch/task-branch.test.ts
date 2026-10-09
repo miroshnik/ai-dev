@@ -36,7 +36,7 @@ async function copies(): Promise<Copy[]> {
   return out;
 }
 
-// типы канона (AGENTS.md, «Сессия и ветка»): conventional commits плюс research
+// типы канона (AGENTS.md, «Session and branch»): conventional commits плюс research
 const TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
 
 /** Таблица канона: ветка и ответ на «ветка задачи N?» — тип и номер или `null`. */

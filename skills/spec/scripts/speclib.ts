@@ -6,7 +6,7 @@
  *
  * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
  * зависимостей (парсер — файл скилла `vendor/babel-parser.cjs`) и без конфигурации под
- * репозиторий: дерево tests/ из правила «Спецификация — решения» (skills/spec/canon.md) и
+ * репозиторий: дерево tests/ из правила «Specification — decisions» (skills/spec/canon.md) и
  * стандартные форматы отчётов.
  */
 

@@ -698,8 +698,8 @@ describe("Статус ставится, даже если проект ещё �
  */
 describe("task actualize печатает задание субагенту актуализации блока", () => {
   const REFERENCE = readFileSync(new URL("../../../skills/github/reference.md", import.meta.url), "utf8");
-  // пять проверок канона — список между «Пять проверок:» и «Что поправил» в справочнике
-  const CHECKS = /Пять проверок:\n\n([\s\S]*?)\n\nЧто поправил/.exec(REFERENCE)?.[1] ?? "";
+  // пять проверок канона — список между «Five checks:» и «What was fixed» в справочнике
+  const CHECKS = /Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(REFERENCE)?.[1] ?? "";
 
   it("скрипт печатает готовое задание субагенту актуализации: задача, эпик, открытые задачи эпика, пять проверок", () => {
     const f = new FakeGitHub(REC);
