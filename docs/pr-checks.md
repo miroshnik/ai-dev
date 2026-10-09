@@ -1,79 +1,86 @@
-# Ожидание чеков PR и мерж к разделу «Git, PR и мерж»
+# Waiting for PR checks and merging — for "Git, PRs and merging"
 
-Принцип — в `AGENTS.md` («Git, PR и мерж»: мерж только при всех зелёных
-чеках); скилл `ci-wait` делает ожидание скриптом. Здесь — правила ожидания и
-мержа целиком, затем механика опроса. Rebase, проверка перед push и уборка
-влитой ветки — скилл `github`, раздел «Git, PR и мерж — механика».
+The principle is in `AGENTS.md` ("Git, PRs and merging": merge only with all
+checks green); the `ci-wait` skill does the waiting with a script. Here are the
+waiting and merging rules in full, then the polling mechanics. Rebase, the
+check before a push and cleaning up the merged branch — the `github` skill,
+section "Git, PRs and merging — mechanics".
 
-## Правила
+## Rules
 
-- **Полный SHA:** своего мержа не добываю — `wait-ci.sh merged <N>` берёт
-  его из PR сам (`git rev-parse origin/main` при параллельных мержах отдаёт
-  чужой, более поздний коммит), своего коммита — `git log -1 --format=%H`;
-  короткий не достраиваю, «похожий» из памяти не беру: по несуществующему
-  SHA API молча отдаёт пустой статус.
-- **Мерж — только при всех зелёных чеках**, включая превью-деплой;
-  «известный красный первый билд» — не исключение: перезапускаю свой упавший
-  прогон (`gh run rerun <id> --failed`) и жду зелёного, красный по другой
-  причине — чиню до мержа. Жду циклом опроса по API: PR — по SHA его
-  головы, коммит — по полному SHA (механика и ловушки — ниже; скилл
-  `ci-wait`). Зелёный — ещё `github pr premerge <N>`: `main` ушёл после CI
-  — быстрые проверки на слиянии со свежим `main`; `main` красный и сам —
-  код 3, не вливаю, жду бага на него (скилл `github`). Пустой список или `no checks reported` — «ещё не
-  зарегистрированы», а не «прошли»; упавший чек — «красный» сразу, не
-  дожидаясь остальных.
-- **Джобы Actions не стартовали** с аннотацией «The job was not started
+- **The full SHA:** I don't dig up the SHA of my merge — `wait-ci.sh merged
+  <N>` takes it from the PR itself (`git rev-parse origin/main` returns
+  someone else's, later commit during parallel merges); of my commit — `git
+  log -1 --format=%H`; I don't complete a short one or take a "similar" one
+  from memory: for a nonexistent SHA the API silently returns an empty status.
+- **Merge only with all checks green**, including the preview deploy; "a
+  known red first build" is no exception: I re-run my failed run (`gh run
+  rerun <id> --failed`) and wait for green; red for another reason — I fix it
+  before merging. I wait with a polling loop over the API: a PR — by its head
+  SHA, a commit — by the full SHA (mechanics and traps below; the `ci-wait`
+  skill). Green — then also `github pr premerge <N>`: if `main` moved after
+  CI — fast checks on the merge with a fresh `main`; `main` is red by
+  itself — exit code 3, I don't merge: one bug for it, and I wait for it to
+  close (the `github` skill).
+  An empty list or `no checks reported` means "not registered yet", not
+  "passed"; a failed check means "red" at once, without waiting for the rest.
+- **Actions jobs didn't start** with the annotation "The job was not started
   because recent account payments have failed or your spending limit needs
-  to be increased» — это биллинг владельца аккаунта: ни rerun, ни правка кода
-  не помогут. Не перезапускаю и не чиню — говорю владельцу, мерж ждёт.
-- **Мерж, который выкатывает** (деплой из `main`), — ещё не конец задачи: до
-  доклада «готово» жду статусы на SHA мержа — деплой и проверки после него
-  (скилл `ci-wait`, `merged <N>`). Смоук прода — проверка
-  в CI проекта, а не ручной шаг агента. Упал — логи и починка сразу: это
-  блокер доклада и закрытия задачи.
-- **Деплой — по статусу коммита, не опросом сайта.** Выкатился ли мерж,
-  говорит статус хостинга на SHA мержа (`ci-wait merged <N>`), а не
-  страница: частые запросы к живому сайту включают защиту хостинга от
-  ботов, и дальше сайт отвечает проверкой вместо страницы — агенту, а то и
-  всем с того же адреса. Нужно увидеть страницу — один запрос после
-  зелёного статуса, не цикл.
+  to be increased" — this is the account owner's billing: neither a rerun nor
+  a code change will help. I don't re-run or fix — I tell the owner; the merge
+  waits.
+- **A merge that deploys** (deploy from `main`) isn't the end of the task yet:
+  before reporting "done" I wait for the statuses on the merge SHA — the
+  deploy and the checks after it (the `ci-wait` skill, `merged <N>`). A
+  production smoke test is a check in the project's CI, not a manual agent
+  step. Failed — logs and a fix at once: it blocks the report and closing the
+  task.
+- **Deploy — by the commit status, not by polling the site.** Whether the
+  merge rolled out is told by the host's status on the merge SHA (`ci-wait
+  merged <N>`), not by the page: frequent requests to the live site turn on
+  the host's bot protection, and from then on the site answers with a
+  challenge instead of the page — to the agent, or even to everyone from the
+  same address. Need to see the page — one request after a green status, not
+  a loop.
 
-## Механика опроса
+## Polling mechanics
 
-- Решение — только по `bucket` (`pending`, `fail`, `cancel`, `pass`,
-  `skipping`). Список пуст или есть `pending` → ждать. Мерж — когда список
-  непуст, `pending` нет и снимок повторился два опроса подряд (чеки
-  регистрируются с опозданием). `fail` или `cancel` — итог известен сразу:
-  долгий чек рядом (превью-деплой) его не изменит.
-- По полному SHA коммита (деплой, внешний чек, прогон на `main`) чеки лежат
-  в двух местах: статусы хостингов и внешних сервисов —
-  `gh api repos/{owner}/{repo}/commits/<sha>/status` (список `statuses` по
-  контекстам), GitHub Actions — `commits/<sha>/check-runs` (`status`,
-  `conclusion`). Ждать оба: на коммите, где весь CI — Actions, статусов нет
-  вовсе. `gh pr checks` SHA не принимает.
-- По номеру PR — каждый опрос `gh api repos/{owner}/{repo}/pulls/<N>`
-  (`head.sha`, `mergeable`, `base.ref`), чеки — по SHA головы, как у
-  коммита: новый push меняет голову. `gh pr checks` ходит в GraphQL, квота
-  которого (5000 очков в час) общая на все сессии пользователя, — при
-  параллельных сессиях кончается раньше REST.
-- `mergeable: false` — конфликт с базой: merge-ref нет, workflow на
-  `pull_request` не запускаются, и непустой снимок из одних статусов
-  хостинга даёт ложный итог. Ждать нечего — rebase. `null` — GitHub ещё
-  вычисляет: ждать.
-- Обязательные чеки базовой ветки — `rules/branches/<base>` (ruleset,
-  правило `required_status_checks`) и `branches/<base>`
-  (`protection.required_status_checks`, если `enforcement_level` не `off`):
-  пока любого нет в снимке — ждать.
-- Прогоны Actions на SHA — `actions/runs?head_sha=<sha>`: прогон, упавший
-  без единого job, check-run не даёт — workflow не разобран (имя прогона —
-  путь файла, событие `push`) или не стартовал. Это «красный», а не пустое
-  место: без него снимок из одних статусов хостинга даёт ложный «зелёный».
-  Workflow, который по `on:` на SHA головы срабатывает на PR, а прогона не
-  дал, — ждать.
-- Ответ с `rate limit` — не ошибка: ждать до `reset` из `gh api rate_limit`
-  (этот запрос квоту не тратит), вторичный лимит — минуту.
-- Сразу после push `gh pr checks` отвечает `no checks reported` с exit 1 —
-  это «ещё не зарегистрированы», не «упали» и не «прошли». Коды выхода
-  0 / 1 (упавшие) / 8 (`pending`) выставляются только **без** `--json`; с
-  `--json` exit 0 и при `pending`, и при `fail`.
-- Без branch protection `gh pr merge --auto` мержит, не дожидаясь CI.
+- Decide only by `bucket` (`pending`, `fail`, `cancel`, `pass`, `skipping`).
+  The list is empty or has `pending` → wait. Merge — when the list is
+  non-empty, there is no `pending` and the snapshot repeated two polls in a
+  row (checks register with a delay). `fail` or `cancel` — the outcome is
+  known at once: a long check alongside (a preview deploy) won't change it.
+- By a commit's full SHA (deploy, an external check, a run on `main`) checks
+  live in two places: statuses of hosts and external services —
+  `gh api repos/{owner}/{repo}/commits/<sha>/status` (the `statuses` list by
+  context), GitHub Actions — `commits/<sha>/check-runs` (`status`,
+  `conclusion`). Wait for both: on a commit where all CI is Actions there are
+  no statuses at all. `gh pr checks` doesn't accept a SHA.
+- By PR number — on every poll `gh api repos/{owner}/{repo}/pulls/<N>`
+  (`head.sha`, `mergeable`, `base.ref`), checks — by the head SHA, as for a
+  commit: a new push changes the head. `gh pr checks` goes to GraphQL, whose
+  quota (5000 points per hour) is shared by all the user's sessions — with
+  parallel sessions it runs out before REST does.
+- `mergeable: false` — a conflict with the base: there is no merge ref,
+  workflows on `pull_request` don't start, and a non-empty snapshot of host
+  statuses alone gives a false outcome. Nothing to wait for — rebase. `null` —
+  GitHub is still computing: wait.
+- The base branch's required checks — `rules/branches/<base>` (ruleset, rule
+  `required_status_checks`) and `branches/<base>`
+  (`protection.required_status_checks`, if `enforcement_level` isn't `off`):
+  while any of them is missing from the snapshot — wait.
+- Actions runs on a SHA — `actions/runs?head_sha=<sha>`: a run that failed
+  without a single job gives no check run — the workflow wasn't parsed (the
+  run's name is the file path, event `push`) or didn't start. That is "red",
+  not an empty spot: without it a snapshot of host statuses alone gives a
+  false "green". A workflow whose `on:` fires on the PR at the head SHA but
+  which produced no run — wait.
+- A response with `rate limit` isn't an error: wait until `reset` from `gh api
+  rate_limit` (that request doesn't spend quota), a secondary limit — a
+  minute.
+- Right after a push `gh pr checks` answers `no checks reported` with exit 1 —
+  that means "not registered yet", not "failed" and not "passed". Exit codes
+  0 / 1 (failed) / 8 (`pending`) are set only **without** `--json`; with
+  `--json` it exits 0 on both `pending` and `fail`.
+- Without branch protection `gh pr merge --auto` merges without waiting for
+  CI.

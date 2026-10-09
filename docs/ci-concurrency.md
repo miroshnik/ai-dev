@@ -1,47 +1,49 @@
-# CI: параллельные задачи — правило и фрагменты workflow
+# CI: parallel tasks — the rule and workflow fragments
 
-Справочник к разделу «CI: параллельные задачи» `AGENTS.md`: здесь правило
-целиком и готовые фрагменты для копирования.
+A reference for the "CI: parallel tasks" section of `AGENTS.md`: here is the
+full rule and ready-made fragments to copy.
 
-## Правило
+## Rule
 
-Каждая ветка и каждый PR прогоняются независимо; отменяется только свой
-устаревший прогон той же ветки. Серийность — лишь там, где есть общий ресурс
-(окружение деплоя, общая база, внешний сервис с лимитами). Одна очередь на
-весь CI — не решение: тормозит все задачи, а без `queue: max` ещё и отменяет
-ожидающие. Фрагменты workflow — ниже.
+Every branch and every PR runs independently; only the branch's own stale run
+is cancelled. Serialization — only where there is a shared resource (a deploy
+environment, a shared database, an external service with limits). One queue
+for all of CI is not a solution: it slows down every task, and without
+`queue: max` it also cancels pending runs. Workflow fragments — below.
 
-- **Ветки и PR — параллельно:** группа `concurrency` по номеру PR или ветке,
-  `cancel-in-progress: true`.
-- **`main`, теги, ручной запуск — никогда не отменяются:** их прогоны
-  деплоят, прерванный деплой хуже лишнего прогона. Вместо отмены —
-  `queue: max` (по умолчанию GitHub держит один ожидающий прогон и вытесняет
-  его следующим: третий мерж подряд отменил бы второй).
-- **Деплой — очередь на окружение:** у job деплоя группа `deploy-<env>`,
-  общая для всех workflow репозитория, и `queue: max`. Без него очередь job
-  вытесняет ожидающих, как и на уровне workflow: в прогоне третий
-  deploy-job окружения отменит ждущий второй, ручной запуск — ждущий деплой
-  тега.
-- **CI и деплой — в разных workflow:** `queue: max` несовместим с
-  `cancel-in-progress: true`. В одном workflow —
-  `cancel-in-progress: ${{ github.event_name == 'pull_request' }}` без
-  `queue: max`: деплой не прервётся, но ожидающий прогон может быть вытеснен.
-- **Агент чужие прогоны не отменяет и не перезапускает** (`gh run cancel` и
-  `gh run rerun` — только свой прогон на своей ветке). Ожидание своих чеков и
-  мерж — раздел «Git, PR и мерж» `AGENTS.md`.
+- **Branches and PRs run in parallel:** a `concurrency` group by PR number or
+  branch, `cancel-in-progress: true`.
+- **`main`, tags and manual runs are never cancelled:** their runs deploy, and
+  an interrupted deploy is worse than an extra run. Instead of cancelling —
+  `queue: max` (by default GitHub keeps one pending run and evicts it with the
+  next one: a third merge in a row would cancel the second).
+- **Deploy — a queue per environment:** the deploy job has the group
+  `deploy-<env>`, shared by all workflows of the repository, and `queue: max`.
+  Without it the job queue evicts pending jobs, just as at the workflow level:
+  at run time the environment's third deploy job cancels the waiting second
+  one, and a manual run cancels a waiting tag deploy.
+- **CI and deploy — in different workflows:** `queue: max` is incompatible
+  with `cancel-in-progress: true`. In one workflow —
+  `cancel-in-progress: ${{ github.event_name == 'pull_request' }}` without
+  `queue: max`: the deploy won't be interrupted, but a pending run may be
+  evicted.
+- **The agent doesn't cancel or re-run others' runs** (`gh run cancel` and
+  `gh run rerun` — only its own run on its own branch). Waiting for its own
+  checks and merging — the "Git, PRs and merging" section of `AGENTS.md`.
 
-## Фрагменты workflow
+## Workflow fragments
 
-Проверено по документации GitHub Actions («Control the concurrency of
-workflows and jobs»): `queue: max` допускает до 100 ожидающих прогонов
-(сверх — отменяются) и несовместим с `cancel-in-progress: true`, `false` —
-значение по умолчанию; `queue` действует и на `jobs.<id>.concurrency`, а он
-поддерживается и на job с `uses:` (reusable workflow); `cancel-in-progress`
-принимает выражения; группа job деплоя общая на репозиторий, поэтому одно
-имя в разных workflow даёт одну очередь.
+Checked against the GitHub Actions documentation ("Control the concurrency of
+workflows and jobs"): `queue: max` allows up to 100 pending runs (beyond that
+they are cancelled) and is incompatible with `cancel-in-progress: true`;
+`false` is the default; `queue` also works on `jobs.<id>.concurrency`, which
+is supported on a job with `uses:` (reusable workflow) too;
+`cancel-in-progress` accepts expressions; a deploy job's group is shared
+across the repository, so the same name in different workflows gives one
+queue.
 
 ```yaml
-# ci.yml — ветки и PR: параллельно, устаревший прогон той же ветки отменяется
+# ci.yml — branches and PRs in parallel; a branch's stale run is cancelled
 on:
   pull_request:
 concurrency:
@@ -50,7 +52,7 @@ concurrency:
 ```
 
 ```yaml
-# cd.yml — main, теги, ручной запуск: ничего не отменяется, прогоны по очереди
+# cd.yml — main, tags, manual runs: nothing is cancelled, runs wait in a queue
 on:
   push:
     branches: [main]
@@ -62,11 +64,11 @@ concurrency:
 jobs:
   deploy-dev:
     concurrency:
-      group: deploy-dev          # окружение = очередь, общая для всех workflow
-      queue: max                 # ожидающий деплой не вытесняется следующим
+      group: deploy-dev          # environment = queue, shared by all workflows
+      queue: max                 # the next deploy doesn't evict a pending one
 ```
 
-Если CI и деплой в одном workflow (разнести нельзя прямо сейчас):
+If CI and deploy are in one workflow (they can't be split right now):
 
 ```yaml
 concurrency:
@@ -74,6 +76,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
-Работающий деплой на `main` так не прервётся, но из трёх мержей подряд
-третий прогон вытеснит ожидающий второй — третий задеплоит всё вместе, а
-второй коммит останется без статуса CI на `main`.
+A running deploy on `main` won't be interrupted this way, but of three merges
+in a row the third run evicts the pending second one — the third deploys
+everything together, and the second commit is left without a CI status on
+`main`.
