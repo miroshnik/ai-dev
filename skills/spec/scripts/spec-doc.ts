@@ -61,7 +61,7 @@ type Group = { kind: Kind; name: string; tests: Test[]; tree: Node; doc: string[
 
 /** Число и форма слова на языке проекта: «2 теста». */
 const count = (forms: Plural, n: number): string => locale.count(LANG, forms, n);
-const testsWord = (n: number): string => count(N.spec.tests, n);
+const testsWord = (n: number): string => L.testsWord(LANG, n);
 
 /** Пропущенные и падающие — то, что стоит заметить; пусто, если всё зелёное. */
 function problemsLine(tests: Test[]): string {

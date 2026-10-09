@@ -9,11 +9,12 @@
  *   bun spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json]
  *                    [--scenarios issue.md | -]
  *
- * --scenarios — тело задачи (markdown, `-` — stdin): раздел «## Сценарии» сверяется с добавленными и изменёнными
- * тестами и с describe новых проверок харнесса — сценарий, ставший тестом или проверкой, несделанный сценарий и тесты
- * сверх сценариев.
+ * --scenarios — тело задачи (markdown, `-` — stdin): раздел сценариев («## Scenarios», «## Сценарии» — на любом языке
+ * словаря) сверяется с добавленными и изменёнными тестами и с describe новых проверок харнесса — сценарий, ставший
+ * тестом или проверкой, несделанный сценарий и тесты сверх сценариев.
  *
- * База по умолчанию — merge-base базовой ветки и HEAD (как дифф PR на GitHub). Запуск — Bun; нужен git.
+ * Раздел — на языке проекта корня (`language` в `.agents/ai-dev.json`, словарь скилла github). База по умолчанию —
+ * merge-base базовой ветки и HEAD (как дифф PR на GitHub). Запуск — Bun; нужен git.
  */
 
 import { spawnSync } from "node:child_process";
@@ -23,9 +24,15 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import locale from "../../github/scripts/locale.cjs";
+import type { Names } from "../../github/scripts/locale.cjs";
 import { disablesIn } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Test } from "./speclib.ts";
+
+// язык проекта и его названия: раздел для PR — на нём; ставит main по корню
+let LANG = locale.DEFAULT_LANGUAGE;
+let N: Names = locale.names(LANG);
 
 /** Ниже этой похожести — не переименование, а снятое и новое требование: пусть будет видно. */
 export const RENAME_RATIO = 0.6;
@@ -348,7 +355,7 @@ export function unmovedFiles(outFiles: string[], moved: Moved[], count: Map<stri
   return outFiles.filter((f) => !(gone.has(f) && (count.get(f) ?? 0) > 0 && n.get(f) === count.get(f)));
 }
 
-const outMark = (t: Test) => (L.classify(t.path)[0] === "out" ? " ⚠️ вне дерева" : "");
+const outMark = (t: Test) => (L.classify(t.path)[0] === "out" ? ` ⚠️ ${N.spec.diff.outsideMark}` : "");
 const entry = (t: Test) => `- \`${L.folderOf(t)}\` · ${L.titleOf(t)}${outMark(t)}`;
 
 function changedEntry([o, n]: [Test, Test]): string {
@@ -372,13 +379,12 @@ function movedLines(moved: Moved[]): string[] {
     byFolder.set(L.folderOf(m.test), g);
   }
   const files = new Set(moved.map((m) => m.from)).size;
-  const fileWord = (n: number) => L.plural(n, "файла", "файлов", "файлов");
-  return [
-    `**Перенесены в дерево (${moved.length}):** названия те же, что вне \`${L.TESTS}/\` на базе; из ${fileWord(files)}.`,
-    "",
-    ...[...byFolder.keys()].sort().map((f) => `- \`${f}\` — ${L.testsWord(byFolder.get(f)!.tests)} из ${fileWord(byFolder.get(f)!.files.size)}`),
-    "",
-  ];
+  const fileWord = (n: number) => locale.count(LANG, N.spec.diff.files, n);
+  const folderLine = (f: string) => {
+    const g = byFolder.get(f)!;
+    return `- \`${f}\` — ${locale.fill(N.spec.diff.movedFolder, { tests: L.testsWord(LANG, g.tests), files: fileWord(g.files.size) })}`;
+  };
+  return [locale.fill(N.spec.diff.moved, { n: moved.length, tests: L.TESTS, files: fileWord(files) }), "", ...[...byFolder.keys()].sort().map(folderLine), ""];
 }
 
 // ---------- решения вне названий тестов: модель, исключения, проверки харнесса ----------
@@ -412,9 +418,9 @@ export function modelFacts(m: ModelData | undefined): string[] {
   const mods = Object.keys(m?.modules ?? {}).sort();
   const at = (n: string) => m!.modules![n]!;
   return [
-    ...mods.map((n) => `модуль ${n}`),
-    ...mods.flatMap((n) => [...(at(n).dependsOn ?? [])].sort().map((d) => `зависимость ${n} → ${d}`)),
-    ...mods.flatMap((n) => [...(at(n).packages ?? [])].sort().map((p) => `пакет ${p} модуля ${n}`)),
+    ...mods.map((n) => locale.fill(N.spec.diff.modelModule, { module: n })),
+    ...mods.flatMap((n) => [...(at(n).dependsOn ?? [])].sort().map((d) => locale.fill(N.spec.diff.modelDependency, { from: n, to: d }))),
+    ...mods.flatMap((n) => [...(at(n).packages ?? [])].sort().map((p) => locale.fill(N.spec.diff.modelPackage, { package: p, module: n }))),
   ];
 }
 
@@ -423,10 +429,11 @@ export function modelFacts(m: ModelData | undefined): string[] {
  * архитектуры»; реестр или правило не вычислить без прогона — только вид.
  */
 const checkLabel = (call: string, value: string | null): string => {
-  if (call === "invariant") return value === null ? "реестр" : `реестр «${value}»`;
-  if (call === "examples") return value === null ? "правило" : `правило ${value}`;
-  if (call === "deadCode") return value === null ? "код без потребителя" : `код без потребителя (${value})`;
-  return "модель архитектуры";
+  const named = (template: string) => locale.fill(template, { value: value! });
+  if (call === "invariant") return value === null ? N.spec.diff.registry : named(N.spec.diff.registryNamed);
+  if (call === "examples") return value === null ? N.spec.diff.rule : named(N.spec.diff.ruleNamed);
+  if (call === "deadCode") return value === null ? N.spec.diff.deadCode : named(N.spec.diff.deadCodeNamed);
+  return N.spec.diff.architecture;
 };
 
 // проверка, которую называет опция вызова: без вычислимого реестра или правила её в списке решений не назвать
@@ -482,7 +489,7 @@ export function reportedChecks(fresh: Test[], generated: Set<Test>, sourced: Che
   for (const t of fresh) {
     const k = key(L.folderOf(t), t.describes);
     if (!generated.has(t) || !t.describes.length || inSource.has(k)) continue;
-    out.set(k, { folder: L.folderOf(t), describes: t.describes, checks: ["по отчёту"] });
+    out.set(k, { folder: L.folderOf(t), describes: t.describes, checks: [N.spec.diff.fromReport] });
   }
   return [...out.values()];
 }
@@ -500,7 +507,7 @@ type ExceptionEntry = { item?: string; rule?: string; file?: string; name?: stri
 
 /** Строка исключения: что исключено, задача и причина — у каждого пункта своя, одинаковые не схлопываются. */
 function exceptionLine(folder: string, e: ExceptionEntry): string {
-  const what = e.item !== undefined ? e.item : `«${e.name}» в \`${e.file}\``;
+  const what = e.item !== undefined ? e.item : locale.fill(N.spec.diff.nameException, { name: e.name ?? "", file: e.file ?? "" });
   return `\`${folder}\` · ${what} (${e.rule ? `${e.rule}, ` : ""}#${e.issue}) — ${e.reason}`;
 }
 const CODE = /\.[cm]?[jt]sx?$/;
@@ -545,7 +552,7 @@ async function decisionsAt(rev: string | null, top: string, prefix: string, chan
     const rel = p.slice(prefix.length);
     const text = files.get(rel);
     if (!text || !text.includes("eslint-disable")) continue;
-    for (const d of disablesIn(rel, text)) exceptions.push(`\`${rel}\` · ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
+    for (const d of disablesIn(rel, text)) exceptions.push(`\`${rel}\` · ${d.rules.join(", ") || N.spec.lint.allRules} — ${d.description || N.spec.lint.noReason}`);
   }
   return { model: modelFacts(model), exceptions: exceptions.sort(), checks: checkFacts(checks) };
 }
@@ -589,15 +596,19 @@ function grouped(items: string[]): string[] {
 /** Снятые и добавленные решения по видам — разделы для тела PR; нет изменений вида — нет раздела; выше порога — сводкой. */
 export function decisionLines(base: Decisions, head: Decisions, limit = Infinity): string[] {
   const lines: string[] = [];
-  const kinds: [string, keyof Decisions][] = [["Модель архитектуры", "model"], ["Исключения", "exceptions"], ["Проверки харнесса", "checks"]];
+  const kinds: [string, keyof Decisions][] = [
+    [N.spec.diff.modelTitle, "model"],
+    [N.spec.diff.exceptionsTitle, "exceptions"],
+    [N.spec.diff.checksTitle, "checks"],
+  ];
   const section = (title: string, items: string[]) => {
     if (!items.length) return;
-    if (items.length > limit) lines.push(`**${title} (${items.length}), сводкой:**`, "", ...grouped(items), "");
+    if (items.length > limit) lines.push(locale.fill(N.spec.diff.summarized, { title, n: items.length }), "", ...grouped(items), "");
     else lines.push(`**${title} (${items.length}):**`, "", ...items.map((x) => `- ${L.mdText(x)}`), "");
   };
   for (const [title, k] of kinds) {
-    section(`${title} — снято`, minus(base[k], head[k]));
-    section(`${title} — добавлено`, minus(head[k], base[k]));
+    section(locale.fill(N.spec.diff.removedKind, { title }), minus(base[k], head[k]));
+    section(locale.fill(N.spec.diff.addedKind, { title }), minus(head[k], base[k]));
   }
   return lines;
 }
@@ -628,12 +639,12 @@ function summaryLines(removed: Test[], changed: [Test, Test][], added: Test[], l
   const cols = (r: Row) => [r.removed, r.changed, r.added, ...(harness ? [r.harness] : [])].join(" | ");
   const sum = [...rows.values()].reduce((a, r) => ({ removed: a.removed + r.removed, changed: a.changed + r.changed, added: a.added + r.added, harness: a.harness + r.harness }));
   return [
-    `**Сводка по папкам** — ${L.testsWord(total)}, больше порога ${limit}: полный список — \`spec-diff --full\` (в CI — summary джоба).`,
+    locale.fill(N.spec.diff.summary, { tests: L.testsWord(LANG, total), limit }),
     "",
-    `| Папка | Удалены | Изменены | Добавлены |${harness ? " Из них харнесса |" : ""}`,
+    `| ${N.spec.diff.folder} | ${N.spec.diff.removed} | ${N.spec.diff.changed} | ${N.spec.diff.added} |${harness ? ` ${N.spec.diff.harnessColumn} |` : ""}`,
     `|---|--:|--:|--:|${harness ? "--:|" : ""}`,
     ...[...rows.keys()].sort().map((f) => `| \`${f}\` | ${cols(rows.get(f)!)} |`),
-    `| **Всего** | ${cols(sum)} |`,
+    `| **${N.spec.diff.total}** | ${cols(sum)} |`,
     "",
   ];
 }
@@ -641,9 +652,14 @@ function summaryLines(removed: Test[], changed: [Test, Test][], added: Test[], l
 /** Тестов в списках больше порога — вместо списков сводка по папкам. */
 const summarized = (removed: Test[], changed: [Test, Test][], added: Test[], limit: number) => removed.length + changed.length + added.length > limit;
 
-/** Пометка теста, которого нет среди сценариев задачи: сам тест — в списке, второй раз его не печатаем. */
-const EXTRA = " — сверх сценариев";
+/** Строка о файлах тестов, изменённых вне дерева `tests/`. */
+const outsideFilesLine = (outFiles: string[]): string =>
+  locale.fill(N.spec.diff.outsideFiles, { tests: L.TESTS, files: outFiles.map((p) => `\`${p}\``).join(", ") });
 
+/**
+ * Раздел для тела PR; `note` — строка под базой (откуда тесты харнесса). Тест, которого нет среди сценариев задачи
+ * (`extra`), — пометкой в списке: сам тест уже в нём, второй раз его не печатаем.
+ */
 export function render(
   baseLabel: string,
   removed: Test[],
@@ -651,34 +667,35 @@ export function render(
   added: Test[],
   outFiles: string[],
   moved: Moved[] = [],
-  opts: { limit?: number; harness?: Set<Test>; extra?: Set<Test> } = {},
+  opts: { limit?: number; harness?: Set<Test>; extra?: Set<Test>; note?: string } = {},
 ): string {
-  const lines = ["## Спека (тесты)", "", `_База: \`${baseLabel}\`._`, ""];
+  const lines = [N.prSpecSection, "", locale.fill(N.spec.diff.base, { base: baseLabel }), ""];
+  if (opts.note) lines.push(opts.note, "");
   if (!removed.length && !changed.length && !added.length && !outFiles.length && !moved.length) {
-    lines.push("Тесты не менялись.");
+    lines.push(N.spec.diff.unchanged);
     return lines.join("\n") + "\n";
   }
   const limit = opts.limit ?? SUMMARY_LIMIT;
   if (summarized(removed, changed, added, limit)) {
     // удалённый тест — снятое требование: в теле PR поимённо, пока их самих не больше порога
-    if (removed.length && removed.length <= limit) lines.push(`**Удалены (${removed.length}):**`, "", ...removed.map(entry), "");
+    if (removed.length && removed.length <= limit) lines.push(`**${N.spec.diff.removed} (${removed.length}):**`, "", ...removed.map(entry), "");
     lines.push(...summaryLines(removed, changed, added, limit, opts.harness));
     if (moved.length) lines.push(...movedLines(moved));
-    if (outFiles.length) lines.push(`**Вне дерева \`${L.TESTS}/\`** изменены файлы тестов: ${outFiles.map((p) => `\`${p}\``).join(", ")}.`, "");
+    if (outFiles.length) lines.push(outsideFilesLine(outFiles), "");
     return lines.join("\n").trimEnd() + "\n";
   }
-  const mark = (t: Test) => (opts.extra?.has(t) ? EXTRA : "");
+  const mark = (t: Test) => (opts.extra?.has(t) ? ` — ${N.spec.diff.extraMark}` : "");
   const sections: [string, string[]][] = [
-    ["Удалены", removed.map(entry)],
-    ["Изменены", changed.map((p) => changedEntry(p) + mark(p[1]))],
-    ["Добавлены", added.map((t) => entry(t) + mark(t))],
+    [N.spec.diff.removed, removed.map(entry)],
+    [N.spec.diff.changed, changed.map((p) => changedEntry(p) + mark(p[1]))],
+    [N.spec.diff.added, added.map((t) => entry(t) + mark(t))],
   ];
   for (const [title, items] of sections) {
     if (items.length) lines.push(`**${title} (${items.length}):**`, "", ...items, "");
-    else lines.push(`**${title}:** нет.`, "");
+    else lines.push(locale.fill(N.spec.diff.empty, { title }), "");
   }
   if (moved.length) lines.push(...movedLines(moved));
-  if (outFiles.length) lines.push(`**Вне дерева \`${L.TESTS}/\`** изменены файлы тестов: ${outFiles.map((p) => `\`${p}\``).join(", ")}.`, "");
+  if (outFiles.length) lines.push(outsideFilesLine(outFiles), "");
   return lines.join("\n").trimEnd() + "\n";
 }
 
@@ -700,10 +717,14 @@ function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], add
   );
 }
 
-/** Сценарии задачи — пункты списка раздела «## Сценарии» (до следующего заголовка); чекбоксы сняты; нет раздела — null. */
+/**
+ * Сценарии задачи — пункты списка раздела сценариев (до следующего заголовка); чекбоксы сняты; нет раздела — null.
+ * Заголовок — на любом языке словаря (`## Scenarios`, `## Сценарии`): задачу могли написать до смены языка проекта.
+ */
 export function parseScenarios(md: string): string[] | null {
   const lines = md.split(/\r?\n/);
-  const start = lines.findIndex((l) => /^##\s+Сценарии\s*$/.test(l.trim()));
+  const heads = locale.every((n) => n.sections.scenarios).map((h) => new RegExp(`^${locale.escapeRe(h).replace(/ +/g, "\\s+")}\\s*$`));
+  const start = lines.findIndex((l) => heads.some((h) => h.test(l.trim())));
   if (start < 0) return null;
   const out: string[] = [];
   for (const l of lines.slice(start + 1)) {
@@ -766,7 +787,8 @@ export function matchScenarios(
   return { found, extra: fresh.filter((t) => !used.has(t) && !covered(t)) };
 }
 
-const harnessEntry = (c: HarnessDescribe) => `\`${c.folder}\` · ${c.describes.map(L.mdText).join(" › ")} — проверка харнесса: ${c.checks.map(L.mdText).join(", ")}`;
+const harnessEntry = (c: HarnessDescribe) =>
+  `\`${c.folder}\` · ${c.describes.map(L.mdText).join(" › ")} — ${N.spec.diff.harnessCheck}: ${c.checks.map(L.mdText).join(", ")}`;
 
 /**
  * Сверка сценариев без повторов: сценарий, ставший тестом, назван так же, как тест, — пока тесты в списках выше
@@ -774,19 +796,24 @@ const harnessEntry = (c: HarnessDescribe) => `\`${c.folder}\` · ${c.describes.m
  * строкой теста. Сценарий проверки харнесса — строкой проверки, несделанный — своим текстом.
  */
 function scenarioLines(scenarios: string[] | null, match: { found: Found[]; extra: Test[] }, listed: boolean, limit = Infinity): string[] {
-  if (scenarios === null) return ["### Сценарии задачи", "", "В задаче нет раздела «## Сценарии» — сверять не с чем.", ""];
+  if (scenarios === null) return [`### ${N.spec.diff.scenarios}`, "", locale.fill(N.spec.diff.noScenarios, { section: N.sections.scenarios }), ""];
   const { found, extra } = match;
-  const lines = [`### Сценарии задачи (${scenarios.length})`, ""];
+  const lines = [`### ${N.spec.diff.scenarios} (${scenarios.length})`, ""];
   const done = found.filter((f) => f.tests.length).length;
-  if (listed && done) lines.push(`**Стали тестами (${done}):** в списках выше.`, "");
+  if (listed && done) lines.push(locale.fill(N.spec.diff.becameTests, { n: done }), "");
   const items = found.flatMap(({ scenario, tests, harness }) =>
-    tests.length ? (listed ? [] : tests.map((t) => `- ✅ ${entry(t).slice(2)}`)) : [harness ? `- ✅ ${harnessEntry(harness)}` : `- ❌ ${L.mdText(scenario)} — теста нет`],
+    tests.length
+      ? listed
+        ? []
+        : tests.map((t) => `- ✅ ${entry(t).slice(2)}`)
+      : [harness ? `- ✅ ${harnessEntry(harness)}` : `- ❌ ${L.mdText(scenario)} — ${N.spec.diff.noTest}`],
   );
   if (items.length) lines.push(...items, "");
   if (!extra.length) return lines;
-  if (listed) lines.push(`**Тесты сверх сценариев (${extra.length}):** в списках выше, с пометкой «сверх сценариев».`, "");
-  else if (extra.length > limit) lines.push(`**Тесты сверх сценариев (${extra.length}):** списком — \`spec-diff --full\`.`, "");
-  else lines.push(`**Тесты сверх сценариев (${extra.length}):**`, "", ...extra.map(entry), "");
+  const title = `**${N.spec.diff.extraTitle} (${extra.length}):**`;
+  if (listed) lines.push(`${title} ${locale.fill(N.spec.diff.extraListed, { mark: N.spec.diff.extraMark })}`, "");
+  else if (extra.length > limit) lines.push(`${title} ${N.spec.diff.extraFull}`, "");
+  else lines.push(title, "", ...extra.map(entry), "");
   return lines;
 }
 
@@ -861,6 +888,9 @@ export async function main(argv: string[]): Promise<number> {
     console.error(`spec-diff: --limit — целое число тестов больше нуля, а не «${v.limit}»\n${USAGE}`);
     return 2;
   }
+  // язык проекта корня — до разбора: строки решений (модель, проверки харнесса) базы и головы сравниваются на нём
+  LANG = locale.projectLanguage(path.resolve(v.root ?? process.cwd()));
+  N = locale.names(LANG);
 
   let removed: Test[], changed: [Test, Test][], added: Test[], moved: Moved[], outFiles: string[];
   let decisions: string[];
@@ -893,10 +923,10 @@ export async function main(argv: string[]): Promise<number> {
         headTests = union(headTests, reported, harness);
         // пропущенная публикация (spec-run: дерево main не проверено целиком) — tests.json старше базы диффа: о разрыве сказать
         const baseSha = gitText(["rev-parse", `${base}^{commit}`], top).trim();
-        const gap = specBase.source === baseSha ? "" : ` старше базы диффа ${baseSha.slice(0, 12)}: в списках возможны тесты PR, влитых между ними`;
-        harnessNote = `_Тесты харнесса — по отчёту; база — ветка ${branch} (исходник ${specBase.source.slice(0, 12)}${gap})._`;
+        const gap = specBase.source === baseSha ? "" : locale.fill(N.spec.diff.harnessGap, { sha: baseSha.slice(0, 12) });
+        harnessNote = locale.fill(N.spec.diff.harnessNote, { branch, source: specBase.source.slice(0, 12), gap });
       } else {
-        harnessNote = `_Тесты харнесса: в ветке ${branch} нет tests.json для базы — дифф по исходникам, тестов харнесса в нём не видно._`;
+        harnessNote = locale.fill(N.spec.diff.noSpecBase, { branch });
       }
     }
     const changedOut = outOfTreeFiles(base, v.head, top, prefix, v.worktree);
@@ -939,9 +969,8 @@ export async function main(argv: string[]): Promise<number> {
   const match = scenarios ? matchScenarios(scenarios, fresh, [...checks, ...reportedChecks(fresh, harness, sourced)], harness) : { found: [], extra: fresh };
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
-  const shown = { limit, harness: v.report?.length ? harness : undefined, extra: scenarios ? new Set(match.extra) : undefined };
+  const shown = { limit, harness: v.report?.length ? harness : undefined, extra: scenarios ? new Set(match.extra) : undefined, note: harnessNote };
   let text = v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved, shown);
-  if (harnessNote && !v.json) text = text.replace(/^(_База: .*_)$/m, (m) => `${m}\n\n${harnessNote}`);
   if (v.json) {
     const j = JSON.parse(text);
     j.decisions = Object.fromEntries(

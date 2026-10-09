@@ -144,6 +144,54 @@ declare namespace locale {
       containerCount: Plural;
       externalCount: Plural;
     };
+    /** Раздел PR `spec-diff`: списки тестов, перенос в дерево, сводка, решения вне названий, сверка сценариев. */
+    diff: {
+      base: string;
+      unchanged: string;
+      removed: string;
+      changed: string;
+      added: string;
+      empty: string;
+      outsideMark: string;
+      moved: string;
+      movedFolder: string;
+      files: Plural;
+      summary: string;
+      folder: string;
+      harnessColumn: string;
+      total: string;
+      outsideFiles: string;
+      scenarios: string;
+      noScenarios: string;
+      becameTests: string;
+      noTest: string;
+      extraMark: string;
+      extraTitle: string;
+      extraListed: string;
+      extraFull: string;
+      harnessCheck: string;
+      fromReport: string;
+      harnessNote: string;
+      harnessGap: string;
+      noSpecBase: string;
+      modelModule: string;
+      modelDependency: string;
+      modelPackage: string;
+      registry: string;
+      registryNamed: string;
+      rule: string;
+      ruleNamed: string;
+      deadCode: string;
+      deadCodeNamed: string;
+      architecture: string;
+      nameException: string;
+      modelTitle: string;
+      exceptionsTitle: string;
+      checksTitle: string;
+      removedKind: string;
+      addedKind: string;
+      summarized: string;
+    };
   }
 
   const LANGUAGE_CODE: RegExp;
