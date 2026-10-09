@@ -10,6 +10,7 @@ import { spawn } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import locale from "../../github/scripts/locale.cjs";
 import { branchIssueNumber, cloudSessionsIn, encodePath, EST_DIR, EstError, PROJECTS_DIR } from "../../est/scripts/est.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- #280 записи транскрипта и ответы GitHub — JSON без схемы
@@ -23,7 +24,11 @@ export const BG_MAX = 2 * 3600;
 export const RECENT = 86400;
 /** Вкладка обновляется сама: секунды. */
 export const REFRESH = 30;
-const IN_WORK = "В работе";
+/**
+ * Дашборд общий на все репозитории машины: подписи — по-английски, а названия, которые он разбирает (статус «В работе»,
+ * раздел и метка вопросов, последняя строка сессии), — любого языка словаря locales скилла github.
+ */
+const IN_WORK = locale.every((n) => n.status.inProgress);
 
 // ----------------------------------------------------------------------------
 // Транскрипт
@@ -119,7 +124,7 @@ export function parseTranscript(id: string, text: string): Transcript {
       if (!line.includes('"tool_use"') || ![...want].some((t) => line.includes(t))) continue;
       for (const b of blocks(parse(line))) if (b.type === "tool_use" && want.has(b.id)) what.set(b.id, String(b.input?.description || b.input?.command || b.name));
     }
-  const bg = launched.filter((b) => !finished.has(b.id)).map((b) => ({ id: b.id, at: b.at, what: what.get(b.tool) || b.what || "фоновая задача" }));
+  const bg = launched.filter((b) => !finished.has(b.id)).map((b) => ({ id: b.id, at: b.at, what: what.get(b.tool) || b.what || "background task" }));
 
   let last: number | null = null;
   const turn: Any[] = []; // записи последнего хода, с конца
@@ -150,7 +155,7 @@ export function parseTranscript(id: string, text: string): Transcript {
       }
       answer = texts.join("\n\n").trim();
     }
-  } else if (end?.type === "user" && /^\[Request interrupted by user/.test(textOf(end.message?.content))) answer = "ход прерван человеком";
+  } else if (end?.type === "user" && /^\[Request interrupted by user/.test(textOf(end.message?.content))) answer = "turn interrupted by a human";
   const archived = turn.some((r) => r.type === "assistant" && blocks(r).some((b) => b.type === "tool_use" && /archive_session$/.test(String(b.name)) && b.input?.session_id === "self"));
   return { id, title, last, bg, answer, pendingTool, archived, routine: (first ?? "").trimStart().startsWith("<scheduled-task") };
 }
@@ -159,9 +164,10 @@ export function parseTranscript(id: string, text: string): Transcript {
 // Вопросы
 // ----------------------------------------------------------------------------
 
-// строки конца сессии по канону (AGENTS.md, «Epic refresh on task close»), в том числе с разметкой
-const ASK_RE = /^[\s*_>]*(Всё сделано, но есть вопросы|Осталось)/;
-const DONE_RE = /Сессию можно закрывать\.?[\s*_]*$/;
+// строки конца сессии по канону (AGENTS.md, «Epic refresh on task close») на любом языке словаря, в том числе с разметкой
+const alt = (xs: string[]) => xs.map((x) => locale.escapeRe(x.replace(/[:.]$/, ""))).join("|");
+const ASK_RE = new RegExp(`^[\\s*_>]*(?:${alt([...locale.every((n) => n.lastLine.questions), ...locale.every((n) => n.lastLine.remaining)])})`);
+const DONE_RE = new RegExp(`(?:${alt(locale.every((n) => n.lastLine.done))})\\.?\\s*$`);
 
 /**
  * Вопрос владельцу в ответе сессии: от строки «Всё сделано, но есть вопросы…» или «Осталось: …» до конца ответа; без
@@ -173,16 +179,19 @@ export function questionOf(answer: string, strict = false): string | null {
   const lines = text.split("\n");
   const i = lines.findIndex((l) => ASK_RE.test(l));
   if (i >= 0) return lines.slice(i).join("\n").trim();
-  if (DONE_RE.test(text)) return null;
+  if (DONE_RE.test(text.replace(/[*_]/g, ""))) return null;
   const paras = text.split(/\n\s*\n/);
   const last = paras[paras.length - 1]!.trim();
   return strict && !/\?[\s*_)»"]*$/.test(last) ? null : last;
 }
 
-/** Открытые вопросы задачи — первые строки пунктов раздела «## Вопросы» без ✅. */
+/** Раздел вопросов issue — `sections.questions` любого языка словаря. */
+const QUESTIONS_RE = new RegExp(`^(?:${alt(locale.every((n) => n.sections.questions))})\\s*$`);
+
+/** Открытые вопросы задачи — первые строки пунктов раздела вопросов («## Questions», «## Вопросы») без ✅. */
 export function openQuestions(body: string): string[] {
   const lines = body.split(/\r?\n/);
-  const from = lines.findIndex((l) => /^##\s+Вопросы\s*$/.test(l));
+  const from = lines.findIndex((l) => QUESTIONS_RE.test(l));
   if (from < 0) return [];
   const items: string[][] = [];
   for (const line of lines.slice(from + 1)) {
@@ -224,16 +233,16 @@ export interface Wait {
 }
 
 const LABEL: Record<WaitKey, string> = {
-  human: "ответ человека",
-  merge: "мерж",
-  silent: "тишина",
-  "ci-red": "CI красный",
-  ci: "CI идёт",
-  deploy: "деплой",
-  working: "работает",
-  done: "можно закрывать",
-  none: "сессии нет",
-  cloud: "облако, состояние не видно",
+  human: "human reply",
+  merge: "merge",
+  silent: "silence",
+  "ci-red": "CI red",
+  ci: "CI running",
+  deploy: "deploy",
+  working: "working",
+  done: "can be closed",
+  none: "no session",
+  cloud: "cloud, state not visible",
 };
 
 /**
@@ -245,10 +254,10 @@ export function waitOf(s: Transcript | null, pr: PrInfo | null, now: number): Wa
   const w = (key: WaitKey, detail = ""): Wait => ({ key, label: LABEL[key], detail });
   // облачная сессия задачу не закрепляет: проекты GitHub ей закрыты, её состояние отсюда не видно
   if (!s) return pr?.cloud ? w("cloud") : w("none");
-  if (s.archived) return w("done", "сессия архивирована");
+  if (s.archived) return w("done", "session archived");
   const bg = s.bg.filter((b) => now - b.at <= BG_MAX);
   if (bg.length) {
-    const what = `в фоне: ${bg.map((b) => b.what).join("; ")}`;
+    const what = `in background: ${bg.map((b) => b.what).join("; ")}`;
     if (pr && !pr.merged && pr.checks === "pending") return w("ci", what);
     if (pr && !pr.merged && pr.checks === "failure") return w("ci-red", what);
     if (pr?.merged && pr.deploy === "pending") return w("deploy", what);
@@ -260,7 +269,7 @@ export function waitOf(s: Transcript | null, pr: PrInfo | null, now: number): Wa
     const first = q.split("\n")[0]!;
     return pr && !pr.merged && pr.checks === "success" && !pr.conflict ? w("merge", first) : w("human", first);
   }
-  if (s.last === null || now - s.last > SILENCE) return w("silent", s.pendingTool ? `вызов ${s.pendingTool} без результата — ждёт разрешения или завис` : "записей нет, в фоне ничего");
+  if (s.last === null || now - s.last > SILENCE) return w("silent", s.pendingTool ? `call ${s.pendingTool} without a result — waiting for permission or stuck` : "no records, nothing in background");
   return w("working");
 }
 
@@ -356,7 +365,7 @@ export function sessionsView(inp: SessionsInput, now: number): SessionsView {
       const q = !pinned.has(s.id) && !s.routine && s.last !== null && now - s.last <= RECENT && waitOf(s, null, now).key === "human" ? questionOf(s.answer!, true) : null;
       return q === null ? [] : [{ s, q }];
     });
-    for (const { s, q } of recent.sort((a, b) => b.s.last! - a.s.last!)) asks.push({ kind: "session", repo, head: s.title ?? `сессия ${s.id.slice(0, 8)}`, url: null, session: s, lines: q.split("\n") });
+    for (const { s, q } of recent.sort((a, b) => b.s.last! - a.s.last!)) asks.push({ kind: "session", repo, head: s.title ?? `session ${s.id.slice(0, 8)}`, url: null, session: s, lines: q.split("\n") });
   }
   const issues = Object.entries(inp.live).flatMap(([repo, live]) =>
     live.questions.map((q): Ask => {
@@ -371,25 +380,25 @@ export function sessionsView(inp: SessionsInput, now: number): SessionsView {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const link = (url: string, text: string) => `<a href="${esc(url)}">${esc(text)}</a>`;
 
-/** Сколько прошло: «4 мин назад», «2 ч 5 мин назад», «3 д назад». */
+/** Сколько прошло: «4 min ago», «2 h 5 min ago», «3 d ago». */
 function ago(sec: number): string {
   const m = Math.floor(sec / 60);
-  if (m < 1) return "только что";
-  if (m < 60) return `${m} мин назад`;
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} ч${m % 60 ? ` ${m % 60} мин` : ""} назад`;
-  return `${Math.floor(h / 24)} д назад`;
+  if (h < 24) return `${h} h${m % 60 ? ` ${m % 60} min` : ""} ago`;
+  return `${Math.floor(h / 24)} d ago`;
 }
 
-const when = (s: Transcript, now: number) => (s.last === null ? "записей нет" : ago(now - s.last));
+const when = (s: Transcript, now: number) => (s.last === null ? "no records" : ago(now - s.last));
 /** Название сессии, если оно не повторяет задачу: по канону сессия называется «#N <название задачи>». */
-const ownTitle = (s: Transcript, task: string) => (s.title === null ? `без названия, ${s.id.slice(0, 8)}` : s.title === task ? null : s.title);
-const CHECKS: Record<string, string> = { pending: "чеки идут", failure: "чеки красные", success: "чеки зелёные", null: "чеков нет" };
-const DEPLOY: Record<string, string> = { pending: " · деплой идёт", failure: " · деплой красный", success: "", null: "" };
+const ownTitle = (s: Transcript, task: string) => (s.title === null ? `untitled, ${s.id.slice(0, 8)}` : s.title === task ? null : s.title);
+const CHECKS: Record<string, string> = { pending: "checks running", failure: "checks red", success: "checks green", null: "no checks" };
+const DEPLOY: Record<string, string> = { pending: " · deploy running", failure: " · deploy red", success: "", null: "" };
 
 function prCell(p: PrInfo | null): string {
   if (!p) return "—";
-  const state = p.merged ? `влит${DEPLOY[String(p.deploy)]}` : `${CHECKS[String(p.checks)]}${p.conflict ? " · конфликт" : ""}`;
+  const state = p.merged ? `merged${DEPLOY[String(p.deploy)]}` : `${CHECKS[String(p.checks)]}${p.conflict ? " · conflict" : ""}`;
   return `${link(p.url, `#${p.number}`)} ${esc(state)}`;
 }
 
@@ -400,27 +409,27 @@ function asksBlock(asks: Ask[], now: number, many: boolean): string {
     const text = (lines: string[]) => `<div class="ask-text">${lines.map(esc).join("<br>")}</div>`;
     // задач с вопросами десятки: строкой, сами вопросы — под раскрытием
     if (a.kind === "issue" || a.kind === "backlog")
-      return `<li>${top(a.lines.length ? `метка «вопросы» · открытых: ${a.lines.length}` : "метка «вопросы»")}${a.lines.length ? `<details data-key="${esc(`${a.repo}${a.head}`)}"><summary>вопросы</summary>${text(a.lines)}</details>` : ""}</li>`;
+      return `<li>${top(a.lines.length ? `questions label · open: ${a.lines.length}` : "questions label")}${a.lines.length ? `<details data-key="${esc(`${a.repo}${a.head}`)}"><summary>questions</summary>${text(a.lines)}</details>` : ""}</li>`;
     const name = a.kind === "task" ? ownTitle(a.session!, a.head) : null;
-    return `<li>${top(a.kind === "task" ? `сессия${name ? ` «${name}»` : ""} · ${when(a.session!, now)}` : `сессия без задачи «В работе» · ${when(a.session!, now)}`)}${text(a.lines)}</li>`;
+    return `<li>${top(a.kind === "task" ? `session${name ? ` «${name}»` : ""} · ${when(a.session!, now)}` : `session without a task in progress · ${when(a.session!, now)}`)}${text(a.lines)}</li>`;
   };
   const live = asks.filter((a) => a.kind !== "backlog");
   const backlog = asks.filter((a) => a.kind === "backlog");
   // вопросы бэклога ждут, пока задачу не возьмут: свёрнуты, чтобы не заслонять сессии, которые стоят сейчас
-  const rest = backlog.length ? `<details class="backlog" data-key="backlog"><summary>задачи с вопросами вне работы: ${backlog.length}</summary><ul>${backlog.map(item).join("")}</ul></details>` : "";
-  return `<section class="asks card"><h2>Ждут владельца</h2>${live.length ? `<ul>${live.map(item).join("")}</ul>` : `<p class="note">вопросов нет</p>`}${rest}</section>`;
+  const rest = backlog.length ? `<details class="backlog" data-key="backlog"><summary>tasks with questions, not in progress: ${backlog.length}</summary><ul>${backlog.map(item).join("")}</ul></details>` : "";
+  return `<section class="asks card"><h2>Waiting for the owner</h2>${live.length ? `<ul>${live.map(item).join("")}</ul>` : `<p class="note">no questions</p>`}${rest}</section>`;
 }
 
 function rowsTable(rows: SessionRow[], now: number, many: boolean): string {
-  if (!rows.length) return `<p class="card">Задач «В работе» нет.</p>`;
+  if (!rows.length) return `<p class="card">No tasks in progress.</p>`;
   const body = rows.map((r) => {
-    const task = `${link(r.url, `${many ? r.repo : ""}#${r.number}`)} ${esc(r.title)}${r.epic ? `<div class="minor">эпик ${link(r.epic.url, `#${r.epic.number} ${r.epic.title}`)}</div>` : ""}`;
+    const task = `${link(r.url, `${many ? r.repo : ""}#${r.number}`)} ${esc(r.title)}${r.epic ? `<div class="minor">epic ${link(r.epic.url, `#${r.epic.number} ${r.epic.title}`)}</div>` : ""}`;
     const name = r.session && ownTitle(r.session, `#${r.number} ${r.title}`);
     const session = r.session ? `${esc(when(r.session, now))}${name ? `<div class="minor">${esc(name)}</div>` : ""}` : "—";
     const wait = `<span class="wait ${r.wait.key}">${esc(r.wait.label)}</span>${r.wait.detail ? `<div class="minor">${esc(r.wait.detail)}</div>` : ""}`;
     return `<tr data-task="${esc(`${r.repo}#${r.number}`)}"><td>${task}</td><td>${session}</td><td>${wait}</td><td>${prCell(r.pr)}</td></tr>`;
   });
-  return `<section class="card scroll"><table class="sessions"><thead><tr><th>Задача</th><th>Сессия</th><th>Ждёт</th><th>PR</th></tr></thead><tbody>${body.join("")}</tbody></table></section>`;
+  return `<section class="card scroll"><table class="sessions"><thead><tr><th>Task</th><th>Session</th><th>Waiting for</th><th>PR</th></tr></thead><tbody>${body.join("")}</tbody></table></section>`;
 }
 
 /** Содержимое вкладки: «Ждут владельца» сверху, под ним — строка на задачу «В работе». */
@@ -562,7 +571,8 @@ export function repoTranscripts(paths: string[], since: number, projectsDir = PR
 
 const ROLLUP: Record<string, Checks> = { SUCCESS: "success", FAILURE: "failure", ERROR: "failure", PENDING: "pending", EXPECTED: "pending" };
 const rollup = (state: unknown): Checks => ROLLUP[String(state)] ?? null;
-const isEpic = (i: Any) => (i.labels?.nodes ?? []).some((l: Any) => l.name === "epic") || ["эпик", "epic"].includes(String(i.issueType?.name ?? "").toLowerCase());
+const EPIC_TYPES = locale.every((n) => n.issueTypes.epic).map((t) => t.toLowerCase());
+const isEpic = (i: Any) => (i.labels?.nodes ?? []).some((l: Any) => l.name === "epic") || EPIC_TYPES.includes(String(i.issueType?.name ?? "").toLowerCase());
 const PR_FIELDS = "number url headRefName mergeable closingIssuesReferences(first:10){nodes{number}} commits(last:20){nodes{commit{messageBody statusCheckRollup{state}}}}";
 
 /** Задачи «В работе», PR и задачи с меткой «вопросы» из ответа GitHub; эпик — не строка: его сессия планирует, а не делает. */
@@ -624,6 +634,7 @@ export async function liveQuery(full: string, projectId: string): Promise<Live> 
     repository(owner:$o,name:$r){
       open: pullRequests(states:OPEN, first:50, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ ${PR_FIELDS} } }
       merged: pullRequests(states:MERGED, first:30, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ ${PR_FIELDS} mergeCommit{ statusCheckRollup{state} } } }
-      questions: issues(states:OPEN, labels:["вопросы"], first:50){ nodes{ number title body } } } }`;
-  return packLive(await graphql(q, { o, r, p: projectId, q: `status:"${IN_WORK}"` }));
+      questions: issues(states:OPEN, labels:${JSON.stringify(locale.every((n) => n.labels.questions))}, first:50){ nodes{ number title body } } } }`;
+  // фильтр проекта: значения через запятую — любое из них
+  return packLive(await graphql(q, { o, r, p: projectId, q: `status:${IN_WORK.map((s) => JSON.stringify(s)).join(",")}` }));
 }
