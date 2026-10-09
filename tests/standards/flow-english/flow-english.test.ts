@@ -78,7 +78,7 @@ describe("Названия, которые пишут и разбирают ск
     expect(cyrillicLines(read(`${LOCALES}/en.json`))).toEqual([]);
   });
 
-  invariant(it, {
+  invariant<[string, string]>(it, {
     registry: "русские названия skills/github/locales/ru.json",
     items: locale("ru"),
     key: ([k]) => k,
