@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
@@ -7,7 +8,6 @@ import localeModule from "../../../skills/github/scripts/locale.cjs";
 import type { Names as LocaleNames } from "../../../skills/github/scripts/locale.cjs";
 import en from "../../../skills/github/locales/en.json" with { type: "json" };
 import { codeOnly, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
-import { tmpDir } from "../../lib/spec.ts";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -124,7 +124,7 @@ describe("Язык проекта у скриптов скиллов и у ус�
   });
 
   it("манифест с языком — его язык, без поля — ru, битый — ru, без манифеста — en", () => {
-    const { dir, cleanup } = tmpDir();
+    const dir = mkdtempSync(path.join(os.tmpdir(), "flow-english-"));
     try {
       const project = (name: string, manifest: string | null) => {
         const root = path.join(dir, name);
@@ -143,7 +143,7 @@ describe("Язык проекта у скриптов скиллов и у ус�
         localeModule.projectLanguage(project("none", null)),
       ]).toEqual(["pt-BR", "ru", "ru", "en"]);
     } finally {
-      cleanup();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

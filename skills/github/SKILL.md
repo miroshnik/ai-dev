@@ -43,7 +43,13 @@ there are ❌, steps or errors, `2` — a call or access error, or a cloud sessi
 
 Names of views, `Status` options, fields, issue types and label markers here
 and below are the `en` ones (in the project language — `locales/<language>.json`
-of the `github` skill).
+of the `github` skill). The project language — `language` in
+`.agents/ai-dev.json` of the checkout the script runs from (module
+`scripts/locale.cjs`). Views, `Status` options, fields and issue types named in
+another language of the dictionary — ❌, `fix` renames them keeping the ids
+(task values and the «Item closed» target survive; with tasks in the project —
+after `--confirm`); a decision label with a marker in another language — its
+description is rewritten.
 
 1. The project is linked to the repository, it is the only one, its title =
    the repository name.
@@ -207,7 +213,12 @@ bun <skill dir>/scripts/github.ts pr premerge <PR>               # before the me
 | PR ready (and after new commits) | `pr labels <PR>` — decision labels for the task and the epic |
 | PR's CI green (`ci-wait` PASS), before `gh pr merge` | `pr premerge <PR>` — a separate call; code `0` — merge, `3` — `main` is red: don't merge, wait for the bug |
 
-**`task new`** — one `createIssue` mutation: the organization's issue type (in
+**`task new`** — without `--body` the description is a skeleton in the project
+language: the scenarios and questions sections (an epic — only questions);
+`--type` and `task status` take a name in any language of the dictionary. A
+board in another language of the dictionary (the script runs outside the
+project's checkout, the language changed without `fix`) — the task is kept in
+the board's language. One `createIssue` mutation: the organization's issue type (in
 a personal account an Epic gets the `epic` label, created if missing; Task and
 Bug get no label there), the project, the epic (sub-issue), the milestone by
 title among open ones, `Priority` in an organization (`Medium` by default).
@@ -322,8 +333,9 @@ one. A subtask — a hint to recalculate the epic's estimate.
 after the merge: the refresh doesn't depend on the deploy and runs in parallel
 with it, while the session at peak context neither assembles the assignment
 nor reads `reference.md`. It prints the whole assignment — pass it to the
-subagent as is: the first line «Task #N (epic #M)» (`est`
-links the subagent's work to the task by it), the task and its merged PR (the
+subagent as is: in the project language, the first line «Task #N (epic #M)»
+(`subagentPrompt` of the dictionary; `est` links the subagent's work to the task
+by it in any language), the task and its merged PR (the
 link, otherwise the branch or "Closes #N" among recent PRs), the epic and its
 open tasks, the five checks from `reference.md`, what may be changed (only
 GitHub tasks; the task, the epic and their milestone are closed by
