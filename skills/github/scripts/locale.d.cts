@@ -87,6 +87,8 @@ declare namespace locale {
         size: string;
       };
     };
+    /** Описание коммита копии флоу, который подсказывает `update`: «ai-dev flow <тег>». */
+    updateCommit: string;
     standardIssue: string;
     autoAnswer: string;
     lastLine: { done: string; questions: string; remaining: string };

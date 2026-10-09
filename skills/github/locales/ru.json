@@ -158,6 +158,7 @@
       "size": "описание ×{ratio}"
     }
   },
+  "updateCommit": "флоу ai-dev {version}",
   "standardIssue": "Стандарт ·",
   "autoAnswer": "✅ авто",
   "lastLine": {

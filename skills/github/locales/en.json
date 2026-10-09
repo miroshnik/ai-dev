@@ -158,6 +158,7 @@
       "size": "description ×{ratio}"
     }
   },
+  "updateCommit": "ai-dev flow {version}",
   "standardIssue": "Standard ·",
   "autoAnswer": "✅ auto",
   "lastLine": {
