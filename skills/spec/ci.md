@@ -1,15 +1,16 @@
-# CI проекта со скиллом spec — фрагмент workflow
+# A project's CI with the spec skill — workflow fragment
 
-Раздел «Подключение в репозиторий» в `SKILL.md`, п. 4: pnpm (в `package.json`
-— `packageManager`), Vitest в 3 шарда, Playwright в 2; concurrency — по
-`docs/ci-concurrency.md`. Шарды пишут blob-отчёты, job `spec`
-склеивает их средствами раннеров и собирает `docs/spec` с `--strict`; на
-`main` отдаёт его артефактом job `spec-publish` — у неё одной токен на запись
-(без CI на `main` — публикация на мерж PR, раздел в конце).
-`spec-diff` — своя лёгкая job после `spec`: git-история, Node и склеенные
-отчёты (тесты харнесса видны только в отчёте; база для них — `tests.json`
-ветки `spec`). Отчёт сверки `.spec-claims.xml` — туда же: его тесты есть в
-`tests.json`, и без отчёта они в каждом PR выходят «удалены».
+The "Wiring into a repository" section of `SKILL.md`, item 4: pnpm
+(`packageManager` in `package.json`), Vitest in 3 shards, Playwright in 2;
+concurrency — per `docs/ci-concurrency.md`. The shards write blob reports, the
+`spec` job merges them with the runners' own tools and builds `docs/spec` with
+`--strict`; on `main` it hands it as an artifact to the `spec-publish` job —
+the only one with a write token (no CI on `main` — publishing on PR merge,
+section at the end). `spec-diff` is its own light job after `spec`: git
+history, Node and the merged reports (harness tests are visible only in the
+report; their base is the `tests.json` of the `spec` branch). The
+`.spec-claims.xml` claims report goes there too: its tests are in `tests.json`,
+and without the report they show up as "deleted" in every PR.
 
 ```yaml
 on:
@@ -17,7 +18,7 @@ on:
   push:
     branches: [main]
 
-concurrency: # main — своя группа у прогона: не ждёт и не вытесняется, очередь — у spec-publish
+concurrency: # main — a run gets its own group: it doesn't wait and isn't displaced; the queue is at spec-publish
   group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -38,9 +39,9 @@ jobs:
           --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
       - uses: actions/upload-artifact@v7
         with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
-      - uses: actions/upload-artifact@v7 # журнал точек входа — для spec-claims
+      - uses: actions/upload-artifact@v7 # entry-point log — for spec-claims
         with: { name: 'spec-journal-unit-${{ matrix.shard }}', path: .spec-journal/, retention-days: 1, include-hidden-files: true }
-      - uses: actions/upload-artifact@v7 # код примеров и причины исключений — для spec-doc
+      - uses: actions/upload-artifact@v7 # example code and exception reasons — for spec-doc
         with: { name: 'spec-meta-unit-${{ matrix.shard }}', path: .spec-meta/, retention-days: 1, include-hidden-files: true }
 
   e2e:
@@ -78,7 +79,7 @@ jobs:
         with: { pattern: spec-journal-*, path: .spec-journal, merge-multiple: true }
       - uses: actions/download-artifact@v8
         with: { pattern: spec-meta-*, path: .spec-meta, merge-multiple: true }
-      - run: pnpm spec:claims # каждая точка входа вызвана тестом capability; отчёт — в spec:doc
+      - run: pnpm spec:claims # every entry point is called by a capability test; the report goes to spec:doc
       - run: pnpm exec vitest --merge-reports=vitest-blob --reporter=json --outputFile.json=.spec-report.json
       - run: pnpm exec playwright merge-reports --reporter=json playwright-blob
         env: { PLAYWRIGHT_JSON_OUTPUT_NAME: .spec-playwright.json }
@@ -100,11 +101,11 @@ jobs:
     if: github.event_name == 'push'
     needs: spec
     runs-on: ubuntu-latest
-    permissions: { contents: write } # пуш ветки spec — только здесь
-    concurrency: { group: spec-publish, queue: max } # ожидающая публикация не вытесняется следующей
+    permissions: { contents: write } # push to the spec branch — only here
+    concurrency: { group: spec-publish, queue: max } # a pending publication isn't displaced by the next one
     steps:
       - uses: actions/checkout@v7
-        with: { fetch-depth: 0 } # прогоны main параллельны: история — для «уже новее»
+        with: { fetch-depth: 0 } # main runs are parallel: history for the "already newer" check
       - uses: actions/setup-node@v7
         with: { node-version: 24, package-manager-cache: false }
       - uses: actions/download-artifact@v8
@@ -117,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with: { fetch-depth: 0 } # merge-base с базовой веткой и ветка spec
+        with: { fetch-depth: 0 } # merge-base with the base branch, and the spec branch
       - uses: actions/setup-node@v7
         with: { node-version: 24, package-manager-cache: false }
       - uses: actions/download-artifact@v8
@@ -125,41 +126,44 @@ jobs:
       - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
-Отчёты и журналы `.spec-*` — скрытые файлы: `upload-artifact` их пропускает
-без `include-hidden-files: true`, и артефакт выходит пустым.
+The `.spec-*` reports and logs are hidden files: `upload-artifact` skips them
+without `include-hidden-files: true`, and the artifact comes out empty.
 
-Нет Playwright — без job `e2e`, её шагов в `spec` и второго отчёта в
-`spec:doc`. Без шардов — те же шаги в одной job: прогон с JSON-отчётами,
-`spec:doc`, артефакт на `main`; `spec-publish` — так же отдельно. ai-dev сам на
-Bun — его `.github/workflows/ci.yml` образцом для проекта на Node не служит.
+No Playwright — no `e2e` job, no steps for it in `spec` and no second report
+in `spec:doc`. No shards — the same steps in one job: a run with JSON reports,
+`spec:doc`, the artifact on `main`; `spec-publish` stays separate as well.
+ai-dev itself runs on Bun — its `.github/workflows/ci.yml` is no model for a
+project on Node.
 
-Прогон `main` — в своей группе (`github.run_id`): тестам общий ресурс не
-нужен, а `queue: max` с отменой прогонов PR в одном workflow не сочетается.
-Очередь — только у `spec-publish`; публикации идут не по порядку мержей, и
-старую поверх новой не пускает «уже новее» — поэтому checkout с историей.
-Деплою в этом же workflow так нельзя — ему нужен порядок мержей: отдельный
+The `main` run is in its own group (`github.run_id`): the tests need no shared
+resource, and `queue: max` doesn't combine with cancelling PR runs in one
+workflow. Only `spec-publish` has a queue; publications don't go in merge
+order, and the "already newer" check (`spec-publish` prints «уже новее») keeps
+an old one from landing over a new one — hence the checkout with history. A
+deploy can't do this in the same workflow — it needs merge order: a separate
 workflow (`docs/ci-concurrency.md`).
 
-## Без CI на `main` — публикация на мерж PR
+## No CI on `main` — publishing on PR merge
 
-Проект, где весь CI — на PR, а тесты на `main` не гоняются, публикует из
-прогона самого PR: job `spec` отдаёт `docs/spec` артефактом и на PR, лёгкий
-workflow на мерж скачивает его и зовёт `spec-publish`. Есть CI на `main` —
-вариант выше: он собирает то, что в `main` действительно оказалось. Нет —
-этот, возвращать CI на `main` ради документации не нужно.
+A project whose whole CI runs on PRs, with no tests run on `main`, publishes
+from the PR's own run: the `spec` job hands `docs/spec` as an artifact on PRs
+too, and a light workflow on merge downloads it and calls `spec-publish`. With
+CI on `main` — the variant above: it builds what actually ended up in `main`.
+Without it — this one; there is no need to bring back CI on `main` for the
+documentation.
 
-В workflow выше: `on` — только `pull_request`, job `spec-publish` нет, а в
-job `spec` артефакт — на каждом прогоне, назван по дереву, которое прогон
-проверил, и живёт дольше, чем PR ждёт мержа:
+In the workflow above: `on` is only `pull_request`, there is no `spec-publish`
+job, and in the `spec` job the artifact is uploaded on every run, named after
+the tree the run checked, and lives longer than the PR waits for its merge:
 
 ```yaml
-      - id: tree # дерево, которое проверил прогон: merge-ref PR
+      - id: tree # the tree the run checked: the PR's merge-ref
         run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with: { name: 'docs-spec-${{ steps.tree.outputs.tree }}', path: docs/spec/, retention-days: 30 }
 ```
 
-Публикация — свой workflow, `.github/workflows/spec-publish.yml`:
+Publishing is its own workflow, `.github/workflows/spec-publish.yml`:
 
 ```yaml
 on:
@@ -169,58 +173,62 @@ on:
 
 jobs:
   spec-publish:
-    if: github.event.pull_request.merged == true # закрытый без мержа PR не публикует
+    if: github.event.pull_request.merged == true # a PR closed without a merge doesn't publish
     runs-on: ubuntu-latest
-    permissions: { contents: write, actions: read } # пуш ветки spec, артефакт прогона PR
-    concurrency: { group: spec-publish, queue: max } # ожидающая публикация не вытесняется следующей
+    permissions: { contents: write, actions: read } # push to the spec branch, the PR run's artifact
+    concurrency: { group: spec-publish, queue: max } # a pending publication isn't displaced by the next one
     env:
       GH_TOKEN: ${{ github.token }}
       MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
     steps:
       - uses: actions/checkout@v7
-        with: { ref: '${{ github.event.pull_request.merge_commit_sha }}', fetch-depth: 0 } # история — для «уже новее»
+        with: { ref: '${{ github.event.pull_request.merge_commit_sha }}', fetch-depth: 0 } # history for the "already newer" check
       - uses: actions/setup-node@v7
         with: { node-version: 24, package-manager-cache: false }
-      - name: docs/spec из прогона, проверившего дерево мержа
+      - name: docs/spec from the run that checked the merge tree
         run: |
           tree=$(git rev-parse 'HEAD^{tree}')
           run=$(node .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
-          [ -n "$run" ] || exit 0 # пропуск: причина — строкой spec-run выше
+          [ -n "$run" ] || exit 0 # skip: the reason is in spec-run's line above
           gh run download "$run" --name "docs-spec-$tree" --dir docs/spec
           node .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
 ```
 
-- Публикуется только дерево, проверенное целиком: артефакт назван по дереву
-  merge-ref, которое гонял прогон PR, публикация ищет его по дереву коммита
-  мержа. В `main` между стартом прогона и мержем ничего не влили — деревья
-  равны при merge, squash и rebase. Влит отставший PR — такого артефакта
-  нет: `spec-run` пишет «дерево main не проверено целиком — публикация
-  пропущена», job зелёный, ветка `spec` отстаёт до следующего мержа с
-  совпавшим деревом, но не откатывается. Актуальности ветки от PR это не
-  требует.
-- Артефакт — ещё не зелёный прогон: `spec-run` берёт прогон только этого
-  репозитория (не форка) с исходом `success`; идущий ждёт (потолок
-  `--timeout`, 30 мин), к потолку не завершился — job падает с причиной.
-- `--source` — SHA мержа, а не головы PR: после squash и rebase голова в
-  историю `main` не попадает, а `spec-diff` берёт базу тестов харнесса из
-  публикации, чей `Source:` — предок merge-base.
-- `spec-publish` не публикует поверх более нового: `Source:` опубликованного
-  — потомок нового исходника → «уже новее», код 0; для этого checkout — с
-  историей.
-- После пропуска публикация старше merge-base следующих PR — `spec-diff`
-  говорит это строкой под «База».
+- Only a tree checked in full is published: the artifact is named after the
+  merge-ref tree the PR run tested, and publishing looks it up by the merge
+  commit's tree. Nothing was merged into `main` between the run's start and
+  the merge — the trees are equal with merge, squash and rebase. A PR that
+  fell behind is merged — there is no such artifact: `spec-run` writes
+  «дерево main не проверено целиком — публикация пропущена» (main tree not
+  checked in full — publication skipped), the job is green, the `spec` branch
+  lags until the next merge with a matching tree but doesn't roll back. This
+  doesn't require the PR's branch to be up to date.
+- An artifact doesn't yet mean a green run: `spec-run` takes only a run of
+  this repository (not a fork) with the `success` conclusion; it waits for one
+  in progress (cap `--timeout`, 30 min); not finished by the cap — the job
+  fails with the reason.
+- `--source` is the merge SHA, not the PR head: after squash and rebase the
+  head doesn't land in `main`'s history, and `spec-diff` takes the base for
+  harness tests from the publication whose `Source:` is an ancestor of
+  merge-base.
+- `spec-publish` doesn't publish over a newer one: the published `Source:` is
+  a descendant of the new source → "already newer", exit code 0; that's why
+  the checkout has history.
+- After a skip, the publication is older than the merge-base of the following
+  PRs — `spec-diff` says so in a line under «База» (Base).
 
-## Хостинг собирает каждую ветку
+## The host builds every branch
 
-Vercel (и любой хостинг с git-интеграцией на все ветки) собирает и ветку
-`spec` — по конфигу из её дерева, где нет ни кода, ни `package.json`: на
-каждой публикации — упавшая сборка и письмо о ней. Конфиг без деплоя
-кладётся в `docs/spec` перед `spec-publish` (в обоих вариантах выше):
+Vercel (and any host with git integration for all branches) also builds the
+`spec` branch — by the config from its tree, which has neither code nor a
+`package.json`: on every publication, a failed build and an email about it. A
+config without deploys goes into `docs/spec` before `spec-publish` (in both
+variants above):
 
 ```yaml
-      - name: Ветка spec — без деплоя Vercel
+      - name: spec branch — no Vercel deploy
         run: |
           echo '{ "git": { "deploymentEnabled": false } }' > docs/spec/vercel.json
 ```
 
-`vercel.json` основной ветки на `spec` не действует: у неё своё дерево.
+The main branch's `vercel.json` doesn't apply to `spec`: it has its own tree.
