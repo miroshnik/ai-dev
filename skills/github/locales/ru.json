@@ -9,7 +9,8 @@
     "scenarios": "## Сценарии"
   },
   "labels": {
-    "questions": "вопросы"
+    "questions": "вопросы",
+    "epicDescription": "Эпик: большая задача с подзадачами"
   },
   "status": {
     "backlog": "Бэклог",
@@ -29,15 +30,34 @@
   },
   "labelMarkers": {
     "decision": "Решение:",
-    "slice": "Разрез:"
+    "slice": "Разрез:",
+    "architecturePath": "tests/architecture — правило или модуль {name}"
   },
   "comments": {
     "state": "Состояние",
-    "actual": "Факт:"
+    "actual": "Факт:",
+    "closedByPr": "Закрыта по PR {prs}: GitHub не связал PR с задачей"
   },
   "subagentPrompt": {
     "task": "Задача",
     "epic": "эпик"
+  },
+  "mainRed": {
+    "title": "{base} красный",
+    "check": "чек {names}",
+    "checks": "чеки {names}"
+  },
+  "actualize": {
+    "lead": "{task} #{number} ({epicWord} #{epic}): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.",
+    "shipped": "Репозиторий {repo}. Выкачено: #{number} «{title}», {shipped}.",
+    "prs": "PR {list}",
+    "noPr": "PR не найден — коммиты {command}",
+    "epic": "Эпик #{epic} «{title}». Открытые задачи эпика:",
+    "openTask": "- #{number} «{title}»",
+    "checks": "Пять проверок (канон — reference.md скилла github, «Epic refresh on task close»):",
+    "scope": "Меняешь только задачи GitHub — описание, «{questions}», связи, статус; скрипт скилла github — `{script}`: без выполнения — `task drop <N>`, новая — `task new … --epic {epic}` и оценка скиллом est. Код, ветки и git не трогать; #{number}, эпик #{epic} и их milestone не закрывать — это сделает task close после тебя.",
+    "comment": "Что поправил — одной строкой в комментарии к эпику #{epic} (`gh issue comment {epic} --repo {repo}`); править нечего — без комментария.",
+    "answer": "Ответ — правки по строке с номерами задач и вопросы владельцу, если есть; иначе «Блок актуален»."
   },
   "standardIssue": "Стандарт ·",
   "autoAnswer": "✅ авто",

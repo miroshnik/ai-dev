@@ -29,6 +29,9 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
+import locale from "./locale.cjs";
+import type { Names } from "./locale.cjs";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
@@ -36,22 +39,29 @@ type Any = any;
 // Канон
 // ----------------------------------------------------------------------------
 
-export const VIEWS = [
-  { name: "Доска", layout: "BOARD_LAYOUT" },
-  { name: "Таблица", layout: "TABLE_LAYOUT" },
-  { name: "Роадмэп", layout: "ROADMAP_LAYOUT" },
-] as const;
+/**
+ * Названия канона на языке проекта (`locales/<язык>.json`, модуль `locale.cjs`): представления, варианты Status,
+ * поля, типы issue, маркеры меток, разделы, комментарии. Язык — проекта каталога `io.cwd`, его ставит `main`; разбор —
+ * по названиям любого языка словаря (`locale.every`).
+ */
+let N: Names = locale.names(locale.projectLanguage());
+
+const canonViews = () => [
+  { name: N.views.board, layout: "BOARD_LAYOUT" },
+  { name: N.views.table, layout: "TABLE_LAYOUT" },
+  { name: N.views.roadmap, layout: "ROADMAP_LAYOUT" },
+];
 export const STATUS = "Status";
-export const STATUS_OPTIONS = ["Бэклог", "В работе", "Готово"] as const;
-export const [BACKLOG, IN_PROGRESS, DONE] = STATUS_OPTIONS;
-export const NUMBER_FIELDS = ["Оценка, ч", "Факт, ч", "Токены, млн", "Стоимость, $"] as const;
+const statusOptions = () => [N.status.backlog, N.status.inProgress, N.status.done];
+const numberFields = () => [N.fields.estimate, N.fields.actual, N.fields.tokens, N.fields.cost];
+const issueTypes = () => [N.issueTypes.task, N.issueTypes.bug, N.issueTypes.epic];
 export const PRIORITY = "Priority";
 /** Варианты Priority от самого срочного; новой задаче — Medium, эпику — не ниже самой срочной подзадачи. */
 export const PRIORITIES = ["Urgent", "High", "Medium", "Low"] as const;
 export const DEFAULT_PRIORITY = "Medium";
 /** В личном аккаунте типов issue нет — эпик помечается меткой, это единственное исключение. */
-export const EPIC_LABEL = { name: "epic", color: "8250DF", description: "Эпик: большая задача с подзадачами" };
-export const ISSUE_TYPES = ["Задача", "Баг", "Эпик"] as const;
+export const EPIC_LABEL = "epic";
+const epicLabel = () => ({ name: EPIC_LABEL, color: "8250DF", description: N.labels.epicDescription });
 /**
  * Метки решений: имя — имя решения (папка дерева спеки или модуль модели), вид — цветом. Решения разных видов с
  * одним именем — одна метка: цвет старшего вида (порядок здесь), в описании все. У архитектуры решение — правило
@@ -81,10 +91,40 @@ export const STABLE_PRS = 10;
 /** Роль admin репозитория (`repositoryRoleDatabaseId`) обходит ruleset: прямой push, `gh pr merge --admin`. */
 const ADMIN_ROLE = 5;
 
-// Варианты Status нового проекта и их канонические имена: переименование с тем же id сохраняет значения
-// задач и цель workflow «Item closed» (замена вариантов целиком даёт новые id).
-const STATUS_ALIASES: Record<string, string> = { todo: BACKLOG, backlog: BACKLOG, "to do": BACKLOG, "in progress": "В работе", doing: "В работе", done: DONE };
-const TYPE_ALIASES: Record<string, string> = { task: "Задача", bug: "Баг", epic: "Эпик" };
+/**
+ * Варианты Status нового проекта и названия других языков словаря → название на языке проекта: переименование с тем
+ * же id сохраняет значения задач и цель workflow «Item closed» (замена вариантов целиком даёт новые id).
+ */
+function statusAliases(): Record<string, string> {
+  const out: Record<string, string> = { todo: N.status.backlog, "to do": N.status.backlog, doing: N.status.inProgress };
+  for (const n of locale.everyNames()) {
+    out[n.status.backlog.toLowerCase()] = N.status.backlog;
+    out[n.status.inProgress.toLowerCase()] = N.status.inProgress;
+    out[n.status.done.toLowerCase()] = N.status.done;
+  }
+  return out;
+}
+/** Типы issue любого языка словаря (и `task`, `bug`, `epic`) → тип на языке проекта. */
+function typeAliases(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const n of locale.everyNames()) {
+    out[n.issueTypes.task.toLowerCase()] = N.issueTypes.task;
+    out[n.issueTypes.bug.toLowerCase()] = N.issueTypes.bug;
+    out[n.issueTypes.epic.toLowerCase()] = N.issueTypes.epic;
+  }
+  return out;
+}
+/** Поля проекта любого языка словаря → поле на языке проекта. */
+function fieldAliases(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const n of locale.everyNames()) {
+    out[n.fields.estimate] = N.fields.estimate;
+    out[n.fields.actual] = N.fields.actual;
+    out[n.fields.tokens] = N.fields.tokens;
+    out[n.fields.cost] = N.fields.cost;
+  }
+  return out;
+}
 // Встроенные поля проекта; свои — всё остальное (TEXT, NUMBER, DATE, SINGLE_SELECT, ITERATION…).
 const BUILTIN_FIELDS = new Set(["TITLE", "ASSIGNEES", "LABELS", "LINKED_PULL_REQUESTS", "MILESTONE", "REPOSITORY", "REVIEWERS", "PARENT_ISSUE", "SUB_ISSUES_PROGRESS", "CREATED", "UPDATED", "CLOSED", "TRACKS", "TRACKED_BY", "ISSUE_TYPE"]);
 const NOT_DONE_REASONS = new Set(["NOT_PLANNED", "DUPLICATE"]);
@@ -103,7 +143,7 @@ export interface Io {
   sleep?: (ms: number) => void;
   /** Подпроцесс (`est`, `git` у `task close`) — внешний край: в тестах подменяется. */
   run?: (cmd: string, args: string[], cwd?: string) => RunResult;
-  /** Каталог git-шагов `task close`; по умолчанию — текущий. */
+  /** Чекаут проекта: его язык (`.agents/ai-dev.json`) — язык названий, в нём git-шаги `task close`; по умолчанию — текущий каталог. */
   cwd?: string;
 }
 
@@ -331,7 +371,7 @@ export const Q = {
 }`,
   TaskContext: `query TaskContext($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    label(name: "${EPIC_LABEL.name}") { id }
+    label(name: "${EPIC_LABEL}") { id }
     milestones(first: 100, states: OPEN) { nodes { id title } }
   }
 }`,
@@ -695,35 +735,40 @@ export function legacyDecision(label: string): { kind: DecisionKind; name: strin
   return i > 0 && DECISION_KINDS.includes(kind) && label.length > i + 1 ? { kind, name: label.slice(i + 1) } : null;
 }
 
-/** Признак метки решения — описание: цвет у обычной метки может совпасть, имя — тоже. */
-const DECISION_MARK = "Решение: ";
-const decisionPath = (kind: DecisionKind, name: string) => (kind === "architecture" ? `tests/architecture — правило или модуль ${name}` : `tests/${DECISIONS[kind].dir}/${name}`);
+/**
+ * Признак метки решения — описание `<маркер> <пути>`: цвет у обычной метки может совпасть, имя — тоже. Пишется маркер
+ * языка проекта, узнаётся — любого языка словаря: описание на другом языке fix перепишет, а не сочтёт метку обычной.
+ */
+const decisionMark = () => `${N.labelMarkers.decision} `;
+const decisionPath = (kind: DecisionKind, name: string) => (kind === "architecture" ? locale.fill(N.labelMarkers.architecturePath, { name }) : `tests/${DECISIONS[kind].dir}/${name}`);
+/** Маркер любого языка словаря, с которого начинается описание; нет — null. */
+const markOf = (description: string | null | undefined, marks: string[]) => marks.map((m) => `${m} `).find((m) => description?.startsWith(m)) ?? null;
 
 /** Метка решения: цвет старшего вида, в описании пути всех видов; длиннее 100 символов GitHub не примет — тогда виды. */
 export function decisionLabel(name: string, kinds: DecisionKind[]): { name: string; color: string; description: string } {
   const ks = DECISION_KINDS.filter((k) => kinds.includes(k));
-  const full = DECISION_MARK + ks.map((k) => decisionPath(k, name)).join("; ");
-  return { name, color: DECISIONS[ks[0]!].color, description: full.length <= 100 ? full : DECISION_MARK + ks.join(", ") };
+  const full = decisionMark() + ks.map((k) => decisionPath(k, name)).join("; ");
+  return { name, color: DECISIONS[ks[0]!].color, description: full.length <= 100 ? full : decisionMark() + ks.join(", ") };
 }
 
 /** Виды метки решения — по описанию; обычная метка — null. */
 export function labelKinds(description: string | null | undefined): DecisionKind[] | null {
-  if (!description?.startsWith(DECISION_MARK)) return null;
-  const parts = description.slice(DECISION_MARK.length).split(/; |, /);
+  const mark = markOf(description, locale.every((n) => n.labelMarkers.decision));
+  if (!mark) return null;
+  const parts = description!.slice(mark.length).split(/; |, /);
   return DECISION_KINDS.filter((k) => parts.some((p) => p === k || p.startsWith(`tests/${DECISIONS[k].dir}`)));
 }
 
 /**
- * Признак метки-разреза — описание `Разрез: <разрез>[ — пояснение]`: разрез задач проекта (приложения, команды), а не
- * решение, хотя имя может совпасть с модулем модели. Разрез живёт с меткой, а не в `.agents/ai-dev.json`: манифест
- * установки `install` и `update` пишут заново, а `check` читает всё через API.
+ * Признак метки-разреза — описание `<маркер разреза> <разрез>[ — пояснение]` (маркер — `labelMarkers.slice` любого
+ * языка словаря): разрез задач проекта (приложения, команды), а не решение, хотя имя может совпасть с модулем модели.
+ * Разрез живёт с меткой, а не в `.agents/ai-dev.json`: манифест установки `install` и `update` пишут заново, а
+ * `check` читает всё через API.
  */
-const DIMENSION_MARK = "Разрез: ";
-
-/** Разрез метки-разреза — по описанию; другая метка — null. */
 function labelDimension(description: string | null | undefined): string | null {
-  if (!description?.startsWith(DIMENSION_MARK)) return null;
-  return description.slice(DIMENSION_MARK.length).split(" — ")[0]!.trim() || null;
+  const mark = markOf(description, locale.every((n) => n.labelMarkers.slice));
+  if (!mark) return null;
+  return description!.slice(mark.length).split(" — ")[0]!.trim() || null;
 }
 
 /** Решения основной ветки по имени: имя → его виды (старший первым). */
@@ -800,10 +845,10 @@ export function analyze(s: State): Check[] {
   }
 
   // Представления: по имени; нет — переименовать лишнее того же вида или создать; лишние — удалить.
-  const views = add("views", `Представления ${VIEWS.map((v) => q(v.name)).join(", ")} — нужного вида, без фильтра, других нет`);
-  const canonNames = new Set<string>(VIEWS.map((v) => v.name));
+  const views = add("views", `Представления ${canonViews().map((v) => q(v.name)).join(", ")} — нужного вида, без фильтра, других нет`);
+  const canonNames = new Set<string>(canonViews().map((v) => v.name));
   const spare = p.views.filter((v) => !canonNames.has(v.name));
-  for (const c of VIEWS) {
+  for (const c of canonViews()) {
     const v = p.views.find((x) => x.name === c.name);
     if (!v) {
       const cand = spare.find((x) => x.layout === c.layout);
@@ -824,43 +869,51 @@ export function analyze(s: State): Check[] {
   for (const v of spare) views(`лишнее ${q(v.name)}`, guarded(`удалить представление ${q(v.name)}`, { op: "DeleteView", input: { viewId: v.id } }));
 
   // Status: варианты по имени или по известному английскому имени — с тем же id; недостающие — новые.
-  const status = add("status", `${STATUS}: ${STATUS_OPTIONS.join(" → ")}`);
+  const status = add("status", `${STATUS}: ${statusOptions().join(" → ")}`);
   const sf = p.fields.find((f) => f.name === STATUS && f.options);
   if (!sf) {
-    status(`нет поля ${STATUS}`, api(`создать поле ${STATUS}`, { op: "CreateField", input: { projectId: p.id, dataType: "SINGLE_SELECT", name: STATUS, singleSelectOptions: STATUS_OPTIONS.map((name) => ({ name, color: "GRAY", description: "" })) } }));
-  } else if (sf.options!.map((o) => o.name).join("\n") !== STATUS_OPTIONS.join("\n")) {
+    status(`нет поля ${STATUS}`, api(`создать поле ${STATUS}`, { op: "CreateField", input: { projectId: p.id, dataType: "SINGLE_SELECT", name: STATUS, singleSelectOptions: statusOptions().map((name) => ({ name, color: "GRAY", description: "" })) } }));
+  } else if (sf.options!.map((o) => o.name).join("\n") !== statusOptions().join("\n")) {
     const left = [...sf.options!];
     const take = (pred: (o: Option) => boolean) => {
       const i = left.findIndex(pred);
       return i < 0 ? null : left.splice(i, 1)[0]!;
     };
-    const next = STATUS_OPTIONS.map((name) => {
-      const o = take((x) => x.name === name) ?? take((x) => STATUS_ALIASES[x.name.toLowerCase()] === name);
+    const aliases = statusAliases();
+    const next = statusOptions().map((name) => {
+      const o = take((x) => x.name === name) ?? take((x) => aliases[x.name.toLowerCase()] === name);
       return o ? { id: o.id, name, color: o.color, description: o.description ?? "" } : { name, color: "GRAY", description: "" };
     });
     const drop = left.length ? `; удалить ${left.map((o) => q(o.name)).join(", ")}` : "";
-    status(`варианты: ${sf.options!.map((o) => o.name).join(", ") || "нет"}`, guarded(`${STATUS}: ${STATUS_OPTIONS.join(", ")} (существующие переименовать с тем же id${drop})`, { op: "UpdateField", input: { fieldId: sf.id, singleSelectOptions: next } }));
+    status(`варианты: ${sf.options!.map((o) => o.name).join(", ") || "нет"}`, guarded(`${STATUS}: ${statusOptions().join(", ")} (существующие переименовать с тем же id${drop})`, { op: "UpdateField", input: { fieldId: sf.id, singleSelectOptions: next } }));
   }
 
-  // Поля: четыре числовых; своих полей сверх канона нет; в организации Priority — поле issue.
-  const fields = add("fields", `Поля ${NUMBER_FIELDS.map(q).join(", ")} (Number), других своих нет`);
-  for (const name of NUMBER_FIELDS) {
+  // Поля: четыре числовых; поле другого языка словаря переименовывается с тем же id (значения задач сохраняются);
+  // своих полей сверх канона нет; в организации Priority — поле issue.
+  const fields = add("fields", `Поля ${numberFields().map(q).join(", ")} (Number), других своих нет`);
+  const fieldAlias = fieldAliases();
+  const renamed = new Set<Field>();
+  for (const name of numberFields()) {
     const f = p.fields.find((x) => x.name === name);
     const create: Mutation = { op: "CreateField", input: { projectId: p.id, dataType: "NUMBER", name } };
-    if (!f) fields(`нет ${q(name)}`, api(`создать поле ${q(name)} (Number)`, create));
+    const other = f ? undefined : p.fields.find((x) => x.dataType === "NUMBER" && !renamed.has(x) && fieldAlias[x.name] === name);
+    if (other) {
+      renamed.add(other);
+      fields(`нет ${q(name)}`, guarded(`переименовать поле ${q(other.name)} → ${q(name)} (значения задач сохраняются)`, { op: "UpdateField", input: { fieldId: other.id, name } }));
+    } else if (!f) fields(`нет ${q(name)}`, api(`создать поле ${q(name)} (Number)`, create));
     else if (f.dataType !== "NUMBER") fields(`${q(name)} — ${f.dataType}`, { kind: "confirm", text: `пересоздать поле ${q(name)} как Number (значения поля пропадут)`, mutations: [{ op: "DeleteField", input: { fieldId: f.id } }, create] });
   }
   const orgPriority = s.repo.owner.org ? s.repo.owner.issueFields.find((f) => f.name === PRIORITY) : undefined;
-  const isCanon = (f: Field) => BUILTIN_FIELDS.has(f.dataType) || f.name === STATUS || (NUMBER_FIELDS as readonly string[]).includes(f.name) || (s.repo.owner.org && f.isIssueField && f.name === PRIORITY);
+  const isCanon = (f: Field) => BUILTIN_FIELDS.has(f.dataType) || f.name === STATUS || numberFields().includes(f.name) || (s.repo.owner.org && f.isIssueField && f.name === PRIORITY);
   const ownPriority = p.fields.find((f) => f.name === PRIORITY && !f.isIssueField);
-  for (const f of p.fields.filter((x) => !isCanon(x) && x !== ownPriority)) {
+  for (const f of p.fields.filter((x) => !isCanon(x) && x !== ownPriority && !renamed.has(x))) {
     fields(`лишнее ${q(f.name)} (${f.dataType}${f.isIssueField ? ", поле issue" : ""})`, guarded(`удалить поле ${q(f.name)}`, { op: "DeleteField", input: { fieldId: f.id } }));
   }
   if (ownPriority && !s.repo.owner.org) fields(`лишнее ${q(PRIORITY)} — в личном аккаунте приоритет не ведём`, guarded(`удалить поле ${q(PRIORITY)}`, { op: "DeleteField", input: { fieldId: ownPriority.id } }));
 
   if (s.repo.owner.org) {
     const org = s.repo.owner.login;
-    const prio = add("priority", `${PRIORITY} — поле issue организации в проекте, ${q("Таблица")} и ${q("Доска")} сортируются по нему`);
+    const prio = add("priority", `${PRIORITY} — поле issue организации в проекте, ${q(N.views.table)} и ${q(N.views.board)} сортируются по нему`);
     const connected = p.fields.some((f) => f.isIssueField && f.name === PRIORITY);
     if (!connected) {
       const connect: Mutation[] = orgPriority ? [{ op: "AddIssueField", input: { projectId: p.id, issueFieldId: orgPriority.id } }] : [];
@@ -871,28 +924,29 @@ export function analyze(s: State): Check[] {
       }
       if (!orgPriority) prio(`в организации нет поля issue ${PRIORITY}`, ui(`создать поле issue ${PRIORITY} (single select: Urgent, High, Medium, Low), затем снова fix`, `https://github.com/organizations/${org}/settings/issue-fields`));
     }
-    for (const name of ["Таблица", "Доска"]) {
+    for (const name of [N.views.table, N.views.board]) {
       const v = p.views.find((x) => x.name === name);
       if (v && v.sortBy[0] !== PRIORITY) prio(`${q(name)} не сортируется по ${PRIORITY}`, ui(`${q(name)}: View options → Sort by → ${PRIORITY} → Save`, `${p.url}/views/${v.number}`));
     }
 
-    const types = add("types", `Типы issue организации: ${ISSUE_TYPES.join(", ")} — и только они`);
+    const types = add("types", `Типы issue организации: ${issueTypes().join(", ")} — и только они`);
     const t = s.repo.owner.issueTypes;
     const url = `https://github.com/organizations/${org}/settings/issue-types`;
     const claimed = new Set<string>();
-    for (const name of ISSUE_TYPES) {
+    const aliases = typeAliases();
+    for (const name of issueTypes()) {
       const exact = t.find((x) => x.name === name);
       if (exact) {
         claimed.add(exact.id);
         if (!exact.isEnabled) types(`${q(name)} выключен`, { kind: "confirm", text: `включить тип ${q(name)}`, url, mutations: [{ op: "UpdateIssueType", input: { issueTypeId: exact.id, isEnabled: true } }] });
         continue;
       }
-      const alias = t.find((x) => !claimed.has(x.id) && TYPE_ALIASES[x.name.toLowerCase()] === name);
+      const alias = t.find((x) => !claimed.has(x.id) && aliases[x.name.toLowerCase()] === name);
       if (alias) {
         claimed.add(alias.id);
         types(`нет ${q(name)}`, { kind: "confirm", text: `переименовать тип ${q(alias.name)} → ${q(name)}`, url, mutations: [{ op: "UpdateIssueType", input: { issueTypeId: alias.id, name, isEnabled: true } }] });
       } else {
-        types(`нет ${q(name)}`, { kind: "confirm", text: `создать тип ${q(name)}`, url, mutations: [{ op: "CreateIssueType", input: { ownerId: s.repo.owner.id, name, isEnabled: true, color: name === "Эпик" ? "PURPLE" : name === "Баг" ? "RED" : "GRAY" } }] });
+        types(`нет ${q(name)}`, { kind: "confirm", text: `создать тип ${q(name)}`, url, mutations: [{ op: "CreateIssueType", input: { ownerId: s.repo.owner.id, name, isEnabled: true, color: name === N.issueTypes.epic ? "PURPLE" : name === N.issueTypes.bug ? "RED" : "GRAY" } }] });
       }
     }
     for (const x of t.filter((x) => x.isEnabled && !claimed.has(x.id))) {
@@ -903,8 +957,8 @@ export function analyze(s: State): Check[] {
   // Workflow: API их не включает и не показывает цель — только UI. Ненастроенного нет в списке.
   const wf = add("workflows", `Workflow ${[WORKFLOW_ADDED, WORKFLOW_CLOSED, WORKFLOW_AUTO_ADD].map(q).join(", ")} включены`);
   const how: Record<string, string> = {
-    [WORKFLOW_ADDED]: `Edit → Set value → ${STATUS}: ${BACKLOG}`,
-    [WORKFLOW_CLOSED]: `Edit → Set value → ${STATUS}: ${DONE}`,
+    [WORKFLOW_ADDED]: `Edit → Set value → ${STATUS}: ${N.status.backlog}`,
+    [WORKFLOW_CLOSED]: `Edit → Set value → ${STATUS}: ${N.status.done}`,
     // is:open — иначе обновлённая закрытая задача (и not planned) вернётся в проект
     [WORKFLOW_AUTO_ADD]: `Edit → репозиторий ${s.repo.name}, фильтр is:issue is:open (Enter)`,
   };
@@ -918,17 +972,19 @@ export function analyze(s: State): Check[] {
   // Задачи: статусы по канону. Закрытые не в «Готово» — симптом «Item closed» на удалённом варианте Status.
   const opt = (name: string) => sf?.options?.find((o) => o.name === name)?.id;
   const setStatus = (it: Item, name: string): Mutation => ({ op: "SetItemStatus", input: { projectId: p.id, itemId: it.id, fieldId: sf!.id, value: { singleSelectOptionId: opt(name) } } });
-  const statusReady = !!(opt(BACKLOG) && opt(DONE));
-  const closedAdd = add("closed", `Закрытые задачи — в ${q(DONE)}, закрытые без выполнения — вне проекта`);
+  const statusReady = !!(opt(N.status.backlog) && opt(N.status.done));
+  const closedAdd = add("closed", `Закрытые задачи — в ${q(N.status.done)}, закрытые без выполнения — вне проекта`);
   const issues = p.items.filter((it) => it.issue);
-  const notDone = issues.filter((it) => it.issue!.state === "CLOSED" && !NOT_DONE_REASONS.has(it.issue!.stateReason ?? "") && it.status !== DONE);
+  // «Готово» другого языка словаря — тот же вариант: его переименует пункт Status, задачи переставлять незачем
+  const doneAlias = statusAliases();
+  const notDone = issues.filter((it) => it.issue!.state === "CLOSED" && !NOT_DONE_REASONS.has(it.issue!.stateReason ?? "") && doneAlias[(it.status ?? "").toLowerCase()] !== N.status.done);
   if (notDone.length) {
     const steps: Step[] = [];
-    if (statusReady) steps.push(api(`${STATUS} ${q(DONE)}: ${nums(notDone.map((it) => it.issue!))}`, ...notDone.map((it) => setStatus(it, DONE))));
+    if (statusReady) steps.push(api(`${STATUS} ${q(N.status.done)}: ${nums(notDone.map((it) => it.issue!))}`, ...notDone.map((it) => setStatus(it, N.status.done))));
     const closed = p.workflows.find((x) => x.name === WORKFLOW_CLOSED);
     // статусы fix поставит сам, а цель workflow из API не видна — проверить её в UI, даже когда симптом снят
-    if (closed?.enabled) steps.push({ ...ui(`${q(WORKFLOW_CLOSED)}: проверить Set value → ${STATUS}: ${DONE}, иначе Edit → ${DONE} → Save`, `${p.url}/workflows/${closed.fullDatabaseId}`), sticky: true });
-    closedAdd(`не в ${q(DONE)}: ${nums(notDone.map((it) => it.issue!))}`, ...steps);
+    if (closed?.enabled) steps.push({ ...ui(`${q(WORKFLOW_CLOSED)}: проверить Set value → ${STATUS}: ${N.status.done}, иначе Edit → ${N.status.done} → Save`, `${p.url}/workflows/${closed.fullDatabaseId}`), sticky: true });
+    closedAdd(`не в ${q(N.status.done)}: ${nums(notDone.map((it) => it.issue!))}`, ...steps);
   }
   const dropped = issues.filter((it) => it.issue!.state === "CLOSED" && NOT_DONE_REASONS.has(it.issue!.stateReason ?? ""));
   if (dropped.length) closedAdd(`закрыты без выполнения, но в проекте: ${nums(dropped.map((it) => it.issue!))}`, api(`убрать из проекта ${nums(dropped.map((it) => it.issue!))}`, ...dropped.map((it) => ({ op: "DeleteItem", input: { projectId: p.id, itemId: it.id } }))));
@@ -938,7 +994,7 @@ export function analyze(s: State): Check[] {
   const missing = s.openIssues.filter((i) => !inProject.has(i.id));
   if (missing.length) open(`не в проекте: ${nums(missing)}`, api(`добавить в проект ${nums(missing)}`, ...missing.map((i) => ({ op: "AddItem", input: { projectId: p.id, contentId: i.id } }))));
   const noStatus = issues.filter((it) => it.issue!.state === "OPEN" && !it.status);
-  if (noStatus.length) open(`без ${STATUS}: ${nums(noStatus.map((it) => it.issue!))}`, ...(statusReady ? [api(`${STATUS} ${q(BACKLOG)}: ${nums(noStatus.map((it) => it.issue!))}`, ...noStatus.map((it) => setStatus(it, BACKLOG)))] : []));
+  if (noStatus.length) open(`без ${STATUS}: ${nums(noStatus.map((it) => it.issue!))}`, ...(statusReady ? [api(`${STATUS} ${q(N.status.backlog)}: ${nums(noStatus.map((it) => it.issue!))}`, ...noStatus.map((it) => setStatus(it, N.status.backlog)))] : []));
 
   // Метки решений: по дереву спеки и модели основной ветки. Удалить, переименовать по догадке, слить, сделать меткой
   // решения обычную — только с --confirm: метка стоит на задачах. Одна лишняя и одна недостающая одного вида —
@@ -1261,18 +1317,25 @@ interface TaskCtx {
   status: Field;
 }
 
-/** Репозиторий и его проект со Status по канону: без них задачу по канону не завести — сначала project fix. */
+/**
+ * Репозиторий и его проект со Status по канону: без них задачу по канону не завести — сначала project fix. Варианты
+ * Status не на языке проекта, а на другом языке словаря (скрипт позван не из чекаута проекта; язык сменили, а fix ещё
+ * не было) — задача ведётся на языке доски: сверяет язык `project check`, а не каждая команда.
+ */
 function taskContext(io: Io, slug: string): TaskCtx {
   const repo = loadRepo(io, slug);
   const main = mainProject(repo);
   if (!main) throw new GhError(`к ${slug} не привязан проект — сначала github project fix`);
   const project = loadProject(io, main.id, false);
   const status = project.fields.find((f) => f.name === STATUS && f.options);
-  if (!status || STATUS_OPTIONS.some((n) => !status.options!.some((o) => o.name === n))) throw new GhError(`${STATUS} проекта не по канону — сначала github project fix`);
+  const onBoard = (n: Names) => !!status && [n.status.backlog, n.status.inProgress, n.status.done].every((name) => status.options!.some((o) => o.name === name));
+  const board = onBoard(N) ? N : locale.everyNames().find(onBoard);
+  if (!status || !board) throw new GhError(`${STATUS} проекта не по канону — сначала github project fix`);
+  N = board;
   return { slug, repo, project, status };
 }
 
-const isEpic = (i: Issue, org: boolean) => (org ? i.type === "Эпик" : i.labels.includes(EPIC_LABEL.name));
+const isEpic = (i: Issue, org: boolean) => (org ? locale.every((n) => n.issueTypes.epic).includes(i.type ?? "") : i.labels.includes(EPIC_LABEL));
 const itemIn = (ctx: TaskCtx, i: Pick<Issue, "items">) => i.items.find((it) => it.projectId === ctx.project.id) ?? null;
 
 function setStatus(io: Io, ctx: TaskCtx, itemId: string, name: string): void {
@@ -1371,13 +1434,22 @@ export interface NewTask {
   labels?: string[];
 }
 
-export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
+/**
+ * Каркас описания задачи без `--body` — разделы канона на языке проекта: сценарии (у эпика их нет — он без кода) и
+ * вопросы.
+ */
+export const taskTemplate = (type: string): string =>
+  type === N.issueTypes.epic ? `${N.sections.questions}\n` : `${N.sections.scenarios}\n\n${N.sections.questions}\n`;
+
+export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const [owner, name] = slug.split("/");
   const ctx = taskContext(io, slug);
   const org = ctx.repo.owner.org;
 
-  // Всё проверяется до создания: задача не должна появиться наполовину.
-  if (!(ISSUE_TYPES as readonly string[]).includes(o.type)) throw new GhError(`--type: ${ISSUE_TYPES.join(", ")}`);
+  // Всё проверяется до создания: задача не должна появиться наполовину. Тип — название любого языка словаря.
+  const type = typeAliases()[task.type.toLowerCase()];
+  if (!type) throw new GhError(`--type: ${issueTypes().join(", ")}`);
+  const o = { ...task, type, body: task.body.trim() ? task.body : taskTemplate(type) };
   const issueType = org ? ctx.repo.owner.issueTypes.find((t) => t.name === o.type && t.isEnabled) : undefined;
   if (org && !issueType) throw new GhError(`в организации нет включённого типа ${q(o.type)} — github project fix`);
   if (!org && o.priority) throw new GhError("в личном аккаунте полей issue нет — приоритет не ведём, --priority не нужен");
@@ -1393,13 +1465,13 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   let title = o.title.trim();
   const epic = o.epic === undefined ? null : loadIssue(io, slug, o.epic);
   if (epic) {
-    if (!isEpic(epic, org)) throw new GhError(`#${epic.number} — не эпик (${org ? "тип не «Эпик»" : `нет метки ${EPIC_LABEL.name}`})`);
+    if (!isEpic(epic, org)) throw new GhError(`#${epic.number} — не эпик (${org ? `тип не ${q(N.issueTypes.epic)}` : `нет метки ${EPIC_LABEL}`})`);
     if (epic.state !== "OPEN") throw new GhError(`эпик #${epic.number} закрыт`);
     const prefix = epicPrefix(epic.title);
     if (prefix && !title.startsWith(`${prefix} · `)) title = `${prefix} · ${title}`;
   }
   const blockers = o.blockedBy.map((n) => loadIssue(io, slug, n));
-  const needCtx = !!o.milestone || (!org && o.type === "Эпик");
+  const needCtx = !!o.milestone || (!org && o.type === N.issueTypes.epic);
   const repoCtx = needCtx ? graphql(io, Q.TaskContext, { owner, name }).repository : null;
   const milestone = o.milestone ? (repoCtx.milestones.nodes as { id: string; title: string }[]).find((m) => m.title === o.milestone) : undefined;
   if (o.milestone && !milestone) throw new GhError(`открытого milestone ${q(o.milestone)} нет`);
@@ -1431,14 +1503,14 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
     input.issueTypeId = issueType.id;
     done.push(`тип ${q(o.type)}`);
   }
-  if (!org && o.type === "Эпик") {
+  if (!org && o.type === N.issueTypes.epic) {
     let labelId: string | undefined = repoCtx.label?.id;
     if (!labelId) {
-      labelId = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...EPIC_LABEL } }).createLabel.label.id as string;
-      done.push(`создана метка ${q(EPIC_LABEL.name)}`);
+      labelId = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...epicLabel() } }).createLabel.label.id as string;
+      done.push(`создана метка ${q(EPIC_LABEL)}`);
     }
     input.labelIds = [labelId];
-    done.push(`метка ${q(EPIC_LABEL.name)} — тип в личном аккаунте`);
+    done.push(`метка ${q(EPIC_LABEL)} — тип в личном аккаунте`);
   }
   if (plan.length) {
     const ids: string[] = [];
@@ -1462,8 +1534,8 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
   // Status ставим сами, не дожидаясь workflow «Item added to project».
   const listed = (created.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: null }));
   const item = ensureItem(io, ctx, { id: created.id, number: created.number, items: listed }).id;
-  setStatus(io, ctx, item, BACKLOG);
-  done.push(`проект ${q(ctx.project.title)}: ${STATUS} ${q(BACKLOG)}`);
+  setStatus(io, ctx, item, N.status.backlog);
+  done.push(`проект ${q(ctx.project.title)}: ${STATUS} ${q(N.status.backlog)}`);
   if (priority) done.push(`${PRIORITY} ${q(priority.name)}`);
   if (epic) done.push(`подзадача эпика #${epic.number}`);
   for (const b of blockers) {
@@ -1493,33 +1565,35 @@ export function cmdTaskNew(io: Io, slug: string, o: NewTask): number {
 
   io.out(`Создана #${created.number} ${created.title} — ${created.url}`);
   for (const d of done) io.out(`+ ${d}`);
-  if (o.type === "Эпик") io.out("Дальше: эпик не оценивается — его «Оценка, ч» = сумма оценок подзадач.");
-  else io.out(`Дальше: оценка — одним вызовом скилла est: est estimate ${created.number} --type <тип ветки> --write (аналоги подбирает скрипт)${epic ? `; «Оценка, ч» эпика #${epic.number} — пересчитать суммой подзадач` : ""}.`);
+  if (o.type === N.issueTypes.epic) io.out(`Дальше: эпик не оценивается — его ${q(N.fields.estimate)} = сумма оценок подзадач.`);
+  else io.out(`Дальше: оценка — одним вызовом скилла est: est estimate ${created.number} --type <тип ветки> --write (аналоги подбирает скрипт)${epic ? `; ${q(N.fields.estimate)} эпика #${epic.number} — пересчитать суммой подзадач` : ""}.`);
   // сессия с закреплённой задачей новую в работу не возьмёт (pinTask)
   const held = pinnedTask(io);
   if (held) io.out(`Дальше: сессия ведёт ${held} — #${created.number} в новой сессии, первый промпт: #${created.number}.`);
   return 0;
 }
 
-export function cmdTaskStatus(io: Io, slug: string, number: number, status: string): number {
-  if (!(STATUS_OPTIONS as readonly string[]).includes(status)) throw new GhError(`статус: ${STATUS_OPTIONS.join(", ")}`);
+export function cmdTaskStatus(io: Io, slug: string, number: number, name: string): number {
+  // статус — название любого языка словаря; сверка — до чтения проекта, вариант — на языке доски
+  if (!statusAliases()[name.toLowerCase()]) throw new GhError(`статус: ${statusOptions().join(", ")}`);
   const ctx = taskContext(io, slug);
+  const status = statusAliases()[name.toLowerCase()]!;
   const issue = loadIssue(io, slug, number);
   // эпик не закрепляется: его сессия планирует и раздаёт, а «В работе» эпику ставит и первая подзадача
-  if (status === IN_PROGRESS && !isEpic(issue, ctx.repo.owner.org)) pinTask(io, slug, number);
+  if (status === N.status.inProgress && !isEpic(issue, ctx.repo.owner.org)) pinTask(io, slug, number);
   const item = ensureItem(io, ctx, issue);
   setStatus(io, ctx, item.id, status);
   io.out(`+ #${issue.number}: ${STATUS} ${q(status)}${item.added ? " (добавлена в проект)" : ""}`);
   if (!issue.parent) return 0;
   const epic = loadIssue(io, slug, issue.parent.number);
   const epicStatus = itemIn(ctx, epic)?.status ?? null;
-  if (status === IN_PROGRESS && epic.state === "OPEN" && (epicStatus === null || epicStatus === BACKLOG)) {
-    setStatus(io, ctx, ensureItem(io, ctx, epic).id, IN_PROGRESS);
-    io.out(`+ эпик #${epic.number}: ${STATUS} ${q(IN_PROGRESS)} — взята первая подзадача`);
+  if (status === N.status.inProgress && epic.state === "OPEN" && (epicStatus === null || epicStatus === N.status.backlog)) {
+    setStatus(io, ctx, ensureItem(io, ctx, epic).id, N.status.inProgress);
+    io.out(`+ эпик #${epic.number}: ${STATUS} ${q(N.status.inProgress)} — взята первая подзадача`);
   }
-  if (status === IN_PROGRESS && epic.state === "CLOSED") io.out(`Дальше: эпик #${epic.number} закрыт, а подзадача снова в работе — переоткрыть его (и его milestone, если закрыт).`);
-  if (status === DONE && epic.state === "OPEN" && epic.subIssues.length && epic.subIssues.every((x) => x.state === "CLOSED")) {
-    io.out(`Дальше: все подзадачи эпика #${epic.number} закрыты — закрыть эпик и поставить ему ${q(DONE)}.`);
+  if (status === N.status.inProgress && epic.state === "CLOSED") io.out(`Дальше: эпик #${epic.number} закрыт, а подзадача снова в работе — переоткрыть его (и его milestone, если закрыт).`);
+  if (status === N.status.done && epic.state === "OPEN" && epic.subIssues.length && epic.subIssues.every((x) => x.state === "CLOSED")) {
+    io.out(`Дальше: все подзадачи эпика #${epic.number} закрыты — закрыть эпик и поставить ему ${q(N.status.done)}.`);
   }
   return 0;
 }
@@ -1539,7 +1613,7 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
     mutate(io, { op: "DeleteItem", input: { projectId: ctx.project.id, itemId: item.id } });
     io.out(`+ #${number} убрана из проекта ${q(ctx.project.title)}`);
   }
-  if (issue.parent) io.out(`Дальше: «Оценка, ч» эпика #${issue.parent.number} — пересчитать суммой оставшихся подзадач.`);
+  if (issue.parent) io.out(`Дальше: ${q(N.fields.estimate)} эпика #${issue.parent.number} — пересчитать суммой оставшихся подзадач.`);
   return 0;
 }
 
@@ -1559,7 +1633,8 @@ function actualizeChecks(): string {
  * Задание субагенту актуализации блока — сразу после мержа, параллельно с деплоем: актуализация от деплоя не
  * зависит. Сессия на пиковом контексте задание не собирает и справочник не читает — команда печатает его целиком:
  * задача и её PR, эпик, его открытые задачи, пять проверок. Нет эпика или открытых задач в нём — строка «не нужна».
- * Первым словом — «Задача #N»: по нему est привязывает работу субагента к задаче.
+ * Задание — на языке проекта (ключи `actualize`), пять проверок — цитатой из reference.md как есть. Первым словом —
+ * `subagentPrompt.task` и номер («Task #N»): по нему est привязывает работу субагента к задаче.
  */
 export function cmdTaskActualize(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
@@ -1572,24 +1647,22 @@ export function cmdTaskActualize(io: Io, slug: string, number: number): number {
   const linked = issue.prs.filter((p) => p.merged);
   const prs = linked.length ? linked : unlinkedPrs(io, slug, number).prs.filter((p) => p.merged);
   const shipped = prs.length
-    ? `PR ${prs.map((p) => `#${p.number} (\`gh pr view ${p.number}\`, \`gh pr diff ${p.number}\`)`).join(", ")}`
-    : `PR не найден — коммиты \`git log origin/main --grep '#${number}'\``;
-  const github = `bun ${import.meta.path}`;
+    ? locale.fill(N.actualize.prs, { list: prs.map((p) => `#${p.number} (\`gh pr view ${p.number}\`, \`gh pr diff ${p.number}\`)`).join(", ") })
+    : locale.fill(N.actualize.noPr, { command: `\`git log origin/main --grep '#${number}'\`` });
+  const vars = { task: N.subagentPrompt.task, epicWord: N.subagentPrompt.epic, number, epic: epic.number, repo: slug };
   for (const line of [
-    `Задача #${number} (эпик #${epic.number}): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.`,
-    `Репозиторий ${slug}. Выкачено: #${number} ${q(issue.title)}, ${shipped}.`,
-    `Эпик #${epic.number} ${q(epic.title)}. Открытые задачи эпика:`,
-    ...open.map((x) => `- #${x.number} ${q(x.title)}`),
+    locale.fill(N.actualize.lead, vars),
+    locale.fill(N.actualize.shipped, { ...vars, title: issue.title, shipped }),
+    locale.fill(N.actualize.epic, { ...vars, title: epic.title }),
+    ...open.map((x) => locale.fill(N.actualize.openTask, { number: x.number, title: x.title })),
     "",
-    "Пять проверок (канон — reference.md скилла github, «Epic refresh on task close»):",
+    N.actualize.checks,
     "",
     checks,
     "",
-    `Меняешь только задачи GitHub — описание, «## Вопросы», связи, статус; скрипт скилла github — \`${github}\`: ` +
-      `без выполнения — \`task drop <N>\`, новая — \`task new … --epic ${epic.number}\` и оценка скиллом est. ` +
-      `Код, ветки и git не трогать; #${number}, эпик #${epic.number} и их milestone не закрывать — это сделает task close после тебя.`,
-    `Что поправил — одной строкой в комментарии к эпику #${epic.number} (\`gh issue comment ${epic.number} --repo ${slug}\`); править нечего — без комментария.`,
-    "Ответ — правки по строке с номерами задач и вопросы владельцу, если есть; иначе «Блок актуален».",
+    locale.fill(N.actualize.scope, { ...vars, questions: N.sections.questions, script: `bun ${import.meta.path}` }),
+    locale.fill(N.actualize.comment, vars),
+    N.actualize.answer,
   ])
     io.out(line);
   return 0;
@@ -1621,7 +1694,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   const wasOpen = issue.state === "OPEN";
   if (wasOpen) {
     // без связи задача не видит своего PR — комментарий его называет
-    if (unlinked.length) mutate(io, { op: "AddComment", input: { subjectId: issue.id, body: `Закрыта по PR ${unlinked.map((p) => `#${p.number}`).join(", ")}: GitHub не связал PR с задачей` } });
+    if (unlinked.length) mutate(io, { op: "AddComment", input: { subjectId: issue.id, body: locale.fill(N.comments.closedByPr, { prs: unlinked.map((p) => `#${p.number}`).join(", ") }) } });
     mutate(io, { op: "CloseIssue", input: { issueId: issue.id, stateReason: "COMPLETED" } });
     io.out(
       unlinked.length
@@ -1631,8 +1704,8 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   }
   runFact(io, slug, number);
   const item = ensureItem(io, ctx, issue);
-  setStatus(io, ctx, item.id, DONE);
-  io.out(`+ #${number}: ${STATUS} ${q(DONE)}${item.added ? " (добавлена в проект)" : ""}`);
+  setStatus(io, ctx, item.id, N.status.done);
+  io.out(`+ #${number}: ${STATUS} ${q(N.status.done)}${item.added ? " (добавлена в проект)" : ""}`);
   closeMilestone(io, slug, issue, wasOpen);
   let open = 0; // открытые задачи эпика, кроме этой: есть — блок актуализирует субагент
   if (issue.parent) {
@@ -1640,20 +1713,21 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
     if (epic.state === "OPEN" && epic.subIssues.length && !open) {
       mutate(io, { op: "CloseIssue", input: { issueId: epic.id, stateReason: "COMPLETED" } });
-      setStatus(io, ctx, ensureItem(io, ctx, epic).id, DONE);
-      io.out(`+ эпик #${epic.number} закрыт и в ${q(DONE)}: все подзадачи закрыты`);
+      setStatus(io, ctx, ensureItem(io, ctx, epic).id, N.status.done);
+      io.out(`+ эпик #${epic.number} закрыт и в ${q(N.status.done)}: все подзадачи закрыты`);
       closeMilestone(io, slug, epic, true);
     } else if (epic.state === "OPEN") io.out(`○ эпик #${epic.number}: открытых подзадач ${open}`);
   }
   if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
+  // три строки — на языке проекта: их разбирает dashboard
   io.out(
     `Дальше: ${open ? `актуализация блока, если её не было до close, — субагент с заданием task actualize ${number}; затем ` : ""}` +
-      `последней строкой ответа одна из трёх: «Всё сделано. Сессию можно закрывать.»; ` +
-      `владельцу есть что решать — «Всё сделано, но есть вопросы: …» с самими вопросами, без «Сессию можно закрывать»; ` +
-      `что-то осталось — «Осталось: …». ` +
-      // манифест проекта команда не читает: режим знает сессия, условие названо словами
-      `В режиме auto после «Всё сделано. Сессию можно закрывать.» — архивация сессии, где у агента есть инструмент; после двух других строк — нет. ` +
-      `Информация без решения (наблюдение, срок, предупреждение) — не вопрос: строка и архивация — как у «Всё сделано. Сессию можно закрывать.»`,
+      `последней строкой ответа одна из трёх: ${q(N.lastLine.done)}; ` +
+      `владельцу есть что решать — ${q(`${N.lastLine.questions} …`)} с самими вопросами, без ${q(N.lastLine.done)}; ` +
+      `что-то осталось — ${q(`${N.lastLine.remaining} …`)}. ` +
+      // режим (auto) команда не читает: его знает сессия, условие названо словами
+      `В режиме auto после ${q(N.lastLine.done)} — архивация сессии, где у агента есть инструмент; после двух других строк — нет. ` +
+      `Информация без решения (наблюдение, срок, предупреждение) — не вопрос: строка и архивация — как у ${q(N.lastLine.done)}`,
   );
   return 0;
 }
@@ -1961,21 +2035,30 @@ function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: 
   return { sha: String(status.sha ?? ""), names: [...new Set(names)].sort() };
 }
 
-/** Открытые баги на красную основную ветку — заголовок «<base> красный…», по номеру: поиск отстаёт, бывает и дубль. */
+/** Префиксы заголовка бага на красную основную ветку — `mainRed.title` каждого языка словаря, язык проекта первым. */
+const mainRedPrefixes = (base: string) => [...new Set([N, ...locale.everyNames()].map((n) => locale.fill(n.mainRed.title, { base })))];
+
+/**
+ * Открытые баги на красную основную ветку — заголовок «<base> is red…» на любом языке словаря (поиск на каждый), по
+ * номеру: поиск отстаёт, бывает и дубль.
+ */
 function mainBugsOf(io: Io, slug: string, base: string): { number: number; title: string }[] {
-  const prefix = `${base} красный`;
-  const q = `repo:${slug} is:issue is:open in:title "${prefix}"`;
-  const items: Any[] = restCall(io, ["api", `search/issues?q=${encodeURIComponent(q)}&per_page=20`]).items ?? [];
-  return items.filter((i) => !i.pull_request && String(i.title).startsWith(prefix)).sort((a, b) => a.number - b.number);
+  const prefixes = mainRedPrefixes(base);
+  const found = new Map<number, Any>();
+  for (const prefix of prefixes) {
+    const q = `repo:${slug} is:issue is:open in:title "${prefix}"`;
+    for (const i of restCall(io, ["api", `search/issues?q=${encodeURIComponent(q)}&per_page=20`]).items ?? []) found.set(i.number, i);
+  }
+  return [...found.values()].filter((i) => !i.pull_request && prefixes.some((p) => String(i.title).startsWith(p))).sort((a, b) => a.number - b.number);
 }
 
 /**
- * Заголовок бага «<base> красный…» называет чек — имя целиком после префикса, не часть другого: `test` — не в
+ * Заголовок бага «<base> is red…» называет чек — имя целиком после префикса, не часть другого: `test` — не в
  * «test:spec», `main` — не префикс.
  */
 function bugNames(base: string, title: string, check: string): boolean {
-  const name = check.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\s,«"(])${name}(?=$|[\\s,;»")])`, "u").test(title.slice(`${base} красный`.length));
+  const prefix = mainRedPrefixes(base).find((p) => title.startsWith(p)) ?? "";
+  return new RegExp(`(?:^|[\\s,«"(])${locale.escapeRe(check)}(?=$|[\\s,;»")])`, "u").test(title.slice(prefix.length));
 }
 
 /**
@@ -2022,7 +2105,8 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     const unnamed = red.filter((n) => !bugs.some((b) => bugNames(base, b.title, n)));
     if (unnamed.length) {
       const priority = pr.base?.repo?.owner?.type === "Organization" ? " --priority Urgent" : "";
-      io.out(`бага на красный ${base} про ${what(unnamed)} нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${import.meta.path} task new --type Баг${priority} --title ${JSON.stringify(`${base} красный: ${what(unnamed)}`)}; ${wait("<N>")}`);
+      const title = `${locale.fill(N.mainRed.title, { base })}: ${what(unnamed)}`;
+      io.out(`бага на красный ${base} про ${what(unnamed)} нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${import.meta.path} task new --type ${N.issueTypes.bug}${priority} --title ${JSON.stringify(title)}; ${wait("<N>")}`);
     }
     io.out(`⛔ не вливать: ${base} красный, не этот PR — в своём PR не чинить`);
     return 3;
@@ -2032,8 +2116,10 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     const red = redChecksOf(io, slug, base);
     if (red.names.length) {
       const checks = (names: string[]) => `${names.length > 1 ? "чеки" : "чек"} ${names.join(", ")}`;
+      // в заголовке бага — на языке проекта
+      const titled = (names: string[]) => locale.fill(names.length > 1 ? N.mainRed.checks : N.mainRed.check, { names: names.join(", ") });
       const why = `${checks(red.names)} последнего коммита ${base} (${red.sha.slice(0, 7)})`;
-      const code = mainRed(`${base} красный: ${why}`, why, red.names, checks);
+      const code = mainRed(`${base} красный: ${why}`, why, red.names, titled);
       if (code !== null) return code;
     }
   } catch (e) {
@@ -2211,6 +2297,7 @@ function detectRepo(): string {
 }
 
 export function main(argv: string[], io: Io): number {
+  N = locale.names(locale.projectLanguage(io.cwd ?? process.cwd()));
   try {
     const [group, cmd, ...rest] = argv;
     if (!group || group === "-h" || group === "--help") {
@@ -2252,7 +2339,7 @@ export function main(argv: string[], io: Io): number {
           title: { type: "string" },
           body: { type: "string" },
           "body-file": { type: "string" },
-          type: { type: "string", default: "Задача" },
+          type: { type: "string" },
           epic: { type: "string" },
           milestone: { type: "string" },
           "blocked-by": { type: "string" },
@@ -2271,7 +2358,7 @@ export function main(argv: string[], io: Io): number {
         const blockedBy = (values["blocked-by"] ?? "").split(",").filter((x) => x.trim()).map((x) => issueNumber(x, "--blocked-by"));
         const epic = values.epic === undefined ? undefined : issueNumber(values.epic, "--epic");
         const labels = (values.labels ?? "").split(",").map((x) => x.trim()).filter(Boolean);
-        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type!, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels });
+        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type ?? N.issueTypes.task, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels });
       }
       const number = issueNumber(positionals[0], `task ${cmd}`);
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));

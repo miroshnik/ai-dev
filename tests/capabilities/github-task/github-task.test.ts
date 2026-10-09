@@ -469,7 +469,7 @@ describe("task status двигает задачу по доске, эпик — 
 
   it("статус не из канона — ошибка, ничего не меняется", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["status", "47", "Done"]);
+    const r = task(f, ["status", "47", "Сделано"]);
     expect(r.code).toBe(2);
     expect(r.err).toContain("статус: Бэклог, В работе, Готово");
     expect(f.mutations).toEqual([]);
@@ -795,7 +795,7 @@ describe("task close закрывает задачу одной командой
     const last = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
     expect(last).toContain(
       "Дальше: последней строкой ответа одна из трёх: «Всё сделано. Сессию можно закрывать.»; " +
-        "владельцу есть что решать — «Всё сделано, но есть вопросы: …» с самими вопросами, без «Сессию можно закрывать»; " +
+        "владельцу есть что решать — «Всё сделано, но есть вопросы: …» с самими вопросами, без «Всё сделано. Сессию можно закрывать.»; " +
         "что-то осталось — «Осталось: …».",
     );
   });
@@ -980,7 +980,8 @@ describe("task close убирает влитое", () => {
     const work = path.join(dir, "work");
     mkdirSync(work);
     const repo = gitRepo(work);
-    repo.commit({ "README.md": "x\n" }, "init");
+    // чекаут ai-dev: язык проекта — русский, как у записанного проекта GitHub
+    repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
     repo.git("remote", "add", "origin", origin);
     repo.git("push", "-q", "-u", "origin", "main");
     repo.git("switch", "-q", "-c", branch);
@@ -1058,5 +1059,93 @@ describe("task close убирает влитое", () => {
     } finally {
       cleanup();
     }
+  });
+});
+
+/**
+ * Задачи — на языке проекта (`language` в `.agents/ai-dev.json` чекаута, канон, «Language»): каркас описания, статусы,
+ * тип, задание субагенту и комментарии пишутся названиями словаря `skills/github/locales/<язык>.json`, а разбирается
+ * название любого его языка. Доска не на языке проекта (скрипт позван не из чекаута, язык сменили без fix) — задача
+ * ведётся на языке доски: язык сверяет `project check`.
+ */
+describe("Задачи — на языке проекта из .agents/ai-dev.json чекаута", () => {
+  /** Чекаут проекта с манифестом (null — без манифеста). */
+  function checkoutWith(manifest: string | null): string {
+    const dir = scratch();
+    mkdirSync(path.join(dir, ".git"));
+    if (manifest !== null) {
+      mkdirSync(path.join(dir, ".agents"));
+      writeFileSync(path.join(dir, ".agents/ai-dev.json"), manifest);
+    }
+    return dir;
+  }
+  const EN = '{ "language": "en" }\n';
+  /** Доска проекта ai-dev на английском — как после project fix в проекте на en. */
+  function englishBoard(f: FakeGitHub): FakeGitHub {
+    const ru: Record<string, string> = { Бэклог: "Backlog", "В работе": "In progress", Готово: "Done" };
+    for (const o of f.field("Status").options) o.name = ru[o.name];
+    for (const it of f.items()) if (it.status) it.status = { name: ru[it.status.name] };
+    return f;
+  }
+
+  it("проект на en: task new без --body пишет каркас с разделами ## Scenarios и ## Questions, статус Backlog", () => {
+    const f = englishBoard(new FakeGitHub(REC));
+    const r = task(f, ["new", "--title", "Export"], REPO, { cwd: checkoutWith(EN) });
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CreateIssue")[0].body).toBe("## Scenarios\n\n## Questions\n");
+    expect(statusSet(f)).toEqual([[50, "Backlog"]]);
+    expect(r.out).toContain("+ проект «ai-dev»: Status «Backlog»");
+  });
+
+  it("эпик без --body — каркас только с разделом вопросов: эпик без кода, сценариев у него нет", () => {
+    const f = new FakeGitHub(REC);
+    task(f, ["new", "--title", "Экспорт", "--type", "Эпик"]);
+    expect(byOp(f, "CreateIssue")[0].body).toBe("## Вопросы\n");
+  });
+
+  it("манифест без поля language — каркас на русском, как раньше", () => {
+    const f = new FakeGitHub(REC);
+    task(f, ["new", "--title", "Экспорт"], REPO, { cwd: checkoutWith('{ "auto": true }\n') });
+    expect(byOp(f, "CreateIssue")[0].body).toBe("## Сценарии\n\n## Вопросы\n");
+  });
+
+  it("тело дано — пишется как есть, без каркаса", () => {
+    const f = new FakeGitHub(REC);
+    task(f, ["new", "--title", "Экспорт", "--body", "Что сделать"]);
+    expect(byOp(f, "CreateIssue")[0].body).toBe("Что сделать");
+  });
+
+  it("тип и статус — название любого языка словаря: --type Epic и task status Done в проекте на русском", () => {
+    const f = new FakeGitHub(REC);
+    expect(task(f, ["new", "--title", "Экспорт", "--type", "Epic"]).out).toContain("+ метка «epic» — тип в личном аккаунте");
+    task(f, ["status", "47", "Done"]);
+    expect(statusSet(f).at(-1)).toEqual([47, "Готово"]);
+  });
+
+  it("доска на русском, а скрипт позван из каталога без манифеста (en) — задача ведётся на языке доски", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["status", "47", "В работе"], REPO, { cwd: checkoutWith(null) });
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[47, "В работе"]]);
+  });
+
+  it("задание субагенту в проекте на en начинается с «Task #N (epic #M)» — по нему est привязывает работу к задаче", () => {
+    const f = englishBoard(new FakeGitHub(REC));
+    f.prs[77] = { files: [], closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true };
+    const lines = task(f, ["actualize", "46"], REPO, { cwd: checkoutWith(EN) }).out.split("\n");
+    expect(lines[0]).toBe("Task #46 (epic #45): epic refresh after the merge — bring the epic's open tasks in line with what shipped.");
+    expect(lines).toContain("Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой». The epic's open tasks:");
+    expect(lines.at(-1)).toBe("Answer — fixes one per line with task numbers and questions to the owner, if any; otherwise «The block is current».");
+  });
+
+  it("проект на en: комментарий о PR, с которым GitHub не связал задачу, — по-английски", () => {
+    const f = englishBoard(new FakeGitHub(REC));
+    f.prs[77] = { files: [], closes: [], head: "fix/49-x", base: "main", model: null, merged: true };
+    const noEst = () => ({ status: 0, stdout: "Actual: …\n", stderr: "" });
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: noEst, cwd: checkoutWith(EN) });
+    expect(r.code).toBe(0);
+    expect(byOp(f, "AddComment").map((c) => c.body)).toEqual(["Closed by PR #77: GitHub didn't link the PR to the task"]);
+    expect(statusSet(f)).toEqual([[49, "Done"]]);
+    expect(r.out.split("\n").at(-1)).toContain("«All done. The session can be closed.»");
   });
 });

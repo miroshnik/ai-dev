@@ -50,6 +50,9 @@ const TYPED = { "package.json": PKG({ typecheck: "sh tc.sh", "test:spec": "sh ch
  * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/ai-dev.git. Голова PR лежит в
  * `refs/pull/<N>/head`, как на GitHub; `mainAfter` — коммит, влитый в main после CI PR.
  */
+// проект на русском, как ai-dev, чей проект GitHub записан: названия — из ru.json (язык — .agents/ai-dev.json чекаута)
+const RU = { ".agents/ai-dev.json": '{ "language": "ru" }\n' };
+
 function project({ pr, mainAfter, files = {} }: { pr: Record<string, string | null>; mainAfter?: Record<string, string | null>; files?: Record<string, string | null> }) {
   const dir = scratch();
   const origin = path.join(dir, `${SLUG}.git`);
@@ -58,7 +61,7 @@ function project({ pr, mainAfter, files = {} }: { pr: Record<string, string | nu
   const work = path.join(dir, "work");
   mkdirSync(work);
   const repo = gitRepo(work);
-  repo.commit({ "package.json": PKG(), "bun.lock": "{}\n", "check.sh": CHECK, "items.txt": "a\nb\n", ...files }, "init");
+  repo.commit({ ...RU, "package.json": PKG(), "bun.lock": "{}\n", "check.sh": CHECK, "items.txt": "a\nb\n", ...files }, "init");
   repo.git("remote", "add", "origin", origin);
   repo.git("push", "-q", "origin", "main");
   repo.git("switch", "-q", "-c", "feat/7-x");
@@ -99,7 +102,12 @@ function fakeGh(
       return JSON.stringify({ total_count: runs.length, check_runs: runs });
     }
     if (url === `repos/${SLUG}/commits/main/status`) return JSON.stringify({ sha: MAIN_SHA, state: "pending", statuses: main.statuses ?? [] });
-    if (url.startsWith("search/issues?")) return JSON.stringify({ total_count: bugs.length, items: bugs.map((b) => ({ ...b, state: "open" })) });
+    if (url.startsWith("search/issues?")) {
+      // поиск по заголовку — фраза в кавычках `in:title "…"`
+      const phrase = /in:title "([^"]*)"/.exec(decodeURIComponent(url.slice("search/issues?q=".length).split("&")[0]!))?.[1] ?? "";
+      const items = bugs.filter((b) => b.title.includes(phrase)).map((b) => ({ ...b, state: "open" }));
+      return JSON.stringify({ total_count: items.length, items });
+    }
     if (url.startsWith(`repos/${SLUG}/commits/${head}/check-suites`)) return JSON.stringify({ total_count: suites.length, check_suites: suites.map((t, i) => ({ id: i + 1, created_at: t })) });
     if (url.startsWith(`repos/${SLUG}/activity?`)) {
       if (activity) return JSON.stringify({ message: activity, status: "404" });
@@ -381,6 +389,28 @@ describe("pr premerge: main красный — не этот PR: не влива
     expect(none.calls.find((c) => c.startsWith("search/issues?"))).toBe(`search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "main красный"`)}&per_page=20`);
     expect(r.out).toContain(`бага на красный main про чек deploy нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
     expect(r.code).toBe(3);
+  });
+
+  it("проект на en: открытый баг «main is red: …» — premerge называет его; бага нет — заголовок «main is red: check …» и --type Bug", () => {
+    const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
+    const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
+    const found = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main is red: check deploy" }] }).gh, p.work);
+    expect(found.out).toContain(`баг на красный main — #41 «main is red: check deploy»: ждать его закрытия — bash ${WAIT} issue 41 фоновой командой`);
+    const none = fakeGh(p.head, { main });
+    const r = premerge(none.gh, p.work);
+    const query = (title: string) => `search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "${title}"`)}&per_page=20`;
+    // ищется заголовок на каждом языке словаря, язык проекта первым
+    expect(none.calls.filter((c) => c.startsWith("search/issues?"))).toEqual([query("main is red"), query("main красный")]);
+    expect(r.out).toContain(`task new --type Bug --title "main is red: check deploy"`);
+    expect(r.code).toBe(3);
+  });
+
+  it("баг на красную ветку на другом языке словаря тоже найден: проект на en, баг «main красный: чек deploy»", () => {
+    const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
+    const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }] };
+    const r = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чек deploy" }] }).gh, p.work);
+    expect(r.out).toContain("баг на красный main — #41 «main красный: чек deploy»: ждать его закрытия");
+    expect(r.out).not.toContain("task new --type");
   });
 
   /**

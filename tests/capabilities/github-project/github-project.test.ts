@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it, setDefaultTimeout } from "bun:test";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { main } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { tmpDir } from "../../lib/spec.ts";
 
 // модель архитектуры скилл читает отдельным процессом bun
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -14,15 +16,33 @@ const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.
 const REPO = "miroshnik/ai-dev";
 const PROJECT_URL = "https://github.com/users/miroshnik/projects/6";
 
-function run(fake: FakeGitHub, args: string[], env: Record<string, string> = {}) {
+/** `cwd` — чекаут проекта: язык названий канона — его `.agents/ai-dev.json`; без него — текущий каталог (клон ai-dev, ru). */
+function run(fake: FakeGitHub, args: string[], env: Record<string, string> = {}, cwd?: string) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = main(args, { gh: fake.gh, out: (l) => out.push(l), err: (l) => err.push(l), env });
+  const code = main(args, { gh: fake.gh, out: (l) => out.push(l), err: (l) => err.push(l), env, cwd });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
-const check = (fake: FakeGitHub, repo = REPO) => run(fake, ["project", "check", "--repo", repo]);
-const fix = (fake: FakeGitHub, opts: { repo?: string; confirm?: boolean } = {}) =>
-  run(fake, ["project", "fix", "--repo", opts.repo ?? REPO, ...(opts.confirm ? ["--confirm"] : [])]);
+const check = (fake: FakeGitHub, repo = REPO, cwd?: string) => run(fake, ["project", "check", "--repo", repo], {}, cwd);
+const fix = (fake: FakeGitHub, opts: { repo?: string; confirm?: boolean; cwd?: string } = {}) =>
+  run(fake, ["project", "fix", "--repo", opts.repo ?? REPO, ...(opts.confirm ? ["--confirm"] : [])], {}, opts.cwd);
+
+const temp: (() => void)[] = [];
+afterEach(() => {
+  for (const cleanup of temp.splice(0)) cleanup();
+});
+/** Чекаут проекта во временном каталоге: манифест `.agents/ai-dev.json` с этим содержимым (null — без манифеста). */
+function checkout(manifest: string | null): string {
+  const { dir, cleanup } = tmpDir();
+  temp.push(cleanup);
+  mkdirSync(path.join(dir, ".git"));
+  if (manifest !== null) {
+    mkdirSync(path.join(dir, ".agents"));
+    writeFileSync(path.join(dir, ".agents/ai-dev.json"), manifest);
+  }
+  return dir;
+}
+const EN = '{ "language": "en" }\n';
 
 /** Пункты сверки: первое слово заголовка → ✅ или ❌ (после «Итог:», если он есть). */
 function marks(out: string): Record<string, string> {
@@ -739,3 +759,54 @@ function openIssueId(n: number): string {
   const issues = Object.entries(REC).find(([k]) => k.startsWith("RepoIssues "))![1].data.repository.issues.nodes;
   return issues.find((i: { number: number }) => i.number === n).id;
 }
+
+/**
+ * Канон проекта — на языке проекта: варианты Status, поля, представления и типы issue называет словарь
+ * `skills/github/locales/<язык>.json` по `language` в `.agents/ai-dev.json` чекаута, из которого зовут скрипт (канон,
+ * «Language»). Язык сменили — check показывает расхождение, fix переименовывает с теми же id: значения задач и цель
+ * «Item closed» сохраняются (#366, вопрос 1).
+ */
+describe("Канон проекта — на языке проекта из .agents/ai-dev.json чекаута", () => {
+  it("эталон недоступен, проект на en — fix создаёт статусы Backlog, In progress, Done, представления и поля по-английски", () => {
+    const f = fake();
+    f.unlinkAll();
+    f.rec['TemplateProject {"login":"miroshnik","number":6}'] = { data: { repositoryOwner: { projectV2: null } }, errors: [{ message: "Could not resolve to a ProjectV2 with the number 6." }] };
+    const r = fix(f, { cwd: checkout(EN) });
+    const status = f.project().fields.nodes.find((x: { name: string }) => x.name === "Status");
+    expect(status.options.map((o: { name: string }) => o.name)).toEqual(["Backlog", "In progress", "Done"]);
+    expect(byOp(f, "UpdateView")).toEqual([{ viewId: f.project().views.nodes[0].id, name: "Table" }]);
+    expect(byOp(f, "CreateView").map((v) => v.name)).toEqual(["Board", "Roadmap"]);
+    expect(byOp(f, "CreateField").map((v) => v.name)).toEqual(["Estimate, h", "Actual, h", "Tokens, M", "Cost, $"]);
+    expect(marks(r.out)).toMatchObject({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Открытые: "✅" });
+  });
+
+  it("доска на русском, а язык проекта en — check ❌ по представлениям, Status и полям; fix --confirm переименовывает с теми же id, задачи сохраняют статусы", () => {
+    const f = fake();
+    const en = checkout(EN);
+    const ids = (names: string[]) => names.map((n) => f.field(n)?.id ?? null);
+    const options = f.field("Status").options.map((o: { id: string }) => o.id);
+    const fields = ids(["Оценка, ч", "Факт, ч", "Токены, млн", "Стоимость, $"]);
+    const before = f.items().map((it: { status: { name: string } | null }) => it.status?.name ?? null);
+    expect(marks(check(f, REPO, en).out)).toMatchObject({ Представления: "❌", Status: "❌", Поля: "❌" });
+
+    expect(fix(f, { cwd: en }).out).toContain("Нужно подтверждение пользователя");
+    const r = fix(f, { confirm: true, cwd: en });
+    expect(r.code).toBe(0);
+    expect(f.field("Status").options.map((o: { id: string; name: string }) => [o.id, o.name])).toEqual(options.map((id: string, i: number) => [id, ["Backlog", "In progress", "Done"][i]]));
+    expect(ids(["Estimate, h", "Actual, h", "Tokens, M", "Cost, $"])).toEqual(fields);
+    expect(f.project().views.nodes.map((v: { name: string }) => v.name).sort()).toEqual(["Board", "Roadmap", "Table"]);
+    const ru = { Бэклог: "Backlog", "В работе": "In progress", Готово: "Done" } as Record<string, string>;
+    expect(f.items().map((it: { status: { name: string } | null }) => it.status?.name ?? null)).toEqual(before.map((n: string | null) => (n === null ? null : (ru[n] ?? null))));
+    expect(check(f, REPO, en).code).toBe(0);
+  });
+
+  it("манифест без поля language — названия русские, как раньше: проект ai-dev по канону", () => {
+    const r = check(fake(), REPO, checkout('{ "auto": true }\n'));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("✅ Status: Бэклог → В работе → Готово");
+  });
+
+  it("без манифеста — язык en: проект ai-dev с русской доской не по канону", () => {
+    expect(marks(check(fake(), REPO, checkout(null)).out)).toMatchObject({ Status: "❌", Поля: "❌" });
+  });
+});
