@@ -2,14 +2,19 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { isStatement } from "../../../skills/spec/scripts/spec-doc.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { runScript, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { runScript, setLanguage, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;
-beforeEach(() => ({ dir, cleanup } = tmpDir()));
+// проект на ru: тесты файла ждут русский вывод, без манифеста проект — en
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  setLanguage(dir, "ru");
+});
 afterEach(() => cleanup());
 
 const MAIN = "tests/capabilities/billing/billing.test.ts";
@@ -133,5 +138,52 @@ describe("Названия-утверждения вводятся постеп�
     exceptions([{ name: "returns 201", issue: 12 }]);
     expect(doc([[["Счета"], "returns 201"]]).code).toBe(0);
     expect(read("docs/spec/README.md")).toContain(`## Названия — не утверждения (исключения)\n\n- «returns 201» — \`${MAIN}\` — #12 переписать\n`);
+  });
+});
+
+/**
+ * Утверждение — на языке проекта: в ru — русские слова, в другом языке — фраза из слов. Идентификатор, имя функции
+ * или файла, слово с числом — не утверждение ни в каком языке: читатель спеки не узнает из него, что система делает.
+ */
+describe("Название — утверждение на языке проекта", () => {
+  it("spec-doc в проекте на en принимает английское утверждение и отвергает идентификатор", () => {
+    setLanguage(dir, "en");
+    const r = doc(
+      [
+        [["Invoices"], "an invoice is issued for a month"],
+        [["Invoices"], "`parseScenarios` returns null without a section"],
+        [["parseScenarios"], "foo_bar"],
+        [["Invoices"], "fooBar"],
+        [["Invoices"], "foo-bar"],
+      ],
+      "--stdout",
+      "--strict",
+    );
+    expect(r.code).toBe(1);
+    expect([...r.stderr.matchAll(/«(.+?)» \(/g)].map((m) => m[1])).toEqual(["parseScenarios", "foo_bar", "fooBar", "foo-bar"]);
+  });
+
+  it("утверждение не на ru — фраза из слов; идентификатор, путь и слово с числом — нет", () => {
+    const statements = [
+      "Invoices",
+      "an invoice is issued for a month",
+      "`parseScenarios` returns null without a section",
+      "GET /invoices returns the user's invoices",
+      "an e-mail is sent once",
+      "UI shows an error",
+    ];
+    const identifiers = ["parseScenarios", "foo_bar", "fooBar", "FooBar", "foo-bar", "spec-doc.ts", "src/billing", "returns 201", "GET /invoices", "x", "`parseScenarios`"];
+    expect(statements.filter((n) => !isStatement(n, "en"))).toEqual([]);
+    expect(identifiers.filter((n) => isStatement(n, "en"))).toEqual([]);
+    // письмо без пробелов между словами — утверждение строкой его букв
+    expect(isStatement("請求書は月ごとに発行される", "ja")).toBe(true);
+  });
+
+  it("в проекте на en долг названий в оглавлении и причина от --names-baseline — по-английски", () => {
+    setLanguage(dir, "en");
+    expect(doc([[["Invoices"], "returns 201"]], "--names-baseline", "12").code).toBe(0);
+    const reason = "the name isn't a statement; rewrite in #12";
+    expect(read(`${NAMES}/returns-201.json`)).toBe(json({ file: MAIN, name: "returns 201", issue: 12, reason }));
+    expect(read("docs/spec/README.md")).toContain(`## Names that aren't statements (exceptions)\n\n- «returns 201» — \`${MAIN}\` — #12 ${reason}\n`);
   });
 });

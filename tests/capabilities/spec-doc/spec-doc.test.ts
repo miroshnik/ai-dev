@@ -1,16 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { runScript, SCRIPTS, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { runScript, SCRIPTS, setLanguage, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;
-beforeEach(() => ({ dir, cleanup } = tmpDir()));
+// проект на ru: тесты файла ждут русский вывод, без манифеста проект — en
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  setLanguage(dir, "ru");
+});
 afterEach(() => cleanup());
 
 function doc(reportName: string, content: string, ...args: string[]) {
@@ -755,5 +759,75 @@ describe("Названия — текст, а не разметка", () => {
     );
     expect(r.stdout).toContain("#### \\<type>/N-slug\n");
     expect(r.stdout).toContain("- ✅ маркер \\<!-- est {…} --> читается, `<x>` — как есть\n");
+  });
+});
+
+/**
+ * Документацию читают люди проекта — она на его языке (`language` в `.agents/ai-dev.json`): заголовки, разделы,
+ * счётчики и пометки тестов. Манифест без поля — установка прошлой версии: флоу до поля работал по-русски.
+ */
+describe("Документация — на языке проекта", () => {
+  it("проект без манифеста — на en: оглавление, разделы, счётчики и пометки тестов по-английски", () => {
+    rmSync(path.join(dir, ".agents"), { recursive: true });
+    const r = doc(
+      "r.json",
+      vitestReport(dir, {
+        [MAIN]: [
+          [["Invoices"], "an invoice is issued for a month"],
+          [["Invoices"], "an invoice in a foreign currency", "skipped"],
+          [["Invoices"], "an invoice with VAT", "failed"],
+          [["Invoices"], "a draft is deleted", "todo"],
+        ],
+        "src/sum.test.ts": [[[], "adds numbers"]],
+      }),
+    );
+    expect(r.code).toBe(0);
+    expect(read("docs/spec/README.md")).toBe(
+      [
+        "<!-- spec-doc: generated from test names, don't edit by hand -->",
+        "# Specification",
+        "",
+        "Generated from the `tests/` tree, test names and their JSDoc (the `spec` skill, `spec-doc`). Don't edit by hand: edit the tests.",
+        "",
+        "## What the system does",
+        "",
+        "- [billing](capabilities/billing.md) — 2 skipped, 1 failing",
+        "",
+        "## Which rules the code obeys",
+        "",
+        "— none.",
+        "",
+        "## Outside the tree",
+        "",
+        "Tests without a home in `tests/capabilities/<name>`, `tests/architecture/<name>` and `tests/standards/<name>` — move them:",
+        "",
+        "- `src/sum.test.ts` — 1 test",
+        "",
+      ].join("\n"),
+    );
+    expect(read("docs/spec/capabilities/billing.md")).toContain(
+      "## Invoices\n\n<details open><summary>❌ 4 tests, 2 skipped, 1 failing</summary>\n\n" +
+        "- ✅ an invoice is issued for a month\n- ⏭️ an invoice in a foreign currency — skipped\n- ❌ an invoice with VAT — failing\n- 📝 a draft is deleted — todo\n",
+    );
+  });
+
+  it("манифест без поля language — установка прошлой версии: документация по-русски, как раньше", () => {
+    writeTree(dir, { ".agents/ai-dev.json": JSON.stringify({ auto: true }) + "\n" });
+    const r = doc("r.json", billing(), "--stdout");
+    expect(r.stdout).toStartWith("<!-- spec-doc: сгенерировано из названий тестов, руками не править -->\n# Спецификация\n");
+    expect(r.stdout).toContain("## Что делает система\n\n### billing\n\n#### Счета\n\n<details><summary>✅ 2 теста</summary>");
+  });
+
+  it("свой файл прошлого языка spec-doc узнаёт по шапке и удаляет, чужой не трогает", () => {
+    rmSync(path.join(dir, ".agents"), { recursive: true });
+    writeTree(dir, {
+      "docs/spec/capabilities/old.md": "<!-- spec-doc: сгенерировано из названий тестов, руками не править -->\n# old\n",
+      "docs/spec/capabilities/manual.md": "# handwritten\n",
+    });
+    const r = doc("r.json", billing());
+    expect(r.code).toBe(0);
+    expect(existsSync(path.join(dir, "docs/spec/capabilities/old.md"))).toBe(false);
+    expect(existsSync(path.join(dir, "docs/spec/capabilities/manual.md"))).toBe(true);
+    expect(read("docs/spec/capabilities/billing.md")).toStartWith("<!-- spec-doc: generated from test names, don't edit by hand -->\n# billing\n");
   });
 });

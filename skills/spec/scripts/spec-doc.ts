@@ -19,7 +19,9 @@
  * сиквенс-схема под его тестом или там, где в `<папка>.md` стоит `<!-- spec: sequence-<id> -->`.
  *
  * Вывод по умолчанию — docs/spec/: README.md (индекс), architecture.md, capabilities/<name>.md, architecture/<name>.md,
- * standards/<name>.md; свои устаревшие файлы (с маркером) удаляет. Запуск — Bun или Node ≥ 22.18, без зависимостей.
+ * standards/<name>.md; свои устаревшие файлы (с маркером на любом языке словаря) удаляет. Текст документации — на языке
+ * проекта корня (`language` в `.agents/ai-dev.json`, словарь скилла github). Запуск — Bun или Node ≥ 22.18, без
+ * зависимостей.
  */
 
 import { execFileSync } from "node:child_process";
@@ -28,40 +30,46 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import locale from "../../github/scripts/locale.cjs";
+import type { Names, Plural } from "../../github/scripts/locale.cjs";
 import type { Model } from "./architecture.ts";
 import * as C4 from "./c4.ts";
 import type { Call } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Kind, Test } from "./speclib.ts";
 
-export const MARK = "<!-- spec-doc: сгенерировано из названий тестов, руками не править -->";
+// язык проекта и его названия: всё, что попадает в docs/spec, — на нём; ставит main по корню
+let LANG = locale.DEFAULT_LANGUAGE;
+let N: Names = locale.names(LANG);
+
 const ICON: Record<string, string> = { passed: "✅", failed: "❌", skipped: "⏭️", todo: "📝" };
 // порядок разделов — вопросы читателя: что делает, из чего состоит, каким правилам подчиняется код
 const KINDS: Kind[] = ["capability", "architecture", "standard"];
-const SECTION: Record<string, string> = {
-  capability: "Что делает система",
-  architecture: "Из чего состоит",
-  standard: "Каким правилам подчиняется код",
-};
 const SUBDIR: Record<string, string> = { capability: "capabilities", architecture: "architecture", standard: "standards" };
-const INTRO =
-  "Сгенерировано из дерева `tests/`, названий тестов и их JSDoc (скилл `spec`, `spec-doc`). Руками не править: правка — в тестах.";
+
+/** Заголовок раздела оглавления — вопрос читателя о корне дерева. */
+function sectionTitle(kind: Kind): string {
+  if (kind === "capability") return N.spec.doc.capabilities;
+  if (kind === "architecture") return N.spec.doc.architecture;
+  return N.spec.doc.standards;
+}
 
 // doc — абзацы прозы из JSDoc: у группы — шапка главного файла, у describe из нескольких файлов —
 // по порядку файлов (главный первым), повтор один раз
 type Node = { tests: Test[]; children: Map<string, Node>; doc: string[] };
 type Group = { kind: Kind; name: string; tests: Test[]; tree: Node; doc: string[]; testDocs: Map<string, string[]> };
 
-const plural = L.plural;
-const testsWord = L.testsWord;
+/** Число и форма слова на языке проекта: «2 теста». */
+const count = (forms: Plural, n: number): string => locale.count(LANG, forms, n);
+const testsWord = (n: number): string => count(N.spec.tests, n);
 
 /** Пропущенные и падающие — то, что стоит заметить; пусто, если всё зелёное. */
 function problemsLine(tests: Test[]): string {
   const parts: string[] = [];
   const sk = tests.filter((t) => t.status === "skipped" || t.status === "todo").length;
   const fl = tests.filter((t) => t.status === "failed").length;
-  if (sk) parts.push(plural(sk, "пропущен", "пропущено", "пропущено"));
-  if (fl) parts.push(plural(fl, "падает", "падают", "падают"));
+  if (sk) parts.push(count(N.spec.doc.skippedCount, sk));
+  if (fl) parts.push(count(N.spec.doc.failingCount, fl));
   return parts.join(", ");
 }
 
@@ -181,11 +189,28 @@ function hasMain(g: Group, root: string): boolean {
   );
 }
 
+// слово: буквы, заглавная — только первая или все (аббревиатура), части — через апостроф или дефис («user's»,
+// «e-mail»); буквы письма без регистра (иероглифы, кана) — слово целиком, пробелов между словами в нём нет
+const PART = String.raw`(?:\p{Lo}+|\p{Lu}+|\p{L}[\p{Ll}\p{M}]*)`;
+const WORD = new RegExp(String.raw`^${PART}(?:['’-]${PART})*$`, "u");
+// знаки вокруг слова в предложении: кавычки и скобки, в конце — ещё препинание
+const EDGES = /^["'«“‘([{]+|["'»”’)\]}.,;:!?…]+$/gu;
+
 /**
- * Название — утверждение по-русски: в нём есть русские слова. Идентификатор (camelCase, snake_case), имя функции
- * или файла, английская фраза — не утверждение: читатель спеки не узнает из него, что система делает.
+ * Название — утверждение на языке проекта, код в бэктиках не в счёт. `ru` — в нём есть русские слова. Другой язык —
+ * фраза: два слова и больше или одно слово (из двух букв и больше, без дефиса) целиком. Идентификатор (`parseScenarios`,
+ * `foo_bar`, `fooBar`, `foo-bar`), имя функции или файла, путь, слово с числом (`returns 201`) — не утверждение:
+ * читатель спеки не узнает из него, что система делает.
  */
-export const isStatement = (name: string): boolean => /[А-Яа-яЁё]/.test(name.replace(/`[^`]*`/g, ""));
+export function isStatement(name: string, lang: string): boolean {
+  const text = name.replace(/`[^`]*`/g, "");
+  if (lang === "ru") return /[А-Яа-яЁё]/.test(text);
+  const tokens = text.split(/\s+/).map((t) => t.replace(EDGES, "")).filter(Boolean);
+  const words = tokens.filter((t) => WORD.test(t));
+  if (words.length >= 2) return true;
+  const [only] = words;
+  return tokens.length === 1 && only !== undefined && [...only].length >= 2 && !/['’-]/.test(only);
+}
 
 /** Названия describe и it, которые не утверждения, — по файлу, без повторов. */
 function badNames(groups: Map<string, Group>): [string, string][] {
@@ -195,7 +220,7 @@ function badNames(groups: Map<string, Group>): [string, string][] {
     for (const t of g.tests) {
       for (const n of [...t.describes, t.name]) {
         const k = t.path + "\0" + n;
-        if (seen.has(k) || isStatement(n)) continue;
+        if (seen.has(k) || isStatement(n, LANG)) continue;
         seen.add(k);
         out.push([n, t.path]);
       }
@@ -310,7 +335,8 @@ export function loadMeta(dir: string): Map<string, Meta> {
   return out;
 }
 
-const LANG: Record<string, string> = { ts: "ts", mts: "ts", cts: "ts", tsx: "tsx", js: "js", mjs: "js", cjs: "js", jsx: "jsx" };
+// язык блока кода примера по расширению его файла
+const FENCE_LANG: Record<string, string> = { ts: "ts", mts: "ts", cts: "ts", tsx: "tsx", js: "js", mjs: "js", cjs: "js", jsx: "jsx" };
 
 /** Под строкой теста: путь и код примера, задача и причина исключения, отключения правил в файле. */
 function metaLines(t: Test): string[] {
@@ -319,22 +345,22 @@ function metaLines(t: Test): string[] {
   const out: string[] = [];
   if (m.code !== undefined) {
     if (m.path) out.push(`  \`${m.path}\``);
-    out.push("  ```" + (LANG[(m.path ?? "").split(".").pop() ?? ""] ?? ""), ...m.code.split("\n").map((l) => (l ? "  " + l : "")), "  ```");
+    out.push("  ```" + (FENCE_LANG[(m.path ?? "").split(".").pop() ?? ""] ?? ""), ...m.code.split("\n").map((l) => (l ? "  " + l : "")), "  ```");
   }
   if (m.issue !== undefined) out.push(`  > #${m.issue} — ${m.reason ?? ""}`);
   else if (m.reason) out.push(`  > ${m.reason}`); // вне охвата — причина без задачи: это решение, а не долг
   const codeFile = /^исключения в (.+?): /.exec(t.name)?.[1] ?? "";
-  for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || "все правила"} — ${d.description || "без причины"}`);
+  for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || N.spec.lint.allRules} — ${d.description || N.spec.lint.noReason}`);
   if (m.sequence?.length && !PLACED.has(t.path + "\0" + t.name)) out.push(...sequenceLines(m.sequence).map((l) => "  " + l));
   return out;
 }
 
 function testLine(t: Test): string {
   let line = `- ${ICON[t.status] ?? "❔"} ${L.mdText(t.name)}`;
-  if (t.status === "skipped") line += t.reason ? ` — пропущен: ${L.mdText(t.reason)}` : " — пропущен";
-  else if (t.status === "failed") line += " — падает";
-  else if (t.status === "todo") line += " — todo";
-  if (t.variants > 1) line += ` (${plural(t.variants, "вариант", "варианта", "вариантов")})`;
+  if (t.status === "skipped") line += ` — ${N.spec.doc.skipped}` + (t.reason ? `: ${L.mdText(t.reason)}` : "");
+  else if (t.status === "failed") line += ` — ${N.spec.doc.failing}`;
+  else if (t.status === "todo") line += ` — ${N.spec.doc.todo}`;
+  if (t.variants > 1) line += ` (${count(N.spec.doc.variants, t.variants)})`;
   return line;
 }
 
@@ -416,7 +442,8 @@ function groupNames(groups: Map<string, Group>, kind: Kind): string[] {
 function outSection(out: Map<string, Test[]>): string[] {
   if (!out.size) return [];
   const homes = KINDS.map((k) => `\`${L.TESTS}/${SUBDIR[k]}/<name>\``);
-  const lines = ["", "## Вне дерева", "", `Тесты без дома в ${homes.slice(0, -1).join(", ")} и ${homes.at(-1)} — перенести:`, ""];
+  const intro = locale.fill(N.spec.doc.outsideIntro, { homes: homes.slice(0, -1).join(", "), last: homes.at(-1)! });
+  const lines = ["", `## ${N.spec.doc.outside}`, "", intro, ""];
   for (const file of [...out.keys()].sort()) lines.push(`- \`${file}\` — ${testsWord(out.get(file)!.length)}`);
   return lines;
 }
@@ -428,7 +455,7 @@ let NAME_DEBT: NameException[] = [];
 
 function debtSection(): string[] {
   if (!NAME_DEBT.length) return [];
-  const lines = ["", "## Названия — не утверждения (исключения)", ""];
+  const lines = ["", `## ${N.spec.doc.nameDebt}`, ""];
   for (const x of NAME_DEBT) lines.push(`- «${L.mdText(x.name)}» — \`${x.file}\` — #${x.issue} ${L.mdText(x.reason)}`);
   return lines;
 }
@@ -437,15 +464,15 @@ function debtSection(): string[] {
 const ARCH_PAGE = "architecture.md";
 
 function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model: Model | null): string {
-  const lines = [MARK, "# Спецификация", "", INTRO];
+  const lines = [N.spec.doc.mark, `# ${N.spec.doc.title}`, "", N.spec.doc.intro];
   for (const kind of KINDS) {
     const names = groupNames(groups, kind);
     const page = kind === "architecture" && model;
     // ни модели, ни правил архитектуры в проекте может не быть вовсе — тогда раздела нет, а не «— нет.»
     if (!names.length && !page && kind === "architecture") continue;
-    lines.push("", `## ${SECTION[kind]}`, "");
-    if (page) lines.push(`- [Архитектура](${ARCH_PAGE}) — ${C4.modelSummary(model)}`);
-    if (!names.length && !page) lines.push("— нет.");
+    lines.push("", `## ${sectionTitle(kind)}`, "");
+    if (page) lines.push(`- [${N.spec.c4.title}](${ARCH_PAGE}) — ${C4.modelSummary(model, LANG)}`);
+    if (!names.length && !page) lines.push(N.spec.doc.none);
     for (const n of names) lines.push(indexLine(groups.get(kind + "/" + n)!));
   }
   lines.push(...debtSection(), ...outSection(out));
@@ -454,30 +481,33 @@ function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model
 
 /** Страница архитектуры: схемы и таблица из модели, затем правила, которые сверяют модель с кодом. */
 function renderArchitecture(groups: Map<string, Group>, model: Model): string {
-  const lines = [MARK, ...C4.architecturePage(model, 1), "## Правила", ""];
+  const lines = [N.spec.doc.mark, ...C4.architecturePage(model, 1, LANG), `## ${N.spec.doc.rules}`, ""];
   const names = groupNames(groups, "architecture");
-  if (!names.length) lines.push("— нет.");
+  if (!names.length) lines.push(N.spec.doc.none);
   for (const n of names) lines.push(indexLine(groups.get("architecture/" + n)!));
   return lines.join("\n") + "\n";
 }
 
 function renderStdout(groups: Map<string, Group>, out: Map<string, Test[]>, model: Model | null): string {
-  const lines = [MARK, "# Спецификация", "", INTRO];
+  const lines = [N.spec.doc.mark, `# ${N.spec.doc.title}`, "", N.spec.doc.intro];
   for (const kind of KINDS) {
     const names = groupNames(groups, kind);
     const page = kind === "architecture" && model;
     if (!names.length && !page && kind === "architecture") continue;
-    lines.push("", `## ${SECTION[kind]}`, "");
-    if (page) lines.push(...C4.architecturePage(model, 3));
-    if (!names.length && !page) lines.push("— нет.");
+    lines.push("", `## ${sectionTitle(kind)}`, "");
+    if (page) lines.push(...C4.architecturePage(model, 3, LANG));
+    if (!names.length && !page) lines.push(N.spec.doc.none);
     for (const n of names) lines.push(renderGroup(groups.get(kind + "/" + n)!, 3).trimEnd(), "");
   }
   lines.push(...debtSection(), ...outSection(out));
   return lines.join("\n").trimEnd() + "\n";
 }
 
-/** Свой сгенерированный файл (маркер в первой строке) — его можно удалить; чужой — нет. */
-const isOwn = (file: string): boolean => readFileSync(file, "utf8").split("\n", 1)[0] === MARK;
+/**
+ * Свой сгенерированный файл (маркер в первой строке) — его можно удалить; чужой — нет. Маркер — на любом языке
+ * словаря: проект сменил язык — файлы прежнего языка тоже свои.
+ */
+const isOwn = (file: string): boolean => locale.every((n) => n.spec.doc.mark).includes(readFileSync(file, "utf8").split("\n", 1)[0]!);
 
 function writeFiles(
   groups: Map<string, Group>,
@@ -501,7 +531,7 @@ function writeFiles(
     const rel = path.join(SUBDIR[g.kind]!, g.name + ".md");
     const full = path.join(outDir, rel);
     mkdirSync(path.dirname(full), { recursive: true });
-    writeFileSync(full, MARK + "\n" + renderGroup(g, 1));
+    writeFileSync(full, N.spec.doc.mark + "\n" + renderGroup(g, 1));
     generated.add(rel);
   }
   writeFileSync(path.join(outDir, "README.md"), renderIndex(groups, out, model));
@@ -567,7 +597,7 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
         PLACED.add(hit[0]);
         return sequenceLines(hit[1].sequence!).join("\n");
       });
-      const { text, bad } = C4.embed(withSequences, model);
+      const { text, bad } = C4.embed(withSequences, model, LANG);
       for (const b of bad) {
         const mark = `<!-- spec: ${b.mark} -->`;
         problems.push(
@@ -667,6 +697,8 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const root = findRoot(values.root);
+  LANG = locale.projectLanguage(root);
+  N = locale.names(LANG);
   let tests: Test[] = [];
   // CI задан — отчёт обязан быть: прогон, который его не написал, иначе молча выкинет свои тесты из спеки
   const inCi = !!process.env.CI && !["0", "false"].includes(process.env.CI);
@@ -728,7 +760,7 @@ export async function main(argv: string[]): Promise<number> {
     const fresh = bad
       .filter(([n, f]) => !have.has(nameKey(f, n)))
       .map(([name, file]) => {
-        const x = { file, name, issue, reason: `название — не утверждение; переписать в #${issue}` };
+        const x = { file, name, issue, reason: locale.fill(N.spec.doc.nameReason, { issue }) };
         return { ...x, src: L.writeNameException(root, L.decisionFolder(file)!, x) };
       });
     nameExceptions = [...nameExceptions.filter((x) => badKeys.has(nameKey(x.file, x.name))), ...fresh];

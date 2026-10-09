@@ -3,13 +3,17 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { runScript, SCRIPTS, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { runScript, SCRIPTS, setLanguage, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;
-beforeEach(() => ({ dir, cleanup } = tmpDir()));
+// проект на ru: тесты файла ждут русский вывод, без манифеста проект — en
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  setLanguage(dir, "ru");
+});
 afterEach(() => cleanup());
 
 const MODEL = "tests/architecture/model.ts";
@@ -263,6 +267,62 @@ describe("Архитектура — страница из модели `tests/a
     const empty = doc(rules());
     expect(empty.code).toBe(2);
     expect(empty.stderr).toContain(`spec-doc: модель ${MODEL} — нет export default с modules`);
+  });
+
+  it("в проекте на en подписи схем, таблица модулей и строка оглавления — по-английски", () => {
+    setLanguage(dir, "en");
+    writeTree(dir, {
+      [MODEL]: model(`{
+  modules: {
+    web: { path: "src/web", purpose: "pages", dependsOn: ["ui"] },
+    ui: { path: "src/ui", purpose: "components", library: true },
+    payments: { path: "src/payments", purpose: "payments", packages: ["stripe"] },
+  },
+  externals: {
+    stripe: { purpose: "payment provider", adapter: "payments", hosts: ["api.stripe.com"] },
+    telegram: { purpose: "messenger", adapter: ["web", "payments"], hosts: ["api.telegram.org"] },
+    cdn: { purpose: "CDN in front of the site" },
+  },
+  containers: {
+    app: { purpose: "web app", modules: ["web", "payments"], uses: ["db"] },
+    db: { purpose: "database", clients: ["pg"] },
+  },
+}`),
+    });
+    expect(doc(rules()).code).toBe(0);
+    expect(read("docs/spec/README.md")).toContain(
+      "## What it's made of\n\n- [Architecture](architecture.md) — model: 3 modules, 2 containers, 3 external systems\n- [modules](architecture/modules.md)\n",
+    );
+    const page = read("docs/spec/architecture.md");
+    expect(page).toContain(
+      "# Architecture\n\nGenerated from the model `tests/architecture/model.ts` (the `spec` skill, `spec-doc`): C4 diagrams and a table of modules. " +
+        "Edit the model; the architecture rules check it against the code.\n",
+    );
+    expect(page).toContain(
+      block(
+        "## System and external systems (C1)",
+        "",
+        "```mermaid",
+        "C4Context",
+        "  title System and external systems",
+        '  System(system, "System")',
+        '  System_Ext(ext_stripe, "stripe", "payment provider")',
+        '  System_Ext(ext_telegram, "telegram", "messenger")',
+        '  System_Ext(ext_cdn, "cdn", "CDN in front of the site")',
+        '  Rel(system, ext_stripe, "via module payments", "api.stripe.com")',
+        '  Rel(system, ext_telegram, "via modules web, payments", "api.telegram.org")',
+        '  Rel(ext_cdn, system, "perimeter")',
+        "```",
+      ),
+    );
+    expect(page).toContain(block("## Containers (C2)", "", "```mermaid", "C4Container", "  title Containers"));
+    expect(page).toContain('  Rel(c_app, c_db, "uses")');
+    expect(page).toContain(block("## Modules (C3)", "", "```mermaid", "C4Component", "  title Modules"));
+    expect(page).toContain('  Component(m_ui, "ui", "src/ui, library", "components")');
+    expect(page).toContain('  Rel(m_web, m_ui, "depends on")');
+    expect(page).toContain('  Rel(m_payments, ext_stripe, "calls", "api.stripe.com")');
+    expect(page).toContain("| Module | Purpose | Directory | API | Depends on | Packages |\n");
+    expect(page).toContain("## Rules\n\n- [modules](architecture/modules.md)\n");
   });
 
   it("под Node без Bun — та же страница", () => {
