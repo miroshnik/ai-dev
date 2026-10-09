@@ -31,7 +31,10 @@ with the `project` scope, as for `est`. A task's session is found by the pin
 file written by `github task status <N> "In progress"` (in the project
 language — `locales/<language>.json` of the `github` skill)
 (`~/.config/ai-dev/sessions/<session id>` or in `$AI_DEV_CONFIG_DIR`), its
-state — by the transcript `~/.claude/projects/<dir>/<id>.jsonl`.
+state — by the transcript `~/.claude/projects/<dir>/<id>.jsonl`. The dashboard
+is shared by all the machine's repositories: its labels are in English, and what
+it parses — the In progress status, the questions section and label, the last
+line of a session, the epic type — in any language of the dictionary.
 
 ## How to run
 

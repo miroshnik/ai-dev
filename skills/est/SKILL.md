@@ -19,7 +19,11 @@ hours on the task (agent work + pauses ≤ 30 min between records). Not
 person-hours, not calendar time. Manual work outside the agent (> 0.5 h) the human
 adds themselves as a line «+ manually: N h» in the actual
 comment. Old estimates without the `<!-- est -->` marker (set before `est` was
-introduced, in other units) don't go into calibration (k).
+introduced, in other units) don't go into calibration (k). The «Estimate» and
+«Actual» comments are written in the project language of the current checkout
+(the `est` keys of the dictionary; the markers are the same in every
+language); fields, the questions section, the human's lines and the subagent
+assignment («Task #N») are read in any language of the dictionary.
 
 **The source of the actual is the agent's transcripts** (Claude Code, Codex,
 claude.ai/code cloud sessions — section "Cloud session"), not memory and not a
