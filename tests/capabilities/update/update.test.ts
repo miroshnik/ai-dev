@@ -44,8 +44,9 @@ function editManifest(root: string, fields: Record<string, unknown>) {
 // установка прошлой версией установщика: в .agents/ai-dev.json нет SHA
 const dropSha = (root: string) => editManifest(root, { sha: undefined });
 
-const MODE_ASK = "  задачи: по разрешению\n";
-const MODE_AUTO = "  задачи: целиком сам\n";
+// режим и язык проекта — последними строками check: язык новой установки без флага — en
+const MODE_ASK = "  задачи: по разрешению\n  язык: en\n";
+const MODE_AUTO = "  задачи: целиком сам\n  язык: en\n";
 
 // машина с `install -g --link` из клона; origin клона — upstream, куда тест коммитит новое в main
 function linkedClone() {
@@ -118,18 +119,40 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(JSON.parse(read(manifest(sb.proj))).auto).toBe(false);
   });
 
+  /**
+   * Язык задаёт только `install`. Установка прошлой версии без поля — проект, который флоу вёл по-русски: `update`
+   * записывает ему `ru`, и язык проекта после обновления не меняется.
+   */
+  it("update язык сохраняет: language ru остаётся ru, у установки прошлой версии без поля — ru", () => {
+    aiDev(sb, ["install", "--lang", "ru"]);
+    expect(aiDev(sb, ["update"], { bin: newer.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ sha: newer.sha, language: "ru" });
+    aiDev(sb, ["install", "--lang", "en"]);
+    editManifest(sb.proj, { language: undefined });
+    expect(aiDev(sb, ["update"], { bin: newer.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj))).language).toBe("ru");
+  });
+
+  /** Язык — последней строкой: в начале сессии агент видит, на каком языке работать, не читая манифест. */
+  it("check называет язык проекта; установка прошлой версии без поля — ru, отставанием не считается", () => {
+    aiDev(sb, ["install", "--lang", "ru"]);
+    expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(/\n {2}язык: ru\n$/) });
+    editManifest(sb.proj, { language: undefined });
+    expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: по разрешению\n {2}язык: ru\n$/) });
+  });
+
   /** Режим — последней строкой: в начале сессии агент видит, вести ли задачу целиком самому. */
   it("check называет режим проекта: auto true — «задачи: целиком сам», иначе — «задачи: по разрешению»; поле, правленное руками, и установка без поля отставанием не считаются", () => {
     aiDev(sb, ["install"]);
     const check = (bin?: string) => aiDev(sb, ["check"], { bin });
     expect(check().stdout).toEndWith(MODE_ASK);
     editManifest(sb.proj, { auto: true });
-    expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n$/) });
+    expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n {2}язык: en\n$/) });
     const behind = check(newer.bin);
     expect(behind.code).toBe(1);
     expect(behind.stdout).toEndWith("npx -y github:miroshnik/ai-dev update\n" + MODE_AUTO);
     editManifest(sb.proj, { auto: undefined });
-    expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: по разрешению\n$/) });
+    expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/в проекте: актуально[^\n]*\n {2}задачи: по разрешению\n {2}язык: en\n$/) });
     expect(aiDev(sb, ["install", "-g"]).code).toBe(0);
     expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("задачи:");
   });
@@ -149,7 +172,7 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(hook.stdout).toContain(ABSENT + MODE_AUTO);
     expect(hook.stdout).not.toContain("поставь");
     expect(aiDev(sb, ["update"], { cwd: clone }).code).toBe(0);
-    expect(snapshot(path.join(clone, ".agents"))).toEqual({ "ai-dev.json": JSON.stringify({ auto: true }, null, 2) + "\n" });
+    expect(snapshot(path.join(clone, ".agents"))).toEqual({ "ai-dev.json": JSON.stringify({ auto: true, language: "en" }, null, 2) + "\n" });
   });
 });
 
@@ -586,18 +609,18 @@ describe("В начале сессии Claude Code проверка идёт с�
     npxServes(base.bin);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("ai-dev в проекте: не установлен — поставь: npx -y github:miroshnik/ai-dev install");
+    expect(r.stdout).toContain("ai-dev в проекте: не установлен — поставь: npx -y github:miroshnik/ai-dev install --lang <язык проекта>");
     expect(aiDev(sb, ["check", "--hook"], { cwd: sb.tmp }).stdout).not.toContain("в проекте");
   });
 
-  it("вывод хука называет режим проекта; в проекте без флоу строки режима нет", () => {
+  it("вывод хука называет режим и язык проекта; в проекте без флоу строк режима и языка нет", () => {
     aiDev(sb, ["install", "-g"]);
     npxServes(base.bin);
-    expect(runHook().stdout).not.toContain("задачи:");
+    expect(runHook().stdout).not.toMatch(/задачи:|язык:/);
     aiDev(sb, ["install", "--auto"]);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toMatch(/ai-dev в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n/);
+    expect(r.stdout).toMatch(/ai-dev в проекте: актуально[^\n]*\n {2}задачи: целиком сам\n {2}язык: en\n/);
   });
 
   it("вывод хука называет игнорируемый файл флоу и что update допишет исключения в .gitignore", () => {
