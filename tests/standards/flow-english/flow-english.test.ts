@@ -113,20 +113,14 @@ describe("Названия, которые пишут и разбирают ск
 });
 
 /**
- * Язык проекта — `language` в `.agents/ai-dev.json`, без поля — `ru`, без манифеста — `en`: скрипты скиллов берут его
- * модулем `locale.cjs`, установщик — своей `languageOf` (npx запускает его из node_modules, где Node не стирает типы, и
- * модуль скилла он не импортирует). Правило в двух местах держат одинаковые константы.
+ * Язык проекта — `language` в `.agents/ai-dev.json`, без поля — `ru`, без манифеста — `en`: скрипты скиллов и
+ * установщик берут его одним модулем `skills/github/scripts/locale.cjs` — правило в одном месте.
  */
-describe("Язык проекта у скриптов скиллов и у установщика — по одному правилу", () => {
-  const BIN = read("bin/ai-dev.mjs");
-  const constant = (name: string) => new RegExp(`const ${name} = (.+);`).exec(BIN)?.[1];
-
-  it("код языка, язык по умолчанию и язык установки прошлой версии — те же, что у установщика", () => {
-    expect({ code: constant("LANGUAGE_CODE"), byDefault: constant("DEFAULT_LANGUAGE"), legacy: constant("LEGACY_LANGUAGE") }).toEqual({
-      code: String(localeModule.LANGUAGE_CODE),
-      byDefault: JSON.stringify(localeModule.DEFAULT_LANGUAGE),
-      legacy: JSON.stringify(localeModule.LEGACY_LANGUAGE),
-    });
+describe("Язык проекта у скриптов скиллов и у установщика — один модуль", () => {
+  it("установщик берёт язык и код языка модулем locale скилла github, своего правила у него нет", () => {
+    const bin = codeOnly(read("bin/ai-dev.mjs"), "bin/ai-dev.mjs");
+    expect(bin).toContain('import locale from "../skills/github/scripts/locale.cjs";');
+    expect(bin).not.toMatch(/const (?:DEFAULT|LEGACY)_LANGUAGE\b|\[a-z\]\{2,3\}/);
   });
 
   it("манифест с языком — его язык, без поля — ru, битый — ru, без манифеста — en", () => {

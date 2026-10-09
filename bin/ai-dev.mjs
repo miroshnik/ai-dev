@@ -23,7 +23,8 @@
  * задачи, промпты, документы (AGENTS.md, «Language»); флоу написан по-английски. Их задаёт `install` в проекте —
  * вопросом в терминале или флагами `--auto` / `--no-auto` и `--lang <код>`; по умолчанию auto — «нет», язык — `en`,
  * без терминала и флага — прежнее значение, `update` его сохраняет. У установки прошлой версии поля `language` нет, а
- * флоу до него работал только по-русски: её язык — `ru` (LEGACY_LANGUAGE), `update` его записывает. С auto `install`
+ * флоу до него работал только по-русски: её язык — `ru` (`LEGACY_LANGUAGE` модуля языка скилла github), `update` его
+ * записывает. С auto `install`
  * подсказывает правило разрешений Claude Code на мерж (MERGE_HINT) — настройки машины не меняет. В клон ai-dev флоу
  * не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto` и `language`.
  * Копия в проекте коммитится — файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`),
@@ -46,6 +47,8 @@ import os from "node:os";
 import path from "node:path";
 import { isatty } from "node:tty";
 import { fileURLToPath } from "node:url";
+
+import locale from "../skills/github/scripts/locale.cjs";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const SOURCE = "miroshnik/ai-dev";
@@ -773,23 +776,16 @@ function isAiDevClone(root) {
 /** Ведёт ли агент задачу целиком сам — `auto` манифеста проекта; нет поля — «нет». @param {string} root */
 const autoOf = (root) => readManifest(root).auto === true;
 
-/** Язык новой установки без флага и терминала: флоу написан по-английски. */
-const DEFAULT_LANGUAGE = "en";
-/** Язык установки прошлой версии — манифест без поля `language`: флоу до поля работал только по-русски. */
-const LEGACY_LANGUAGE = "ru";
 /** Код языка BCP 47: язык и необязательные подтеги — `ru`, `en`, `pt-BR`, `zh-Hant`. */
-const LANGUAGE_CODE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+const LANGUAGE_CODE = locale.LANGUAGE_CODE;
 
 /**
- * Язык работы агента в проекте — `language` манифеста; манифест без поля (установка прошлой версии) — LEGACY_LANGUAGE,
- * манифеста нет — DEFAULT_LANGUAGE.
+ * Язык работы агента в проекте — модулем языка скилла github, тем же, что у скриптов скиллов: `language` манифеста;
+ * манифест без поля (установка прошлой версии) — `ru`, манифеста нет — `en`, язык флоу. Модуль — CommonJS без типов:
+ * npx запускает установщик из node_modules, где Node типы не стирает, а этот файл ему и не нужно стирать.
  * @param {string} root
  */
-function languageOf(root) {
-  const m = readManifest(root);
-  if (typeof m.language === "string" && LANGUAGE_CODE.test(m.language)) return m.language;
-  return existsSync(path.join(root, ".agents/ai-dev.json")) ? LEGACY_LANGUAGE : DEFAULT_LANGUAGE;
-}
+const languageOf = (root) => locale.projectLanguage(root);
 
 /** Строки режима и языка проекта в выводе `check`: их видит начало сессии (хук). @param {string} root */
 const modeLines = (root) => [`  задачи: ${autoOf(root) ? "целиком сам" : "по разрешению"}`, `  язык: ${languageOf(root)}`];
@@ -1065,6 +1061,13 @@ function hook(failed) {
 }
 
 /**
+ * Описание коммита копии флоу — на языке проекта, ключ `updateCommit` словаря скилла github этого пакета: «флоу ai-dev
+ * <тег>», «ai-dev flow <тег>».
+ * @param {string} root @param {string | null | undefined} version
+ */
+const commitSubject = (root, version) => locale.fill(locale.names(languageOf(root)).updateCommit, { version: version ?? "" }).trim();
+
+/**
  * Довести установку до актуальной. Машина с `--link` — `updateLink`; копия — `install` этим пакетом, в проекте с
  * подсказкой коммита.
  * @param {boolean} global
@@ -1083,7 +1086,7 @@ function update(global) {
   note(
     [
       "Копию в проекте — отдельным коммитом в ветку текущей задачи:",
-      `  git add -A .agents .claude/rules .claude/skills AGENTS.md${changed.map((f) => ` ${f}`).join("")} && git commit -m "chore(agents): флоу ai-dev${version ? ` ${version}` : ""}"`,
+      `  git add -A .agents .claude/rules .claude/skills AGENTS.md${changed.map((f) => ` ${f}`).join("")} && git commit -m "chore(agents): ${commitSubject(root, version)}"`,
     ].join("\n"),
   );
   return 0;

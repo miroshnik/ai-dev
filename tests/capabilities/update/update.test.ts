@@ -79,8 +79,8 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(snapshot(sb.proj)).toEqual(before);
   });
 
-  it("update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents); после него check — актуально", () => {
-    aiDev(sb, ["install"]);
+  it("update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально", () => {
+    aiDev(sb, ["install", "--lang", "ru"]);
     const r = aiDev(sb, ["update"], { bin: newer.bin });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain(`chore(agents): флоу ai-dev ${short(newer.sha)}`);
@@ -363,7 +363,8 @@ describe("Копия следует за релизами ai-dev, а не за m
     r.commit(rule(r.up, "Правило из main."));
     const u = r.run(["update"]);
     expect(u.code).toBe(0);
-    expect(u.stdout).toContain("chore(agents): флоу ai-dev v2026.10.12");
+    // проект на en (install без флага и терминала): описание коммита — по-английски
+    expect(u.stdout).toContain("chore(agents): ai-dev flow v2026.10.12");
     const agents = read(path.join(sb.proj, ".agents/ai-dev/AGENTS.md"));
     expect(agents).toContain("Правило релиза.");
     expect(agents).not.toContain("Правило из main.");
