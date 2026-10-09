@@ -97,7 +97,54 @@ declare namespace locale {
   }
 
   /** Названия скилла spec: документация `spec-doc`, раздел PR `spec-diff`, схемы `c4`, тесты харнесса. */
-  interface SpecNames {}
+  interface SpecNames {
+    /** «12 тестов» — счётчики spec-doc и spec-diff. */
+    tests: Plural;
+    /** Отключение линта: без правил — все, без описания — без причины. */
+    lint: { allRules: string; noReason: string };
+    /** Документация `docs/spec`: шапка-метка, заголовки, разделы трёх корней, счётчики и пометки тестов. */
+    doc: {
+      mark: string;
+      title: string;
+      intro: string;
+      capabilities: string;
+      architecture: string;
+      standards: string;
+      skippedCount: Plural;
+      failingCount: Plural;
+      variants: Plural;
+      skipped: string;
+      failing: string;
+      todo: string;
+      outside: string;
+      outsideIntro: string;
+      nameDebt: string;
+      nameReason: string;
+      none: string;
+      rules: string;
+    };
+    /** Страница архитектуры и схемы C4 из модели. */
+    c4: {
+      title: string;
+      intro: string;
+      system: string;
+      context: string;
+      containers: string;
+      components: string;
+      perimeter: string;
+      viaModule: string;
+      viaModules: string;
+      uses: string;
+      dependsOn: string;
+      calls: string;
+      library: string;
+      table: string;
+      summary: string;
+      moduleCount: Plural;
+      containerCount: Plural;
+      externalCount: Plural;
+    };
+  }
 
   const LANGUAGE_CODE: RegExp;
   const DEFAULT_LANGUAGE: string;

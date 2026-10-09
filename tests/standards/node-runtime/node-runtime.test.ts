@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { gitRepo, runScript, SCRIPTS, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { gitRepo, runScript, SCRIPTS, setLanguage, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -22,9 +22,10 @@ afterEach(() => cleanup());
 
 const BILLING = "tests/capabilities/billing/billing.test.ts";
 const DESCRIPTION = { "tests/capabilities/billing/billing.md": "Биллинг: счета клиентам за месяц.\n" };
-const source = (...names: string[]) =>
+const source = (...names: string[]) => sourceIn("Счета", ...names);
+const sourceIn = (describe: string, ...names: string[]) =>
   `import { describe, it } from "vitest";\n` +
-  `describe("Счета", () => { ${names.map((n) => `it("${n}", () => {});`).join(" ")} });\n`;
+  `describe("${describe}", () => { ${names.map((n) => `it("${n}", () => {});`).join(" ")} });\n`;
 
 /** Каталог → { относительный путь: содержимое }. */
 function readTree(root: string): Record<string, string> {
@@ -39,6 +40,7 @@ function readTree(root: string): Record<string, string> {
 
 describe("Под Node без Bun скрипты spec пишут то же, что под Bun", () => {
   it("spec-doc пишет тот же docs/spec, что под Bun", () => {
+    setLanguage(dir, "ru");
     writeTree(dir, { ...DESCRIPTION, [BILLING]: source("выставляется за месяц") });
     writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [BILLING]: [[["Счета"], "выставляется за месяц"]] }));
     const bun = runScript("spec-doc", ["r.json", "--root", dir, "--out", "spec-bun", "--strict"], dir);
@@ -46,6 +48,17 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     expect([bun.code, node.code]).toEqual([0, 0]);
     const out = readTree(path.join(dir, "spec-node"));
     expect(out["capabilities/billing.md"]).toContain("Биллинг: счета клиентам за месяц.\n\n## Счета\n\n<details><summary>✅ 1 тест</summary>\n\n- ✅ выставляется за месяц");
+    expect(out).toEqual(readTree(path.join(dir, "spec-bun")));
+  });
+
+  it("spec-doc в проекте на en пишет под Node тот же docs/spec, что под Bun", () => {
+    writeTree(dir, { "tests/capabilities/billing/billing.md": "Billing: monthly invoices.\n", [BILLING]: sourceIn("Invoices", "an invoice is issued for a month") });
+    writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [BILLING]: [[["Invoices"], "an invoice is issued for a month"]] }));
+    const bun = runScript("spec-doc", ["r.json", "--root", dir, "--out", "spec-bun", "--strict"], dir);
+    const node = runScript("spec-doc", ["r.json", "--root", dir, "--out", "spec-node", "--strict"], dir, "node");
+    expect([bun.code, node.code]).toEqual([0, 0]);
+    const out = readTree(path.join(dir, "spec-node"));
+    expect(out["capabilities/billing.md"]).toContain("Billing: monthly invoices.\n\n## Invoices\n\n<details><summary>✅ 1 test</summary>\n\n- ✅ an invoice is issued for a month");
     expect(out).toEqual(readTree(path.join(dir, "spec-bun")));
   });
 
@@ -133,7 +146,9 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
   it("копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений", () => {
     writeTree(dir, { [BILLING]: source("выставляется за месяц") });
     writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [BILLING]: [[["Счета"], "выставляется за месяц"]] }));
+    // установка ставит все скиллы: скрипты spec берут названия из словаря скилла github
     cpSync(path.join(SCRIPTS, ".."), path.join(dir, ".agents/skills/spec"), { recursive: true });
+    cpSync(path.join(SCRIPTS, "../../github"), path.join(dir, ".agents/skills/github"), { recursive: true });
     for (const type of ["commonjs", undefined]) {
       writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "app", type }));
       const r = spawnSync("node", [".agents/skills/spec/scripts/spec-doc.ts", "r.json", "--stdout"], { cwd: dir, encoding: "utf8" });

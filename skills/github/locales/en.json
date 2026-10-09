@@ -167,5 +167,86 @@
     "remaining": "Remaining:"
   },
   "prSpecSection": "## Spec (tests)",
-  "spec": {}
+  "spec": {
+    "tests": {
+      "one": "test",
+      "few": "tests",
+      "many": "tests",
+      "other": "tests"
+    },
+    "lint": {
+      "allRules": "all rules",
+      "noReason": "no reason"
+    },
+    "doc": {
+      "mark": "<!-- spec-doc: generated from test names, don't edit by hand -->",
+      "title": "Specification",
+      "intro": "Generated from the `tests/` tree, test names and their JSDoc (the `spec` skill, `spec-doc`). Don't edit by hand: edit the tests.",
+      "capabilities": "What the system does",
+      "architecture": "What it's made of",
+      "standards": "Which rules the code obeys",
+      "skippedCount": {
+        "one": "skipped",
+        "few": "skipped",
+        "many": "skipped",
+        "other": "skipped"
+      },
+      "failingCount": {
+        "one": "failing",
+        "few": "failing",
+        "many": "failing",
+        "other": "failing"
+      },
+      "variants": {
+        "one": "variant",
+        "few": "variants",
+        "many": "variants",
+        "other": "variants"
+      },
+      "skipped": "skipped",
+      "failing": "failing",
+      "todo": "todo",
+      "outside": "Outside the tree",
+      "outsideIntro": "Tests without a home in {homes} and {last} — move them:",
+      "nameDebt": "Names that aren't statements (exceptions)",
+      "nameReason": "the name isn't a statement; rewrite in #{issue}",
+      "none": "— none.",
+      "rules": "Rules"
+    },
+    "c4": {
+      "title": "Architecture",
+      "intro": "Generated from the model `tests/architecture/model.ts` (the `spec` skill, `spec-doc`): C4 diagrams and a table of modules. Edit the model; the architecture rules check it against the code.",
+      "system": "System",
+      "context": "System and external systems",
+      "containers": "Containers",
+      "components": "Modules",
+      "perimeter": "perimeter",
+      "viaModule": "via module {modules}",
+      "viaModules": "via modules {modules}",
+      "uses": "uses",
+      "dependsOn": "depends on",
+      "calls": "calls",
+      "library": "library",
+      "table": "| Module | Purpose | Directory | API | Depends on | Packages |",
+      "summary": "model: {parts}",
+      "moduleCount": {
+        "one": "module",
+        "few": "modules",
+        "many": "modules",
+        "other": "modules"
+      },
+      "containerCount": {
+        "one": "container",
+        "few": "containers",
+        "many": "containers",
+        "other": "containers"
+      },
+      "externalCount": {
+        "one": "external system",
+        "few": "external systems",
+        "many": "external systems",
+        "other": "external systems"
+      }
+    }
+  }
 }

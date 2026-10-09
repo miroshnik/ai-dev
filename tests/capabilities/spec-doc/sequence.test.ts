@@ -3,13 +3,17 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { runScript, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
+import { runScript, setLanguage, tmpDir, vitestReport, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 let dir: string;
 let cleanup: () => void;
-beforeEach(() => ({ dir, cleanup } = tmpDir()));
+// проект на ru: тесты файла ждут русский вывод, без манифеста проект — en
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  setLanguage(dir, "ru");
+});
 afterEach(() => cleanup());
 
 const MAIN = "tests/capabilities/billing/billing.test.ts";
