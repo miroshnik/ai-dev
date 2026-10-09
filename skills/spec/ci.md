@@ -138,7 +138,7 @@ project on Node.
 The `main` run is in its own group (`github.run_id`): the tests need no shared
 resource, and `queue: max` doesn't combine with cancelling PR runs in one
 workflow. Only `spec-publish` has a queue; publications don't go in merge
-order, and the "already newer" check (`spec-publish` prints «уже новее») keeps
+order, and the "already newer" check (`spec-publish` prints `already newer`) keeps
 an old one from landing over a new one — hence the checkout with history. A
 deploy can't do this in the same workflow — it needs merge order: a separate
 workflow (`docs/ci-concurrency.md`).
@@ -199,8 +199,7 @@ jobs:
   commit's tree. Nothing was merged into `main` between the run's start and
   the merge — the trees are equal with merge, squash and rebase. A PR that
   fell behind is merged — there is no such artifact: `spec-run` writes
-  «дерево main не проверено целиком — публикация пропущена» (main tree not
-  checked in full — publication skipped), the job is green, the `spec` branch
+  `main tree not checked in full — publication skipped`, the job is green, the `spec` branch
   lags until the next merge with a matching tree but doesn't roll back. This
   doesn't require the PR's branch to be up to date.
 - An artifact doesn't yet mean a green run: `spec-run` takes only a run of
@@ -215,7 +214,7 @@ jobs:
   a descendant of the new source → "already newer", exit code 0; that's why
   the checkout has history.
 - After a skip, the publication is older than the merge-base of the following
-  PRs — `spec-diff` says so in a line under «База» (Base).
+  PRs — `spec-diff` says so in a line under "Base".
 
 ## The host builds every branch
 

@@ -1,6 +1,6 @@
 ---
 name: slot
-description: "A queue for heavy runs on the machine — project checks (`lint`, `typecheck`, `test`, `test:*`) go through `slot`, and installing the flow wraps the `package.json` scripts in it; two runs at a time, together half of the cores, the rest wait in arrival order and print whom they wait for; the command gets `AI_DEV_SLOT_CPUS` (a quarter of the cores) for the runner's workers. When — you run a full project check, tests, typecheck, lint, e2e; a run is silent with the line «slot: жду очередь машины» (waiting for the machine queue); parallel sessions choke the machine and runs hit timeouts; you set up runner workers (Vitest, Playwright, Jest) locally; a heavy command bypasses the project's scripts — even if the word 'queue' was never said."
+description: "A queue for heavy runs on the machine — project checks (`lint`, `typecheck`, `test`, `test:*`) go through `slot`, and installing the flow wraps the `package.json` scripts in it; two runs at a time, together half of the cores, the rest wait in arrival order and print whom they wait for; the command gets `AI_DEV_SLOT_CPUS` (a quarter of the cores) for the runner's workers. When — you run a full project check, tests, typecheck, lint, e2e; a run is silent with the line 'slot: waiting for the machine queue'; parallel sessions choke the machine and runs hit timeouts; you set up runner workers (Vitest, Playwright, Jest) locally; a heavy command bypasses the project's scripts — even if the word 'queue' was never said."
 allowed-tools: Bash(bun *skills/slot/scripts/slot.ts *) Bash(node *skills/slot/scripts/slot.ts *)
 ---
 
@@ -39,8 +39,8 @@ wrapper by hand — `check` names the script, `update` puts it back.
 | Moment | Action |
 |---|---|
 | Full check before a commit, e2e | via the project's scripts (`npm run test`, `bun run typecheck`): they are already queued. As a background command with a generous timeout (Claude Code — `run_in_background`, up to 2 h): waiting in the queue doesn't eat the tool timeout, completion wakes the session |
-| `slot: жду очередь машины — идут …` (waiting for the machine queue — running …) | not a hang: who holds the slots (directory, command) and how long they have been running. Don't kill someone else's run or delete its ticket |
-| `slot: дождался за …` (waited for …) | the time in the queue; compare run speed without it — by CI or by `user` from `time` |
+| `slot: waiting for the machine queue — running …` | not a hang: who holds the slots (directory, command) and how long they have been running. Don't kill someone else's run or delete its ticket |
+| `slot: waited …` | the time in the queue; compare run speed without it — by CI or by `user` from `time` |
 | A targeted run (`vitest run <file>`) | bypasses the queue — it's cheap |
 | A heavy command bypassing the project's scripts | `bun <skill dir>/scripts/slot.ts '<command>'` |
 | Runner workers locally | from `AI_DEV_SLOT_CPUS` — below |

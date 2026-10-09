@@ -24,8 +24,8 @@ Each requirement has exactly one outcome:
 
 | Outcome | When | What goes in the PR |
 |---|---|---|
-| re-verified by breaking | a test exists and catches the breakage (`spec-break` — ✅ «упал», failed) | the test name |
-| added | no test, or `spec-break` — ❌ «не упал» (didn't fail) | a new test: red first, then green |
+| re-verified by breaking | a test exists and catches the breakage (`spec-break` — ✅ `failed`) | the test name |
+| added | no test, or `spec-break` — ❌ `didn't fail` | a new test: red first, then green |
 | from code | the spec fell behind the code, the behavior has a decision trace (section below) | a test from code, the reason and the trace — in `<folder>.md` |
 | removed with a reason | a removal category (section below) or the requirement no longer applies | the reason — as a table row |
 | home in another decision | a repeat of a general rule (standard) or of another capability's behavior | the test there, here — a link |

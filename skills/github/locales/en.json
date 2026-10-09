@@ -1,0 +1,19 @@
+{
+  "issueTypes": { "task": "Task", "bug": "Bug", "epic": "Epic" },
+  "sections": { "questions": "## Questions", "scenarios": "## Scenarios" },
+  "labels": { "questions": "questions" },
+  "status": { "backlog": "Backlog", "inProgress": "In progress", "done": "Done" },
+  "fields": { "estimate": "Estimate, h", "actual": "Actual, h", "tokens": "Tokens, M", "cost": "Cost, $" },
+  "views": { "board": "Board", "table": "Table", "roadmap": "Roadmap" },
+  "labelMarkers": { "decision": "Decision:", "slice": "Slice:" },
+  "comments": { "state": "State", "actual": "Actual:" },
+  "subagentPrompt": { "task": "Task", "epic": "epic" },
+  "standardIssue": "Standard ·",
+  "autoAnswer": "✅ auto",
+  "lastLine": {
+    "done": "All done. The session can be closed.",
+    "questions": "All done, but there are questions:",
+    "remaining": "Remaining:"
+  },
+  "prSpecSection": "## Spec (tests)"
+}
