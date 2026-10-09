@@ -1,21 +1,22 @@
 #!/usr/bin/env bun
 /**
- * spec-publish — публикация сгенерированной документации (docs/spec) в отдельную ветку (spec): корень ветки —
- * содержимое каталога, в сообщении коммита — SHA, из которого собрано. В main документация не коммитится: это
- * производная копия тестов, и параллельные PR конфликтовали бы в её страницах и оглавлении.
+ * spec-publish — publishing the generated documentation (docs/spec) to a separate branch (spec): the branch root is the
+ * directory's contents, the commit message names the SHA it was built from. The documentation isn't committed to main:
+ * it is a derived copy of the tests, and parallel PRs would conflict in its pages and table of contents.
  *
- * Рабочая копия и HEAD не трогаются: дерево собирается во временном индексе, коммит — `git commit-tree` поверх
- * опубликованного, пуш — `<коммит>:refs/heads/<ветка>`. Тот же исходник — без нового коммита; то же содержимое из
- * нового исходника — коммит с тем же деревом и новым `Source:` (ветка называет последний проверенный main); `Source:`
- * опубликованного — потомок нового исходника — «уже новее», ветка не трогается. Отклонённый пуш (ветку сдвинула
- * параллельная публикация, сбой хостинга) — пауза `--interval` × номер попытки, ветка перечитывается, и решение
- * принимается заново, до `--attempts` попыток. После пуша ветка читается с remote и сверяется с каталогом —
- * опубликовано ровно собранное. `--check` — только сверка.
+ * The working copy and HEAD aren't touched: the tree is built in a temporary index, the commit — `git commit-tree` on top
+ * of the published one, the push — `<commit>:refs/heads/<branch>`. The same source — no new commit; the same contents
+ * from a new source — a commit with the same tree and a new `Source:` (the branch names the last checked main); the
+ * published `Source:` is a descendant of the new source — "already newer", the branch isn't touched. A rejected push (the
+ * branch moved by a parallel publish, a hosting failure) — a pause of `--interval` × the attempt number, the branch is
+ * re-read and the decision is made again, up to `--attempts` attempts. After the push the branch is read from the remote
+ * and compared with the directory — exactly what was built is published. `--check` — comparison only.
  *
  *   bun spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check] [--root DIR]
  *
- * Коды: 0 — опубликовано, совпадает или уже новее, 1 — ветка отличается от каталога (или её нет) при --check, пуш отклонён
- * на всех попытках, 2 — ошибка вызова (нет каталога, не git). Запуск — Bun или Node ≥ 22.18, без зависимостей.
+ * Codes: 0 — published, matches or already newer, 1 — the branch differs from the directory (or doesn't exist) with
+ * --check, the push was rejected on all attempts, 2 — a call error (no directory, not git). Runs on Bun or Node ≥ 22.18,
+ * no dependencies.
  */
 
 import { execFileSync } from "node:child_process";
@@ -29,7 +30,7 @@ import { sourceOf } from "./speclib.ts";
 const USAGE =
   "spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check] [--root DIR]";
 
-// коммит публикации без настроенного git user (CI) — от имени бота GitHub Actions
+// a publish commit without a configured git user (CI) — in the name of the GitHub Actions bot
 const BOT = { name: "github-actions[bot]", email: "41898282+github-actions[bot]@users.noreply.github.com" };
 
 class Fail extends Error {
@@ -52,12 +53,12 @@ function tryGit(root: string, args: string[]): string | null {
   }
 }
 
-/** Дерево каталога как объект git: временный индекс, --work-tree = каталог; .gitignore репозитория не мешает (-f). */
+/** The directory's tree as a git object: a temporary index, --work-tree = the directory; the repository's .gitignore doesn't interfere (-f). */
 function treeOf(root: string, dir: string): string {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "spec-publish-"));
   try {
     const env = { GIT_INDEX_FILE: path.join(tmp, "index") };
-    // cwd — сам каталог: пути индекса от его корня; git-dir — репозитория (в worktree — свой, объекты общие)
+    // cwd is the directory itself: index paths from its root; git-dir is the repository's (in a worktree — its own, objects shared)
     const gitDir = git(root, ["rev-parse", "--absolute-git-dir"]);
     git(dir, ["--git-dir", gitDir, "--work-tree", dir, "add", "-A", "-f", "."], env);
     return git(dir, ["--git-dir", gitDir, "write-tree"], env);
@@ -66,20 +67,20 @@ function treeOf(root: string, dir: string): string {
   }
 }
 
-/** Опубликованный коммит ветки на remote (после fetch) или null, если ветки нет. */
+/** The branch's published commit on the remote (after fetch) or null if there is no branch. */
 function remoteHead(root: string, remote: string, branch: string): string | null {
   if (!tryGit(root, ["ls-remote", "--exit-code", "--heads", remote, branch])) return null;
   git(root, ["fetch", "-q", remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`]);
   return git(root, ["rev-parse", `refs/remotes/${remote}/${branch}`]);
 }
 
-/** Пути, которыми дерево ветки отличается от дерева каталога. */
+/** Paths by which the branch's tree differs from the directory's tree. */
 function diffPaths(root: string, a: string, b: string): string[] {
   const out = git(root, ["diff-tree", "-r", "--name-only", "--no-commit-id", a, b]);
   return out ? out.split("\n") : [];
 }
 
-/** Причина отказа git: последние строки stderr без подсказок — первая строка ошибки называет только команду. */
+/** Why git refused: the last stderr lines without hints — the first error line names only the command. */
 function reason(e: unknown): string {
   const stderr = String((e as { stderr?: unknown }).stderr ?? "");
   const lines = stderr.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("hint:"));
@@ -148,13 +149,13 @@ export async function main(argv: string[]): Promise<number> {
     const message = `spec: ${source.slice(0, 12)}\n\nSource: ${source}\n`;
     let same = false;
     let commit = "";
-    // пуш отклоняют ветка, сдвинутая между fetch и push, и сбой хостинга: каждая попытка перечитывает ветку и решает
-    // заново — после сдвига она может оказаться собранной из потомка
+    // a push is rejected when the branch moved between fetch and push or on a hosting failure: each attempt re-reads the
+    // branch and decides again — after a move it may turn out to be built from a descendant
     for (let attempt = 1; ; attempt++) {
       const head = remoteHead(root, v.remote, v.branch);
       const published = head ? git(root, ["rev-parse", `${head}^{tree}`]) : null;
-      // публикации приходят не по порядку мержей (прогоны main параллельны): поверх собранного из потомка старое не
-      // публикуется. Сравнить можно только при истории: в мелком клоне опубликованный исходник неизвестен — публикуется
+      // publishes don't arrive in merge order (main runs are parallel): an old one isn't published on top of one built
+      // from a descendant. Comparing needs history: in a shallow clone the published source is unknown — it is published
       const was = head ? sourceOf(git(root, ["log", "-1", "--format=%B", head])) : undefined;
       if (was && sha && sha !== was && tryGit(root, ["merge-base", "--is-ancestor", sha, was]) !== null) {
         console.error(`spec-publish: пропуск — ${v.remote}/${v.branch} уже новее: опубликовано из ${was.slice(0, 12)}`);
@@ -165,8 +166,8 @@ export async function main(argv: string[]): Promise<number> {
         console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} уже совпадает с ${v.dir}`);
         return 0;
       }
-      // то же дерево из нового исходника — тоже коммит: `Source:` называет последний проверенный main, и spec-diff видит
-      // разрыв с базой диффа только после пропущенной публикации, а не после каждого мержа без изменений спеки
+      // the same tree from a new source is a commit too: `Source:` names the last checked main, and spec-diff sees a gap
+      // with the diff base only after a skipped publish, not after every merge without spec changes
       commit = git(root, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", message], identity(root));
       try {
         git(root, ["push", "-q", v.remote, `${commit}:refs/heads/${v.branch}`]);
@@ -178,7 +179,7 @@ export async function main(argv: string[]): Promise<number> {
         await new Promise((resolve) => setTimeout(resolve, interval * attempt * 1000));
       }
     }
-    // проверяю то, что дошло до читателя: ветку на remote, а не свой коммит
+    // check what reached the reader: the branch on the remote, not our own commit
     const after = remoteHead(root, v.remote, v.branch);
     if (!after || git(root, ["rev-parse", `${after}^{tree}`]) !== tree) throw new Fail(`после пуша ${v.remote}/${v.branch} не совпадает с ${v.dir}`, 1);
     if (same) console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} подтверждена для ${source.slice(0, 12)}`);

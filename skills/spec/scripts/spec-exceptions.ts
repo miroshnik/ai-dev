@@ -1,19 +1,20 @@
 #!/usr/bin/env bun
 /**
- * spec-exceptions — перенос исключений в формат «файл на элемент»: каждый `exceptions.ts` (`.mts`, `.js`, `.mjs`,
- * `.json`) папки решения `tests/<вид>/<имя>` или её подпапки раскладывается в каталог `exceptions/` папки решения —
- * файл `<элемент>.json` на исключение (`{ item, rule?, issue, reason }`), старый файл удаляется; какой файл чей —
- * правило `exceptionFile` (speclib). Импорт в файлах папки
- * (`import exceptions from "./exceptions.ts"`) становится `const exceptions = exceptionsIn()` харнесса, путь к старому
- * файлу в `package.json` и workflow CI (`spec-claims --exceptions`) — путём к каталогу. Чего не переписать (ссылка из
- * другой папки, нет импорта харнесса) — строка `!`. Исключения названий spec-doc (`{ file, name }`) — массив в
- * `names.exceptions.ts` папки, общий `tests/standards/spec-names/exceptions.ts` или файл `--names-exceptions` из
- * `package.json` и workflow CI — раскладываются по каталогам `names.exceptions/` папок решений своих тестов (файл
- * `<название>.json`), флаг `--names-exceptions` убирается. Повторный запуск ничего не меняет.
+ * spec-exceptions — moving exceptions to the "file per item" format: each `exceptions.ts` (`.mts`, `.js`, `.mjs`,
+ * `.json`) of a decision folder `tests/<kind>/<name>` or its subfolder is split into the decision folder's
+ * `exceptions/` directory — a `<item>.json` file per exception (`{ item, rule?, issue, reason }`), the old file is
+ * deleted; which file belongs where — the `exceptionFile` rule (speclib). The import in the folder's files
+ * (`import exceptions from "./exceptions.ts"`) becomes the harness's `const exceptions = exceptionsIn()`, the path to the
+ * old file in `package.json` and the CI workflow (`spec-claims --exceptions`) — the path to the directory. What can't be
+ * rewritten (a reference from another folder, no harness import) — a `!` line. spec-doc name exceptions
+ * (`{ file, name }`) — an array in the folder's `names.exceptions.ts`, the shared
+ * `tests/standards/spec-names/exceptions.ts` or the `--names-exceptions` file from `package.json` and the CI workflow —
+ * are split into the `names.exceptions/` directories of their tests' decision folders (a `<name>.json` file), the
+ * `--names-exceptions` flag is removed. A repeated run changes nothing.
  *
  *   bun spec-exceptions.ts [--root DIR]
  *
- * Коды: 0 — перенесено или переносить нечего, 1 — осталось поправить руками, 2 — ошибка вызова или файла исключений.
+ * Codes: 0 — moved or nothing to move, 1 — something is left to fix by hand, 2 — a call error or a bad exceptions file.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -24,7 +25,7 @@ import { parseArgs } from "node:util";
 import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, NAMES_DIR, type NameException, TESTS, writeNameException } from "./speclib.ts";
 
 const USAGE = "spec-exceptions.ts [--root DIR]";
-// флаг прежнего общего файла исключений названий spec-doc в скриптах проекта и CI: `--names-exceptions <путь>`
+// the flag of the former shared spec-doc name exceptions file in the project's scripts and CI: `--names-exceptions <path>`
 const NAMES_FLAG = /[ \t]+--names-exceptions(?:=|[ \t]+)([^\s"']+)/g;
 const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", EXCEPTIONS_DIR, NAMES_DIR]);
@@ -36,7 +37,7 @@ interface Entry {
   reason: string;
 }
 
-/** Файлы под каталогом (от корня проекта), по порядку; каталоги исключений и зависимостей — мимо. */
+/** Files under the directory (from the project root), in order; exception and dependency directories are skipped. */
 function walk(root: string, rel: string): string[] {
   let entries;
   try {
@@ -49,14 +50,14 @@ function walk(root: string, rel: string): string[] {
     .sort();
 }
 
-/** Список исключений из прежнего файла: JSON — разбор, модуль — `default` (или `exceptions`). */
+/** The exceptions list from the former file: JSON — parsed, a module — `default` (or `exceptions`). */
 async function loadLegacy(abs: string): Promise<unknown> {
   if (abs.endsWith(".json")) return JSON.parse(readFileSync(abs, "utf8"));
   const mod = (await import(pathToFileURL(abs).href)) as { default?: unknown; exceptions?: unknown };
   return mod.default ?? mod.exceptions;
 }
 
-/** Имя файла исключения — элемент (и соглашение) латиницей: стабильно, видно в дереве и в диффе. */
+/** The exception file's name is the item (and the convention) in Latin letters: stable, visible in the tree and in the diff. */
 const slug = (e: Entry): string =>
   ((e.rule ? `${e.rule}--` : "") + e.item)
     .replace(/[^A-Za-z0-9._-]+/g, "-")
@@ -72,14 +73,14 @@ const ANY_IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"']+)\1/g;
 const HARNESS = /^import\s*\{([^}]*)\}\s*from\s*(["'])([^"']*\/harness(?:\.ts)?)\2/m;
 const HARNESS_TYPE = /^import\s+type\s*\{[^}]*\}\s*from\s*(["'])([^"']*\/harness(?:\.ts)?)\1\s*;?[ \t]*\n/m;
 
-/** Путь импорта из файла указывает на прежний файл исключений (с расширением или без). */
+/** The import path from the file points to the former exceptions file (with or without the extension). */
 function pointsTo(fromFile: string, spec: string, legacy: string): boolean {
   if (!spec.startsWith(".")) return false;
   const target = path.posix.join(path.posix.dirname(fromFile), spec);
   return target === legacy || target === legacy.replace(/\.[^./]+$/, "");
 }
 
-/** Конец последнего оператора import в начале файла — после его строки. */
+/** The end of the last import statement at the start of the file — after its line. */
 function afterImports(text: string): number {
   let end = 0;
   let open = false;
@@ -96,7 +97,7 @@ function afterImports(text: string): number {
   return end;
 }
 
-/** Добавить `exceptionsIn` в импорт харнесса: в список значений, иначе рядом с импортом типов; нет ни того ни другого — null. */
+/** Add `exceptionsIn` to the harness import: to the value list, otherwise next to the type import; neither — null. */
 function withHarnessImport(text: string): string | null {
   const m = HARNESS.exec(text);
   if (m) {
@@ -130,14 +131,14 @@ export async function main(argv: string[]): Promise<number> {
   }
   const root = path.resolve(values.root ?? ".");
   const files = walk(root, TESTS);
-  // прежние файлы — по правилу exceptionFile: в папке решения или её подпапке, переезжают в каталог папки решения
+  // former files — by the exceptionFile rule: in the decision folder or its subfolder, they move to the decision folder's directory
   const legacyOf = (f: string) => {
     const x = exceptionFile(f);
     return x?.legacy ? x : null;
   };
   const legacy = files.filter((f) => legacyOf(f)?.dir === EXCEPTIONS_DIR);
   const configs = ["package.json", ...walk(root, ".github/workflows").filter((f) => /\.ya?ml$/.test(f))].filter((f) => existsSync(path.join(root, f)));
-  // исключения названий: файлы папок, общий файл (он же exceptions.ts — ниже по содержимому) и названные флагом
+  // name exceptions: the folders' files, the shared file (it is also exceptions.ts — below, by its contents) and the ones named by the flag
   const flagged = configs.flatMap((f) => [...readFileSync(path.join(root, f), "utf8").matchAll(NAMES_FLAG)].map((m) => m[1]!));
   const names = [...new Set([...files.filter((f) => legacyOf(f)?.dir === NAMES_DIR), ...flagged.filter((f) => existsSync(path.join(root, f)))])];
   const out: string[] = [];
@@ -172,7 +173,7 @@ export async function main(argv: string[]): Promise<number> {
     for (const e of list as Entry[]) {
       const body = json(e);
       let name = slug(e);
-      // имя занято другим исключением — суффикс; тот же текст — уже перенесено
+      // the name is taken by another exception — a suffix; the same text — already moved
       for (let n = 2; existsSync(path.join(root, dir, `${name}.json`)) && readFileSync(path.join(root, dir, `${name}.json`), "utf8") !== body; n++) {
         name = `${slug(e)}-${n}`;
       }
@@ -184,7 +185,7 @@ export async function main(argv: string[]): Promise<number> {
     moved.push(rel);
     out.push(`- ${rel} → ${dir}/ (${written.length})`, ...written.map((w) => `+ ${w}`));
 
-    // импорт в файлах папки и её подпапок — на exceptionsIn(): каталог папки решения теста харнесс находит сам
+    // the import in the files of the folder and its subfolders — to exceptionsIn(): the harness finds the directory of the test's decision folder itself
     for (const file of files.filter((f) => f.startsWith(`${folder}/`) && CODE.test(f) && f !== rel)) {
       const text = readFileSync(path.join(root, file), "utf8");
       const names: string[] = [];
@@ -207,7 +208,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  // исключения названий — файл на название в папку решения своего теста; тест вне дерева — к папке решения прежнего файла
+  // name exceptions — a file per name into the decision folder of its test; a test outside the tree — to the former file's decision folder
   for (const rel of names) {
     let list: unknown;
     try {
@@ -229,8 +230,8 @@ export async function main(argv: string[]): Promise<number> {
     out.push(`- ${rel} → ${[...new Set(written.map((w) => `${path.posix.dirname(w)}/`))].join(", ")} (${written.length})`, ...written.map((w) => `+ ${w}`));
   }
 
-  // путь к прежнему файлу в скриптах проекта и CI (spec-claims --exceptions) — путём к каталогу, флаг прежнего файла
-  // исключений названий (spec-doc --names-exceptions) — долой: исключения уже в каталогах
+  // the path to the former file in the project's scripts and CI (spec-claims --exceptions) — by the path to the directory; the
+  // flag of the former name exceptions file (spec-doc --names-exceptions) — away: the exceptions are already in the directories
   for (const file of configs) {
     let text = readFileSync(path.join(root, file), "utf8");
     for (const rel of moved) {
@@ -247,7 +248,7 @@ export async function main(argv: string[]): Promise<number> {
     if (text !== readFileSync(path.join(root, file), "utf8")) writeFileSync(path.join(root, file), text);
   }
 
-  // ссылки на перенесённые файлы, которые команда не переписала, — руками
+  // references to the moved files that the command didn't rewrite — by hand
   for (const file of walk(root, TESTS).filter((f) => CODE.test(f))) {
     const text = readFileSync(path.join(root, file), "utf8");
     for (const m of text.matchAll(ANY_IMPORT)) {

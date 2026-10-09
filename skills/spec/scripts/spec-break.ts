@@ -1,23 +1,23 @@
 #!/usr/bin/env bun
 /**
- * spec-break — проверка поломкой: умеет ли проверка упасть. Применяет правку к исходнику проекта, прогоняет команду
- * теста, ждёт красного и всегда откатывает правку; печатает ✅ «упал» / ❌ «не упал» по каждой поломке. Поломку
- * выбирает агент под одну проверку — это доказательство, а не мутационное тестирование.
+ * spec-break — a check by breaking: can the check fail. Applies an edit to the project's source, runs the test command,
+ * expects red and always rolls the edit back; prints ✅ (failed) / ❌ (didn't fail) for each break. The agent picks the
+ * break for one check — this is a proof, not mutation testing.
  *
- *   bun spec-break.ts --file <файл> --find <фрагмент> --replace <замена> [--name <название>] [--no-baseline] -- <команда теста…>
- *   bun spec-break.ts --plan breaks.json [--no-baseline] [-- <команда теста…>]
+ *   bun spec-break.ts --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>
+ *   bun spec-break.ts --plan breaks.json [--no-baseline] [-- <test command…>]
  *   bun spec-break.ts --restore
  *
- * План — JSON `[{ name, file, find, replace, cmd? }]`: `cmd` — строка для `sh -c`, без неё — команда после `--`.
- * Фрагмент `find` встречается в файле ровно один раз. Каждая поломка — отдельный прогон: первый красный тест в
- * serial-группе прячет остальные. Перед поломками — базовый прогон каждой команды: красный и без поломки — ✅ ничего
- * не доказывал бы, код 2 (`--no-baseline` — пропустить).
+ * A plan is JSON `[{ name, file, find, replace, cmd? }]`: `cmd` — a string for `sh -c`, without it — the command after
+ * `--`. The `find` fragment occurs in the file exactly once. Each break is a separate run: the first red test in a serial
+ * group hides the rest. Before the breaks — a baseline run of each command: red even without a break, ✅ would prove
+ * nothing — code 2 (`--no-baseline` skips it).
  *
- * Откат: после прогона; по SIGINT, SIGTERM, SIGHUP — команда теста убивается вместе с её процессами, файл
- * возвращается. Обрыв без шанса на откат (kill -9, закрытая сессия) — перед поломкой пишется журнал
- * (`.git/spec-break.json`, вне git — `.spec-break.json`), следующий запуск или `--restore` возвращает файл по нему;
- * файл правили после обрыва — журнал его не трогает, код 2. Коды: 0 — упали от всех поломок, 1 — есть ❌,
- * 2 — ошибка вызова, красный базовый прогон, журнал не применён.
+ * Rollback: after the run; on SIGINT, SIGTERM, SIGHUP the test command is killed together with its processes and the
+ * file is restored. For an abort with no chance of rollback (kill -9, a closed session) a journal is written before the
+ * break (`.git/spec-break.json`, outside git — `.spec-break.json`), and the next run or `--restore` restores the file
+ * from it; the file was edited after the abort — the journal doesn't touch it, code 2. Codes: 0 — failed on every break,
+ * 1 — there is a ❌, 2 — a call error, a red baseline run, the journal not applied.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -39,10 +39,10 @@ interface Break {
   cmd?: string;
 }
 
-/** Команда теста: argv после `--` или строка плана для `sh -c`. */
+/** The test command: argv after `--` or a plan string for `sh -c`. */
 type Command = string[];
 
-/** Запись о применённой поломке: по ней следующий запуск вернёт файл, если откат не случился. */
+/** A record of an applied break: by it the next run restores the file if the rollback didn't happen. */
 interface Journal {
   name: string;
   file: string;
@@ -57,7 +57,7 @@ function journalPath(): string {
   return r.status === 0 && r.stdout.trim() ? path.resolve(r.stdout.trim()) : path.resolve(".spec-break.json");
 }
 
-/** Вернуть файл по журналу оборванного прогона; журнала нет — ничего. Файл правили после поломки — не трогать. */
+/** Restore the file from the journal of an aborted run; no journal — nothing. The file was edited after the break — leave it. */
 function restoreJournal(journal: string): void {
   if (!existsSync(journal)) return;
   const j = JSON.parse(readFileSync(journal, "utf8")) as Journal;
@@ -75,7 +75,7 @@ function restoreJournal(journal: string): void {
   console.log(`spec-break: вернул ${rel} после оборванного прогона (поломка «${j.name}»)`);
 }
 
-/** Поломка применима: файл есть, фрагмент в нём ровно один. */
+/** The break is applicable: the file exists, the fragment occurs in it exactly once. */
 function check(b: Break): void {
   if (!existsSync(b.file)) throw new Failure(`поломка «${b.name}»: файла ${b.file} нет`);
   const n = readFileSync(b.file, "utf8").split(b.find).length - 1;
@@ -86,7 +86,7 @@ function check(b: Break): void {
 let child: ReturnType<typeof spawn> | null = null;
 let applied: { journal: string; j: Journal } | null = null;
 
-/** Откатить применённую поломку: файл — в исходный вид, журнал — долой. */
+/** Roll the applied break back: the file to its original state, the journal away. */
 function undo(): void {
   if (!applied) return;
   writeFileSync(applied.j.file, applied.j.original);
@@ -94,7 +94,7 @@ function undo(): void {
   applied = null;
 }
 
-/** Прогон команды в своей группе процессов (сигнал — всей группе); код выхода и хвост вывода. */
+/** Run the command in its own process group (a signal goes to the whole group); the exit code and the output tail. */
 function run(cmd: Command): Promise<{ code: number; tail: string }> {
   return new Promise((resolve, reject) => {
     const out: string[] = [];
@@ -122,7 +122,7 @@ function onSignal(signal: NodeJS.Signals): void {
     try {
       process.kill(-child.pid, "SIGKILL");
     } catch {
-      /* группа уже завершилась */
+      /* the group has already exited */
     }
   }
   const file = applied && path.relative(process.cwd(), applied.j.file);
@@ -194,7 +194,7 @@ export async function main(argv: string[]): Promise<number> {
     for (const b of breaks) {
       const original = readFileSync(b.file, "utf8");
       const j: Journal = { name: b.name, file: path.resolve(b.file), original, broken: original.replace(b.find, () => b.replace) };
-      // журнал — до правки: оборвётся после неё — следующий запуск найдёт, что вернуть
+      // the journal goes before the edit: if aborted after it, the next run finds what to restore
       writeFileSync(journal, JSON.stringify(j));
       applied = { journal, j };
       writeFileSync(j.file, j.broken);

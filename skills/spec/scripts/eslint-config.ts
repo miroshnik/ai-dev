@@ -1,17 +1,19 @@
 /**
- * eslint-config — сборка правил ESLint из дерева спеки: у стандарта правило лежит фрагментом `eslint.ts` (default —
- * объект или массив flat config) в его папке, рядом с примерами и причиной, а `eslint.config.*` проекта только
- * собирает фрагменты — `lint` и редактор видят правило как обычно:
+ * eslint-config — assembling ESLint rules from the spec tree: a standard's rule lives as an `eslint.ts` fragment
+ * (default — a flat config object or array) in its folder, next to the examples and the reason, and the project's
+ * `eslint.config.*` only collects the fragments — `lint` and the editor see the rule as usual:
  *
  *   import { collectEslint } from "./.agents/skills/spec/scripts/eslint-config.ts";
  *   export default [...base, ...(await collectEslint(import.meta.dirname))];
  *
- * Пути `files` во фрагменте — от корня проекта. Порядок фрагментов — по пути: конфиг одинаков на любой машине.
- * `tests/lib` — хелперы, не фрагменты. Фрагмент `eslint.mts` Node грузит как ESM и в проекте без `"type": "module"`.
- * Только `node:`-API и стираемый TypeScript: фрагмент `.ts` импортирует Node ≥ 22.18 без сборки.
+ * `files` paths in a fragment are from the project root. Fragments go in path order: the config is the same on any
+ * machine. `tests/lib` holds helpers, not fragments. Node loads an `eslint.mts` fragment as ESM even in a project
+ * without `"type": "module"`. Only `node:` APIs and erasable TypeScript: Node ≥ 22.18 imports a `.ts` fragment without
+ * a build.
  *
- * Запрет стандарта — `restrict(...)`: своё правило `spec/<id>` на стандарт. Flat config опции одного правила не сливает:
- * два фрагмента с `no-restricted-syntax` на одни файлы — действует последний, запреты первого молча пропадают.
+ * A standard's ban is `restrict(...)`: its own rule `spec/<id>` per standard. Flat config doesn't merge one rule's
+ * options: with two fragments setting `no-restricted-syntax` on the same files, the last one wins and the first one's
+ * bans silently vanish.
  */
 
 import { readdirSync } from "node:fs";
@@ -20,10 +22,10 @@ import { pathToFileURL } from "node:url";
 
 const FRAGMENT = new Set(["eslint.ts", "eslint.mts", "eslint.mjs", "eslint.js"]);
 const SKIP = new Set(["node_modules", ".git"]);
-// хелперы тестов, не спека: `spec-doc` их тоже пропускает
+// test helpers, not the spec: `spec-doc` skips them too
 const SKIP_REL = new Set(["tests/lib"]);
 
-/** Пути фрагментов `eslint.ts` в каталогах (по умолчанию `tests/`), по порядку. */
+/** Paths of `eslint.ts` fragments in the directories (by default `tests/`), in order. */
 export function eslintFragments(root: string, dirs: string[] = ["tests"]): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
@@ -45,8 +47,8 @@ export function eslintFragments(root: string, dirs: string[] = ["tests"]): strin
 }
 
 /**
- * Фрагменты flat config из дерева спеки — для `eslint.config.*` проекта. Первым — храповик исключений: отключение
- * правила в коде, которое больше ничего не глушит, — ошибка (исключение надо убрать, долг только уменьшается).
+ * Flat config fragments from the spec tree — for the project's `eslint.config.*`. First — the exceptions ratchet: a rule
+ * disabled in code that no longer silences anything is an error (the exception must go, the debt only shrinks).
  */
 export async function collectEslint(root: string, dirs: string[] = ["tests"]): Promise<object[]> {
   const configs: object[] = [{ linterOptions: { reportUnusedDisableDirectives: "error" } }];
@@ -60,12 +62,12 @@ export async function collectEslint(root: string, dirs: string[] = ["tests"]): P
 
 type RuleContext = { report(d: { node: unknown; message: string }): void };
 
-/** Общий плагин запретов стандартов: один объект на все фрагменты — ESLint не даёт переопределить плагин. */
+/** The shared plugin of standards' bans: one object for all fragments — ESLint doesn't allow redefining a plugin. */
 const SPEC_PLUGIN: { meta: { name: string }; rules: Record<string, object> } = { meta: { name: "spec" }, rules: {} };
 
 /**
- * Запрет стандарта по селекторам AST (как у `no-restricted-syntax`) — своим правилом `spec/<id>` в общем плагине `spec`:
- * запреты разных стандартов на одни файлы действуют все. Фрагмент `eslint.ts` стандарта:
+ * A standard's ban by AST selectors (as in `no-restricted-syntax`) — as its own rule `spec/<id>` in the shared `spec`
+ * plugin: bans of different standards on the same files all apply. A standard's `eslint.ts` fragment:
  *
  *   export default restrict({ id: "no-alert", selectors: ["CallExpression[callee.name='alert']"], message: "…", files: ["src/**"] });
  */
