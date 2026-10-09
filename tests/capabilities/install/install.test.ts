@@ -427,18 +427,75 @@ describe("Задача целиком без спроса — настройка
   });
 
   /** Клон ai-dev — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
-  it("в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto: с --auto — true, без флага и терминала — прежнее значение", () => {
+  it("в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее", () => {
     const clone = path.join(tmp, "clone");
     writeTree(clone, { "package.json": JSON.stringify({ name: "ai-dev" }) });
     execFileSync("git", ["init", "-q"], { cwd: clone });
     expect(install(["--auto"], clone).code).toBe(0);
-    expect(manifest(clone)).toEqual({ auto: true });
+    expect(manifest(clone)).toEqual({ auto: true, language: "en" });
     expect(install([], clone).code).toBe(0);
-    expect(manifest(clone)).toEqual({ auto: true });
-    expect(install(["--no-auto"], clone).code).toBe(0);
-    expect(manifest(clone)).toEqual({ auto: false });
+    expect(manifest(clone)).toEqual({ auto: true, language: "en" });
+    expect(install(["--no-auto", "--lang", "ru"], clone).code).toBe(0);
+    expect(manifest(clone)).toEqual({ auto: false, language: "ru" });
     expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
     expect(readdirSync(path.join(clone, ".agents"))).toEqual(["ai-dev.json"]);
+  });
+});
+
+/**
+ * Флоу написан по-английски, а агент работает с человеком на языке проекта: диалог, задачи, промпты, документы. Язык —
+ * настройка проекта, как auto: хранится в манифесте, его видят облачная сессия и любой агент. Флоу до поля работал
+ * только по-русски, поэтому установка прошлой версии без поля — `ru`: обновление не меняет языка проектам.
+ */
+describe("Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru", () => {
+  const manifest = (root: string) => JSON.parse(read(path.join(root, ".agents/ai-dev.json")));
+
+  it("без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json language: en", () => {
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("Язык работы");
+    expect(manifest(proj).language).toBe("en");
+  });
+
+  it("--lang ru пишет language: ru, повторный install без флага его сохраняет, --lang=pt-BR меняет", () => {
+    expect(install(["--lang", "ru"]).code).toBe(0);
+    expect(manifest(proj).language).toBe("ru");
+    expect(install().code).toBe(0);
+    expect(manifest(proj).language).toBe("ru");
+    expect(install(["--lang=pt-BR"]).code).toBe(0);
+    expect(manifest(proj).language).toBe("pt-BR");
+  });
+
+  it("установка прошлой версии без поля language — install без флага пишет ru", () => {
+    install(["--auto"]);
+    const m = manifest(proj);
+    delete m.language;
+    writeFileSync(path.join(proj, ".agents/ai-dev.json"), JSON.stringify(m, null, 2) + "\n");
+    expect(install().code).toBe(0);
+    expect(manifest(proj)).toMatchObject({ auto: true, language: "ru" });
+  });
+
+  it("не код языка, --lang без значения и --lang с -g — отказ с кодом 2, ничего не ставится", () => {
+    for (const args of [["--lang", "русский"], ["--lang"], ["--lang=ru_RU"], ["-g", "--lang", "ru"]]) {
+      const r = install(args);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("--lang <код>");
+    }
+    expect(existsSync(path.join(proj, ".agents"))).toBe(false);
+    expect(existsSync(path.join(home, ".agents"))).toBe(false);
+  });
+
+  it("--lang — флаг только install: у update и check он неизвестен", () => {
+    install();
+    expect(aiDev(sb, ["update", "--lang", "ru"]).code).toBe(2);
+    expect(aiDev(sb, ["check", "--lang=ru"]).stderr).toContain("неизвестный флаг: --lang=ru");
+  });
+
+  it("install -g язык не спрашивает и не хранит — в ~/.agents/ai-dev.json поля language нет", () => {
+    const r = install(["-g"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("Язык работы");
+    expect(manifest(home)).not.toHaveProperty("language");
   });
 });
 

@@ -19,10 +19,13 @@
  * из которого поставлено, список поставленных скиллов (по нему переустановка убирает скиллы, которых в ai-dev
  * больше нет, и не трогает чужие), у машины с `--link` — путь клона, у проекта — `auto`: ведёт ли агент задачу
  * целиком сам — ответы на вопросы по рекомендации, commit, push, починка CI и мерж своего PR по зелёным чекам
- * (AGENTS.md, «Что делаю без спроса, а что — по разрешению»). Его задаёт `install` в проекте — вопросом в терминале
- * или флагом `--auto` / `--no-auto`; по умолчанию «нет», без терминала и флага — прежнее значение, `update` его
- * сохраняет. С auto `install` подсказывает правило разрешений Claude Code на мерж (MERGE_HINT) — настройки машины
- * не меняет. В клон ai-dev флоу не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto`.
+ * (AGENTS.md, «What I do without asking and what needs a yes»), и `language` — язык работы агента в проекте: диалог,
+ * задачи, промпты, документы (AGENTS.md, «Language»); флоу написан по-английски. Их задаёт `install` в проекте —
+ * вопросом в терминале или флагами `--auto` / `--no-auto` и `--lang <код>`; по умолчанию auto — «нет», язык — `en`,
+ * без терминала и флага — прежнее значение, `update` его сохраняет. У установки прошлой версии поля `language` нет, а
+ * флоу до него работал только по-русски: её язык — `ru` (LEGACY_LANGUAGE), `update` его записывает. С auto `install`
+ * подсказывает правило разрешений Claude Code на мерж (MERGE_HINT) — настройки машины не меняет. В клон ai-dev флоу
+ * не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto` и `language`.
  * Копия в проекте коммитится — файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`),
  * установка снимает исключениями блоком ai-dev в конце `.gitignore`, `check` называет их несоответствием
  * (`gitignoreFlow`). Проверки проекта — скрипты `package.json` `lint`, `typecheck`, `test`, `test:*` — установка
@@ -81,19 +84,22 @@ const USAGE = `Использование: ai-dev <команда> [-g]
                      по умолчанию — нет); без терминала — флаг --auto или --no-auto, без флага ответ прежний;
                      с auto подсказывает правило разрешений Claude Code на мерж — Bash(gh pr merge *) в
                      ~/.claude/settings.json: его ставит владелец, install настройки машины не меняет;
-                     в клоне ai-dev пишет только auto
+                     --lang <код> — язык работы агента в проекте: диалог, задачи, промпты, документы (language
+                     в .agents/ai-dev.json, код BCP 47: ru, en, pt-BR); в терминале — вопросом, по умолчанию en,
+                     без флага и терминала — прежний; в клоне ai-dev пишет только auto и language
   install -g         на машину только скиллы (~/.agents/skills, ~/.claude/skills) и хук SessionStart; правила —
                      из проекта, копию на машине прошлой установки убирает
   install -g --link  из клона ai-dev: симлинки на клон вместо копий, правки видны сразу
   check [-g]         отстала ли установка, ничего не меняет: 0 — актуально, 1 — отстаёт или файлы флоу игнорирует
                      git проекта, 2 — проверка недоступна; копию сверяет последний релиз, клон --link — origin/main;
-                     у проекта называет режим (auto) и предупреждает (!), если скрипт в slot зовёт turbo, а
+                     у проекта называет режим (auto) и язык и предупреждает (!), если скрипт в slot зовёт turbo, а
                      turbo.json не пропускает задачам переменные очереди (код не меняет)
   check --hook       машина и проект разом для хука SessionStart Claude Code: код всегда 0, ошибки — в выводе
   update [-g]        довести до актуальной: клон --link — git pull --ff-only, копия — install последнего релиза
-                     (режим проекта — auto — сохраняется); в проекте install и update снимают с файлов флоу шаблоны
-                     .gitignore исключениями в его конце и оборачивают проверки package.json (lint, typecheck,
-                     test, test:*) в очередь машины slot
+                     (режим и язык проекта сохраняются; установке прошлой версии без языка — ru: флоу до поля
+                     работал по-русски); в проекте install и update снимают с файлов флоу шаблоны .gitignore
+                     исключениями в его конце и оборачивают проверки package.json (lint, typecheck, test, test:*)
+                     в очередь машины slot
   release [--dry-run]  из клона ai-dev: тег vГГГГ.ММ.ДД на origin/main и GitHub Release со списком изменений флоу
                      с прошлого релиза; --dry-run — только показать
 
@@ -348,7 +354,7 @@ function installRules(src, root, linkMode) {
   note(`${path.relative(root, canon)}/ ← AGENTS.md, claude/CLAUDE.md, docs/ (${docs.length})`);
 }
 
-/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[], auto?: boolean }} */
+/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[], auto?: boolean, language?: string }} */
 function readManifest(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, ".agents/ai-dev.json"), "utf8"));
@@ -362,12 +368,13 @@ function readManifest(root) {
  * Чужой каталог с тем же именем не трогается; скиллы из прошлой установки, которых в ai-dev больше нет, убираются.
  * В `.agents/ai-dev.json` — SHA источника, тег релиза и поставленные скиллы; холостой прогон SHA и тег не сравнивает:
  * установка актуальна, если совпадает то, что она ставит (релиз с правкой одного установщика проекты не трогает).
- * auto — настройка проекта «задача целиком без спроса», пишется всегда; у машины её нет (undefined).
- * Холостой прогон её тоже не сравнивает: правка поля руками установку «отставшей» не делает.
+ * auto и language — настройки проекта «задача целиком без спроса» и язык работы агента, пишутся всегда; у машины их
+ * нет (undefined). Холостой прогон их тоже не сравнивает: правка поля руками установку «отставшей» не делает.
  * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude @param {boolean} [auto]
+ * @param {string} [language]
  * @returns {string[]} поставленные скиллы
  */
-function installSkills(src, root, linkMode, claude, auto) {
+function installSkills(src, root, linkMode, claude, auto, language) {
   const manifestPath = path.join(root, ".agents/ai-dev.json");
   const before = readManifest(root).skills ?? [];
   const names = sourceSkills(src);
@@ -402,7 +409,7 @@ function installSkills(src, root, linkMode, claude, auto) {
     return installed;
   }
   const sha = sourceSha(src);
-  const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }) };
+  const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }), ...(language === undefined ? {} : { language }) };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return installed;
 }
@@ -766,28 +773,49 @@ function isAiDevClone(root) {
 /** Ведёт ли агент задачу целиком сам — `auto` манифеста проекта; нет поля — «нет». @param {string} root */
 const autoOf = (root) => readManifest(root).auto === true;
 
-/** Строка режима проекта в выводе `check`. @param {string} root */
-const modeLine = (root) => `  задачи: ${autoOf(root) ? "целиком сам" : "по разрешению"}`;
+/** Язык новой установки без флага и терминала: флоу написан по-английски. */
+const DEFAULT_LANGUAGE = "en";
+/** Язык установки прошлой версии — манифест без поля `language`: флоу до поля работал только по-русски. */
+const LEGACY_LANGUAGE = "ru";
+/** Код языка BCP 47: язык и необязательные подтеги — `ru`, `en`, `pt-BR`, `zh-Hant`. */
+const LANGUAGE_CODE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+
+/**
+ * Язык работы агента в проекте — `language` манифеста; манифест без поля (установка прошлой версии) — LEGACY_LANGUAGE,
+ * манифеста нет — DEFAULT_LANGUAGE.
+ * @param {string} root
+ */
+function languageOf(root) {
+  const m = readManifest(root);
+  if (typeof m.language === "string" && LANGUAGE_CODE.test(m.language)) return m.language;
+  return existsSync(path.join(root, ".agents/ai-dev.json")) ? LEGACY_LANGUAGE : DEFAULT_LANGUAGE;
+}
+
+/** Строки режима и языка проекта в выводе `check`: их видит начало сессии (хук). @param {string} root */
+const modeLines = (root) => [`  задачи: ${autoOf(root) ? "целиком сам" : "по разрешению"}`, `  язык: ${languageOf(root)}`];
 
 const CLONE_NOTE = "клон ai-dev: флоу в него не ставится — канон в корне";
 
-/** Клон ai-dev: из установки в нём — только режим, манифест из одного поля. @param {string} root @param {boolean} auto */
-function installClone(root, auto) {
+/**
+ * Клон ai-dev: из установки в нём — только режим и язык, манифест из двух полей.
+ * @param {string} root @param {boolean} auto @param {string} language
+ */
+function installClone(root, auto, language) {
   const file = path.join(root, ".agents/ai-dev.json");
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ auto }, null, 2) + "\n");
-  note(`.agents/ai-dev.json — auto: ${auto}; ${CLONE_NOTE}`);
+  writeFileSync(file, JSON.stringify({ auto, language }, null, 2) + "\n");
+  note(`.agents/ai-dev.json — auto: ${auto}, language: ${language}; ${CLONE_NOTE}`);
 }
 
 /**
- * auto — режим проекта; его задаёт только `install` (флаг или вопрос в терминале), `update` и `check` идут с прежним
- * значением манифеста.
- * @param {string} src @param {string} root @param {boolean} [auto] @returns {string[]} изменённые файлы проекта вне
- * копии флоу — им тоже в коммит
+ * auto и language — режим и язык проекта; их задаёт только `install` (флаг или вопрос в терминале), `update` и
+ * `check` идут с прежним значением манифеста.
+ * @param {string} src @param {string} root @param {boolean} [auto] @param {string} [language] @returns {string[]}
+ * изменённые файлы проекта вне копии флоу — им тоже в коммит
  */
-function installProject(src, root, auto = autoOf(root)) {
+function installProject(src, root, auto = autoOf(root), language = languageOf(root)) {
   installRules(src, root, false);
-  const skills = installSkills(src, root, false, true, auto);
+  const skills = installSkills(src, root, false, true, auto, language);
   claudeRules(root);
   agentsBlock(root);
   const pkg = slotScripts(root, skills);
@@ -923,14 +951,14 @@ function check(global) {
   const { home, root, installed } = target(global);
   const where = global ? "на машине" : "в проекте";
   // клон ai-dev сверять не с чем, но режим сессии в нём нужен — как в проекте
-  if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`ai-dev ${where}: не установлен — клон ai-dev, канон в корне`, modeLine(root)].join("\n") };
+  if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`ai-dev ${where}: не установлен — клон ai-dev, канон в корне`, ...modeLines(root)].join("\n") };
   if (!installed) return { code: 0, text: `ai-dev ${where}: не установлен`, absent: true };
   const clone = global ? linkedClone(home) : null;
   if (clone) return checkLink(home, clone);
   const changes = dryRun(() => (global ? installGlobal(SRC, false) : installProject(SRC, root)));
   const fresh = release ?? short(sourceSha(SRC)) ?? "SHA неизвестен";
-  // режим — настройка проекта: последней строкой, её видит и начало сессии (хук)
-  const mode = global ? [] : [modeLine(root)];
+  // режим и язык — настройки проекта: последними строками, их видит и начало сессии (хук)
+  const mode = global ? [] : modeLines(root);
   // предупреждения — настройка проекта, которую update не правит: строки `!`, код не меняют
   const warnings = changeLines(changes.filter((c) => c.op === "!"), root, global);
   const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
@@ -1026,13 +1054,13 @@ function hook(failed) {
   }
   const shown = results.filter((r) => !r.absent);
   // правила грузятся только из проекта: git-репозиторий без флоу — как поставить (клон ai-dev — сам канон, он не absent)
-  if (results[1]?.absent && gitRoot()) shown.push({ code: 0, text: `ai-dev в проекте: не установлен — поставь: npx -y github:${SOURCE} install` });
+  if (results[1]?.absent && gitRoot()) shown.push({ code: 0, text: `ai-dev в проекте: не установлен — поставь: npx -y github:${SOURCE} install --lang <язык проекта>` });
   if (!shown.length) return 0;
   const tail = [];
   if (shown.some((r) => r.behind)) tail.push("Отстаёт — update, копию в проекте закоммитить, перечитать обновлённое.");
   if (shown.some((r) => r.ignored)) tail.push("Файлы флоу игнорирует git — update допишет исключения в .gitignore, закоммитить его с копией; правило вне проекта — поправить самому.");
   if (shown.some((r) => r.code === 2)) tail.push("Проверка недоступна — работать по текущему флоу и сказать об этом.");
-  note(["Флоу ai-dev (AGENTS.md, «Первый шаг сессии»):", ...shown.map((r) => r.text), ...tail].join("\n"));
+  note(["Флоу ai-dev (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...tail].join("\n"));
   return 0;
 }
 
@@ -1140,27 +1168,68 @@ function releaseCmd(preview) {
 /** Вопрос `install` в проекте о настройке `auto`: «да» разрешает агенту всё перечисленное без «да» на каждое действие. */
 const AUTO_QUESTION = "Делать задачи целиком самому — ответы по рекомендации, commit, push, починка CI, мерж по зелёным чекам?";
 
+/** Вопрос `install` в проекте о языке: на нём агент говорит с человеком и пишет задачи, промпты и документы. */
+const LANGUAGE_QUESTION = "Язык работы агента в проекте — диалог, задачи, промпты, документы (код: ru, en, …)?";
+
+/**
+ * Ответ на вопрос в терминале: строка без пробелов по краям; ввод закрыт или не читается — null. Синхронно и без
+ * зависимостей — `readSync(0)`: `main` синхронный.
+ * @param {string} prompt
+ */
+function readAnswer(prompt) {
+  const buf = Buffer.alloc(1024);
+  process.stdout.write(prompt);
+  try {
+    const n = readSync(0, buf, 0, buf.length, null);
+    return n ? buf.toString("utf8", 0, n).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Вопрос «да/нет» в терминале: Enter — значение по умолчанию (оно заглавной буквой), непонятный ответ — вопрос снова.
- * Синхронно и без зависимостей — `readSync(0)`: `main` синхронный. Ввод закрыт или не читается — значение по
- * умолчанию.
+ * Ввод закрыт или не читается — значение по умолчанию.
  * @param {string} question @param {boolean} def
  */
 function ask(question, def) {
-  const buf = Buffer.alloc(1024);
   for (;;) {
-    process.stdout.write(`${question} [${def ? "Y/n" : "y/N"}] `);
-    let n = 0;
-    try {
-      n = readSync(0, buf, 0, buf.length, null);
-    } catch {
-      return def;
-    }
-    const answer = buf.toString("utf8", 0, n).trim().toLowerCase();
-    if (!n || !answer) return def;
+    const answer = readAnswer(`${question} [${def ? "Y/n" : "y/N"}] `)?.toLowerCase();
+    if (!answer) return def;
     if (["y", "yes", "д", "да"].includes(answer)) return true;
     if (["n", "no", "н", "нет"].includes(answer)) return false;
   }
+}
+
+/**
+ * Вопрос о языке в терминале: Enter — значение по умолчанию, не код языка — вопрос снова; ввод закрыт — по умолчанию.
+ * @param {string} def
+ */
+function askLanguage(def) {
+  for (;;) {
+    const answer = readAnswer(`${LANGUAGE_QUESTION} [${def}] `);
+    if (!answer) return def;
+    if (LANGUAGE_CODE.test(answer)) return answer;
+  }
+}
+
+/**
+ * `--lang <код>` или `--lang=<код>` среди флагов: код и остальные флаги; флаг без значения — код "", его отвергнет
+ * проверка кода.
+ * @param {string[]} flags @returns {{ lang: string | undefined, rest: string[] }}
+ */
+function takeLang(flags) {
+  /** @type {string | undefined} */
+  let lang;
+  /** @type {string[]} */
+  const rest = [];
+  for (let i = 0; i < flags.length; i++) {
+    const f = flags[i] ?? "";
+    if (f === "--lang") lang = flags[++i] ?? "";
+    else if (f.startsWith("--lang=")) lang = f.slice("--lang=".length);
+    else rest.push(f);
+  }
+  return { lang, rest };
 }
 
 /**
@@ -1178,8 +1247,10 @@ const MERGE_HINT = [
 const FLAGS = { install: ["-g", "--global", "--link", "--auto", "--no-auto"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"] };
 
 function main(/** @type {string[]} */ argv) {
-  const [cmd = "", ...flags] = argv;
+  const [cmd = "", ...args] = argv;
   if (cmd === "help" || cmd === "-h" || cmd === "--help") return note(USAGE.trimEnd()), 0;
+  // --lang со значением — только у install: у остальных команд он — неизвестный флаг
+  const { lang, rest: flags } = cmd === "install" ? takeLang(args) : { lang: undefined, rest: args };
   const allowed = Object.hasOwn(FLAGS, cmd) ? FLAGS[cmd] : undefined;
   const unknown = allowed ? flags.filter((f) => !allowed.includes(f)) : [];
   if (!allowed || unknown.length) {
@@ -1187,6 +1258,10 @@ function main(/** @type {string[]} */ argv) {
     return 2;
   }
   const global = flags.includes("-g") || flags.includes("--global");
+  if (lang !== undefined && (global || !LANGUAGE_CODE.test(lang))) {
+    warn(`--lang <код> — язык работы агента в проекте: без -g, код BCP 47 — ru, en, pt-BR${global ? "" : `; «${lang}» — не код языка`}`);
+    return 2;
+  }
   if (cmd === "release") return releaseCmd(flags.includes("--dry-run"));
   const hookMode = cmd === "check" && flags.includes("--hook");
   // «не установлен» релиз не нужен: хук в чужом проекте не ходит в сеть зря
@@ -1231,11 +1306,13 @@ function main(/** @type {string[]} */ argv) {
   }
   if (global) return installGlobal(SRC, linkMode), 0;
   const root = projectRoot();
+  // вопросы — только здесь и только в терминале: `update` и `check` (хук в начале сессии) идут через installProject без них
+  const tty = isatty(0) && isatty(1);
+  const language = lang ?? (tty ? askLanguage(languageOf(root)) : languageOf(root));
   const before = autoOf(root);
-  // вопрос — только здесь и только в терминале: `update` и `check` (хук в начале сессии) идут через installProject без него
-  const auto = on ? true : off ? false : isatty(0) && isatty(1) ? ask(AUTO_QUESTION, before) : before;
-  if (isAiDevClone(root)) installClone(root, auto);
-  else installProject(SRC, root, auto);
+  const auto = on ? true : off ? false : tty ? ask(AUTO_QUESTION, before) : before;
+  if (isAiDevClone(root)) installClone(root, auto, language);
+  else installProject(SRC, root, auto, language);
   if (auto) note(MERGE_HINT);
   return 0;
 }
