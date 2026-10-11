@@ -57,7 +57,7 @@ function ensureConfigDir(): void {
     mkdirSync(path.dirname(EST_DIR), { recursive: true });
     renameSync(LEGACY_EST_DIR, EST_DIR);
     symlinkSync(EST_DIR, LEGACY_EST_DIR);
-    console.error(`состояние est перенесено: ${LEGACY_EST_DIR} → ${EST_DIR} (симлинк оставлен)`);
+    console.error(`est state moved: ${LEGACY_EST_DIR} → ${EST_DIR} (symlink left in place)`);
   }
   mkdirSync(EST_DIR, { recursive: true });
 }
@@ -189,7 +189,7 @@ export class NotAnIssue extends EstError {}
 const errIs = (e: unknown, text: string) => String((e as Error).message ?? e).toLowerCase().includes(text.toLowerCase());
 
 function die(msg: string, code = 1): never {
-  console.error(`ошибка: ${msg}`);
+  console.error(`error: ${msg}`);
   process.exit(code);
 }
 
@@ -217,16 +217,13 @@ export function fmtH(h: number | null | undefined, digits = 2): string {
   return s || "0";
 }
 
-export function plural(n: number, one: string, few: string, many: string): string {
-  n = Math.abs(Math.trunc(n));
-  if (n % 10 === 1 && n % 100 !== 11) return one;
-  if (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) return few;
-  return many;
+export function plural(n: number, one: string, other: string): string {
+  return Math.abs(n) === 1 ? one : other;
 }
 
 export function parseSince(s: string): number {
   const m = /^(\d+)([dhwm])$/.exec(s.trim());
-  if (!m) throw new EstError(`неверный период «${s}», ожидается вида 90d / 12w / 6m / 48h`);
+  if (!m) throw new EstError(`invalid period «${s}», expected like 90d / 12w / 6m / 48h`);
   const secs: Record<string, number> = { h: 3600, d: 86400, w: 7 * 86400, m: 30 * 86400 };
   return parseInt(m[1]!, 10) * secs[m[2]!]!;
 }
@@ -243,7 +240,7 @@ export function quantile(sortedVals: number[], q: number): number | null {
 export function median(vals: number[]): number {
   const s = [...vals].sort((a, b) => a - b);
   const n = s.length;
-  if (!n) throw new EstError("медиана пустого списка");
+  if (!n) throw new EstError("median of an empty list");
   return n % 2 ? s[(n - 1) / 2]! : (s[n / 2 - 1]! + s[n / 2]!) / 2;
 }
 
@@ -352,20 +349,20 @@ function retryPauses(): number[] {
  */
 function run(cmd: string[], stdin?: string, idempotent = true): string {
   const pauses = cmd[0] === "gh" ? retryPauses() : [];
-  const what = `команда ${cmd.slice(0, 3).join(" ")}…`;
+  const what = `command ${cmd.slice(0, 3).join(" ")}…`;
   for (let attempt = 0; ; attempt++) {
     const r = spawnSync(cmd[0]!, cmd.slice(1), { input: stdin, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
     if (r.error) {
-      if ((r.error as NodeJS.ErrnoException).code === "ENOENT") throw new EstError(`не найдена команда '${cmd[0]}'; нужен установленный gh CLI`);
+      if ((r.error as NodeJS.ErrnoException).code === "ENOENT") throw new EstError(`command '${cmd[0]}' not found; the gh CLI must be installed`);
       throw new EstError(`${what}: ${r.error.message}`);
     }
     if (r.status === 0) return r.stdout;
     const err = (r.stderr || "").trim();
-    const failed = `${what} завершилась с кодом ${r.status}: ${err.slice(0, 500)}`;
+    const failed = `${what} exited with code ${r.status}: ${err.slice(0, 500)}`;
     if (!pauses.length || !NETWORK_FAILURE.test(err)) throw new EstError(failed);
-    if (!idempotent && !NOT_SENT.test(err)) throw new EstError(`${failed} — сбой сети, но запрос мог дойти до GitHub: повтора нет, чтобы не задвоить; проверь и повтори`);
-    if (attempt >= pauses.length) throw new NetworkError(`${failed} — сбой сети, повторов: ${pauses.length}`);
-    console.error(`сбой сети, повтор через ${pauses[attempt]! / 1000} с: ${what}`);
+    if (!idempotent && !NOT_SENT.test(err)) throw new EstError(`${failed} — network failure, but the request may have reached GitHub: no retry, so as not to post it twice; check and retry`);
+    if (attempt >= pauses.length) throw new NetworkError(`${failed} — network failure, retries: ${pauses.length}`);
+    console.error(`network failure, retry in ${pauses[attempt]! / 1000} s: ${what}`);
     Bun.sleepSync(pauses[attempt]!);
   }
 }
@@ -376,7 +373,7 @@ function ghGraphql(query: string, variables: Record<string, unknown>): Any {
   if (data.errors && data.errors.length) {
     const msgs = data.errors.map((e: Any) => e.message ?? "").join("; ");
     if (!data.data) throw new EstError(`GraphQL: ${msgs}`);
-    console.error(`предупреждение GraphQL: ${msgs}`);
+    console.error(`GraphQL warning: ${msgs}`);
   }
   return data.data;
 }
@@ -400,26 +397,26 @@ export function loadRegistry(): Registry {
   ensureConfigDir();
   if (!existsSync(REGISTRY_PATH)) {
     saveJson(REGISTRY_PATH, {});
-    console.error(`создан реестр ${REGISTRY_PATH}`);
+    console.error(`created the registry ${REGISTRY_PATH}`);
   }
   const reg = loadJson<unknown>(REGISTRY_PATH, null);
-  if (!reg || typeof reg !== "object" || Array.isArray(reg)) throw new EstError(`реестр ${REGISTRY_PATH} повреждён`);
+  if (!reg || typeof reg !== "object" || Array.isArray(reg)) throw new EstError(`the registry ${REGISTRY_PATH} is corrupted`);
   return reg as Registry;
 }
 
 function detectRepo(): string {
   const r = spawnSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" });
-  if (r.error) throw new EstError("git не найден; укажите --repo owner/repo");
-  if (r.status !== 0) throw new EstError("не удалось определить репозиторий из git remote origin; укажите --repo owner/repo");
+  if (r.error) throw new EstError("git not found; pass --repo owner/repo");
+  if (r.status !== 0) throw new EstError("couldn't determine the repository from git remote origin; pass --repo owner/repo");
   const url = r.stdout.trim();
   const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url);
-  if (!m) throw new EstError(`не разобран remote «${url}»; укажите --repo owner/repo`);
+  if (!m) throw new EstError(`couldn't parse the remote «${url}»; pass --repo owner/repo`);
   return `${m[1]}/${m[2]}`;
 }
 
 export function resolveRepo(arg?: string): string {
   const repo = arg || detectRepo();
-  if (!/^[\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+$/u.test(repo)) throw new EstError(`неверный формат --repo «${repo}», ожидается owner/repo`);
+  if (!/^[\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+$/u.test(repo)) throw new EstError(`invalid --repo format «${repo}», expected owner/repo`);
   return repo;
 }
 
@@ -667,7 +664,7 @@ export class Repo implements FactRepo {
       const data = ghGraphql(q.replace("organization(login:$o)", "user(login:$o)"), { o: owner, n: number });
       pv = data?.user?.projectV2 ?? null;
     }
-    if (!pv) throw new EstError(`проект ${owner} #${number} не найден`);
+    if (!pv) throw new EstError(`project ${owner} #${number} not found`);
     const fields: Meta["fields"] = {};
     for (const f of pv.fields.nodes) {
       const key = fieldKey(f.name);
@@ -678,7 +675,7 @@ export class Repo implements FactRepo {
       }
     }
     const missing = [FIELD_EST, FIELD_FACT, FIELD_STATUS].filter((k) => !fields[k]).map((k) => fieldShown({ fields } as Meta, k));
-    if (missing.length) throw new EstError(`в проекте ${owner} #${number} нет полей: ${missing.join(", ")}`);
+    if (missing.length) throw new EstError(`project ${owner} #${number} has no fields: ${missing.join(", ")}`);
     const meta: Meta = { id: pv.id, owner, number, title: pv.title, fields, fetched_at: nowTs() };
     saveJson(file, meta);
     this.meta_ = meta;
@@ -714,7 +711,7 @@ export class Repo implements FactRepo {
     const q = `query($o:String!,$r:String!){ repository(owner:$o,name:$r){
             projectsV2(first:5){ nodes{ number title owner{ ... on Organization{login} ... on User{login} } } } } }`;
     const nodes = ghGraphql(q, { o: this.owner, r: this.name }).repository.projectsV2.nodes;
-    if (!nodes.length) throw new EstError(`у репозитория ${this.full} нет привязанного проекта и нет записи в ${REGISTRY_PATH}`);
+    if (!nodes.length) throw new EstError(`repository ${this.full} has no linked project and no entry in ${REGISTRY_PATH}`);
     return [nodes[0].owner.login, nodes[0].number];
   }
 
@@ -945,7 +942,7 @@ export class Repo implements FactRepo {
       data = ghRest(`repos/${this.full}/commits/${oid}`);
     } catch (e) {
       if (!(e instanceof EstError)) throw e;
-      console.error(`предупреждение: дифф коммита ${oid.slice(0, 7)} не получен: ${e.message}`);
+      console.error(`warning: diff of commit ${oid.slice(0, 7)} not fetched: ${e.message}`);
       return null;
     }
     let n = 0;
@@ -1474,7 +1471,7 @@ export function isCloudExport(x: Any): x is CloudExport {
  */
 export function parseCloudFile(file: string): Session {
   const data = JSON.parse(readFileSync(file, "utf8"));
-  if (!isCloudExport(data)) throw new EstError(`${file}: не выгрузка облачной сессии (нужны session, repo, events)`);
+  if (!isCloudExport(data)) throw new EstError(`${file}: not a cloud session export (needs session, repo, events)`);
   const events = [...data.events].sort((a, b) => Number(a.sequence_num) - Number(b.sequence_num));
   let branch = "";
   let cwd: string | null = null;
@@ -1779,7 +1776,7 @@ interface Parsed {
 
 /** Разбор транскриптов с кэшем по mtime (инкрементально). */
 function loadSessions(repo: Repo): Parsed {
-  if (!repo.paths.length) throw new EstError(`для ${repo.full} не заданы локальные пути в ${REGISTRY_PATH} — транскрипты искать негде`);
+  if (!repo.paths.length) throw new EstError(`no local paths for ${repo.full} in ${REGISTRY_PATH} — nowhere to look for transcripts`);
   const file = path.join(repo.cacheDir, "sessions.json");
   const cache = loadJson<Record<string, Session>>(file, {});
   const out: Record<string, Session> = {};
@@ -1803,7 +1800,7 @@ function loadSessions(repo: Repo): Parsed {
     try {
       s = isCodexFile(f) ? parseCodexFile(f) : isCloudFile(f) ? parseCloudFile(f) : parseSessionFile(f);
     } catch (e) {
-      console.error(`пропущен ${f}: ${(e as Error).message}`);
+      console.error(`skipped ${f}: ${(e as Error).message}`);
       continue;
     }
     s.mtime = mtime;
@@ -1870,10 +1867,12 @@ export function branchType(branch: string | null | undefined): string | null {
 }
 
 const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const words = (pick: (n: Names) => string) => locale.every(pick).flatMap((s) => s.split(" "));
+const CLOSING_WORDS = words((n) => n.est.closingWords).map(locale.escapeRe).join("|");
 
 function closingRe(repo: Pick<Repo, "owner" | "name">, n: number): RegExp {
   return new RegExp(
-    "(?<![\\p{L}\\p{N}_])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|закрывает|закрыт[аоы]?|закрыть|исправляет|решает|устраняет)" +
+    `(?<![\\p{L}\\p{N}_])(?:${CLOSING_WORDS})` +
       `[\\s:]*(?:#|https://github\\.com/${reEscape(repo.owner)}/${reEscape(repo.name)}/issues/)${n}(?!\\d)`,
     "iu",
   );
@@ -1900,11 +1899,11 @@ function fetchIssue(repo: Repo, number: number): Any {
   try {
     data = ghGraphql(q, { o: repo.owner, r: repo.name, n: number });
   } catch (e) {
-    if (e instanceof EstError && errIs(e, "Could not resolve to an Issue")) throw new NotAnIssue(`#${number} — не issue в ${repo.full}`);
+    if (e instanceof EstError && errIs(e, "Could not resolve to an Issue")) throw new NotAnIssue(`#${number} is not an issue in ${repo.full}`);
     throw e;
   }
   const issue = data.repository.issue;
-  if (!issue) throw new EstError(`issue #${number} не найден в ${repo.full}`);
+  if (!issue) throw new EstError(`issue #${number} not found in ${repo.full}`);
   // события закрытия — в общий список timeline (маркеры fact/est ищем в последних 100 комментариях)
   issue.timelineItems.nodes.push(...(issue.closedEvents?.nodes ?? []));
   return issue;
@@ -1949,18 +1948,18 @@ export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boole
     if (num && num !== n && !d.has(num)) d.set(num, why);
   };
 
-  for (const p of issue.closedByPullRequestsReferences.nodes) if (same(p)) add(strong, p.number, "закрыл issue");
+  for (const p of issue.closedByPullRequestsReferences.nodes) if (same(p)) add(strong, p.number, "closed the issue");
   for (const t of issue.timelineItems.nodes) {
     const tn = t.__typename;
     if (tn === "CrossReferencedEvent") {
       const s = t.source ?? {};
-      if (s.__typename === "PullRequest" && same(s)) add(weak, s.number, "упоминание");
+      if (s.__typename === "PullRequest" && same(s)) add(weak, s.number, "mention");
     } else if (tn === "ConnectedEvent") {
       const s = t.subject ?? {};
-      if (s.__typename === "PullRequest" && same(s)) add(strong, s.number, "связан вручную");
+      if (s.__typename === "PullRequest" && same(s)) add(strong, s.number, "linked by hand");
     } else if (tn === "ClosedEvent") {
       const c = t.closer ?? {};
-      if (c.__typename === "PullRequest" && same(c)) add(strong, c.number, "закрыл issue");
+      if (c.__typename === "PullRequest" && same(c)) add(strong, c.number, "closed the issue");
       else if (c.__typename === "Commit") closers.push({ oid: c.oid, at: parseTs(c.authoredDate) });
     }
   }
@@ -1971,11 +1970,11 @@ export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boole
   const closerOids = new Set(closers.map((c) => c.oid));
   for (const [num, p] of prs) {
     if (p.closing.includes(n)) add(strong, num, "closingIssuesReferences");
-    else if (p.mergeCommit && closerOids.has(p.mergeCommit)) add(strong, num, "merge-коммит закрыл issue");
-    else if (p.commits.some((c) => closerOids.has(c.oid))) add(strong, num, "коммит PR закрыл issue");
-    else if (crx.test(p.body)) add(strong, num, `Closes #${n} в теле PR`);
-    else if (branchHasIssue(p.headRefName, n)) add(strong, num, "номер в ветке");
-    else if (mention.test(p.body)) add(weak, num, "упоминание в теле PR");
+    else if (p.mergeCommit && closerOids.has(p.mergeCommit)) add(strong, num, "the merge commit closed the issue");
+    else if (p.commits.some((c) => closerOids.has(c.oid))) add(strong, num, "a PR commit closed the issue");
+    else if (crx.test(p.body)) add(strong, num, `Closes #${n} in the PR body`);
+    else if (branchHasIssue(p.headRefName, n)) add(strong, num, "number in the branch");
+    else if (mention.test(p.body)) add(weak, num, "mention in the PR body");
   }
   for (const num of strong.keys()) weak.delete(num);
   // Упоминание в PR, который закрывает другие задачи, — чужая работа: иначе задача без своего PR получает его
@@ -2314,7 +2313,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
           end = e[0];
         }
       }
-      windows.push({ a: start, z: end, zOpen: false, br: brAt, w, rule: "якорь" });
+      windows.push({ a: start, z: end, zOpen: false, br: brAt, w, rule: "anchor" });
     }
     // Задача названа в названии сессии или в первом промпте. Название действует с момента переименования
     // (первое — с начала сессии): сессия, которую переименовывали под каждую следующую задачу, отдаёт
@@ -2325,8 +2324,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     let hist: [number, Set<number>][] = [...(s.title_hist ?? [])].sort((x, y) => x[0] - y[0]).map(([t, title]) => [t, titleRefs(title)]);
     if (!hist.length && s.title) hist = [[-1e18, titleRefs(s.title)]];
     const segs: { a: number; z: number; refs: Set<number>; rule: string }[] = hist.length
-      ? hist.map(([t, refs], k) => ({ a: k ? t : -1e18, z: k + 1 < hist.length ? hist[k + 1]![0] : 1e18, refs: refs.size ? refs : promptRefs, rule: refs.size ? "название" : "промпт" }))
-      : [{ a: -1e18, z: 1e18, refs: promptRefs, rule: "промпт" }];
+      ? hist.map(([t, refs], k) => ({ a: k ? t : -1e18, z: k + 1 < hist.length ? hist[k + 1]![0] : 1e18, refs: refs.size ? refs : promptRefs, rule: refs.size ? "title" : "prompt" }))
+      : [{ a: -1e18, z: 1e18, refs: promptRefs, rule: "prompt" }];
     for (const seg of segs) {
       if (!(seg.refs.size === 1 && seg.refs.has(number))) continue;
       // в периоде — PR другого репозитория: «#N» в названии — номер его задачи, а не нашей
@@ -2359,7 +2358,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       if (pinned) {
         attributed.push(1.0);
         weak.push("");
-        rules["закрепление"] = (rules["закрепление"] ?? 0) + 1;
+        rules["pin"] = (rules["pin"] ?? 0) + 1;
         continue;
       }
       const [ts, b] = [e[0] as number, e[1] as string];
@@ -2371,7 +2370,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         // чужая — не наша, какие бы ветки/окна ни были
         if (hint === String(number) || hint === ourKey) {
           w = 1.0;
-          rules["субагент"] = (rules["субагент"] ?? 0) + 1;
+          rules["subagent"] = (rules["subagent"] ?? 0) + 1;
         }
         attributed.push(w);
         weak.push("");
@@ -2379,13 +2378,13 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
       if (ourBr(b)) {
         w = branchW(b);
-        rules["ветка"] = (rules["ветка"] ?? 0) + 1;
+        rules["branch"] = (rules["branch"] ?? 0) + 1;
       } else if (windows.length && !foreignBr(b)) {
         const ws = windows.filter((x) => x.a <= ts && (x.zOpen ? ts < x.z : ts <= x.z) && (x.br === null || b === x.br || isNeutral(b)));
         if (ws.length) {
           w = Math.max(...ws.map((x) => x.w));
-          const anchored = ws.some((x) => x.rule === "якорь");
-          const rule = anchored ? "якорь" : ws[0]!.rule;
+          const anchored = ws.some((x) => x.rule === "anchor");
+          const rule = anchored ? "anchor" : ws[0]!.rule;
           rules[rule] = (rules[rule] ?? 0) + 1;
           if (!anchored) weakRule = rule;
         }
@@ -2534,7 +2533,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     tail += p.tail || 0;
     if (p.preamble !== undefined && pFirst !== null && (preAt === null || pFirst < preAt)) (preAt = pFirst), (preamble = p.preamble);
     if (p.ctx_end !== undefined && pLast !== null && (endAt === null || pLast > endAt)) (endAt = pLast), (ctxEnd = p.ctx_end);
-    details.push({ sid: p.session, src: "cloud", start: pFirst ?? 0, hours: p.h, prompts: p.prompts || 0, rules: { "часть облака": 1 }, branches: {} });
+    details.push({ sid: p.session, src: "cloud", start: pFirst ?? 0, hours: p.h, prompts: p.prompts || 0, rules: { "cloud part": 1 }, branches: {} });
   }
   const partSids = new Set(partsUsed.map((p) => p.session));
 
@@ -2654,7 +2653,7 @@ export function sweepOverlapWarning(facts: { h: number; iv?: Record<string, [num
   for (const list of bySession.values()) unionSec += mergeIntervals(list).reduce((s, [a, b]) => s + (b - a), 0);
   const unionH = unionSec / 3600;
   if (total - unionH <= 0.05) return null;
-  return `ВНИМАНИЕ: интервалы одной сессии в фактах разных задач: сумма ${fmtH(total)} ч при объединении по сессиям ${fmtH(unionH)} ч — двойной счёт ≈ ${fmtH(total - unionH)} ч`;
+  return `WARNING: intervals of one session in the actuals of different tasks: sum ${fmtH(total)} h against the union by session ${fmtH(unionH)} h — double counting ≈ ${fmtH(total - unionH)} h`;
 }
 
 export function mergeIntervals(iv: [number, number][]): [number, number][] {
@@ -2748,7 +2747,7 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
 // прокси сессии, поэтому ни оценки, ни факта там не посчитать — честное «недоступен (облако)» со ссылкой на сессию.
 // Цифру даёт локальная сессия: импорт событий облачной сессии (est cloud-import, parseCloudFile).
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
-const CLOUD_ERR = "облачная сессия Claude Code: GitHub GraphQL и проекты отсюда недоступны — оценка, история и sweep только в локальной сессии (docs/cloud-sessions.md в ai-dev)";
+const CLOUD_ERR = "Claude Code cloud session: GitHub GraphQL and projects are unreachable from here — estimate, history and sweep only in a local session (docs/cloud-sessions.md in ai-dev)";
 
 /** Комментарий «Факт» задачи, закрытой из облачной сессии: факт недоступен, маркер с cov none и src cloud. */
 /** id облачной сессии для ссылки: env даёт cse_…, ссылка — session_…. */
@@ -2818,10 +2817,10 @@ function upsertComment(repo: Repo, issue: Any, kind: string, body: string): stri
   const existing = findMarkerComment(issue, kind);
   if (existing) {
     ghRest(`repos/${repo.full}/issues/comments/${existing.databaseId}`, "PATCH", { body });
-    return "обновлён";
+    return "updated";
   }
   ghRest(`repos/${repo.full}/issues/${issue.number}/comments`, "POST", { body });
-  return "создан";
+  return "created";
 }
 
 function setNumberField(repo: Repo, issue: Any, fieldName: string, value: number): void {
@@ -2906,8 +2905,8 @@ const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type ||
  */
 export function historyTable(rows: Row[]): string[] {
   const labelsOf = (r: Row) => r.labels.filter((l) => l !== "epic").join(",");
-  const w = Math.max("метки".length, ...rows.map((r) => labelsOf(r).length));
-  const out = [`${pad("№", 5, true)} | ${pad("оценка", 6, true)} | ${pad("факт", 6, true)} | ${pad("покр.", 7)} | ${pad("млн ток", 7, true)} | ${pad("$", 7, true)} | ${pad("аг.", 3, true)} | ${pad("ходы", 4, true)} | ${pad("тип", 8)} | ${pad("метки", w)} | заголовок`];
+  const w = Math.max("labels".length, ...rows.map((r) => labelsOf(r).length));
+  const out = [`${pad("#", 5, true)} | ${pad("est.", 6, true)} | ${pad("actual", 6, true)} | ${pad("cov.", 7)} | ${pad("M tok", 7, true)} | ${pad("$", 7, true)} | ${pad("agents", 6, true)} | ${pad("turns", 5, true)} | ${pad("type", 8)} | ${pad("labels", w)} | title`];
   for (const r of rows) {
     const fm = r.fact_marker ?? {};
     const cov = fm.cov || "—";
@@ -2916,7 +2915,7 @@ export function historyTable(rows: Row[]): string[] {
     // субагенты и ходы задачи — признаки фан-аута и размера; факт, посчитанный до признака, — прочерк
     const ag = typeof fm.agents === "number" ? String(fm.agents) : "—";
     const st = typeof fm.steps === "number" ? String(fm.steps) : "—";
-    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 3, true)} | ${pad(st, 4, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
+    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 6, true)} | ${pad(st, 5, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
   }
   return out;
 }
@@ -2949,27 +2948,27 @@ function cmdHistory(args: HistoryArgs): void {
     const facts = rows.filter((r) => r.fact !== null).map((r) => r.fact!);
     summary.push([full, rows.filter((r) => r.state === "CLOSED" && r.fact !== null).length, facts.length ? median(facts) : null, c]);
     const meta = repo.projectMeta();
-    console.log(`== ${full} (проект ${meta.owner} #${meta.number})`);
+    console.log(`== ${full} (project ${meta.owner} #${meta.number})`);
     if (!rowsFact.length) {
-      console.log("история пуста" + (args.grep ? ` (фильтр «${args.grep}»)` : ""));
+      console.log("history is empty" + (args.grep ? ` (filter «${args.grep}»)` : ""));
     } else {
       for (const line of historyTable(rowsFact)) console.log(line);
     }
     if (c.n) {
-      const units = c.k! >= 0.5 && c.k! <= 3 ? "" : " — старые оценки и факты не в одних единицах";
-      console.log(`k = ${c.k} (n=${c.n} пар «оценка с маркером + факт full», p25–p75 ${c.p25}–${c.p75}); доля в допуске ×0.5…×2: ${Math.trunc(c.share! * 100)} %${units}`);
+      const units = c.k! >= 0.5 && c.k! <= 3 ? "" : " — old estimates and actuals aren't in the same units";
+      console.log(`k = ${c.k} (n=${c.n} pairs «estimate with a marker + actual full», p25–p75 ${c.p25}–${c.p75}); share within ×0.5…×2: ${Math.trunc(c.share! * 100)} %${units}`);
     } else {
-      console.log("k: нет пар «оценка с маркером est + факт» — калибровка недоступна");
+      console.log("k: no pairs «estimate with the est marker + actual» — calibration unavailable");
     }
-    if (c.n_partial) console.log(`в k не вошли задачи с покрытием partial/none: ${c.n_partial}`);
+    if (c.n_partial) console.log(`tasks with coverage partial/none left out of k: ${c.n_partial}`);
     const shares = usdShares(usdByModel(rowsFact.map((r) => r.fact_marker)));
-    if (shares.length) console.log(`$ по моделям: ${sharesTxt(shares)} — ${TARIFF_NOTE} (est period)`);
-    console.log(`закрытых за 90 дней без факта: ${noFact90}`);
+    if (shares.length) console.log(`$ by model: ${sharesTxt(shares)} — ${TARIFF_NOTE} (est period)`);
+    console.log(`closed in 90 days without an actual: ${noFact90}`);
     console.log();
   }
   if (args.allRepos) {
-    console.log("== сводка по всем репозиториям");
-    for (const [full, nf, med, c] of summary) console.log(`  ${full}: фактов ${nf}, медиана факта ${fmtH(med)} ч, k=${c.k} (n=${c.n})`);
+    console.log("== summary across all repositories");
+    for (const [full, nf, med, c] of summary) console.log(`  ${full}: actuals ${nf}, median actual ${fmtH(med)} h, k=${c.k} (n=${c.n})`);
   }
 }
 
@@ -2986,7 +2985,7 @@ function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string
         allRows = allRows.concat(new Repo(full, registry).projectRows());
       } catch (e) {
         if (!(e instanceof EstError)) throw e;
-        console.error(`предупреждение: ${full}: ${e.message}`);
+        console.error(`warning: ${full}: ${e.message}`);
       }
     }
     const c2 = calib(allRows);
@@ -3009,13 +3008,13 @@ function factForIssue(repo: Repo, number: number, gap: number, quiet = false): [
   } catch (e) {
     if (!(e instanceof NotAnIssue)) throw e;
     const pr = repo.pr(number);
-    if (!pr) throw new EstError(`#${number} не найден в ${repo.full} ни как issue, ни как PR`);
+    if (!pr) throw new EstError(`#${number} not found in ${repo.full} either as an issue or as a PR`);
     return factForPr(repo, pr, gap);
   }
   const labels: string[] = issue.labels.nodes.map((l: Any) => l.name);
   const itype = String(issue.issueType?.name ?? "").toLowerCase();
   // эпик — по типу issue «Эпик»/«Epic»; метка epic — запасной вариант для репо без типов
-  if (itype === "эпик" || itype === "epic" || labels.includes("epic")) return factForEpic(repo, issue, gap, quiet);
+  if (locale.every((n) => n.issueTypes.epic.toLowerCase()).includes(itype) || labels.includes("epic")) return factForEpic(repo, issue, gap, quiet);
   const [prObjs, closers, weakUsed] = resolveLinks(repo, issue);
   const parts = cloudPartsIn(issue.comments.nodes.map((c: Any) => c.body));
   const res = computeFact(repo, number, prObjs, closers, gap, parts);
@@ -3030,10 +3029,10 @@ function factForIssue(repo: Repo, number: number, gap: number, quiet = false): [
 
 /** Номер оказался PR, а не issue: считаем факт по самому PR (без записи). */
 function factForPr(repo: Repo, pr: PR, gap: number): [Any, Fact] {
-  const res = computeFact(repo, pr.number, [{ ...pr, why: "сам PR" }], [], gap);
+  const res = computeFact(repo, pr.number, [{ ...pr, why: "the PR itself" }], [], gap);
   res.title = pr.title || "";
   res.weak_links = false;
-  res.links = [{ pr: pr.number, branch: pr.headRefName, why: "это PR, не issue" }];
+  res.links = [{ pr: pr.number, branch: pr.headRefName, why: "this is a PR, not an issue" }];
   res.closers = [];
   res.epic = false;
   res.is_pr = true;
@@ -3071,15 +3070,15 @@ function factForEpic(repo: Repo, issue: Any, gap: number, quiet = false): [Any, 
       const fm = row.fact_marker ?? {};
       const manual = Number(fm.manual || 0);
       h = row.fact + manual;
-      cov = fm.cov || "поле";
-      src = "поле «Факт, ч»" + (manual ? ` + вручную ${fmtH(manual)} ч` : "");
+      cov = fm.cov || "field";
+      src = `field «${fieldShown(repo.projectMeta(), FIELD_FACT)}»` + (manual ? ` + manually ${fmtH(manual)} h` : "");
       sTok = fm.tok?.total;
       sUsd = fm.usd;
     } else {
       const [, r] = factForIssue(repo, s.number, gap, true);
       h = r.h;
       cov = r.cov;
-      src = "транскрипты";
+      src = "transcripts";
       sTok = r.tok?.total;
       sUsd = r.usd;
     }
@@ -3130,50 +3129,50 @@ function agentsTxt(res: Fact, language = locale.projectLanguage()): string {
 
 function printFact(repo: Repo, res: Fact, est: number | null): void {
   console.log(`== ${repo.full}#${res.issue}: ${res.title}`);
-  if (res.is_pr) console.log(`ВНИМАНИЕ: #${res.issue} — это PR, а не issue; факт посчитан по самому PR, запись невозможна`);
+  if (res.is_pr) console.log(`WARNING: #${res.issue} is a PR, not an issue; the actual is computed for the PR itself, it can't be written`);
   if (res.epic) {
-    console.log(`эпик: ${res.subtasks!.length} подзадач, без факта: ${res.sub_missing}`);
-    for (const p of res.subtasks!) console.log(`  #${pad(String(p.issue), 5)} ${pad(p.state, 6)} ${pad(fmtH(p.h), 6, true)} ч  ${pad(p.cov, 7)} ${pad(p.title.slice(0, 50), 50)} [${p.src}]`);
-    console.log(`факт эпика: ${fmtH(res.h)} ч (сумма подзадач с фактом), покрытие ${res.cov}`);
-    if (res.tok) console.log(tokensTxt(res));
+    console.log(`epic: ${res.subtasks!.length} ${plural(res.subtasks!.length, "subtask", "subtasks")}, without an actual: ${res.sub_missing}`);
+    for (const p of res.subtasks!) console.log(`  #${pad(String(p.issue), 5)} ${pad(p.state, 6)} ${pad(fmtH(p.h), 6, true)} h  ${pad(p.cov, 7)} ${pad(p.title.slice(0, 50), 50)} [${p.src}]`);
+    console.log(`epic actual: ${fmtH(res.h)} h (sum of the subtasks with an actual), coverage ${res.cov}`);
+    if (res.tok) console.log(tokensTxt(res, "en"));
     return;
   }
-  for (const l of res.links ?? []) console.log(`PR #${l.pr} (ветка ${l.branch}) — ${l.why}` + (res.weak_links ? "  [СЛАБАЯ СВЯЗЬ]" : ""));
-  if (res.closers?.length) console.log("закрыт коммитом: " + res.closers.join(", "));
-  if (!res.links?.length && !res.closers?.length) console.log("PR и коммиты не найдены — привязка только по ветке/первому промпту");
-  if (res.shared?.length) console.log("ВНИМАНИЕ: " + sharedTxt(res) + " — часы поделены между задачами");
+  for (const l of res.links ?? []) console.log(`PR #${l.pr} (branch ${l.branch}) — ${l.why}` + (res.weak_links ? "  [WEAK LINK]" : ""));
+  if (res.closers?.length) console.log("closed by commit: " + res.closers.join(", "));
+  if (!res.links?.length && !res.closers?.length) console.log("no PRs or commits found — linking only by the branch / first prompt");
+  if (res.shared?.length) console.log("WARNING: hours split between the tasks — " + sharedTxt(res));
   if (res.h === null) {
-    console.log("факт недоступен: сессии не найдены (покрытие none)");
+    console.log("actual unavailable: no sessions found (coverage none)");
   } else {
-    const estTxt = est ? `оценка ${fmtH(est)} ч, ×${(res.h / est).toFixed(2)}` : "оценки нет";
-    const raw = res.shared?.length && res.h_raw !== null && res.h_raw !== undefined ? ` (без деления: ${fmtH(res.h_raw)} ч)` : "";
-    console.log(`факт: ${fmtH(res.h)} ч активных в ${agentsTxt(res)}${raw} (${estTxt}); ${res.sessions} сесс., ${res.prompts} промптов, стена ${fmtH(res.wall, 1)} ч, покрытие ${res.cov}`);
+    const estTxt = est ? `estimate ${fmtH(est)} h, ×${(res.h / est).toFixed(2)}` : "no estimate";
+    const raw = res.shared?.length && res.h_raw !== null && res.h_raw !== undefined ? ` (unsplit: ${fmtH(res.h_raw)} h)` : "";
+    console.log(`actual: ${fmtH(res.h)} h active in ${agentsTxt(res, "en")}${raw} (${estTxt}); ${res.sessions} sess., ${res.prompts} prompts, wall ${fmtH(res.wall, 1)} h, coverage ${res.cov}`);
   }
-  if (res.tok) console.log(tokensTxt(res));
-  console.log(`вторичное: PR ${res.prs.map((p) => `#${p}`).join(", ") || "нет"}; коммитов ${res.commits}; дифф ${diffTxt(res)} (без lock/снапшотов/минифицированного)`);
+  if (res.tok) console.log(tokensTxt(res, "en"));
+  console.log(`secondary: PR ${res.prs.map((p) => `#${p}`).join(", ") || "none"}; commits ${res.commits}; diff ${diffTxt(res, "en")} (without lock files / snapshots / minified)`);
   for (const d of res.details) {
-    const brs = Object.entries(d.branches).slice(0, 4).map(([b, h]) => `${b} ${h} ч`).join(", ");
+    const brs = Object.entries(d.branches).slice(0, 4).map(([b, h]) => `${b} ${h} h`).join(", ");
     const rules = Object.entries(d.rules).map(([k, v]) => `${k}:${v}`).join(", ");
     const src = d.src === "codex" ? " [codex]" : "";
-    console.log(`  сессия ${sidKey(d.sid)}${src} ${fmtLocal(d.start)}: ${d.hours} ч, ${d.prompts} промптов [${rules}] — ${brs}`);
+    console.log(`  session ${sidKey(d.sid)}${src} ${fmtLocal(d.start)}: ${d.hours} h, ${d.prompts} prompts [${rules}] — ${brs}`);
   }
-  for (const x of res.taken ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч по названию/первому промпту уже в факте #${x.issue} — здесь не засчитано; если там ошибка — est fact ${x.issue} --write, потом снова эту задачу`);
-  for (const x of res.overlap ?? []) console.log(`ВНИМАНИЕ: ${fmtH(x.h)} ч этой задачи (закрепление, ветка, субагент, коммит) есть и в факте #${x.issue} — пересчитай его: est fact ${x.issue} --write`);
-  for (const sid of res.cloud_missing ?? []) console.log(`ВНИМАНИЕ: часть работы — облачная сессия https://claude.ai/code/${sid}, её события не импортированы: выгрузить браузером и est cloud-import (SKILL.md est, «Cloud session»)`);
+  for (const x of res.taken ?? []) console.log(`WARNING: Not counted again: ${fmtH(x.h)} h already in the actual of #${x.issue} (linked by the session name / first prompt); if that actual is wrong — est fact ${x.issue} --write, then this task again`);
+  for (const x of res.overlap ?? []) console.log(`WARNING: Overlap with the actual of #${x.issue}: ${fmtH(x.h)} h of this task (pinning, branch, subagent, commit) — recompute #${x.issue}: est fact ${x.issue} --write`);
+  for (const sid of res.cloud_missing ?? []) console.log(`WARNING: part of the work is the cloud session https://claude.ai/code/${sid}, its events aren't imported: export them through the browser and est cloud-import (SKILL.md est, «Cloud session»)`);
 }
 
 /** Записывает факт (комментарий и поля проекта); возвращает тело комментария. */
 function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): string {
-  if (res.is_pr) throw new EstError(`#${res.issue} — это PR, а не issue: факт по PR не записывается`);
+  if (res.is_pr) throw new EstError(`#${res.issue} is a PR, not an issue: an actual for a PR isn't written`);
   const existing = findMarkerComment(issue, "fact");
   const [manual, cause, kept] = extractKeptLines(existing ? existing.body : "");
   const body = factCommentBody(res, est, kept, manual, cause);
   const what = upsertComment(repo, issue, "fact", body);
   if (res.iv && Object.keys(res.iv).length) repo.recorded().set(res.issue, res.iv); // следующая задача sweep видит этот факт
-  let msg = `комментарий «Факт» ${what}`;
+  let msg = `«Actual» comment ${what}`;
   if (res.h !== null) {
     setNumberField(repo, issue, FIELD_FACT, res.h);
-    msg += `, поле «${fieldShown(repo.projectMeta(), FIELD_FACT)}» = ${fmtH(res.h)}`;
+    msg += `, field «${fieldShown(repo.projectMeta(), FIELD_FACT)}» = ${fmtH(res.h)}`;
   }
   const extra: [string, number | null][] = [
     [FIELD_TOK, res.tok ? round2(res.tok.total / 1e6) : null],
@@ -3182,7 +3181,7 @@ function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): strin
   for (const [fname, val] of extra) {
     if (val === null) continue;
     if (setOptionalNumberField(repo, issue, fname, val)) msg += `, «${fieldShown(repo.projectMeta(), fname)}» = ${fmtH(val)}`;
-    else msg += ` (поля «${fieldShown(repo.projectMeta(), fname)}» в проекте нет — пропущено)`;
+    else msg += ` (the project has no field «${fieldShown(repo.projectMeta(), fname)}» — skipped)`;
   }
   console.log(msg);
   return body;
@@ -3217,19 +3216,19 @@ interface FactArgs {
 /** Код выхода: 1 — свип с --write что-то не записал (#353). */
 function cmdFact(args: FactArgs): number {
   const registry = loadRegistry();
-  if (args.gap < 1) throw new EstError(`--gap должен быть ≥ 1 минуты, получено ${args.gap}`);
-  if (args.sweep && args.number !== undefined) throw new EstError("номер issue и --sweep несовместимы: либо одно, либо другое");
-  if (args.model !== undefined && !args.sweep) throw new EstError("--model — только со --sweep: пересчёт записанных фактов с этой моделью");
+  if (args.gap < 1) throw new EstError(`--gap must be ≥ 1 minute, got ${args.gap}`);
+  if (args.sweep && args.number !== undefined) throw new EstError("an issue number and --sweep are incompatible: one or the other");
+  if (args.model !== undefined && !args.sweep) throw new EstError("--model — only with --sweep: recomputing the recorded actuals with this model");
   if (isCloud()) {
     if (args.number === undefined) throw new EstError(CLOUD_ERR);
     const sid = cloudSid(process.env.CLAUDE_CODE_REMOTE_SESSION_ID);
     const part = sid ? cloudOwnPart(args.number, sid, args.gap) : null;
     const what = part
-      ? `часть факта этой сессии посчитана по её транскрипту (${fmtH(part.h)} ч); поля проекта отсюда не поставить — их поставит локальная сессия (est fact ${args.number} --write или --sweep)`
-      : "факт этой сессии не посчитать: транскрипт не привязан к задаче (ветка <type>/<N>-… или «#N» в первом промпте) — локальная сессия импортирует события (est cloud-import)";
+      ? `this session's part of the actual is computed from its transcript (${fmtH(part.h)} h); the project fields can't be set from here — a local session sets them (est fact ${args.number} --write or --sweep)`
+      : "this session's actual can't be computed: the transcript isn't linked to the task (branch <type>/<N>-… or «#N» in the first prompt) — a local session imports the events (est cloud-import)";
     console.log(
-      `облачная сессия Claude Code: GitHub GraphQL и поля проекта отсюда недоступны — ${what}${args.write ? " (--write ничего не пишет)" : ""}.\n` +
-        `Запиши комментарий ниже в issue #${args.number} инструментом GitHub; «Готово» ставит workflow проекта «Item closed», иначе — пользователь.\n\n` +
+      `Claude Code cloud session: GitHub GraphQL and the project fields are unreachable from here — ${what}${args.write ? " (--write writes nothing)" : ""}.\n` +
+        `Write the comment below into issue #${args.number} with a GitHub tool; «${projectNames().status.done}» is set by the project workflow «Item closed», otherwise by the user.\n\n` +
         cloudFactBody(process.env.CLAUDE_CODE_REMOTE_SESSION_ID, part, args.number),
     );
     return 0;
@@ -3242,11 +3241,11 @@ function cmdFact(args: FactArgs): number {
     let rows: Row[];
     if (args.model !== undefined) {
       rows = factsWithModel(repo.projectRows(), args.model, since, now);
-      console.log(`== ${repo.full}: закрытых с фактом по ${modelVersion(args.model)} за ${args.since} (с их эпиками): ${rows.length}`);
+      console.log(`== ${repo.full}: closed with an actual on ${modelVersion(args.model)} in ${args.since} (with their epics): ${rows.length}`);
     } else {
       rows = repo.projectRows().filter((r) => r.state === "CLOSED" && r.fact === null && r.stateReason !== "NOT_PLANNED" && (r.closedAt || 0) >= now - since);
       rows.sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
-      console.log(`== ${repo.full}: закрытых без факта за ${args.since}: ${rows.length}`);
+      console.log(`== ${repo.full}: closed without an actual in ${args.since}: ${rows.length}`);
     }
     const stats: Record<string, number> = { full: 0, partial: 0, none: 0 };
     let total = 0.0;
@@ -3268,7 +3267,7 @@ function cmdFact(args: FactArgs): number {
       try {
         [issue, res] = factForIssue(repo, r.number, args.gap, true);
       } catch (e) {
-        if (failure(r, "ошибка", e, i)) break;
+        if (failure(r, "error", e, i)) break;
         continue;
       }
       stats[res.cov] = (stats[res.cov] ?? 0) + 1;
@@ -3280,18 +3279,18 @@ function cmdFact(args: FactArgs): number {
           counted.push({ h, iv: res.iv });
         }
       }
-      let extra = res.epic ? "эпик" : res.prs.length ? "PR " + res.prs.map((p) => `#${p}`).join(", ") : "без PR";
-      if (res.weak_links) extra += " (слабая связь)";
-      if (res.shared?.length) extra += ` (доля 1/${Math.max(...res.shared.map((s) => s.k))})`;
+      let extra = res.epic ? "epic" : res.prs.length ? "PR " + res.prs.map((p) => `#${p}`).join(", ") : "no PR";
+      if (res.weak_links) extra += " (weak link)";
+      if (res.shared?.length) extra += ` (share 1/${Math.max(...res.shared.map((s) => s.k))})`;
       // пересчёт — весь факт по текущей логике, а не один тариф: прежние часы рядом, чтобы расхождение было видно до --write
-      if (args.model !== undefined) extra += `; было ${fmtH(r.fact)} ч, $${fmtH(r.fact_marker?.usd ?? null)} → $${fmtH(res.usd ?? null)}`;
-      console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} ч  ${pad(res.cov, 7)} оценка ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
+      if (args.model !== undefined) extra += `; was ${fmtH(r.fact)} h, $${fmtH(r.fact_marker?.usd ?? null)} → $${fmtH(res.usd ?? null)}`;
+      console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} h  ${pad(res.cov, 7)} estimate ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
       if (args.write && res.cov !== "none") {
         let body: string;
         try {
           body = writeFact(repo, issue, res, r.est);
         } catch (e) {
-          if (failure(r, "ошибка записи", e, i)) break;
+          if (failure(r, "error writing", e, i)) break;
           continue;
         }
         // эпик дальше в этом же свипе складывает факты подзадач из строк проекта — им нужен записанный, а не прежний
@@ -3299,26 +3298,26 @@ function cmdFact(args: FactArgs): number {
         r.fact_marker = parseMarker(body, "fact");
       }
     }
-    if (left.length) console.log(`сеть не вернулась за повторы — свип остановлен, не пройдено: ${left.length}`);
-    console.log(`итого: full ${stats.full}, partial ${stats.partial}, none ${stats.none}; сумма часов ${fmtH(total)} (без эпиков; эпики ${fmtH(epicsTotal)} ч — сумма своих подзадач)`);
+    if (left.length) console.log(`the network didn't come back within the retries — sweep stopped, not processed: ${left.length}`);
+    console.log(`total: full ${stats.full}, partial ${stats.partial}, none ${stats.none}; sum of hours ${fmtH(total)} (without epics; epics ${fmtH(epicsTotal)} h — the sum of their subtasks)`);
     const warning = sweepOverlapWarning(counted);
     if (warning) console.log(warning);
-    if (!args.write) console.log("(без --write ничего не записано)");
+    if (!args.write) console.log("(nothing written without --write)");
     else if (failed.length || left.length) {
       const missed = [...failed, ...left.map((r) => r.number)];
-      console.log(`не записано: ${missed.length} — ${missed.map((n) => `#${n}`).join(", ")}`);
+      console.log(`not written: ${missed.length} — ${missed.map((n) => `#${n}`).join(", ")}`);
       const opts = `--repo ${repo.full}${args.gap === 30 ? "" : ` --gap ${args.gap}`}`;
       // обычный свип берёт только задачи без факта — записанные он пропустит; свип по модели пересчитал бы и их
       console.log(
         args.model === undefined
-          ? `повтор: est fact --sweep --since ${args.since} ${opts} --write — записанные он пропустит`
-          : `повтор по задаче, по порядку (свип пересчитал бы и записанные): est fact <N> ${opts} --write — ${missed.map((n) => `#${n}`).join(", ")}`,
+          ? `retry: est fact --sweep --since ${args.since} ${opts} --write — it skips the written ones`
+          : `retry task by task, in order (a sweep would recompute the written ones too): est fact <N> ${opts} --write — ${missed.map((n) => `#${n}`).join(", ")}`,
       );
       return 1;
     }
     return 0;
   }
-  if (args.number === undefined) throw new EstError("укажите номер issue или --sweep");
+  if (args.number === undefined) throw new EstError("pass an issue number or --sweep");
   const [issue, res] = factForIssue(repo, args.number, args.gap);
   const est = issueProjectFields(issue, meta).est;
   if (args.json) {
@@ -3331,7 +3330,7 @@ function cmdFact(args: FactArgs): number {
     printFact(repo, res, est);
   }
   if (args.write) writeFact(repo, issue, res, est);
-  else if (!args.json) console.log("(без --write ничего не записано)");
+  else if (!args.json) console.log("(nothing written without --write)");
   return 0;
 }
 
@@ -3400,7 +3399,7 @@ function hiddenAnalogs(repo: Repo, analogs: (number | string)[]): string[] {
 /** Метки, которые не решение: `epic` — вид задачи, метка вопросов (любого языка словаря) — её состояние. */
 const NOT_DECISION = new Set(["epic", ...locale.every((n) => n.labels.questions)]);
 /** Служебные слова заголовка (короче трёх букв отсекаются и так): на сходство задач не указывают. */
-const STOP_WORDS = new Set("для без при что как или все это его из от до за под над про через после перед если чем где когда только также уже ещё еще так the and for with from into".split(" "));
+const STOP_WORDS = new Set(words((n) => n.est.stopWords));
 /** Основа слова — первые четыре буквы: «оценка», «оценки», «оценок» — одно слово (пять букв беглая гласная «оценок» уже
  * разводит); грубо, но без словаря, и в бэктесте #279 не хуже пяти. */
 const STEM = 4;
@@ -3503,10 +3502,10 @@ function analogWhy(a: Analog, type: string, language: string): string {
 function cmdEstimate(args: EstimateArgs): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
   const registry = loadRegistry();
-  if (!(EST_TYPES as readonly string[]).includes(args.type)) throw new EstError(`--type должен быть одним из: ${EST_TYPES.join(", ")}`);
-  if (args.hours !== undefined && !(args.hours > 0)) throw new EstError(`--hours должен быть больше 0, получено ${fmtH(args.hours)}`);
-  if (![0.5, 1, 1.5, 2].includes(args.mult)) throw new EstError("--mult допускает только 0.5, 1, 1.5 или 2");
-  if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
+  if (!(EST_TYPES as readonly string[]).includes(args.type)) throw new EstError(`--type must be one of: ${EST_TYPES.join(", ")}`);
+  if (args.hours !== undefined && !(args.hours > 0)) throw new EstError(`--hours must be greater than 0, got ${fmtH(args.hours)}`);
+  if (![0.5, 1, 1.5, 2].includes(args.mult)) throw new EstError("--mult allows only 0.5, 1, 1.5 or 2");
+  if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult allows only 0.5, 1, 1.5, 2 or 3");
   const tokMult = args.tokMult ?? args.mult;
   const auto = !args.analogs.trim() && args.hours === undefined; // ни --analogs, ни --hours — аналоги подбирает скрипт
   const repo = new Repo(resolveRepo(args.repo), registry);
@@ -3522,22 +3521,22 @@ function cmdEstimate(args: EstimateArgs): void {
       continue;
     }
     if (m) a = m[2]!;
-    if (!isDigits(a)) throw new EstError(`аналог «${a}» — не номер issue и не owner/repo#N`);
+    if (!isDigits(a)) throw new EstError(`analog «${a}» is neither an issue number nor owner/repo#N`);
     const n = parseInt(a, 10);
-    if (n === args.number) throw new EstError(`аналог #${a} — это сама оцениваемая задача`);
+    if (n === args.number) throw new EstError(`analog #${a} is the task being estimated`);
     if (!analogs.includes(n)) analogs.push(n);
   }
   // поправка вниз к чужим аналогам без названного отличия занижала крупные задачи втрое (#348) — правило «без отличия ×1»
   if (args.mult < 1 && analogs.some((a) => typeof a === "string") && !args.note.trim()) {
-    const msg = `поправка вниз к чужим аналогам (×${fmtH(args.mult)}): назови отличие в --note, без отличия — ×1`;
+    const msg = `downward correction against another repo's analogs (×${fmtH(args.mult)}): name the difference in --note, no difference — ×1`;
     if (args.write) throw new EstError(msg); // до любой записи
-    console.error(`предупреждение: ${msg}; с --write — отказ`);
+    console.error(`warning: ${msg}; with --write — refused`);
   }
   const hidden = hiddenAnalogs(repo, analogs);
   if (hidden.length) {
-    const msg = `${repo.full} — публичный репо, а ${plural(hidden.length, "аналог", "аналоги", "аналоги")} ${hidden.join(", ")} — из непубличного: имя и номер чужой задачи остались бы в комментарии «Оценка» и в истории его правок. Возьми аналоги из ${repo.full} или оцени экспертно (--hours)`;
+    const msg = `${repo.full} is a public repo, and the ${plural(hidden.length, "analog", "analogs")} ${hidden.join(", ")} — from a non-public one: the other task's name and number would stay in the «Estimate» comment and in its edit history. Take analogs from ${repo.full} or give an expert estimate (--hours)`;
     if (args.write) throw new EstError(msg); // до любой записи
-    console.error(`предупреждение: ${msg}; с --write — отказ`);
+    console.error(`warning: ${msg}; with --write — refused`);
   }
   const meta = repo.projectMeta();
   const [rows, c, level] = calibForEstimate(repo, registry);
@@ -3576,11 +3575,11 @@ function cmdEstimate(args: EstimateArgs): void {
       const [full, numS] = a.split("#") as [string, string];
       const num = parseInt(numS, 10);
       if (!otherRows.has(full)) {
-        if (!(full in registry)) throw new EstError(`аналог ${a}: репозиторий ${full} не в реестре ${REGISTRY_PATH}`);
+        if (!(full in registry)) throw new EstError(`analog ${a}: repository ${full} isn't in the registry ${REGISTRY_PATH}`);
         otherRows.set(full, new Map(new Repo(full, registry).projectRows().map((r) => [r.number, r])));
       }
       const r = otherRows.get(full)!.get(num);
-      if (!r) throw new EstError(`аналог ${a} не найден в проекте репозитория ${full}`);
+      if (!r) throw new EstError(`analog ${a} not found in the project of repository ${full}`);
       if (!otherParts.has(full)) otherParts.set(full, []);
       take(r, `#${num}`, otherParts.get(full)!);
       continue;
@@ -3591,9 +3590,9 @@ function cmdEstimate(args: EstimateArgs): void {
         fetchIssue(repo, a);
       } catch (e) {
         if (!(e instanceof EstError)) throw e;
-        throw new EstError(`аналог #${a} не найден в репо ${repo.full} как issue (${e.message})`);
+        throw new EstError(`analog #${a} not found in repo ${repo.full} as an issue (${e.message})`);
       }
-      console.error(`предупреждение: аналог #${a} есть в репо, но не в проекте — факт неизвестен`);
+      console.error(`warning: analog #${a} is in the repo but not in the project — its actual is unknown`);
       parts.push(locale.fill(n.est.estimate.notInProject, { label: `#${a}` }));
       continue;
     }
@@ -3603,7 +3602,7 @@ function cmdEstimate(args: EstimateArgs): void {
     // без --analogs и --hours аналогов в списке нет — их подбирает скрипт
     const target = { number: args.number, title: issue.title, labels: (issue.labels?.nodes ?? []).map((l: Any) => l.name), createdAt: parseTs(issue.createdAt), size: descSize(issue.body ?? "") };
     const picked = pickAnalogs(target, args.type, rows);
-    if (picked.length < 2) throw new EstError(`в ${repo.full} закрытых до создания #${args.number} задач с фактом (покрытие full) меньше двух — аналоги из другого репо (--analogs owner/repo#N) или экспертная оценка (--hours)`);
+    if (picked.length < 2) throw new EstError(`${repo.full} has fewer than two tasks with an actual (coverage full) closed before #${args.number} was created — analogs from another repo (--analogs owner/repo#N) or an expert estimate (--hours)`);
     for (const a of picked) {
       analogs.push(a.row.number);
       take(a.row, `#${a.row.number}`, parts, analogWhy(a, args.type, language));
@@ -3613,8 +3612,8 @@ function cmdEstimate(args: EstimateArgs): void {
   const analogTxt = parts.length ? parts.join("; ") : n.est.estimate.none;
 
   const expert = args.hours !== undefined;
-  if (!facts.length && !expert) throw new EstError("нет аналогов с фактом (покрытие full) — укажи --analogs с фактами или --hours как экспертную оценку");
-  if (facts.length === 1 && !expert) throw new EstError("один аналог — не прогноз: добавь второй аналог или --hours");
+  if (!facts.length && !expert) throw new EstError("no analogs with an actual (coverage full) — pass --analogs with actuals or --hours as an expert estimate");
+  if (facts.length === 1 && !expert) throw new EstError("one analog isn't a forecast: add a second analog or --hours");
   let tokF: number | null = null;
   let usdF: number | null = null;
   let spreadTxt: string | null = null;
@@ -3643,7 +3642,7 @@ function cmdEstimate(args: EstimateArgs): void {
     h = roundScale(args.hours!);
     basis = n.est.estimate.expert;
   }
-  if (expert && Math.abs(h - args.hours!) > 1e-9) console.error(`предупреждение: --hours ${fmtH(args.hours)} округлено к шкале: ${fmtH(h)}`);
+  if (expert && Math.abs(h - args.hours!) > 1e-9) console.error(`warning: --hours ${fmtH(args.hours)} rounded to the scale: ${fmtH(h)}`);
   const sameType = rows.filter((r) => r.state === "CLOSED" && r.fact !== null && (r.fact_marker?.cov ?? "full") === "full" && rowType(r) === args.type).length;
   const counted = facts.length;
   const conf = expert ? "C" : counted >= 3 && sameType >= 5 ? "A" : "B";
@@ -3675,17 +3674,17 @@ function cmdEstimate(args: EstimateArgs): void {
   const body = text + "\n" + `<!-- est ${pyDumps(marker)} -->`;
   const cur = issueProjectFields(issue, meta);
   console.log(`== ${repo.full}#${args.number}: ${issue.title}`);
-  console.log(`текущая «${fieldShown(meta, FIELD_EST)}»: ${fmtH(cur.est)}; статус: ${cur.status || "—"}`);
+  console.log(`current «${fieldShown(meta, FIELD_EST)}»: ${fmtH(cur.est)}; status: ${cur.status || "—"}`);
   const over = raw !== null && !expert ? raw : expert ? args.hours! : null;
-  if (over !== null && over > SCALE[SCALE.length - 1]!) console.log(`ВНИМАНИЕ: выходит ${fmtH(over)} ч > 13 — в поле записано ${fmtH(h)}, задачу надо дробить на подзадачи`);
-  console.log("комментарий:");
+  if (over !== null && over > SCALE[SCALE.length - 1]!) console.log(`WARNING: it comes to ${fmtH(over)} h > 13 — the field gets ${fmtH(h)}, the task should be split into subtasks`);
+  console.log("comment:");
   console.log(body);
   if (args.write) {
     const what = upsertComment(repo, issue, "est", body);
     setNumberField(repo, issue, FIELD_EST, h);
-    console.log(`комментарий «Оценка» ${what}, поле «${fieldShown(meta, FIELD_EST)}» = ${fmtH(h)}`);
+    console.log(`«Estimate» comment ${what}, field «${fieldShown(meta, FIELD_EST)}» = ${fmtH(h)}`);
   } else {
-    console.log("(без --write ничего не записано)");
+    console.log("(nothing written without --write)");
   }
 }
 
@@ -3749,26 +3748,26 @@ function cmdBacktest(args: { repo?: string; allRepos: boolean }): void {
   const registry = loadRegistry();
   const repos = args.allRepos ? Object.keys(registry) : [resolveRepo(args.repo)];
   const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)} %`);
-  const line = (name: string, l: BacktestLine) => `  ${pad(name, 28)} в допуске ${pct(l.share)}, k=${l.k ?? "—"}`;
+  const line = (name: string, l: BacktestLine) => `  ${pad(name, 30)} within tolerance ${pct(l.share)}, k=${l.k ?? "—"}`;
   for (const full of repos) {
     let rows: Row[];
     try {
       rows = new Repo(full, registry).projectRows();
     } catch (e) {
       if (!(e instanceof EstError) || !args.allRepos) throw e;
-      console.error(`предупреждение: ${full}: ${e.message}`);
+      console.error(`warning: ${full}: ${e.message}`);
       continue;
     }
     const b = backtest(rows);
-    console.log(`== ${full}: бэктест оценки — аналоги только из задач, закрытых до создания оцениваемой`);
-    console.log(`задач с фактом (покрытие full, без эпиков): ${b.tasks}; механике хватило аналогов (≥ 2): ${b.mech.n}, в допуске ×0.5…×2 — ${pct(b.mech.share)}, k=${b.mech.k ?? "—"}`);
+    console.log(`== ${full}: estimate backtest — analogs only from tasks closed before the estimated one was created`);
+    console.log(`tasks with an actual (coverage full, no epics): ${b.tasks}; the mechanics had enough analogs (≥ 2): ${b.mech.n}, within ×0.5…×2 — ${pct(b.mech.share)}, k=${b.mech.k ?? "—"}`);
     if (b.same) {
-      console.log(`на одной выборке с ручной оценкой, n=${b.same}:`);
-      console.log(line("механика", b.mechSame));
-      console.log(line("ручная", b.manual));
-      console.log(line("механика × поправка ручной", b.mechMult));
+      console.log(`on one sample with a manual estimate, n=${b.same}:`);
+      console.log(line("mechanics", b.mechSame));
+      console.log(line("manual", b.manual));
+      console.log(line("mechanics × manual correction", b.mechMult));
     } else {
-      console.log("ручных оценок с фактом нет — сравнивать механику не с чем");
+      console.log("no manual estimates with an actual — nothing to compare the mechanics with");
     }
     console.log();
   }
@@ -3779,7 +3778,7 @@ function cmdBacktest(args: { repo?: string; allRepos: boolean }): void {
 // ----------------------------------------------------------------------------
 
 /** Тариф модели — отдельно от флоу: смена модели меняет $ задачи в разы при том же флоу. */
-const TARIFF_NOTE = "тренд $ смешивает флоу с тарифом модели: флоу сравнивай по токенам и выходу";
+const TARIFF_NOTE = "the $ trend mixes the flow with the model rate: compare the flow by tokens and output";
 
 /** $ по моделям из маркеров «Факт» (models: {модель: {mtok, usd}}); модель без цены — мимо. */
 export function usdByModel(markers: Any[]): Record<string, number> {
@@ -3813,18 +3812,18 @@ export function parseWhen(s: string, now = nowTs()): number {
   const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
   if (d) return new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])).getTime() / 1000;
   const t = /^\d{4}-\d{2}-\d{2}T/.test(v) ? parseTs(v) : null;
-  if (t === null) throw new EstError(`неверная дата «${s}»: ожидается ГГГГ-ММ-ДД, время ISO или 90d / 12w / 6m / 48h`);
+  if (t === null) throw new EstError(`invalid date «${s}»: expected YYYY-MM-DD, an ISO time or 90d / 12w / 6m / 48h`);
   return t;
 }
 
 /** Периоды [начало, конец): i-й --until закрывает i-й --since, без него — до сейчас. */
 export function parsePeriods(since: string[], until: string[], now = nowTs()): [number, number][] {
-  if (!since.length) throw new EstError("укажите --since: начало периода (ГГГГ-ММ-ДД, время ISO или 90d)");
-  if (until.length > since.length) throw new EstError("--until без своего --since: периоды — пары --since … [--until …] по порядку");
+  if (!since.length) throw new EstError("pass --since: the start of the period (YYYY-MM-DD, an ISO time or 90d)");
+  if (until.length > since.length) throw new EstError("--until without its --since: periods are pairs --since … [--until …] in order");
   return since.map((s, i) => {
     const a = parseWhen(s, now);
     const z = i < until.length ? parseWhen(until[i]!, now) : now;
-    if (!(a < z)) throw new EstError(`период ${i + 1}: конец не позже начала (${fmtLocal(a)} … ${fmtLocal(z)})`);
+    if (!(a < z)) throw new EstError(`period ${i + 1}: the end isn't after the start (${fmtLocal(a)} … ${fmtLocal(z)})`);
     return [a, z];
   });
 }
@@ -3922,34 +3921,34 @@ export function periodTable(ps: Period[]): string[] {
   };
   type Line = [string, (p: Period) => number | null, (v: number) => string];
   const lines: (Line | string)[] = [
-    ["сессий", (p) => p.sessions, int],
-    ["влитых PR", (p) => p.prs, int],
-    ["часы агента (сумма по сессиям)", h, hrs],
-    ["часы машины (объединение сессий)", m, hrs],
-    ["параллельность сессий", (p) => (p.machine ? p.h / p.machine : null), (v) => `×${one(v)}`],
-    ["токены, млн", (p) => p.tok, mln],
-    ["выход, тыс.", (p) => p.out, thou],
-    ["стоимость, $", (p) => p.usd, usd],
-    ["ходы", (p) => p.steps, int],
-    ["субагентов", (p) => p.agents, int],
-    ["промптов человека", (p) => p.prompts, int],
-    "на влитой PR:",
-    ["  часы агента", perPr(h), hrs],
-    ["  часы машины", perPr(m), hrs],
-    ["  токены, млн", perPr((p) => p.tok), mln],
-    ["  выход, тыс.", perPr((p) => p.out), thou],
-    ["  стоимость, $", perPr((p) => p.usd), usd],
-    ["  ходов", perPr((p) => p.steps), one],
-    ["  субагентов", perPr((p) => p.agents), one],
-    ["  промптов человека", perPr((p) => p.prompts), one],
-    ["$ за 1 млн токенов", (p) => (p.usd !== null && p.tok ? p.usd / (p.tok / 1e6) : null), usd],
+    ["sessions", (p) => p.sessions, int],
+    ["merged PRs", (p) => p.prs, int],
+    ["agent hours (sum over sessions)", h, hrs],
+    ["machine hours (union of sessions)", m, hrs],
+    ["session parallelism", (p) => (p.machine ? p.h / p.machine : null), (v) => `×${one(v)}`],
+    ["tokens, M", (p) => p.tok, mln],
+    ["output, K", (p) => p.out, thou],
+    ["cost, $", (p) => p.usd, usd],
+    ["turns", (p) => p.steps, int],
+    ["subagents", (p) => p.agents, int],
+    ["human prompts", (p) => p.prompts, int],
+    "per merged PR:",
+    ["  agent hours", perPr(h), hrs],
+    ["  machine hours", perPr(m), hrs],
+    ["  tokens, M", perPr((p) => p.tok), mln],
+    ["  output, K", perPr((p) => p.out), thou],
+    ["  cost, $", perPr((p) => p.usd), usd],
+    ["  turns", perPr((p) => p.steps), one],
+    ["  subagents", perPr((p) => p.agents), one],
+    ["  human prompts", perPr((p) => p.prompts), one],
+    ["$ per 1M tokens", (p) => (p.usd !== null && p.tok ? p.usd / (p.tok / 1e6) : null), usd],
   ];
   const ratio = ps.length === 2;
   const ratioOf = (f: (p: Period) => number | null) => {
     const [a, b] = [f(ps[0]!), f(ps[1]!)];
     return a && b !== null ? `×${fmtH(b / a, 2)}` : "—";
   };
-  const head = ["", ...heads, ...(ratio ? ["после / до"] : [])];
+  const head = ["", ...heads, ...(ratio ? ["after / before"] : [])];
   const rows = lines.map((l) => (typeof l === "string" ? l : [l[0], ...ps.map((p) => {
     const v = l[1](p);
     return v === null ? "—" : l[2](v);
@@ -3960,10 +3959,10 @@ export function periodTable(ps: Period[]): string[] {
   out.push("");
   ps.forEach((p, i) => {
     const shares = usdShares(p.models);
-    const unpriced = p.unpriced.length ? `; без цены (нет в прайсе): ${p.unpriced.join(", ")}` : "";
-    out.push(`$ по моделям ${heads[i]}: ${shares.length ? sharesTxt(shares) : "—"}${unpriced}`);
+    const unpriced = p.unpriced.length ? `; no price (not in the price list): ${p.unpriced.join(", ")}` : "";
+    out.push(`$ by model ${heads[i]}: ${shares.length ? sharesTxt(shares) : "—"}${unpriced}`);
   });
-  out.push(`${TARIFF_NOTE}; $ за 1 млн токенов — сдвиг тарифа.`);
+  out.push(`${TARIFF_NOTE}; $ per 1M tokens — the rate shift.`);
   return out;
 }
 
@@ -3978,7 +3977,7 @@ function cmdPeriod(args: PeriodArgs): void {
   const repo = new Repo(resolveRepo(args.repo), loadRegistry());
   const sessions = repo.periodSessions();
   const prs = [...repo.prs().values()];
-  console.log(`== ${repo.full}: все сессии репозитория за период, без привязки к задачам`);
+  console.log(`== ${repo.full}: all of the repository's sessions over the period, without linking to tasks`);
   for (const line of periodTable(args.periods.map(([a, z]) => periodSummary(sessions, prs, a, z, args.gap)))) console.log(line);
 }
 
@@ -3986,18 +3985,18 @@ function cmdPeriod(args: PeriodArgs): void {
 // CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `est — оценка задач по истории проекта и факт из транскриптов Claude Code, Codex и облачных сессий.
+const USAGE = `est — estimates tasks from the project's history and records the actual from Claude Code, Codex and cloud session transcripts.
 
-  est history [--repo o/r] [--grep СЛОВО] [--all-repos] [--last N]
+  est history [--repo o/r] [--grep WORD] [--all-repos] [--last N]
   est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
   est fact --sweep [--since 90d] [--repo o/r] [--write]
-  est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   — пересчёт записанных фактов с этой моделью и их эпиков
-  est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "причина"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "причина"]] [--write]   — аналоги подбирает скрипт
-  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — аналоги вручную
-  est estimate <N> [--repo o/r] --type <type> --hours H [--write]
-  est backtest [--repo o/r] [--all-repos]   — механика против ручных оценок по закрытым задачам
-  est period --since ДАТА [--until ДАТА] [--since ДАТА [--until ДАТА]] [--repo o/r] [--gap 30]   — все сессии репо за период; два периода — рядом, «после / до»
-  est cloud-import <выгрузка.json>...   — события облачной сессии (SKILL.md, «Cloud session») в источники факта
+  est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   — recompute the recorded actuals with this model and their epics
+  est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]   — the script picks analogs
+  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — analogs by hand
+  est estimate <N> [--repo o/r] --type <type> --hours H [--write]   — expert, when there are no analogs
+  est backtest [--repo o/r] [--all-repos]   — mechanics vs manual estimates on closed tasks
+  est period --since DATE [--until DATE] [--since DATE [--until DATE]] [--repo o/r] [--gap 30]   — all of the repo's sessions over the period; two periods — side by side, «after / before»
+  est cloud-import <export.json>...   — cloud session events (SKILL.md, «Cloud session») into the sources of the actual
   <type> — ${EST_TYPES.join(" ")}`;
 
 /** Выгрузки облачных сессий → каталог состояния; сводка по каждой, чтобы было видно, что легло. */
@@ -4010,28 +4009,28 @@ function cmdCloudImport(files: string[]): void {
     } catch (e) {
       throw new EstError(`${f}: ${(e as Error).message}`);
     }
-    if (!isCloudExport(data)) throw new EstError(`${f}: не выгрузка облачной сессии (нужны session, repo, events — сниппет из SKILL.md est)`);
+    if (!isCloudExport(data)) throw new EstError(`${f}: not a cloud session export (needs session, repo, events — the snippet from SKILL.md est)`);
     const s = parseCloudFile(f);
     const dst = cloudPath(data.repo, data.session);
     mkdirSync(path.dirname(dst), { recursive: true });
     writeFileSync(dst, JSON.stringify(data));
     const n = data.events.length;
-    const span = s.ev.length ? `${hhmm(s.ev[0]![0])}–${hhmm(s.ev[s.ev.length - 1]![0])} UTC` : "без записей";
+    const span = s.ev.length ? `${hhmm(s.ev[0]![0])}–${hhmm(s.ev[s.ev.length - 1]![0])} UTC` : "no records";
     const title = data.title ? `, «${data.title}»` : "";
-    console.log(`${data.session} (${data.repo}${title}): ${n} ${plural(n, "событие", "события", "событий")}, ${s.n_human} ${plural(s.n_human, "промпт", "промпта", "промптов")}, ${span} → ${dst}`);
+    console.log(`${data.session} (${data.repo}${title}): ${n} ${plural(n, "event", "events")}, ${s.n_human} ${plural(s.n_human, "prompt", "prompts")}, ${span} → ${dst}`);
   }
 }
 
 function intArg(v: string | undefined, name: string): number | undefined {
   if (v === undefined) return undefined;
-  if (!/^-?\d+$/.test(v)) throw new EstError(`${name}: ожидается целое число, получено «${v}»`);
+  if (!/^-?\d+$/.test(v)) throw new EstError(`${name}: expected an integer, got «${v}»`);
   return parseInt(v, 10);
 }
 
 function floatArg(v: string | undefined, name: string): number | undefined {
   if (v === undefined) return undefined;
   const n = Number(v);
-  if (!Number.isFinite(n)) throw new EstError(`${name}: ожидается число, получено «${v}»`);
+  if (!Number.isFinite(n)) throw new EstError(`${name}: expected a number, got «${v}»`);
   return n;
 }
 
@@ -4044,7 +4043,7 @@ export function main(argv: string[]): number {
       return cmd ? 0 : 2;
     }
     if (cmd === "cloud-import") {
-      if (!rest.length) throw new EstError("укажите файлы выгрузки облачной сессии");
+      if (!rest.length) throw new EstError("pass the cloud session export files");
       cmdCloudImport(rest);
       return 0;
     }
@@ -4059,13 +4058,13 @@ export function main(argv: string[]): number {
         allowPositionals: true,
         options: { repo: { type: "string" }, write: { type: "boolean", default: false }, gap: { type: "string", default: "30" }, json: { type: "boolean", default: false }, sweep: { type: "boolean", default: false }, since: { type: "string", default: "90d" }, model: { type: "string" } },
       });
-      if (positionals.length > 1) throw new EstError(`лишние аргументы: ${positionals.slice(1).join(" ")}`);
-      return cmdFact({ number: intArg(positionals[0], "номер issue"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model });
+      if (positionals.length > 1) throw new EstError(`extra arguments: ${positionals.slice(1).join(" ")}`);
+      return cmdFact({ number: intArg(positionals[0], "issue number"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model });
     }
     if (cmd === "period") {
       const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, since: { type: "string", multiple: true }, until: { type: "string", multiple: true }, gap: { type: "string", default: "30" } } });
       const gap = intArg(values.gap, "--gap")!;
-      if (gap < 1) throw new EstError(`--gap должен быть ≥ 1 минуты, получено ${gap}`);
+      if (gap < 1) throw new EstError(`--gap must be ≥ 1 minute, got ${gap}`);
       cmdPeriod({ repo: values.repo, periods: parsePeriods(values.since ?? [], values.until ?? []), gap });
       return 0;
     }
@@ -4080,13 +4079,13 @@ export function main(argv: string[]): number {
         allowPositionals: true,
         options: { repo: { type: "string" }, hours: { type: "string" }, type: { type: "string" }, analogs: { type: "string", default: "" }, mult: { type: "string", default: "1" }, note: { type: "string", default: "" }, "tok-mult": { type: "string" }, "tok-note": { type: "string" }, write: { type: "boolean", default: false } },
       });
-      const number = intArg(positionals[0], "номер issue");
-      if (number === undefined) throw new EstError("укажите номер issue");
-      if (!values.type) throw new EstError(`--type обязателен: ${EST_TYPES.join(", ")}`);
+      const number = intArg(positionals[0], "issue number");
+      if (number === undefined) throw new EstError("pass the issue number");
+      if (!values.type) throw new EstError(`--type is required: ${EST_TYPES.join(", ")}`);
       cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, tokMult: floatArg(values["tok-mult"], "--tok-mult"), tokNote: values["tok-note"], note: values.note, write: values.write });
       return 0;
     }
-    throw new EstError(`неизвестная команда «${cmd}»; ожидается history, fact, estimate, backtest, period или cloud-import`);
+    throw new EstError(`unknown command «${cmd}»; expected history, fact, estimate, backtest, period or cloud-import`);
   } catch (e) {
     if (e instanceof EstError) die(e.message);
     if (e && typeof e === "object" && (e as Any).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") die((e as Error).message, 2);

@@ -64,6 +64,8 @@
     "manual": "+ manually:",
     "reason": "Reason:",
     "hours": "h",
+    "closingWords": "close closes closed fix fixes fixed resolve resolves resolved",
+    "stopWords": "the and for with from into",
     "fact": {
       "unavailable": "Actual unavailable: no sessions found (coverage none).",
       "body": "{h} h active in {agents} ({estimate}). {sessions}, {prompts},{subagents} wall {wall} h, coverage {cov}.",
@@ -101,7 +103,7 @@
       "shared": "shared {unit} with {list} (share 1/{k})",
       "commitUnit": "commit {oid}",
       "taken": " Not counted again: {h} h already in the actual of #{issue}.",
-      "overlap": " Overlap with the actual of #{issue}: {h} h — recount #{issue}.",
+      "overlap": " Overlap with the actual of #{issue}: {h} h — recompute #{issue}.",
       "cloudMissing": " Cloud session https://claude.ai/code/{sid} not imported — est cloud-import.",
       "tokens": "Tokens: {total} M",
       "tokensSplit": " (input {in} · output {out} · cache write {cw} · cache read {cr})",

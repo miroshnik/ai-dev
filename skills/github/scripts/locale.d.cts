@@ -31,6 +31,10 @@ declare namespace locale {
       manual: string;
       reason: string;
       hours: string;
+      /** Слова, которыми текст PR или коммита закрывает задачу (`Closes #N`), — через пробел; разбираются слова всех языков. */
+      closingWords: string;
+      /** Служебные слова заголовка для подбора аналогов — через пробел; отсекаются слова всех языков. */
+      stopWords: string;
       fact: {
         unavailable: string;
         body: string;
