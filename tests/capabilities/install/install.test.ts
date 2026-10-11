@@ -55,6 +55,25 @@ describe("В проект — копия, которую видят облачн
     expect(text).toContain("# Проект\n\nСвои правила.\n");
   });
 
+  /** Блок прошлой версии — по-русски; маркеры begin и end у него те же: по ним установка его находит и заменяет. */
+  it("блок прошлой версии по-русски в AGENTS.md проекта установка заменяет английским, а не ставит второй", () => {
+    const old = [
+      "<!-- ai-dev:begin — ставит `npx -y github:miroshnik/ai-dev install`, руками не править -->",
+      "Общие правила — `.agents/ai-dev/AGENTS.md`: прочитай до начала работы (справочники — `.agents/ai-dev/docs/`).",
+      "Скиллы — `.agents/skills/`.",
+      "<!-- ai-dev:end -->",
+    ].join("\n");
+    writeFileSync(path.join(proj, "AGENTS.md"), `${old}\n\n# Проект\n\nСвои правила.\n`);
+    install();
+    install();
+    const text = read(path.join(proj, "AGENTS.md"));
+    expect(text.match(/<!-- ai-dev:begin/g)).toHaveLength(1);
+    const block = /^<!-- ai-dev:begin[^]*?<!-- ai-dev:end -->/.exec(text)?.[0] ?? "";
+    expect(block).toContain("Shared rules — `.agents/ai-dev/AGENTS.md`");
+    expect(block).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(text).toEndWith("<!-- ai-dev:end -->\n\n# Проект\n\nСвои правила.\n");
+  });
+
   it("без AGENTS.md в проекте — файл создаётся с одним блоком", () => {
     install();
     expect(read(path.join(proj, "AGENTS.md"))).toMatch(/^<!-- ai-dev:begin[^]*<!-- ai-dev:end -->\n$/);
@@ -141,6 +160,21 @@ describe("Файлы флоу не игнорируются git проекта �
     expect(text).toMatch(/\n# ai-dev:begin[^\n]*\n[^]*\n# ai-dev:end\n$/);
     install();
     expect(gitignore()).toBe(text);
+  });
+
+  /** Шапка блока прошлой версии — по-русски; маркеры begin и end у него те же: по ним установка его находит. */
+  it("блок исключений прошлой версии с шапкой по-русски установка заменяет английским, а не ставит второй", () => {
+    const old = ["# ai-dev:begin — файлы флоу, которые иначе игнорирует git; ставит `npx -y github:miroshnik/ai-dev install`, руками не править", "!/.agents/ai-dev/claude/CLAUDE.md", "# ai-dev:end"].join("\n");
+    writeTree(proj, { ".gitignore": `node_modules/\nCLAUDE.md\n\n${old}\n` });
+    expect(install().code).toBe(0);
+    install();
+    const text = gitignore();
+    expect(text.match(/# ai-dev:begin/g)).toHaveLength(1);
+    expect(text).toStartWith("node_modules/\nCLAUDE.md\n\n# ai-dev:begin — flow files git would otherwise ignore; ");
+    expect(text).toContain("\n!/.agents/ai-dev/claude/CLAUDE.md\n");
+    expect(text).toEndWith("\n# ai-dev:end\n");
+    expect(text).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(ignored()).toEqual([]);
   });
 
   it("каталог .claude/ в .gitignore проекта — исключения снимают его только с файлов флоу: правила и скиллы не игнорируются, свои файлы в .claude по-прежнему игнорируются", () => {
@@ -280,11 +314,11 @@ describe("Проверки проекта идут очередью машины
     const ready = `"globalPassThroughEnv": ["SENTRY_*", "AI_DEV_SLOT_CPUS", "AI_DEV_SLOT"]`;
     const i = install();
     expect(i.code).toBe(0);
-    expect(i.stderr).toContain(`!! turbo.json — AI_DEV_SLOT не доходит до раннера`);
+    expect(i.stderr).toContain(`!! turbo.json — AI_DEV_SLOT doesn't reach the runner`);
     expect(i.stderr).toContain(ready);
     const c = aiDev(sb, ["check"]);
     expect(c.code).toBe(0);
-    expect(c.stdout).toMatch(/актуально[^\n]*\n {2}! turbo\.json — AI_DEV_SLOT не доходит до раннера: turbo в strict env mode/);
+    expect(c.stdout).toMatch(/up to date[^\n]*\n {2}! turbo\.json — AI_DEV_SLOT doesn't reach the runner: turbo in strict env mode/);
     expect(c.stdout).toContain(ready);
     expect(aiDev(sb, ["check", "--hook"]).stdout).toContain(ready);
   });
@@ -379,6 +413,18 @@ describe("На машину (-g) — только скиллы и хук, пра
     expect(ours[0].hooks[0].timeout).toBeGreaterThan(0);
   });
 
+  /** Хук прошлой версии — с запасным текстом по-русски: установка узнаёт свой хук по команде `check --hook`. */
+  it("хук прошлой версии с запасным текстом по-русски install -g заменяет, а не ставит второй", () => {
+    const command = 'npx -y --loglevel=error github:miroshnik/ai-dev check --hook 2>&1 || echo "ai-dev check недоступен (код $?): работай по текущему флоу и скажи об этом"';
+    const old = { matcher: "startup|resume|clear", hooks: [{ type: "command", command, timeout: 60 }] };
+    writeTree(home, { ".claude/settings.json": JSON.stringify({ hooks: { SessionStart: [old] } }) });
+    expect(install(["-g"]).code).toBe(0);
+    const hooks = JSON.parse(read(path.join(home, ".claude/settings.json"))).hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
+    expect(hooks).toHaveLength(1);
+    expect(hooks[0].command).toContain("github:miroshnik/ai-dev check --hook");
+    expect(hooks[0].command).not.toMatch(/\p{Script=Cyrillic}/u);
+  });
+
   it("без Claude Code на машине — хука нет, ~/.claude не создаётся", () => {
     mkdirSync(path.join(home, ".codex"));
     expect(install(["-g"]).code).toBe(0);
@@ -404,7 +450,7 @@ describe("Задача целиком без спроса — настройка
   it("без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json auto: false", () => {
     const r = install();
     expect(r.code).toBe(0);
-    expect(r.stdout).not.toContain("Делать задачи");
+    expect(r.stdout).not.toContain("Let the agent do tasks");
     expect(manifest(proj).auto).toBe(false);
   });
 
@@ -420,7 +466,7 @@ describe("Задача целиком без спроса — настройка
   it("install -g настройку не спрашивает и не хранит — в ~/.agents/ai-dev.json поля auto нет", () => {
     const r = install(["-g"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).not.toContain("Делать задачи");
+    expect(r.stdout).not.toContain("Let the agent do tasks");
     expect(manifest(home).skills).toEqual(SKILLS);
     expect(manifest(home)).not.toHaveProperty("auto");
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
@@ -453,7 +499,7 @@ describe("Язык работы агента — настройка проект
   it("без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json language: en", () => {
     const r = install();
     expect(r.code).toBe(0);
-    expect(r.stdout).not.toContain("Язык работы");
+    expect(r.stdout).not.toContain("Project language the agent works in");
     expect(manifest(proj).language).toBe("en");
   });
 
@@ -479,7 +525,7 @@ describe("Язык работы агента — настройка проект
     for (const args of [["--lang", "русский"], ["--lang"], ["--lang=ru_RU"], ["-g", "--lang", "ru"]]) {
       const r = install(args);
       expect(r.code).toBe(2);
-      expect(r.stderr).toContain("--lang <код>");
+      expect(r.stderr).toContain("--lang <code>");
     }
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
     expect(existsSync(path.join(home, ".agents"))).toBe(false);
@@ -488,13 +534,13 @@ describe("Язык работы агента — настройка проект
   it("--lang — флаг только install: у update и check он неизвестен", () => {
     install();
     expect(aiDev(sb, ["update", "--lang", "ru"]).code).toBe(2);
-    expect(aiDev(sb, ["check", "--lang=ru"]).stderr).toContain("неизвестный флаг: --lang=ru");
+    expect(aiDev(sb, ["check", "--lang=ru"]).stderr).toContain("unknown flag: --lang=ru");
   });
 
   it("install -g язык не спрашивает и не хранит — в ~/.agents/ai-dev.json поля language нет", () => {
     const r = install(["-g"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).not.toContain("Язык работы");
+    expect(r.stdout).not.toContain("Project language the agent works in");
     expect(manifest(home)).not.toHaveProperty("language");
   });
 });
@@ -514,9 +560,17 @@ describe("Мерж своего PR в Claude Code — правило разре�
     expect(r.stdout).toContain(`"${RULE}"`);
     expect(r.stdout).toContain("permissions.allow");
     expect(r.stdout).toContain("~/.claude/settings.json");
-    expect(r.stdout).toContain("ставит владелец");
+    expect(r.stdout).toContain("the owner adds it");
     // режим остался с прошлой установки — подсказка та же: о правиле узнают не из отказа
     expect(install().stdout).toContain(RULE);
+  });
+
+  /** Последняя строка сессии — на языке проекта, из словаря скилла github; остальной текст подсказки — по-английски. */
+  it("подсказка цитирует последнюю строку сессии на языке проекта: en — «Remaining: …», ru — «Осталось: …»", () => {
+    expect(install(["--auto"]).stdout).toContain("the session ends with «Remaining: …»");
+    const ru = install(["--auto", "--lang", "ru"]).stdout;
+    expect(ru).toContain("the session ends with «Осталось: …»");
+    expect(ru.replace("«Осталось: …»", "")).not.toMatch(/\p{Script=Cyrillic}/u);
   });
 
   it("install без auto о правиле разрешений молчит", () => {
@@ -551,8 +605,8 @@ describe("Неверный вызов — код 2 с объяснением", (
     for (const args of [["-g", "--auto"], ["-g", "--no-auto"], ["--auto", "--no-auto"]]) {
       const r = install(args);
       expect(r.code).toBe(2);
-      expect(r.stderr).toContain("настройка проекта");
-      expect(r.stderr).not.toContain("неизвестный флаг");
+      expect(r.stderr).toContain("project setting");
+      expect(r.stderr).not.toContain("unknown flag");
     }
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
     expect(existsSync(path.join(home, ".agents"))).toBe(false);
