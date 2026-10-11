@@ -1029,6 +1029,13 @@
  {
   "path": "tests/capabilities/est/est.test.ts",
   "describes": [
+   "Оценка — один вызов: est estimate без --analogs"
+  ],
+  "name": "в репо меньше двух аналогов с фактом — задача без оценки: строка «No estimate», ничего не пишет, код 0, чужие репо не читает"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
    "Оценка — ступень шкалы от 0,1 до 13 ч"
   ],
   "name": "округляет к ближайшей ступени, при равном расстоянии — к меньшей, выше 13 не бывает"
@@ -2480,7 +2487,7 @@
   "describes": [
    "task new заводит задачу со всем сразу"
   ],
-  "name": "подзадача эпика: заголовок с префиксом эпика, в проекте в Бэклог, sub-issue, blocked by, следующий шаг — оценка"
+  "name": "подзадача эпика: заголовок с префиксом эпика, в проекте в Бэклог, sub-issue, blocked by, следующий шаг — сумма оценок эпика"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -2530,6 +2537,62 @@
    "task new ставит метки решений — по имени решения, новое решение — `вид:имя`"
   ],
   "name": "новое решение — `вид:имя`: метка с именем, строка называет решение новым"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "est не установлен рядом — задача заведена, «○ no estimate: est is not installed», код 0"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "est упал — задача заведена, его ошибка строкой «! est estimate», код 0"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "баг без --branch-type — оценка с типом fix: ветка бага — fix/<N>-…"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "задача без --branch-type — ошибка до создания: тип ветки нужен оценке"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "задача с --branch-type — сразу est estimate <N> --type <тип ветки> --write; вывод est — в выводе task new, без маркера"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "тип ветки не из списка — ошибка до создания"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "эпик не оценивается: est не зовётся, «Next:» — оценка эпика есть сумма оценок подзадач"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
+  "name": "эпик с --branch-type — ошибка до создания: у эпика нет ветки и своей оценки"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -9234,6 +9297,20 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «No estimate: …» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «No estimate» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «Not counted again: N h already in the actual of #M» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
@@ -9389,13 +9466,6 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «after / before» из skills/est/SKILL.md печатает или пишет скрипт"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
-  ],
-  "name": "цитату «agents» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9864,13 +9934,6 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «not counted» из skills/est/SKILL.md печатает или пишет скрипт"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
-  ],
   "name": "цитату «not empty» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
@@ -9984,13 +10047,6 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
-  ],
-  "name": "цитату «turns» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",

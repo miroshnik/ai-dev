@@ -109,7 +109,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 164 теста</summary>
+<details><summary>✅ 163 теста</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -157,6 +157,8 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Moved into the tree» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Names that aren't statements (exceptions)» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Next:» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «No estimate: …» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «No estimate» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Not counted again: N h already in the actual of #M» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Of them, from the harness» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Outside the tree» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -180,7 +182,6 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «a mark belongs in one element's file» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «actual unavailable» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «after / before» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «agents» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «all knip findings are of known kinds» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «all time» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «allowed: …» из skills/spec/checks.md печатает или пишет скрипт
@@ -247,7 +248,6 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «none» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not allowed: …» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «not allowed» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «not counted» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not empty» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not imported» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not written: …» из skills/est/SKILL.md печатает или пишет скрипт
@@ -265,7 +265,6 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «remove the mark in \<file>:\<line>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «repo» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «turns» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «unsplit: N h» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «working» из skills/dashboard/SKILL.md печатает или пишет скрипт
