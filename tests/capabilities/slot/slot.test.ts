@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,14 +17,21 @@ const PATIENCE = 30_000;
 let dir: string;
 let cleanup: () => void;
 let config: string;
+let tmp: string;
 let running: ChildProcess[];
+/** Каталоги, закрытые тестом на запись: открываются до уборки, иначе её не удалить. */
+let locked: string[];
 
 beforeEach(() => {
   ({ dir, cleanup } = tmpDir());
   config = path.join(dir, "config");
+  tmp = path.join(dir, "tmp");
+  mkdirSync(tmp);
   running = [];
+  locked = [];
 });
 afterEach(() => {
+  for (const d of locked) chmodSync(d, 0o755);
   for (const p of running) {
     if (p.exitCode !== null || p.signalCode !== null) continue;
     try {
@@ -37,11 +44,25 @@ afterEach(() => {
   cleanup();
 });
 
-/** Окружение slot: своя очередь в каталоге теста; прогон самого теста может идти в CI или внутри слота — не в счёт. */
+/**
+ * Окружение slot: своя очередь в каталоге теста — и в конфигурации, и во временных каталогах, иначе тест встал бы в
+ * очередь машины; прогон самого теста может идти в CI, внутри слота или в Claude Code — не в счёт.
+ */
 function envOf(extra: Record<string, string> = {}) {
-  const env: Record<string, string | undefined> = { ...process.env, AI_DEV_CONFIG_DIR: config, ...extra };
-  for (const k of ["CI", "AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"]) if (!(k in extra)) delete env[k];
+  const env: Record<string, string | undefined> = { ...process.env, AI_DEV_CONFIG_DIR: config, TMPDIR: tmp, ...extra };
+  for (const k of ["CI", "AI_DEV_SLOT", "AI_DEV_SLOT_CPUS", "CLAUDE_TMPDIR"]) if (!(k in extra)) delete env[k];
   return env;
+}
+
+/** Каталог без записи — как каталог конфигурации в песочнице агента: читать можно, писать нельзя. */
+function lock(d: string) {
+  mkdirSync(d, { recursive: true });
+  chmodSync(d, 0o555);
+  locked.push(d);
+}
+function unlock(d: string) {
+  chmodSync(d, 0o755);
+  locked = locked.filter((x) => x !== d);
 }
 
 interface Queued {
@@ -64,7 +85,8 @@ function start(args: string[], extra: Record<string, string> = {}): Queued {
 }
 
 /** Команда в слоте, которая идёт, пока тест её не отпустит: `started-<имя>` — началась, `release-<имя>` — закончить. */
-const hold = (name: string) => start([`touch started-${name}; while [ ! -f release-${name} ]; do sleep 0.02; done`]);
+const hold = (name: string, extra: Record<string, string> = {}) =>
+  start([`touch started-${name}; while [ ! -f release-${name} ]; do sleep 0.02; done`], extra);
 const started = (name: string) => existsSync(path.join(dir, `started-${name}`));
 const release = (name: string) => writeFileSync(path.join(dir, `release-${name}`), "");
 
@@ -186,5 +208,63 @@ describe("Без очереди — там, где она лишняя или ж
     expect(exitOf(r)).toBe(0);
     expect(r.stdout).toBe("inner\n");
     release("a");
+  });
+});
+
+describe("Песочница агента не роняет очередь", () => {
+  it("без записи в каталог конфигурации очередь идёт через временный каталог", async () => {
+    lock(path.join(config, "slots"));
+    const [a, b] = [hold("a"), hold("b")];
+    await until(() => started("a") && started("b"), "две первые команды стартовали");
+    const c = hold("c");
+    await waiting(c, "третья");
+    expect(readdirSync(path.join(tmp, "ai-dev", "slots"))).toHaveLength(3);
+    release("a");
+    expect(await a.done).toBe(0);
+    await until(() => started("c"), "третья стартовала после первой");
+    for (const n of ["b", "c"]) release(n);
+    expect([await b.done, await c.done]).toEqual([0, 0]);
+  });
+
+  it("прогон в песочнице ждёт прогоны вне её, мёртвый билет вне песочницы ему не мешает", async () => {
+    const [a, b] = [hold("a"), hold("b")];
+    await until(() => started("a") && started("b"), "две первые команды стартовали");
+    lock(path.join(config, "slots"));
+    const c = hold("c");
+    await waiting(c, "третья в песочнице");
+    expect(readdirSync(path.join(tmp, "ai-dev", "slots"))).toHaveLength(1);
+    // билет убитой первой остаётся в каталоге, который песочнице не убрать
+    process.kill(-a.proc.pid!, "SIGKILL");
+    await until(() => started("c"), "третья стартовала после убитой первой");
+    unlock(path.join(config, "slots"));
+    for (const n of ["b", "c"]) release(n);
+    expect([await b.done, await c.done]).toEqual([0, 0]);
+  });
+
+  it("прогон Claude Code вне песочницы ждёт прогоны в ней", async () => {
+    lock(path.join(config, "slots"));
+    const [a, b] = [hold("a"), hold("b")];
+    await until(() => started("a") && started("b"), "две первые команды в песочнице стартовали");
+    unlock(path.join(config, "slots"));
+    // вне песочницы временный каталог свой, а временный каталог Claude Code — тот же, что у песочницы
+    const outside = path.join(dir, "outside");
+    mkdirSync(outside);
+    const c = hold("c", { TMPDIR: outside, CLAUDE_TMPDIR: tmp });
+    await waiting(c, "третья вне песочницы");
+    expect(readdirSync(path.join(config, "slots"))).toHaveLength(1);
+    release("a");
+    expect(await a.done).toBe(0);
+    await until(() => started("c"), "третья стартовала после первой");
+    for (const n of ["b", "c"]) release(n);
+    expect([await b.done, await c.done]).toEqual([0, 0]);
+  });
+
+  it("очереди нет — одна строка предупреждения, команда идёт без неё", () => {
+    lock(path.join(config, "slots"));
+    lock(path.join(tmp, "ai-dev", "slots"));
+    const r = run(['echo "ran[$AI_DEV_SLOT_CPUS]"; exit 3']);
+    expect(exitOf(r)).toBe(3);
+    expect(r.stdout).toBe("ran[]\n");
+    expect(r.stderr).toMatch(/^slot: [^\n]*without the queue[^\n]*\n$/);
   });
 });

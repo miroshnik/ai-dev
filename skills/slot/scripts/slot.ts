@@ -9,6 +9,11 @@
  * by the first one to see it: there are no locks to remove by hand. The command gets AI_DEV_SLOT_CPUS: all slots together
  * take half of the cores.
  *
+ * An agent's sandbox doesn't let the configuration be written: the ticket goes to `ai-dev/slots` of the temp directory
+ * (Claude Code's sandbox gives all sessions of the user one TMPDIR), and the queue is read from all places at once — runs
+ * inside and outside the sandbox wait for each other. No place takes the ticket — one warning line and the command runs
+ * without the queue.
+ *
  * No queue in CI (the machine is given to the run) and inside a slot (AI_DEV_SLOT): a script that calls another script
  * through the queue would otherwise wait for itself.
  *
@@ -62,33 +67,61 @@ function alive(pid: number) {
   }
 }
 
-/** Live tickets in arrival order; tickets of dead processes are removed. */
-function queue(dir: string): Ticket[] {
+/**
+ * Where tickets live, in the order a ticket is written: the personal configuration, then the temp directory — an agent's
+ * sandbox doesn't let the configuration be written, while its TMPDIR is shared by the sandbox's sessions; Claude Code
+ * passes its sandbox's temp directory as CLAUDE_TMPDIR outside the sandbox too, so runs outside wait for runs inside.
+ */
+function places() {
+  const config = process.env.AI_DEV_CONFIG_DIR || path.join(os.homedir(), ".config", "ai-dev");
+  const temps = [os.tmpdir(), process.env.CLAUDE_TMPDIR].filter((d): d is string => !!d).map((d) => path.join(d, "ai-dev"));
+  return [...new Set([config, ...temps].map((d) => path.join(path.resolve(d), "slots")))];
+}
+
+/** Live tickets of all places in arrival order; tickets of dead processes are removed where the directory can be written. */
+function queue(dirs: string[]): Ticket[] {
   const out: Ticket[] = [];
-  for (const name of readdirSync(dir).sort()) {
-    const pid = Number(/^\d+-(\d+)$/.exec(name)?.[1]);
-    if (!pid) continue;
-    if (!alive(pid)) {
-      rmSync(path.join(dir, name), { force: true });
-      continue;
-    }
-    let info = {};
+  for (const dir of dirs) {
+    let names: string[];
     try {
-      info = JSON.parse(readFileSync(path.join(dir, name), "utf8"));
+      names = readdirSync(dir);
     } catch {
-      /* the ticket was just created and is still empty */
+      continue; // no one has queued here yet
     }
-    out.push({ ...info, name });
+    for (const name of names) {
+      const pid = Number(/^\d+-(\d+)$/.exec(name)?.[1]);
+      if (!pid) continue;
+      if (!alive(pid)) {
+        try {
+          rmSync(path.join(dir, name), { force: true });
+        } catch {
+          /* a sandbox can't write here: the ticket just doesn't count, a run outside the sandbox removes it */
+        }
+        continue;
+      }
+      let info = {};
+      try {
+        info = JSON.parse(readFileSync(path.join(dir, name), "utf8"));
+      } catch {
+        /* the ticket was just created and is still empty */
+      }
+      out.push({ ...info, name });
+    }
   }
-  return out;
+  return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 const duration = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
 
+/** A path under the home directory — from `~`. */
+function tilde(p: string) {
+  const home = os.homedir();
+  return p.startsWith(home + path.sep) ? `~${p.slice(home.length)}` : p;
+}
+
 /** Who holds the slot: the directory, the command and how long it has been running. */
 function holder(t: Ticket) {
-  const home = os.homedir();
-  const cwd = t.cwd?.startsWith(home + path.sep) ? `~${t.cwd.slice(home.length)}` : (t.cwd ?? "?");
+  const cwd = t.cwd ? tilde(t.cwd) : "?";
   const cmd = (t.cmd ?? "?").replace(/\s+/g, " ");
   return `${cwd}: ${cmd.length > 80 ? cmd.slice(0, 79) + "…" : cmd}${t.since ? ` (${duration(Date.now() - t.since)})` : ""}`;
 }
@@ -114,30 +147,44 @@ async function main(argv: string[]): Promise<number> {
   const ci = process.env.CI && !/^(0|false)$/i.test(process.env.CI);
   if (ci || process.env.AI_DEV_SLOT) return run(command, {});
 
-  const dir = path.join(process.env.AI_DEV_CONFIG_DIR || path.join(os.homedir(), ".config", "ai-dev"), "slots");
+  const dirs = places();
   const name = `${String(Date.now()).padStart(15, "0")}-${process.pid}`;
-  const file = path.join(dir, name);
+  let file = "";
   const enqueue = () => {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ cwd: process.cwd(), cmd: command, since: Date.now() }));
   };
+  const refused: string[] = [];
+  for (const dir of dirs) {
+    file = path.join(dir, name);
+    try {
+      enqueue();
+      break;
+    } catch (e) {
+      refused.push(`${tilde(dir)} (${(e as NodeJS.ErrnoException).code ?? (e as Error).message})`);
+      file = "";
+    }
+  }
+  if (!file) {
+    process.stderr.write(`slot: running without the queue — no place takes the ticket: ${refused.join(", ")}\n`);
+    return run(command, {});
+  }
   const drop = () => rmSync(file, { force: true });
   process.on("exit", drop);
   // while waiting, a signal removes the ticket and exits; in a slot, signals go to the command (run)
   const quit = (s: NodeJS.Signals) => (drop(), process.exit(128 + os.constants.signals[s]));
   for (const s of SIGNALS) process.on(s, quit);
-  enqueue();
 
   const t0 = Date.now();
   let confirmed = false;
   let told = "";
   let toldAt = 0;
   for (;;) {
-    let q = queue(dir);
+    let q = queue(dirs);
     let i = q.findIndex((t) => t.name === name);
     if (i < 0) {
       enqueue(); // the ticket was removed from outside (the directory cleaned by hand) — the same place in the queue
-      q = queue(dir);
+      q = queue(dirs);
       i = q.findIndex((t) => t.name === name);
     }
     if (i >= 0 && i < SLOTS) {

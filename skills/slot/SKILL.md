@@ -83,3 +83,12 @@ it holds the directory, the command and the start time. Who is in the queue —
 `ls` of that directory. A process died, even one killed without cleanup — its
 ticket doesn't count and is removed by the first one to see it: there is
 nothing to clean up by hand.
+
+An agent's sandbox doesn't let the configuration be written: there the ticket
+goes to `ai-dev/slots` of the temp directory (`$TMPDIR`; Claude Code's sandbox
+gives all sessions of the user one), and the queue is read from all places at
+once, Claude Code's temp directory (`$CLAUDE_TMPDIR`) included — runs inside
+and outside the sandbox wait for each other; a human's terminal doesn't see
+the sandbox's runs. The checks run in the sandbox, without disabling it. No
+place takes the ticket — one line `slot: running without the queue — …` and
+the command runs anyway.
