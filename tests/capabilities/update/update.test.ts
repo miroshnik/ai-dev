@@ -669,6 +669,21 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.stdout).not.toContain("Behind —");
   });
 
+  /**
+   * Команду из вывода хука агент запускает в песочнице Bash: npx там не пишет свой кеш `~/.npm`, установка — в
+   * `.claude/skills`. Хук идёт вне песочницы и её не видит — подсказка условная.
+   */
+  it("вывод хука с командой для запуска подсказывает песочницу Claude Code: кеш npm — npm_config_cache, отказ записи в .claude/ — команда в терминале владельца; без команды подсказки нет", () => {
+    const hint = /In the Claude Code sandbox npx can't write its cache ~\/\.npm — prefix the command with npm_config_cache="\$TMPDIR\/npm"; [^\n]*\.claude\/[^\n]*the owner runs the command in their terminal/;
+    aiDev(sb, ["install", "-g"]);
+    npxServes(base.bin);
+    expect(runHook().stdout).toMatch(hint);
+    aiDev(sb, ["install"]);
+    expect(runHook().stdout).not.toContain("sandbox");
+    npxServes(newer.bin);
+    expect(runHook().stdout).toMatch(hint);
+  });
+
   it("npx недоступен — код хука 0, в выводе — что проверка недоступна", () => {
     aiDev(sb, ["install", "-g"]);
     rmSync(path.join(sb.bin, "npx"));

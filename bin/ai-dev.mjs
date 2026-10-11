@@ -971,8 +971,8 @@ function changeLines(changes, root, global) {
 
 /**
  * behind — falls behind: update will install something new; ignored — the project's git ignores flow files: update
- * will add exceptions.
- * @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean, behind?: boolean, ignored?: boolean }} Result
+ * will add exceptions; run — the text names a command to run.
+ * @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean, behind?: boolean, ignored?: boolean, run?: boolean }} Result
  */
 
 /** The check failed: what and why. @param {boolean} global @param {unknown} e @returns {Result} */
@@ -1034,6 +1034,7 @@ function check(global) {
     code: 1,
     behind: stale.length > 0,
     ignored: ignored.length > 0,
+    run: stale.length > 0 || fixable,
     text: [
       stale.length ? `ai-dev ${where}: behind — installed ${m.tag ?? short(m.sha) ?? "without SHA"}, latest ${fresh}` : `ai-dev ${where}: up to date (${fresh}), but git ${lost}`,
       ...capped(changeLines(stale, root, global)),
@@ -1102,6 +1103,12 @@ function unreleased(clone) {
 }
 
 /**
+ * The hook runs outside the Bash sandbox and doesn't see it, but the agent runs the commands it names inside: npx
+ * there can't write its cache `~/.npm` (EPERM mkdtemp), the install — `.claude/skills` (`denied`).
+ */
+const SANDBOX_HINT = `In the Claude Code sandbox npx can't write its cache ~/.npm — prefix the command with npm_config_cache="$TMPDIR/npm"; the sandbox refuses writes to .claude/ too — then the owner runs the command in their terminal.`;
+
+/**
  * The SessionStart hook: the machine and the project in one output to the session context; the code is always 0,
  * errors go to stdout. failed — the latest release couldn't be found: what's installed is "check unavailable".
  * @param {unknown} [failed]
@@ -1119,12 +1126,13 @@ function hook(failed) {
   const shown = results.filter((r) => !r.absent);
   // rules load only from the project: a git repository without the flow — how to install it (an ai-dev clone is the
   // canon itself, it isn't absent)
-  if (results[1]?.absent && gitRoot()) shown.push({ code: 0, text: `ai-dev in the project: not installed — install it: npx -y github:${SOURCE} install --lang <project language>` });
+  if (results[1]?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `ai-dev in the project: not installed — install it: npx -y github:${SOURCE} install --lang <project language>` });
   if (!shown.length) return 0;
   const tail = [];
   if (shown.some((r) => r.behind)) tail.push("Behind — update, commit the project copy, re-read what was updated.");
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, commit it with the copy; a rule outside the project — fix it yourself.");
   if (shown.some((r) => r.code === 2)) tail.push("Check unavailable — work by the current flow and say so.");
+  if (shown.some((r) => r.run)) tail.push(SANDBOX_HINT);
   note(["ai-dev flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...tail].join("\n"));
   return 0;
 }
