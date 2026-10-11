@@ -1,26 +1,29 @@
 #!/usr/bin/env bun
 /**
- * github — проект и задачи GitHub репозитория по канону AGENTS.md (раздел «Task tracking»; правила целиком —
- * reference.md рядом со SKILL.md: типы, метки решений, эпики, проект, milestones, актуализация блока).
+ * github — the repository's GitHub project and tasks by the AGENTS.md canon (the "Task tracking" section; the full
+ * rules are in reference.md next to SKILL.md: types, decision labels, epics, the project, milestones, epic refresh).
  *
- * Подкоманды:
- *   github project check — сверка с каноном по пунктам ✅/❌
- *   github project fix   — довести до канона: API, шаги UI со ссылками, удаление и переименование — с --confirm
- *   github task new      — задача одной командой: тип или метка, проект и Бэклог, Priority, эпик, blocked by, milestone,
- *                          метки решений (имя решения, вид — цветом)
- *   github task status   — Status в проекте (и эпик — «В работе», когда взята первая подзадача); «В работе» закрепляет
- *                          задачу за сессией — другой задаче в той же сессии отказ
- *   github task drop     — закрыть без выполнения и убрать из проекта
- *   github task actualize — после мержа, параллельно с деплоем: задание субагенту актуализации блока (или «не нужна»)
- *   github task close    — после мержа и деплоя: факт, «Готово», эпик и milestone, влитая ветка долой
- *   github pr labels     — метки решений задаче из «Closes #N» по диффу PR, её эпику — объединение
- *   github pr premerge   — перед мержем: основная ветка ушла после CI PR — typecheck и test:spec на слиянии с ней
+ * Subcommands:
+ *   github project check — a check against the canon, item by item ✅/❌
+ *   github project fix   — bring it to the canon: API, UI steps with links, deleting and renaming — with --confirm
+ *   github task new      — a task in one command: type or label, project and Backlog, Priority, epic, blocked by,
+ *                          milestone, decision labels (the decision's name, the kind by color)
+ *   github task status   — Status in the project (and the epic's "In progress" once its first subtask is taken);
+ *                          "In progress" pins the task to the session — another task in the same session is refused
+ *   github task drop     — close without doing it and remove from the project
+ *   github task actualize — after the merge, in parallel with the deploy: the epic-refresh subagent's assignment
+ *                          (or "not needed")
+ *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the merged
+ *                          branch removed
+ *   github pr labels     — decision labels for the task from "Closes #N" by the PR diff, for its epic — the union
+ *   github pr premerge   — before the merge: the default branch moved after the PR's CI — typecheck and test:spec on
+ *                          the merge with it
  *
- * Запуск — Bun (`bun github.ts …`), только `node:`-API + CLI `gh`. Проверка и исправление — одна функция
- * `analyze`: каждое расхождение несёт свой шаг исправления, поэтому `check` и `fix` не расходятся.
- * Метки решений сверяются с деревом спеки основной ветки; модель архитектуры читает отдельный процесс того же
- * рантайма (`modelModules`). Мерж в основную ветку — ruleset `ai-dev`: обязательные чеки, зелёные на последних
- * влитых PR; способ мержа — только rebase (настройка репозитория, REST).
+ * Runs on Bun (`bun github.ts …`), only `node:` APIs + the `gh` CLI. Check and fix are one function, `analyze`: each
+ * discrepancy carries its own fix step, so `check` and `fix` don't diverge.
+ * Decision labels are checked against the spec tree of the default branch; the architecture model is read by a
+ * separate process of the same runtime (`modelModules`). Merging into the default branch — the `ai-dev` ruleset:
+ * required checks, green on the last merged PRs; the merge method — rebase only (a repository setting, REST).
  */
 
 import { spawnSync } from "node:child_process";
@@ -36,13 +39,13 @@ import type { Names } from "./locale.cjs";
 type Any = any;
 
 // ----------------------------------------------------------------------------
-// Канон
+// Canon
 // ----------------------------------------------------------------------------
 
 /**
- * Названия канона на языке проекта (`locales/<язык>.json`, модуль `locale.cjs`): представления, варианты Status,
- * поля, типы issue, маркеры меток, разделы, комментарии. Язык — проекта каталога `io.cwd`, его ставит `main`; разбор —
- * по названиям любого языка словаря (`locale.every`).
+ * Canon names in the project language (`locales/<language>.json`, the `locale.cjs` module): views, Status options,
+ * fields, issue types, label markers, sections, comments. The language is the one of the project of the `io.cwd`
+ * directory, `main` sets it; parsing — by the names of any dictionary language (`locale.every`).
  */
 let N: Names = locale.names(locale.projectLanguage());
 
@@ -56,21 +59,22 @@ const statusOptions = () => [N.status.backlog, N.status.inProgress, N.status.don
 const numberFields = () => [N.fields.estimate, N.fields.actual, N.fields.tokens, N.fields.cost];
 const issueTypes = () => [N.issueTypes.task, N.issueTypes.bug, N.issueTypes.epic];
 export const PRIORITY = "Priority";
-/** Варианты Priority от самого срочного; новой задаче — Medium, эпику — не ниже самой срочной подзадачи. */
+/** Priority options from the most urgent; a new task gets Medium, an epic — no lower than its most urgent subtask. */
 export const PRIORITIES = ["Urgent", "High", "Medium", "Low"] as const;
 export const DEFAULT_PRIORITY = "Medium";
-/** В личном аккаунте типов issue нет — эпик помечается меткой, это единственное исключение. */
+/** A personal account has no issue types — an epic is marked with a label, the only exception. */
 export const EPIC_LABEL = "epic";
 const epicLabel = () => ({ name: EPIC_LABEL, color: "8250DF", description: N.labels.epicDescription });
 /**
- * Метки решений: имя — имя решения (папка дерева спеки или модуль модели), вид — цветом. Решения разных видов с
- * одним именем — одна метка: цвет старшего вида (порядок здесь), в описании все. У архитектуры решение — правило
- * `tests/architecture/<name>` или модуль модели `tests/architecture/model.ts`.
+ * Decision labels: the name is the decision's name (a spec tree folder or a model module), the kind is the color.
+ * Decisions of different kinds with one name are one label: the color of the senior kind (the order here), all of them
+ * in the description. For architecture a decision is the rule `tests/architecture/<name>` or a module of the model
+ * `tests/architecture/model.ts`.
  */
 export const DECISIONS = {
   capability: { dir: "capabilities", color: "0E8A16" },
   standard: { dir: "standards", color: "1D76DB" },
-  // не FBCA04: он у метки «вопросы», а вид метки решения виден только цветом
+  // not FBCA04: the "questions" label has it, and a decision label's kind shows only by color
   architecture: { dir: "architecture", color: "D93F0B" },
 } as const;
 export type DecisionKind = keyof typeof DECISIONS;
@@ -79,21 +83,22 @@ const MODEL_PATH = "tests/architecture/model.ts";
 export const WORKFLOW_ADDED = "Item added to project";
 export const WORKFLOW_CLOSED = "Item closed";
 export const WORKFLOW_AUTO_ADD = "Auto-add to project";
-/** Эталон: новый проект — его копия (представления, поля, настроенные workflow, кроме auto-add). */
+/** The template: a new project is its copy (views, fields, configured workflows except auto-add). */
 export const DEFAULT_TEMPLATE = "miroshnik/6";
 /**
- * Ruleset основной ветки, который ставит fix: GitHub не даёт влить ветку с красным обязательным чеком. Актуальной
- * ветки он не требует (strict выключен): несовместимость двух зелёных PR покажет CI следующего PR.
+ * The default-branch ruleset that fix sets: GitHub doesn't let a branch with a red required check be merged. It doesn't
+ * require the branch to be up to date (strict is off): the next PR's CI shows that two green PRs are incompatible.
  */
 export const RULESET = "ai-dev";
-/** Обязательный чек — зелёный на каждом из стольких последних влитых PR с чеками. */
+/** A required check is green on each of this many last merged PRs with checks. */
 export const STABLE_PRS = 10;
-/** Роль admin репозитория (`repositoryRoleDatabaseId`) обходит ruleset: прямой push, `gh pr merge --admin`. */
+/** The repository admin role (`repositoryRoleDatabaseId`) bypasses the ruleset: direct push, `gh pr merge --admin`. */
 const ADMIN_ROLE = 5;
 
 /**
- * Варианты Status нового проекта и названия других языков словаря → название на языке проекта: переименование с тем
- * же id сохраняет значения задач и цель workflow «Item closed» (замена вариантов целиком даёт новые id).
+ * Status options of a new project and names in the dictionary's other languages → the name in the project language:
+ * renaming with the same id keeps the tasks' values and the target of the "Item closed" workflow (replacing all the
+ * options gives new ids).
  */
 function statusAliases(): Record<string, string> {
   const out: Record<string, string> = { todo: N.status.backlog, "to do": N.status.backlog, doing: N.status.inProgress };
@@ -104,7 +109,7 @@ function statusAliases(): Record<string, string> {
   }
   return out;
 }
-/** Типы issue любого языка словаря (и `task`, `bug`, `epic`) → тип на языке проекта. */
+/** Issue types in any dictionary language (and `task`, `bug`, `epic`) → the type in the project language. */
 function typeAliases(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const n of locale.everyNames()) {
@@ -114,7 +119,7 @@ function typeAliases(): Record<string, string> {
   }
   return out;
 }
-/** Поля проекта любого языка словаря → поле на языке проекта. */
+/** Project fields in any dictionary language → the field in the project language. */
 function fieldAliases(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const n of locale.everyNames()) {
@@ -125,25 +130,28 @@ function fieldAliases(): Record<string, string> {
   }
   return out;
 }
-// Встроенные поля проекта; свои — всё остальное (TEXT, NUMBER, DATE, SINGLE_SELECT, ITERATION…).
+// Built-in project fields; custom ones are everything else (TEXT, NUMBER, DATE, SINGLE_SELECT, ITERATION…).
 const BUILTIN_FIELDS = new Set(["TITLE", "ASSIGNEES", "LABELS", "LINKED_PULL_REQUESTS", "MILESTONE", "REPOSITORY", "REVIEWERS", "PARENT_ISSUE", "SUB_ISSUES_PROGRESS", "CREATED", "UPDATED", "CLOSED", "TRACKS", "TRACKED_BY", "ISSUE_TYPE"]);
 const NOT_DONE_REASONS = new Set(["NOT_PLANNED", "DUPLICATE"]);
 
 // ----------------------------------------------------------------------------
-// Модель
+// Model
 // ----------------------------------------------------------------------------
 
 export interface Io {
-  /** `gh` с аргументами и stdin → stdout; ошибка — исключение. Внешний край: в тестах подменяется. */
+  /** `gh` with arguments and stdin → stdout; an error is an exception. An external edge: replaced in tests. */
   gh: (args: string[], stdin?: string) => string;
   out: (line: string) => void;
   err: (line: string) => void;
   env: Record<string, string | undefined>;
-  /** Пауза перед перечитыванием (GitHub показывает добавленное не сразу); в тестах — без ожидания. */
+  /** A pause before re-reading (GitHub doesn't show additions right away); in tests — no waiting. */
   sleep?: (ms: number) => void;
-  /** Подпроцесс (`est`, `git` у `task close`) — внешний край: в тестах подменяется. */
+  /** A subprocess (`est`, `git` of `task close`) — an external edge: replaced in tests. */
   run?: (cmd: string, args: string[], cwd?: string) => RunResult;
-  /** Чекаут проекта: его язык (`.agents/ai-dev.json`) — язык названий, в нём git-шаги `task close`; по умолчанию — текущий каталог. */
+  /**
+   * The project checkout: its language (`.agents/ai-dev.json`) is the language of names, `task close` runs its git
+   * steps in it; the current directory by default.
+   */
   cwd?: string;
 }
 
@@ -192,7 +200,7 @@ interface Field {
 interface Workflow {
   id: string;
   number: number;
-  /** В адресе workflow в UI — он, а не number: `<проект>/workflows/<fullDatabaseId>`. */
+  /** The workflow address in the UI uses it, not number: `<project>/workflows/<fullDatabaseId>`. */
   fullDatabaseId: string | number;
   name: string;
   enabled: boolean;
@@ -220,15 +228,15 @@ interface Label {
   name: string;
   color: string;
   description: string | null;
-  /** Открытые задачи с меткой: сколько всего и номера первых OPEN_SHOWN. */
+  /** Open tasks with the label: how many in total and the numbers of the first OPEN_SHOWN. */
   open: { total: number; numbers: number[] };
 }
-/** Решения основной ветки по видам; модель не загрузилась — причина, модули в `architecture` тогда не входят. */
+/** Default-branch decisions by kind; the model didn't load — the reason, and then `architecture` has no modules. */
 export interface Decisions {
   names: Record<DecisionKind, string[]>;
   modelError: string | null;
 }
-/** Чек головы PR: зелёный, ещё идёт или иначе (красный, пропущен, отменён). */
+/** A PR head's check: green, still running, or otherwise (red, skipped, cancelled). */
 type CheckState = "success" | "pending" | "other";
 interface Head {
   number: number;
@@ -242,20 +250,20 @@ interface Ruleset {
   contexts: string[];
   bypassAdmin: boolean;
 }
-/** Мерж в основную ветку: её действующие правила с обязательными чеками и чеки голов PR в неё. */
+/** Merging into the default branch: its active rules with required checks and the checks of PR heads into it. */
 export interface Merge {
   branch: string;
-  /** Правила ветки недоступны на тарифе (приватный репозиторий на Free) — причина от GitHub. */
+  /** Branch rules are unavailable on the plan (a private repository on Free) — the reason from GitHub. */
   unavailable: string | null;
-  /** Действующие правила с обязательными чеками: ruleset любого уровня и классическая защита ветки. */
+  /** Active rules with required checks: a ruleset of any level and classic branch protection. */
   rules: { source: string; contexts: string[] }[];
-  /** Свой ruleset — `RULESET` этого репозитория, в любом состоянии. */
+  /** Our own ruleset — this repository's `RULESET`, in any state. */
   own: Ruleset | null;
-  /** Последние `STABLE_PRS` влитых PR с чеками, от старых к новым. */
+  /** The last `STABLE_PRS` merged PRs with checks, oldest to newest. */
   merged: Head[];
-  /** Открытые PR, у которых все чеки уже завершились: чека, которого у них нет, не будет. */
+  /** Open PRs whose checks have all finished: a check they don't have won't come. */
   open: Head[];
-  /** Разрешённые способы мержа PR (настройка репозитория): merge commit, squash, rebase. */
+  /** Allowed PR merge methods (a repository setting): merge commit, squash, rebase. */
   methods: { merge: boolean; squash: boolean; rebase: boolean };
 }
 export interface State {
@@ -263,10 +271,10 @@ export interface State {
   project: Project | null;
   openIssues: { id: string; number: number }[];
   labels: Label[];
-  /** Задачи старых меток `вид:имя`, которые сливаются с уже занятым именем: по id метки. */
+  /** Tasks of old `kind:name` labels that merge into an already taken name: by label id. */
   labelIssues: Record<string, { id: string; number: number }[]>;
   decisions: Decisions;
-  /** Пустой репозиторий (нет основной ветки) — null. */
+  /** An empty repository (no default branch) — null. */
   merge: Merge | null;
 }
 
@@ -275,8 +283,8 @@ interface Mutation {
   input: Record<string, unknown>;
 }
 /**
- * Шаг исправления: `api` — делает fix; `confirm` — только с --confirm (удаление, переименование, организация);
- * `ui` — руками по ссылке. `sticky` — шаг UI остаётся в списке, даже когда fix уже убрал симптом.
+ * A fix step: `api` — fix does it; `confirm` — only with --confirm (deleting, renaming, the organization);
+ * `ui` — by hand via the link. `sticky` — a UI step stays in the list even when fix has already removed the symptom.
  */
 export interface Step {
   kind: "api" | "confirm" | "ui";
@@ -289,9 +297,9 @@ export interface Check {
   key: string;
   title: string;
   problems: { text: string; steps: Step[] }[];
-  /** Не расхождение, а положение дел (метка нового решения): строка `○`, пункт остаётся ✅. */
+  /** Not a discrepancy but the state of things (a new decision's label): an `○` line, the item stays ✅. */
   notes: string[];
-  /** Пункт неприменим (тариф, нет чеков): строка `➖` с причиной вместо ✅/❌. */
+  /** The item doesn't apply (plan, no checks): a `➖` line with the reason instead of ✅/❌. */
   skip?: string;
 }
 
@@ -302,9 +310,12 @@ export class GhError extends Error {}
 // ----------------------------------------------------------------------------
 
 const REF = "id number title url closed";
-/** Номера открытых задач метки в строке «новое решение»; остальные — числом. */
+/** Numbers of the label's open tasks in the "new decision" line; the rest as a count. */
 const OPEN_SHOWN = 10;
-/** Сколько последних PR смотрит task close без связи PR с задачей: его зовут сразу после мержа, PR — среди них. */
+/**
+ * How many recent PRs task close looks at when the PR isn't linked to the task: it's called right after the merge, so
+ * the PR is among them.
+ */
 const RECENT_PRS = 50;
 export const Q = {
   RepoState: `query RepoState($owner: String!, $name: String!) {
@@ -375,7 +386,7 @@ export const Q = {
     milestones(first: 100, states: OPEN) { nodes { id title } }
   }
 }`,
-  // HEAD — основная ветка: метки сверяются с тем, что уже влито
+  // HEAD is the default branch: labels are checked against what's already merged
   SpecDecisions: `query SpecDecisions($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     capabilities: object(expression: "HEAD:tests/capabilities") { ... on Tree { entries { name type } } }
@@ -406,7 +417,7 @@ export const Q = {
   ModelAt: `query ModelAt($owner: String!, $name: String!, $expression: String!) {
   repository(owner: $owner, name: $name) { object(expression: $expression) { ... on Blob { text } } }
 }`,
-  // Ref.rules — правила действующих ruleset (репозитория и организации), которые GitHub применяет к ветке
+  // Ref.rules — the rules of active rulesets (of the repository and the organization) that GitHub applies to the branch
   MergeRules: `query MergeRules($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     isPrivate mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed
@@ -432,7 +443,7 @@ fragment Head on PullRequest {
   number baseRefName
   commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
 }`,
-  // PR задачи, с которым GitHub её не связал (task close): последние открытые и влитые, новые первыми
+  // The task's PR that GitHub didn't link to it (task close): the latest open and merged ones, newest first
   RecentPrs: `query RecentPrs($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
@@ -458,7 +469,7 @@ fragment Head on PullRequest {
 }`,
 } as const;
 
-// Мутации — с одним параметром $input: в input только заданные ключи (null в input GitHub понимает как «стереть»).
+// Mutations take one $input parameter: input has only the given keys (GitHub reads null in input as "erase").
 const M: Record<string, [field: string, inputType: string, select: string]> = {
   LinkProject: ["linkProjectV2ToRepository", "LinkProjectV2ToRepositoryInput", "repository { id }"],
   UnlinkProject: ["unlinkProjectV2FromRepository", "UnlinkProjectV2FromRepositoryInput", "repository { id }"],
@@ -491,8 +502,8 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
 };
 
 /**
- * Мутации REST — чего нет в GraphQL: настройки мержа репозитория (`UpdateRepositoryInput` их не знает). Input — `repo`
- * и поля запроса; `gh api -F` шлёт true/false булевыми.
+ * REST mutations — what GraphQL lacks: the repository's merge settings (`UpdateRepositoryInput` doesn't know them).
+ * Input — `repo` and the request fields; `gh api -F` sends true/false as booleans.
  */
 const REST: Record<string, (input: Record<string, unknown>) => string[]> = {
   UpdateRepository: ({ repo, ...fields }) => ["api", "-X", "PATCH", `repos/${repo}`, ...Object.entries(fields).flatMap(([k, v]) => ["-F", `${k}=${v}`])],
@@ -505,7 +516,7 @@ function mutationQuery(op: string): string {
   return `mutation ${op}($input: ${inputType}!) { ${field}(input: $input) { ${select} } }`;
 }
 
-/** Запрос GraphQL; частичные данные с ошибками — предупреждение, а у мутации (strict) — ошибка: её результат не получен. */
+/** A GraphQL query; partial data with errors — a warning, but for a mutation (strict) an error: no result received. */
 export function graphql(io: Io, query: string, variables: Record<string, unknown>, strict = false): Any {
   const out = io.gh(["api", "graphql", "--input", "-"], JSON.stringify({ query, variables }));
   let res: Any;
@@ -525,9 +536,9 @@ function mutate(io: Io, m: Mutation): Any {
   return rest ? restCall(io, rest(m.input)) : graphql(io, mutationQuery(m.op), { input: m.input }, true);
 }
 
-/** Запрос REST; ответ об ошибке (realGh отдаёт JSON и при коде ≠ 0) — исключение с его message. */
+/** A REST request; an error response (realGh returns JSON even with a code ≠ 0) is an exception with its message. */
 function restCall(io: Io, args: string[]): Any {
-  // `-X PATCH repos/…` или GET `repos/…`
+  // `-X PATCH repos/…` or GET `repos/…`
   const what = args.slice(1).filter((a) => !a.startsWith("-")).slice(0, 2).join(" ");
   const out = io.gh(args);
   let res: Any;
@@ -540,20 +551,20 @@ function restCall(io: Io, args: string[]): Any {
   return res;
 }
 
-/** Реальный `gh`: код возврата ≠ 0 — исключение с stderr. */
+/** The real `gh`: an exit code ≠ 0 is an exception with stderr. */
 export function realGh(args: string[], stdin?: string): string {
   const r = spawnSync("gh", args, { input: stdin, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (r.error) {
     if ((r.error as NodeJS.ErrnoException).code === "ENOENT") throw new GhError("gh command not found; the gh CLI must be installed");
     throw new GhError(`gh ${args.slice(0, 2).join(" ")}: ${r.error.message}`);
   }
-  // gh api graphql при ошибках GraphQL выходит с 1, но JSON с errors в stdout — пусть разберёт graphql()
+  // gh api graphql exits with 1 on GraphQL errors, but the JSON with errors is in stdout — let graphql() parse it
   if (r.status !== 0 && !r.stdout.trim().startsWith("{")) throw new GhError(`gh ${args.slice(0, 2).join(" ")}: ${(r.stderr || "").trim().slice(0, 500)}`);
   return r.stdout;
 }
 
 // ----------------------------------------------------------------------------
-// Чтение состояния
+// Reading the state
 // ----------------------------------------------------------------------------
 
 function pages<T>(fetch: (after: string | null) => { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: T[] }): T[] {
@@ -591,7 +602,7 @@ function loadRepo(io: Io, slug: string): State["repo"] {
   };
 }
 
-/** Проект репозитория: привязанный с названием = имя репозитория, иначе первый открытый привязанный. */
+/** The repository's project: a linked one titled with the repository name, otherwise the first open linked one. */
 const mainProject = (repo: State["repo"]) => repo.linked.find((p) => p.title === repo.name && !p.closed) ?? repo.linked.find((p) => !p.closed) ?? null;
 
 export function loadState(io: Io, slug: string): State {
@@ -606,7 +617,7 @@ export function loadState(io: Io, slug: string): State {
 const statusChecks = (rule: Any): { strict: boolean; contexts: string[] } | null =>
   rule?.type === "REQUIRED_STATUS_CHECKS" ? { strict: !!rule.parameters?.strictRequiredStatusChecksPolicy, contexts: (rule.parameters?.requiredStatusChecks ?? []).map((c: Any) => c.context) } : null;
 
-/** Чеки головы PR по имени; перезапуск того же чека — зелёный, если зелёный хоть один. */
+/** A PR head's checks by name; a rerun of the same check is green if any of its runs is green. */
 function headChecks(pr: Any): Record<string, CheckState> {
   const out: Record<string, CheckState> = {};
   for (const c of pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []) {
@@ -619,7 +630,7 @@ function headChecks(pr: Any): Record<string, CheckState> {
   return out;
 }
 
-/** Приватный репозиторий на Free: GraphQL молча отдаёт пустые правила, REST — 403 «Upgrade to GitHub Pro…». */
+/** A private repository on Free: GraphQL silently returns empty rules, REST — 403 "Upgrade to GitHub Pro…". */
 function rulesetsUnavailable(io: Io, slug: string): string | null {
   const out = io.gh(["api", `repos/${slug}/rulesets`]);
   let res: Any;
@@ -665,7 +676,7 @@ function loadMerge(io: Io, slug: string): Merge | null {
   };
 }
 
-/** Задачи старых меток, чьё имя уже занято (другой меткой или старой меткой раньше в списке), — их сольёт fix. */
+/** Tasks of old labels whose name is taken (by another label or an old label earlier in the list) — fix merges them. */
 function mergedIssues(io: Io, slug: string, labels: Label[]): State["labelIssues"] {
   const [owner, name] = slug.split("/") as [string, string];
   const seen = new Set(labels.filter((l) => !legacyDecision(l.name)).map((l) => l.name));
@@ -688,9 +699,9 @@ function loadLabels(io: Io, slug: string): Label[] {
 }
 
 /**
- * Модули модели архитектуры и их каталоги: текст модели — во временный файл, `modules` печатает отдельный процесс
- * того же рантайма (Bun или Node стирают типы; `import type` скилла spec модели не нужен). Не загрузилась — причина
- * строкой.
+ * Architecture model modules and their directories: the model text goes to a temporary file, `modules` is printed by
+ * a separate process of the same runtime (Bun or Node strip types; the model doesn't need the spec skill's
+ * `import type`). Didn't load — the reason as a string.
  */
 export function modelModules(text: string): Record<string, string[]> | string {
   const dir = mkdtempSync(path.join(os.tmpdir(), "github-model-"));
@@ -712,7 +723,7 @@ export function modelModules(text: string): Record<string, string[]> | string {
   }
 }
 
-/** Решения основной ветки: папки дерева спеки по видам и модули модели — у архитектуры. */
+/** Default-branch decisions: spec tree folders by kind, and model modules for architecture. */
 export function loadDecisions(io: Io, slug: string): Decisions {
   const [owner, name] = slug.split("/") as [string, string];
   const r = graphql(io, Q.SpecDecisions, { owner, name })?.repository ?? {};
@@ -728,7 +739,10 @@ export function loadDecisions(io: Io, slug: string): Decisions {
   return { names, modelError };
 }
 
-/** `capability:billing` → вид и имя решения; другое — null. Метка старого вида или вид нового решения в `--labels`. */
+/**
+ * `capability:billing` → the decision's kind and name; anything else — null. An old-form label or the kind of a new
+ * decision in `--labels`.
+ */
 export function legacyDecision(label: string): { kind: DecisionKind; name: string } | null {
   const i = label.indexOf(":");
   const kind = label.slice(0, i) as DecisionKind;
@@ -736,22 +750,26 @@ export function legacyDecision(label: string): { kind: DecisionKind; name: strin
 }
 
 /**
- * Признак метки решения — описание `<маркер> <пути>`: цвет у обычной метки может совпасть, имя — тоже. Пишется маркер
- * языка проекта, узнаётся — любого языка словаря: описание на другом языке fix перепишет, а не сочтёт метку обычной.
+ * A decision label is marked by its description `<marker> <paths>`: a regular label's color may match, and so may its
+ * name. The marker is written in the project language and recognized in any dictionary language: fix rewrites a
+ * description in another language rather than taking the label for a regular one.
  */
 const decisionMark = () => `${N.labelMarkers.decision} `;
 const decisionPath = (kind: DecisionKind, name: string) => (kind === "architecture" ? locale.fill(N.labelMarkers.architecturePath, { name }) : `tests/${DECISIONS[kind].dir}/${name}`);
-/** Маркер любого языка словаря, с которого начинается описание; нет — null. */
+/** The marker of any dictionary language the description starts with; none — null. */
 const markOf = (description: string | null | undefined, marks: string[]) => marks.map((m) => `${m} `).find((m) => description?.startsWith(m)) ?? null;
 
-/** Метка решения: цвет старшего вида, в описании пути всех видов; длиннее 100 символов GitHub не примет — тогда виды. */
+/**
+ * A decision label: the senior kind's color, the paths of all kinds in the description; GitHub won't accept one longer
+ * than 100 characters — then the kinds.
+ */
 export function decisionLabel(name: string, kinds: DecisionKind[]): { name: string; color: string; description: string } {
   const ks = DECISION_KINDS.filter((k) => kinds.includes(k));
   const full = decisionMark() + ks.map((k) => decisionPath(k, name)).join("; ");
   return { name, color: DECISIONS[ks[0]!].color, description: full.length <= 100 ? full : decisionMark() + ks.join(", ") };
 }
 
-/** Виды метки решения — по описанию; обычная метка — null. */
+/** A decision label's kinds — by its description; a regular label — null. */
 export function labelKinds(description: string | null | undefined): DecisionKind[] | null {
   const mark = markOf(description, locale.every((n) => n.labelMarkers.decision));
   if (!mark) return null;
@@ -760,10 +778,10 @@ export function labelKinds(description: string | null | undefined): DecisionKind
 }
 
 /**
- * Признак метки-разреза — описание `<маркер разреза> <разрез>[ — пояснение]` (маркер — `labelMarkers.slice` любого
- * языка словаря): разрез задач проекта (приложения, команды), а не решение, хотя имя может совпасть с модулем модели.
- * Разрез живёт с меткой, а не в `.agents/ai-dev.json`: манифест установки `install` и `update` пишут заново, а
- * `check` читает всё через API.
+ * A slice label is marked by its description `<slice marker> <slice>[ — note]` (the marker is `labelMarkers.slice` of
+ * any dictionary language): a slice of the project's tasks (apps, teams), not a decision, though its name may match a
+ * model module. The slice lives with the label, not in `.agents/ai-dev.json`: `install` and `update` rewrite the
+ * install manifest, and `check` reads everything through the API.
  */
 function labelDimension(description: string | null | undefined): string | null {
   const mark = markOf(description, locale.every((n) => n.labelMarkers.slice));
@@ -771,7 +789,7 @@ function labelDimension(description: string | null | undefined): string | null {
   return description!.slice(mark.length).split(" — ")[0]!.trim() || null;
 }
 
-/** Решения основной ветки по имени: имя → его виды (старший первым). */
+/** Default-branch decisions by name: name → its kinds (the senior one first). */
 function decisionsByName(d: Decisions): Map<string, DecisionKind[]> {
   const out = new Map<string, DecisionKind[]>();
   for (const k of DECISION_KINDS) for (const n of d.names[k]) out.set(n, [...(out.get(n) ?? []), k]);
@@ -806,13 +824,13 @@ function loadProject(io: Io, id: string, withItems = true): Project {
 }
 
 // ----------------------------------------------------------------------------
-// Сверка с каноном
+// Checking against the canon
 // ----------------------------------------------------------------------------
 
 const nums = (xs: { number: number }[]) => xs.map((x) => `#${x.number}`).join(", ");
 const q = (s: string) => `«${s}»`;
 
-/** Все расхождения с каноном по пунктам; у каждого — шаги исправления. Проекта нет — только пункт привязки. */
+/** All discrepancies with the canon by item; each has fix steps. No project — only the linking item. */
 export function analyze(s: State): Check[] {
   const p = s.project;
   const checks: Check[] = [];
@@ -823,7 +841,7 @@ export function analyze(s: State): Check[] {
   };
 
   const link = add("link", `Project linked to the repository and named ${q(s.repo.name)}`);
-  // правило основной ветки и способ мержа от проекта не зависят
+  // the default-branch rule and the merge method don't depend on the project
   const merge = () => {
     if (!s.merge) return;
     analyzeMerge(s.merge, s.repo.id, add("merge", `Merge into ${s.merge.branch} — only with green required checks`));
@@ -844,7 +862,7 @@ export function analyze(s: State): Check[] {
     link(`another project is linked: ${q(other.title)} (${other.url})`, { kind: "confirm", text: `unlink project ${q(other.title)} from the repository`, mutations: [{ op: "UnlinkProject", input: { projectId: other.id, repositoryId: s.repo.id } }] });
   }
 
-  // Представления: по имени; нет — переименовать лишнее того же вида или создать; лишние — удалить.
+  // Views: by name; missing — rename an extra one of the same layout or create one; extra ones — delete.
   const views = add("views", `Views ${canonViews().map((v) => q(v.name)).join(", ")} — the right layout, no filter, no others`);
   const canonNames = new Set<string>(canonViews().map((v) => v.name));
   const spare = p.views.filter((v) => !canonNames.has(v.name));
@@ -868,7 +886,7 @@ export function analyze(s: State): Check[] {
   }
   for (const v of spare) views(`extra ${q(v.name)}`, guarded(`delete view ${q(v.name)}`, { op: "DeleteView", input: { viewId: v.id } }));
 
-  // Status: варианты по имени или по известному английскому имени — с тем же id; недостающие — новые.
+  // Status: options by name or by a known English name — with the same id; missing ones — new.
   const status = add("status", `${STATUS}: ${statusOptions().join(" → ")}`);
   const sf = p.fields.find((f) => f.name === STATUS && f.options);
   if (!sf) {
@@ -888,8 +906,8 @@ export function analyze(s: State): Check[] {
     status(`options: ${sf.options!.map((o) => o.name).join(", ") || "none"}`, guarded(`${STATUS}: ${statusOptions().join(", ")} (rename the existing ones keeping the id${drop})`, { op: "UpdateField", input: { fieldId: sf.id, singleSelectOptions: next } }));
   }
 
-  // Поля: четыре числовых; поле другого языка словаря переименовывается с тем же id (значения задач сохраняются);
-  // своих полей сверх канона нет; в организации Priority — поле issue.
+  // Fields: four numeric ones; a field in another dictionary language is renamed with the same id (the tasks' values are
+  // kept); no custom fields beyond the canon; in an organization Priority is an issue field.
   const fields = add("fields", `Fields ${numberFields().map(q).join(", ")} (Number), no other custom ones`);
   const fieldAlias = fieldAliases();
   const renamed = new Set<Field>();
@@ -954,35 +972,36 @@ export function analyze(s: State): Check[] {
     }
   }
 
-  // Workflow: API их не включает и не показывает цель — только UI. Ненастроенного нет в списке.
+  // Workflows: the API doesn't turn them on or show the target — only the UI. An unconfigured one isn't in the list.
   const wf = add("workflows", `Workflows ${[WORKFLOW_ADDED, WORKFLOW_CLOSED, WORKFLOW_AUTO_ADD].map(q).join(", ")} are on`);
   const how: Record<string, string> = {
     [WORKFLOW_ADDED]: `Edit → Set value → ${STATUS}: ${N.status.backlog}`,
     [WORKFLOW_CLOSED]: `Edit → Set value → ${STATUS}: ${N.status.done}`,
-    // is:open — иначе обновлённая закрытая задача (и not planned) вернётся в проект
+    // is:open — otherwise an updated closed task (not planned too) comes back into the project
     [WORKFLOW_AUTO_ADD]: `Edit → repository ${s.repo.name}, filter is:issue is:open (Enter)`,
   };
   for (const name of [WORKFLOW_ADDED, WORKFLOW_CLOSED, WORKFLOW_AUTO_ADD]) {
     const w = p.workflows.find((x) => x.name === name);
     if (w?.enabled) continue;
-    // ненастроенного workflow нет в API — ссылка на список, он там в меню слева
+    // an unconfigured workflow isn't in the API — a link to the list, it's in the menu on the left there
     wf(`${q(name)} ${w ? "disabled" : "not configured"}`, ui(`${q(name)}: ${how[name]} → Save and turn on workflow`, `${p.url}/workflows${w ? `/${w.fullDatabaseId}` : ""}`));
   }
 
-  // Задачи: статусы по канону. Закрытые не в «Готово» — симптом «Item closed» на удалённом варианте Status.
+  // Tasks: statuses by the canon. Closed ones not in "Done" — a symptom of "Item closed" on a deleted Status option.
   const opt = (name: string) => sf?.options?.find((o) => o.name === name)?.id;
   const setStatus = (it: Item, name: string): Mutation => ({ op: "SetItemStatus", input: { projectId: p.id, itemId: it.id, fieldId: sf!.id, value: { singleSelectOptionId: opt(name) } } });
   const statusReady = !!(opt(N.status.backlog) && opt(N.status.done));
   const closedAdd = add("closed", `Closed tasks — in ${q(N.status.done)}, closed without being done — outside the project`);
   const issues = p.items.filter((it) => it.issue);
-  // «Готово» другого языка словаря — тот же вариант: его переименует пункт Status, задачи переставлять незачем
+  // "Done" in another dictionary language is the same option: the Status item renames it, no need to move tasks
   const doneAlias = statusAliases();
   const notDone = issues.filter((it) => it.issue!.state === "CLOSED" && !NOT_DONE_REASONS.has(it.issue!.stateReason ?? "") && doneAlias[(it.status ?? "").toLowerCase()] !== N.status.done);
   if (notDone.length) {
     const steps: Step[] = [];
     if (statusReady) steps.push(api(`${STATUS} ${q(N.status.done)}: ${nums(notDone.map((it) => it.issue!))}`, ...notDone.map((it) => setStatus(it, N.status.done))));
     const closed = p.workflows.find((x) => x.name === WORKFLOW_CLOSED);
-    // статусы fix поставит сам, а цель workflow из API не видна — проверить её в UI, даже когда симптом снят
+    // fix sets the statuses itself, and the workflow's target isn't visible from the API — check it in the UI, even
+    // when the symptom is gone
     if (closed?.enabled) steps.push({ ...ui(`${q(WORKFLOW_CLOSED)}: check Set value → ${STATUS}: ${N.status.done}, otherwise Edit → ${N.status.done} → Save`, `${p.url}/workflows/${closed.fullDatabaseId}`), sticky: true });
     closedAdd(`not in ${q(N.status.done)}: ${nums(notDone.map((it) => it.issue!))}`, ...steps);
   }
@@ -996,17 +1015,18 @@ export function analyze(s: State): Check[] {
   const noStatus = issues.filter((it) => it.issue!.state === "OPEN" && !it.status);
   if (noStatus.length) open(`without ${STATUS}: ${nums(noStatus.map((it) => it.issue!))}`, ...(statusReady ? [api(`${STATUS} ${q(N.status.backlog)}: ${nums(noStatus.map((it) => it.issue!))}`, ...noStatus.map((it) => setStatus(it, N.status.backlog)))] : []));
 
-  // Метки решений: по дереву спеки и модели основной ветки. Удалить, переименовать по догадке, слить, сделать меткой
-  // решения обычную — только с --confirm: метка стоит на задачах. Одна лишняя и одна недостающая одного вида —
-  // переименованная папка, а не два решения. Старый вид `вид:имя` → имя — сам, есть решение или нет: задачи сохраняют
-  // метку, догадки нет. Метка без решения на открытой задаче — новое решение (task new ставит её до PR): строка ○, не
-  // удаляется и по догадке не переименовывается — это отняло бы её у задачи. Метка-разрез с именем решения — другой
-  // разрез задач: строка ○, fix её не трогает, а решение остаётся без метки (имя занято).
+  // Decision labels: by the spec tree and the model of the default branch. Deleting, renaming by a guess, merging, making
+  // a regular label a decision one — only with --confirm: the label is on tasks. One extra and one missing of the same
+  // kind — a renamed folder, not two decisions. The old form `kind:name` → name — fix does it itself, decision or not:
+  // tasks keep the label, there's no guess. A label without a decision on an open task is a new decision (task new sets
+  // it before the PR): an ○ line, not deleted and not renamed by a guess — that would take it away from the task. A
+  // slice label with a decision's name is a different slice of tasks: an ○ line, fix doesn't touch it, and the decision
+  // stays without a label (the name is taken).
   const labels = add("labels", "Decision labels — the decision's name, the kind by color; by the spec tree and the model of the default branch");
   const d = s.decisions;
   if (d.modelError) labels(`model ${MODEL_PATH} doesn't load — module labels aren't checked: ${d.modelError}`);
   const want = decisionsByName(d);
-  // модель не прочитана — неизвестно, какие модули есть: метки архитектуры не удаляем и не переописываем
+  // the model wasn't read — it's unknown which modules exist: architecture labels aren't deleted or re-described
   const unsure = (kinds: DecisionKind[]) => !!d.modelError && kinds.includes("architecture");
   const taken = new Map(s.labels.filter((l) => !legacyDecision(l.name)).map((l) => [l.name, l]));
   const orphans: { label: Label; kinds: DecisionKind[] }[] = [];
@@ -1083,7 +1103,10 @@ export function analyze(s: State): Check[] {
   return checks;
 }
 
-/** Ruleset `RULESET`: основная ветка, обязательные чеки без strict (поле в API обязательное), обход — admin (прямой push владельца). */
+/**
+ * The `RULESET` ruleset: the default branch, required checks without strict (the field is mandatory in the API),
+ * bypass — admin (the owner's direct push).
+ */
 function rulesetInput(contexts: string[]): Record<string, unknown> {
   return {
     name: RULESET,
@@ -1096,10 +1119,10 @@ function rulesetInput(contexts: string[]): Record<string, unknown> {
 }
 
 /**
- * Мерж: правило канона «мерж только при зелёных чеках» держит GitHub, а не память агента. Обязательные — чеки,
- * зелёные на каждом из последних влитых PR; чек, которого нет у свежей головы (последний влитый PR, открытые с
- * завершёнными чеками), держал бы PR вечно — он из списка уходит, а не попадает в него. Чужое правило с чеками не
- * дублируется; свой ruleset со strict правится: отставшую ветку GitHub должен вливать.
+ * Merge: the canon rule "merge only with green checks" is held by GitHub, not by the agent's memory. Required checks
+ * are those green on each of the last merged PRs; a check missing from a fresh head (the last merged PR, open ones with
+ * finished checks) would hold the PR forever — it leaves the list rather than gets into it. Someone else's rule with
+ * checks isn't duplicated; our own ruleset with strict is fixed: GitHub must merge a branch that fell behind.
  */
 function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...steps: Step[]) => void) & { skip: (why: string) => void }): void {
   if (m.unavailable) return merge.skip(`branch rules are unavailable: ${m.unavailable}`);
@@ -1134,9 +1157,9 @@ function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...
 }
 
 /**
- * Способ мержа — только rebase (канон, «PR»): правило мержа одно для всех репозиториев — `gh pr merge <N> --rebase`,
- * в основную ветку уходят сами коммиты ветки. Настройка репозитория держит правило постоянным: другим способом PR не
- * влить, а rebase не выключен. Все причины — один запрос.
+ * The merge method is rebase only (the canon, "PR"): the merge rule is the same for all repositories —
+ * `gh pr merge <N> --rebase`, the branch's own commits go into the default branch. The repository setting keeps the
+ * rule constant: a PR can't be merged another way, and rebase isn't turned off. All causes — one request.
  */
 function analyzeMethod(m: Merge, slug: string, method: (text: string, ...steps: Step[]) => void): void {
   const step: Step = {
@@ -1151,7 +1174,7 @@ function analyzeMethod(m: Merge, slug: string, method: (text: string, ...steps: 
 }
 
 // ----------------------------------------------------------------------------
-// Команды
+// Commands
 // ----------------------------------------------------------------------------
 
 function header(io: Io, s: State): void {
@@ -1178,7 +1201,7 @@ export function cmdCheck(io: Io, slug: string): number {
   return report(io, s, analyze(s)) ? 0 : 1;
 }
 
-/** Проекта нет: привязать одноимённый проект владельца, иначе скопировать эталон, иначе создать. */
+/** No project: link the owner's project of the same name, otherwise copy the template, otherwise create one. */
 function ensureProject(io: Io, s: State, template: string | null): string {
   const found = graphql(io, Q.OwnerProjects, { login: s.repo.owner.login, query: s.repo.name })?.repositoryOwner?.projectsV2?.nodes ?? [];
   const same = found.find((p: Any) => p && p.title === s.repo.name && !p.closed);
@@ -1212,7 +1235,7 @@ export function cmdFix(io: Io, slug: string, opts: { confirm: boolean; template:
   const tried = new Set<string>();
   const sticky: Step[] = [];
   let s = loadState(io, slug);
-  // Раунды: шаг может открыть следующий (новое поле Status → статусы задач); повторно шаг не делается.
+  // Rounds: a step may open the next one (a new Status field → the tasks' statuses); a step isn't done twice.
   for (let round = 0; round < 5; round++) {
     if (!s.project) {
       try {
@@ -1231,7 +1254,7 @@ export function cmdFix(io: Io, slug: string, opts: { confirm: boolean; template:
       .filter((st) => st.mutations?.length && (st.kind === "api" || (st.kind === "confirm" && opts.confirm)) && !tried.has(st.text));
     if (!steps.length) break;
     for (const st of steps) {
-      // у нескольких расхождений бывает один шаг (правка ruleset целиком) — он делается один раз
+      // several discrepancies may share one step (editing the whole ruleset) — it's done once
       if (tried.has(st.text)) continue;
       tried.add(st.text);
       try {
@@ -1266,7 +1289,7 @@ export function cmdFix(io: Io, slug: string, opts: { confirm: boolean; template:
 }
 
 // ----------------------------------------------------------------------------
-// Задачи
+// Tasks
 // ----------------------------------------------------------------------------
 
 interface Issue {
@@ -1280,9 +1303,9 @@ interface Issue {
   labels: string[];
   parent: { id: string; number: number } | null;
   subIssues: { number: number; state: string; title: string }[];
-  /** Milestone задачи и число открытых задач в нём (включая эту, если открыта). */
+  /** The task's milestone and the number of open tasks in it (including this one if it's open). */
   milestone: { id: string; number: number; title: string; open: number } | null;
-  /** PR, закрывающие задачу («Closes #N»), включая закрытые: влит ли, голова и база. */
+  /** PRs that close the task ("Closes #N"), closed ones included: whether merged, head and base. */
   prs: { number: number; state: string; merged: boolean; head: string; base: string }[];
   items: { id: string; projectId: string; status: string | null }[];
   priority: string | null;
@@ -1318,9 +1341,10 @@ interface TaskCtx {
 }
 
 /**
- * Репозиторий и его проект со Status по канону: без них задачу по канону не завести — сначала project fix. Варианты
- * Status не на языке проекта, а на другом языке словаря (скрипт позван не из чекаута проекта; язык сменили, а fix ещё
- * не было) — задача ведётся на языке доски: сверяет язык `project check`, а не каждая команда.
+ * The repository and its project with Status by the canon: without them a task can't be created by the canon — run
+ * project fix first. If the Status options are not in the project language but in another dictionary language (the
+ * script wasn't called from the project checkout; the language changed and there was no fix yet), the task is handled
+ * in the board's language: `project check` checks the language, not every command.
  */
 function taskContext(io: Io, slug: string): TaskCtx {
   const repo = loadRepo(io, slug);
@@ -1344,8 +1368,9 @@ function setStatus(io: Io, ctx: TaskCtx, itemId: string, name: string): void {
 }
 
 /**
- * Элемент задачи в проекте; нет — добавить. Проект мог уже добавить задачу сам (projectV2Ids в createIssue, auto-add),
- * а чтение ещё не показывает: addProjectV2ItemById тогда отвечает «Content already exists» — перечитываем с паузой.
+ * The task's item in the project; none — add it. The project may have added the task itself (projectV2Ids in
+ * createIssue, auto-add) while reading doesn't show it yet: addProjectV2ItemById then answers "Content already
+ * exists" — re-read after a pause.
  */
 function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "items">): { id: string; added: boolean } {
   const it = itemIn(ctx, i);
@@ -1364,36 +1389,37 @@ function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "item
 }
 
 /**
- * Каталог личной конфигурации — `AI_DEV_CONFIG_DIR`, иначе `~/.config/ai-dev`: выражение одно на все скрипты (стандарт
- * `config-dir` ai-dev), а не общий модуль — скилл работает и без соседа. est переносит в каталог старый `~/.claude/est`,
- * только пока каталога нет (est.ts, `ensureConfigDir`): создать его здесь первым — оставить est без реестра и цен. До
- * переноса конфигурация — старый каталог: закрепление переедет вместе с ним.
+ * The personal configuration directory — `AI_DEV_CONFIG_DIR`, otherwise `~/.config/ai-dev`: one expression for all
+ * scripts (the ai-dev `config-dir` standard) rather than a shared module — the skill works without its neighbor. est
+ * moves the old `~/.claude/est` into the directory only while the directory doesn't exist (est.ts, `ensureConfigDir`):
+ * creating it here first would leave est without its registry and prices. Before the move the configuration is the
+ * old directory: the pins move along with it.
  */
 function configDir(env: Io["env"]): string {
   const home = env.HOME || os.homedir();
   const dir = env.AI_DEV_CONFIG_DIR || path.join(home, ".config", "ai-dev");
   if (existsSync(dir)) return dir;
   const legacy = path.join(home, ".claude", "est");
-  // lstat: симлинк на месте старого каталога — перенос уже был
+  // lstat: a symlink in place of the old directory — the move has already happened
   return lstatSync(legacy, { throwIfNoEntry: false })?.isDirectory() ? legacy : dir;
 }
 
-/** Файл закрепления сессии — `<каталог конфигурации>/sessions/<id сессии>`; сессия не опознана — null. */
+/** The session pin file — `<config directory>/sessions/<session id>`; the session isn't identified — null. */
 function pinFile(io: Io): string | null {
   const id = io.env.CLAUDE_CODE_SESSION_ID;
   return id ? path.join(configDir(io.env), "sessions", id) : null;
 }
 
-/** Задача, закреплённая за сессией (`owner/repo#N`); нет закрепления или сессия не опознана — null. */
+/** The task pinned to the session (`owner/repo#N`); no pin or the session isn't identified — null. */
 function pinnedTask(io: Io): string | null {
   const file = pinFile(io);
   return file && existsSync(file) ? readFileSync(file, "utf8").trim() : null;
 }
 
 /**
- * Сессия ведёт одну задачу: первая взятая «В работе» закрепляется за сессией, другой — отказ до изменений. Ключ — id
- * сессии (у субагента тот же, на /clear меняется), а не чекаут: worktree сессии переиспользуют. Закрепление не снимает
- * ни одна команда — ошибочное убирает человек, удалив файл.
+ * A session runs one task: the first one taken "In progress" is pinned to the session, another is refused before any
+ * change. The key is the session id (a subagent has the same one, /clear changes it), not the checkout: session
+ * worktrees are reused. No command removes the pin — a human removes a mistaken one by deleting the file.
  */
 function pinTask(io: Io, slug: string, number: number): void {
   const file = pinFile(io);
@@ -1409,14 +1435,14 @@ function pinTask(io: Io, slug: string, number: number): void {
     }
   };
   mkdirSync(path.dirname(file), { recursive: true });
-  // каталог конфигурации бывает личным чекаутом git (AI_DEV_PRIVATE) — закрепления в него не коммитятся
+  // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — pins aren't committed into it
   created(path.join(path.dirname(file), ".gitignore"), "*\n");
   if (created(file, `${task}\n`)) return;
   const held = readFileSync(file, "utf8").trim();
   if (held !== task) throw new GhError(`the session runs ${held}; #${number} — in a new session, first prompt: #${number} (pin: ${file} — a mistaken one is removed by a human)`);
 }
 
-/** Префикс эпика — часть заголовка до « · »: с него начинаются заголовки эпика и всех подзадач. */
+/** The epic prefix — the part of the title before " · ": the titles of the epic and all its subtasks start with it. */
 export function epicPrefix(title: string): string | null {
   const i = title.indexOf(" · ");
   return i > 0 ? title.slice(0, i) : null;
@@ -1430,13 +1456,16 @@ export interface NewTask {
   milestone?: string;
   blockedBy: number[];
   priority?: string;
-  /** Метки: решение по имени или новое решение `вид:имя` (нет метки — создаётся с цветом вида), обычные — существующие. */
+  /**
+   * Labels: a decision by name or a new decision `kind:name` (no label — it's created with the kind's color), regular
+   * ones — existing.
+   */
   labels?: string[];
 }
 
 /**
- * Каркас описания задачи без `--body` — разделы канона на языке проекта: сценарии (у эпика их нет — он без кода) и
- * вопросы.
+ * The task description skeleton without `--body` — canon sections in the project language: scenarios (an epic has
+ * none — it has no code) and questions.
  */
 export const taskTemplate = (type: string): string =>
   type === N.issueTypes.epic ? `${N.sections.questions}\n` : `${N.sections.scenarios}\n\n${N.sections.questions}\n`;
@@ -1446,7 +1475,7 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const ctx = taskContext(io, slug);
   const org = ctx.repo.owner.org;
 
-  // Всё проверяется до создания: задача не должна появиться наполовину. Тип — название любого языка словаря.
+  // All checks come before creating: a task mustn't appear half-made. The type — a name in any dictionary language.
   const type = typeAliases()[task.type.toLowerCase()];
   if (!type) throw new GhError(`--type: ${issueTypes().join(", ")}`);
   const o = { ...task, type, body: task.body.trim() ? task.body : taskTemplate(type) };
@@ -1480,7 +1509,7 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const wanted = [...new Set(o.labels ?? [])];
   const repoLabels = wanted.length ? loadLabels(io, slug) : [];
   const has = (n: string) => repoLabels.find((x) => x.name === n);
-  // решение по имени — из основной ветки; `вид:имя` — и новое, которого там ещё нет
+  // a decision by name comes from the default branch; `kind:name` — also a new one that isn't there yet
   const decisions = wanted.some((l) => legacyDecision(l) || !has(l)) ? loadDecisions(io, slug) : null;
   const inMain = decisions ? decisionsByName(decisions) : new Map<string, DecisionKind[]>();
   const plan = wanted.map((l) => {
@@ -1523,7 +1552,7 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
       ids.push(id);
     }
     input.labelIds = [...((input.labelIds as string[] | undefined) ?? []), ...ids];
-    // решение появится в PR этой задачи — метка говорит об этом, а не падает
+    // the decision will appear in this task's PR — the label says so instead of failing
     done.push(`labels: ${plan.map((x) => x.name).join(", ")}`, ...plan.flatMap((x) => (x.fresh ? [x.fresh] : [])));
   }
   if (milestone) input.milestoneId = milestone.id;
@@ -1531,7 +1560,7 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   if (priority) input.issueFields = [{ fieldId: priority.fieldId, singleSelectOptionId: priority.optionId }];
   const created = mutate(io, { op: "CreateIssue", input }).createIssue.issue;
 
-  // Status ставим сами, не дожидаясь workflow «Item added to project».
+  // We set Status ourselves, without waiting for the "Item added to project" workflow.
   const listed = (created.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: null }));
   const item = ensureItem(io, ctx, { id: created.id, number: created.number, items: listed }).id;
   setStatus(io, ctx, item, N.status.backlog);
@@ -1547,14 +1576,14 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
     done.push(`blocked by #${b.number}`);
   }
   if (milestone) done.push(`milestone ${q(milestone.title)}`);
-  // эпик копит метки решений подзадач
+  // the epic accumulates its subtasks' decision labels
   const decided = plan.filter((x) => x.decision).map((x) => x.name);
   if (epic && decided.length) {
     const all = loadLabels(io, slug);
     const line = addLabels(io, epic, decided, all);
     if (line) done.push(`epic #${epic.number}: ${line}`);
   }
-  // эпик — не ниже самой срочной открытой подзадачи
+  // the epic — no lower than its most urgent open subtask
   if (epic && priority) {
     const rank = (p: string | null) => (p === null ? PRIORITIES.length : (PRIORITIES as readonly string[]).indexOf(p));
     if (rank(priority.name) < rank(epic.priority)) {
@@ -1567,19 +1596,19 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   for (const d of done) io.out(`+ ${d}`);
   if (o.type === N.issueTypes.epic) io.out(`Next: an epic isn't estimated — its ${q(N.fields.estimate)} is the sum of its subtasks' estimates.`);
   else io.out(`Next: the estimate — one call of the est skill: est estimate ${created.number} --type <branch type> --write (the script picks the analogs)${epic ? `; ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks` : ""}.`);
-  // сессия с закреплённой задачей новую в работу не возьмёт (pinTask)
+  // a session with a pinned task won't take a new one into work (pinTask)
   const held = pinnedTask(io);
   if (held) io.out(`Next: the session runs ${held} — #${created.number} in a new session, first prompt: #${created.number}.`);
   return 0;
 }
 
 export function cmdTaskStatus(io: Io, slug: string, number: number, name: string): number {
-  // статус — название любого языка словаря; сверка — до чтения проекта, вариант — на языке доски
+  // status: a name in any dictionary language; checked before reading the project; the option is in the board's language
   if (!statusAliases()[name.toLowerCase()]) throw new GhError(`status: ${statusOptions().join(", ")}`);
   const ctx = taskContext(io, slug);
   const status = statusAliases()[name.toLowerCase()]!;
   const issue = loadIssue(io, slug, number);
-  // эпик не закрепляется: его сессия планирует и раздаёт, а «В работе» эпику ставит и первая подзадача
+  // an epic isn't pinned: its session plans and hands out work, and the first subtask also sets the epic "In progress"
   if (status === N.status.inProgress && !isEpic(issue, ctx.repo.owner.org)) pinTask(io, slug, number);
   const item = ensureItem(io, ctx, issue);
   setStatus(io, ctx, item.id, status);
@@ -1607,7 +1636,7 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
     mutate(io, { op: "CloseIssue", input: { issueId: issue.id, stateReason: dup ? "DUPLICATE" : "NOT_PLANNED", ...(dup ? { duplicateIssueId: dup.id } : {}) } });
     io.out(`+ #${number} closed: ${dup ? `duplicate of #${dup.number}` : "not planned"}`);
   }
-  // закрытую без выполнения «Item closed» запишет в «Готово» — в проекте ей не место
+  // "Item closed" would put a task closed without doing it into "Done" — it has no place in the project
   const item = itemIn(ctx, issue);
   if (item) {
     mutate(io, { op: "DeleteItem", input: { projectId: ctx.project.id, itemId: item.id } });
@@ -1618,10 +1647,13 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 }
 
 // ----------------------------------------------------------------------------
-// Закрытие задачи одной командой
+// Closing a task in one command
 // ----------------------------------------------------------------------------
 
-/** Пять проверок актуализации — из reference.md скилла, одного места канона: список между «Five checks:» и «What was fixed». */
+/**
+ * The five epic-refresh checks — from the skill's reference.md, the one place of the canon: the list between
+ * "Five checks:" and "What was fixed".
+ */
 function actualizeChecks(): string {
   const file = path.resolve(import.meta.dir, "../reference.md");
   const m = existsSync(file) ? /Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(readFileSync(file, "utf8")) : null;
@@ -1630,11 +1662,12 @@ function actualizeChecks(): string {
 }
 
 /**
- * Задание субагенту актуализации блока — сразу после мержа, параллельно с деплоем: актуализация от деплоя не
- * зависит. Сессия на пиковом контексте задание не собирает и справочник не читает — команда печатает его целиком:
- * задача и её PR, эпик, его открытые задачи, пять проверок. Нет эпика или открытых задач в нём — строка «не нужна».
- * Задание — на языке проекта (ключи `actualize`), пять проверок — цитатой из reference.md как есть. Первым словом —
- * `subagentPrompt.task` и номер («Task #N»): по нему est привязывает работу субагента к задаче.
+ * The assignment for the epic-refresh subagent — right after the merge, in parallel with the deploy: the refresh
+ * doesn't depend on the deploy. A session at peak context doesn't assemble the assignment or read the reference — the
+ * command prints it whole: the task and its PR, the epic, its open tasks, the five checks. No epic or no open tasks in
+ * it — a "not needed" line. The assignment is in the project language (the `actualize` keys), the five checks — quoted
+ * from reference.md as is. The first word is `subagentPrompt.task` and the number ("Task #N"): est uses it to tie the
+ * subagent's work to the task.
  */
 export function cmdTaskActualize(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
@@ -1669,18 +1702,19 @@ export function cmdTaskActualize(io: Io, slug: string, number: number): number {
 }
 
 /**
- * Ритуал закрытия после мержа PR — факт, Status «Готово», эпик, milestone, уборка влитой ветки — одним вызовом:
- * сессия делала его по шагу на ход на самом большом контексте. Актуализация блока (пять проверок канона) —
- * не здесь: она идёт до close, параллельно с деплоем, субагентом с заданием `task actualize`; close о ней лишь
- * напоминает, где в эпике есть открытые задачи, — и называет три строки, одной из которых сессия заканчивает ответ, и
- * архивацию сессии в режиме auto — кроме сессии с вопросами владельцу.
+ * The closing ritual after a PR merge — the actual, Status "Done", the epic, the milestone, cleaning up the merged
+ * branch — in one call: the session did it one step per turn at its largest context. The epic refresh (the canon's
+ * five checks) isn't here: it runs before close, in parallel with the deploy, by a subagent with the `task actualize`
+ * assignment; close only reminds of it where the epic has open tasks — and names the three lines, one of which ends
+ * the session's answer, and archiving the session in auto mode — except a session with questions for the owner.
  */
 export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
   const ctx = taskContext(io, slug);
   const issue = loadIssue(io, slug, number);
   const linked = issue.prs.filter((p) => p.merged);
   const closedNoPr = !issue.prs.length && issue.state === "CLOSED" && issue.stateReason === "COMPLETED";
-  // GitHub бывает часами не связывает влитый PR с задачей: задача открыта, влитых в связи нет — ищем PR задачи сами
+  // GitHub may not link a merged PR to the task for hours: the task is open, no merged PR among the linked ones — we
+  // look for the task's PR ourselves
   const found = !linked.length && issue.state === "OPEN" ? unlinkedPrs(io, slug, number) : null;
   const fresh = (found?.prs ?? []).filter((p) => !issue.prs.some((x) => x.number === p.number));
   const unlinked = fresh.filter((p) => p.merged);
@@ -1693,7 +1727,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   }
   const wasOpen = issue.state === "OPEN";
   if (wasOpen) {
-    // без связи задача не видит своего PR — комментарий его называет
+    // without the link the task doesn't see its PR — a comment names it
     if (unlinked.length) mutate(io, { op: "AddComment", input: { subjectId: issue.id, body: locale.fill(N.comments.closedByPr, { prs: unlinked.map((p) => `#${p.number}`).join(", ") }) } });
     mutate(io, { op: "CloseIssue", input: { issueId: issue.id, stateReason: "COMPLETED" } });
     io.out(
@@ -1707,7 +1741,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   setStatus(io, ctx, item.id, N.status.done);
   io.out(`+ #${number}: ${STATUS} ${q(N.status.done)}${item.added ? " (added to the project)" : ""}`);
   closeMilestone(io, slug, issue, wasOpen);
-  let open = 0; // открытые задачи эпика, кроме этой: есть — блок актуализирует субагент
+  let open = 0; // the epic's open tasks other than this one: if there are any, a subagent refreshes the epic
   if (issue.parent) {
     const epic = loadIssue(io, slug, issue.parent.number);
     open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
@@ -1719,25 +1753,25 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     } else if (epic.state === "OPEN") io.out(`○ epic #${epic.number}: open subtasks ${open}`);
   }
   if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
-  // три строки — на языке проекта: их разбирает dashboard
+  // three lines — in the project language: dashboard parses them
   io.out(
     `Next: ${open ? `the epic refresh, if it didn't happen before close — a subagent with the task actualize ${number} assignment; then ` : ""}` +
       `the last line of the answer is one of three: ${q(N.lastLine.done)}; ` +
       `the owner has something to decide — ${q(`${N.lastLine.questions} …`)} with the questions themselves, without ${q(N.lastLine.done)}; ` +
       `something remains — ${q(`${N.lastLine.remaining} …`)}. ` +
-      // режим (auto) команда не читает: его знает сессия, условие названо словами
+      // the command doesn't read the mode (auto): the session knows it, the condition is spelled out in words
       `In auto mode after ${q(N.lastLine.done)} — archive the session where the agent has the tool; after the other two lines — don't. ` +
       `Information without a decision (an observation, a deadline, a warning) isn't a question: the line and archiving are as with ${q(N.lastLine.done)}`,
   );
   return 0;
 }
 
-// типы задач канона — копия EST_TYPES и BRANCH_CONV_RE из skills/est/scripts/est.ts: общего модуля нет (скилл ставится
-// один), одинаковость разбора держит стандарт tests/standards/task-branch
+// canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts: there's no shared module
+// (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
 const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
 const TASK_BRANCH_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + TASK_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 
-/** Ветка задачи по канону — `[<область>/]<type>/<N>-<slug>`: тип (в нижнем регистре) и номер, иначе null. */
+/** A task branch by the canon — `[<area>/]<type>/<N>-<slug>`: the type (lowercased) and the number, otherwise null. */
 export function taskBranch(branch: string): { type: string; issue: number } | null {
   const m = TASK_BRANCH_RE.exec(branch);
   return m ? { type: m[1]!.toLowerCase(), issue: parseInt(m[2]!, 10) } : null;
@@ -1745,8 +1779,8 @@ export function taskBranch(branch: string): { type: string; issue: number } | nu
 const isTaskBranch = (branch: string, number: number) => taskBranch(branch)?.issue === number;
 
 /**
- * PR задачи, с которыми GitHub её не связал: среди последних открытых и влитых PR основной ветки — ветка задачи или
- * «Closes #N» в теле (как `pr labels` до появления связи). `why` — по чему найден.
+ * The task's PRs that GitHub didn't link to it: among the latest open and merged PRs into the default branch — the
+ * task's branch or "Closes #N" in the body (as `pr labels` does before the link appears). `why` — what it was found by.
  */
 function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs: (Issue["prs"][number] & { why: string })[] } {
   const [owner, name] = slug.split("/");
@@ -1762,7 +1796,10 @@ function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs:
   return { base, prs };
 }
 
-/** Факт — скрипт est рядом со скиллом (`../est/scripts/est.ts`: так лежат копия в проекте, `~/.agents/skills` и клон). */
+/**
+ * The actual — the est script next to the skill (`../est/scripts/est.ts`: the project copy, `~/.agents/skills` and the
+ * clone are laid out this way).
+ */
 function runFact(io: Io, slug: string, number: number): void {
   const est = io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
   if (!existsSync(est)) return io.out(`○ actual unavailable: est is not installed (${est}) — est fact ${number} --write after installing it`);
@@ -1771,7 +1808,7 @@ function runFact(io: Io, slug: string, number: number): void {
   if (r.status !== 0) io.out(`! est fact: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
 }
 
-/** Мутации milestone в GraphQL нет — REST. wasOpen — задача была открыта при чтении: в счёте открытых она есть. */
+/** GraphQL has no milestone mutation — REST. wasOpen — the task was open when read: the open count includes it. */
 function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): void {
   const m = issue.milestone;
   if (!m) return;
@@ -1782,9 +1819,9 @@ function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): v
 }
 
 /**
- * Влитое — долой (SKILL.md, «Git, PRs and merging — mechanics», пункт «Right after a PR merge»): чекаут с ветки задачи на
- * origin/<base> detached, локальная и
- * удалённая ветка удаляются. «Влито» — PR merged, без PR — `git cherry`; не влита, чужая или не тот чекаут — не трогаем.
+ * Merged branches go away (SKILL.md, "Git, PRs and merging — mechanics", the "Right after a PR merge" item): the
+ * checkout moves from the task branch to origin/<base> detached, the local and remote branches are deleted. "Merged" —
+ * the PR is merged, without a PR — `git cherry`; not merged, someone else's or not that checkout — left alone.
  */
 function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string; base: string } | null): void {
   const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd);
@@ -1818,10 +1855,10 @@ function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string;
 }
 
 // ----------------------------------------------------------------------------
-// Метки решений по PR
+// Decision labels by PR
 // ----------------------------------------------------------------------------
 
-/** Метки, которых у задачи нет, — одной мутацией; вернёт их через запятую (нечего добавлять — пусто). */
+/** The labels the task doesn't have — in one mutation; returns them comma-separated (nothing to add — empty). */
 function addLabels(io: Io, issue: Pick<Issue, "id" | "labels">, names: string[], all: Label[]): string {
   const missing = names.filter((n) => !issue.labels.includes(n));
   if (!missing.length) return "";
@@ -1830,7 +1867,7 @@ function addLabels(io: Io, issue: Pick<Issue, "id" | "labels">, names: string[],
   return missing.join(", ");
 }
 
-/** Изменённый файл PR (`PullRequestChangedFile`): вид правки и число строк. */
+/** A changed PR file (`PullRequestChangedFile`): the kind of change and the line counts. */
 export interface PrFile {
   path: string;
   changeType: string;
@@ -1838,15 +1875,16 @@ export interface PrFile {
   deletions: number;
 }
 
-// прежний формат исключений — массив в одном файле: exceptions.ts харнесса, names.exceptions.ts spec-doc
+// the former exceptions format — an array in one file: the harness's exceptions.ts, spec-doc's names.exceptions.ts
 const LEGACY_EXCEPTIONS = /^(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
 
 /**
- * Файл исключений какой папки решения? Копия правила `exceptionFile` скилла spec (`speclib.ts`): скиллы ставятся по
- * одному, импорт между ними сломал бы github без spec; стандарт `tests/standards/exception-files` сверяет обе копии
- * с одной таблицей. Каталог `exceptions/` (`names.exceptions/`) папки `tests/<вид>/<имя>`, файл `.json` — исключение
- * папки; иной файл в каталоге и каталог в подпапке — ошибка; `exceptions.*` (`names.exceptions.*`) в папке или
- * подпапке — прежний формат; вне папок решений и скрытые — null.
+ * Which decision folder's exceptions file is it? A copy of the spec skill's `exceptionFile` rule (`speclib.ts`):
+ * skills are installed one by one, an import between them would break github without spec; the
+ * `tests/standards/exception-files` standard checks both copies against one table. The `exceptions/`
+ * (`names.exceptions/`) directory of a `tests/<kind>/<name>` folder, a `.json` file — the folder's exception; another
+ * file in the directory and a directory in a subfolder — an error; `exceptions.*` (`names.exceptions.*`) in a folder
+ * or a subfolder — the former format; outside decision folders and hidden ones — null.
  */
 export function exceptionFile(p: string): { folder: string; dir: string; legacy: boolean; error?: string } | null {
   const parts = p.split("/");
@@ -1864,10 +1902,10 @@ export function exceptionFile(p: string): { folder: string; dir: string; legacy:
 }
 
 /**
- * Механическая правка решение не меняет: файл удалён, переименован без правки содержимого или это файл исключений
- * папки решения, который spec читает исключением (`exceptionFile` без ошибки): файл в `exceptions/`, прежний
- * `exceptions.ts` (храповик исключений), исключение названия в `names.exceptions/` (spec-doc). Метку решения она не
- * даёт — иначе при массовых правках задача получает метки решений, которых не меняла.
+ * A mechanical edit doesn't change a decision: the file is deleted, renamed without content changes, or it's an
+ * exceptions file of a decision folder that spec reads as an exception (`exceptionFile` without an error): a file in
+ * `exceptions/`, the former `exceptions.ts` (the exceptions ratchet), a name exception in `names.exceptions/`
+ * (spec-doc). It gives no decision label — otherwise with mass edits a task gets labels of decisions it didn't change.
  */
 function mechanical(f: PrFile): boolean {
   if (f.changeType === "DELETED") return true;
@@ -1877,10 +1915,10 @@ function mechanical(f: PrFile): boolean {
 }
 
 /**
- * Решения, которые трогает дифф: папка дерева спеки — само решение, файл кода — модуль модели с самым длинным
- * подходящим каталогом (вложенный модуль точнее объемлющего). `tests/lib` и файлы вне модулей — не решения.
- * `changed` — имя решения → его виды в диффе, хотя бы один файл решения правлен по содержимому; `mechanical` — решения,
- * тронутые только механической правкой. Имена по алфавиту.
+ * Decisions the diff touches: a spec tree folder is the decision itself, a code file — the model module with the
+ * longest matching directory (a nested module is more precise than the enclosing one). `tests/lib` and files outside
+ * modules aren't decisions. `changed` — decision name → its kinds in the diff, at least one of the decision's files
+ * edited in content; `mechanical` — decisions touched only by a mechanical edit. Names in alphabetical order.
  */
 export function decisionsOfFiles(files: PrFile[], modules: Record<string, string[]>): { changed: Map<string, DecisionKind[]>; mechanical: string[] } {
   const out = new Map<string, { kinds: Set<DecisionKind>; changed: boolean }>();
@@ -1912,8 +1950,8 @@ export function decisionsOfFiles(files: PrFile[], modules: Record<string, string
 }
 
 /**
- * Задачи, которые закрывает PR, по телу — как их понимает GitHub: ключевое слово (close, fix, resolve в любой форме)
- * перед каждым `#N`; «Closes #1, #2» закрывает только #1.
+ * Tasks the PR closes, by its body — as GitHub understands them: a keyword (close, fix, resolve in any form) before
+ * each `#N`; "Closes #1, #2" closes only #1.
  */
 function closingInBody(body: string): number[] {
   const out: number[] = [];
@@ -1931,10 +1969,10 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     return pr.files;
   });
   let closes: number[] = (head.closingIssuesReferences?.nodes ?? []).map((x: Any) => x.number);
-  // сразу после создания PR GitHub ещё не связал его с задачей — те же ключевые слова в теле
+  // right after the PR is created GitHub hasn't linked it to the task yet — the same keywords in the body
   if (!closes.length) closes = closingInBody(head.body ?? "");
   if (!closes.length) throw new GhError(`PR #${number} has no «Closes #N» — nowhere to put the labels`);
-  // модули — из головы PR: PR может добавить модуль или перенести его каталог
+  // modules come from the PR head: the PR may add a module or move its directory
   const model = graphql(io, Q.ModelAt, { owner, name, expression: `${head.headRefOid}:${MODEL_PATH}` })?.repository?.object;
   let modules: Record<string, string[]> = {};
   if (model) {
@@ -1944,7 +1982,7 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
   }
   const { changed: decided, mechanical: skipped } = decisionsOfFiles(files, modules);
   const all = decided.size ? loadLabels(io, slug) : [];
-  // метка-разрез с именем решения — другой разрез задач: как метку решения её не ставим
+  // a slice label with a decision's name is a different slice of tasks: it isn't set as a decision label
   const dimensions = all.flatMap((l) => {
     const dim = decided.has(l.name) ? labelDimension(l.description) : null;
     return dim ? [{ name: l.name, dim }] : [];
@@ -1969,7 +2007,7 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     const issue = loadIssue(io, slug, n);
     const added = addLabels(io, issue, want, all);
     if (added) io.out(`+ #${n}: ${added}`);
-    // прежние метки не снимаем: задача могла трогать решение и другим PR
+    // earlier labels aren't removed: the task may have touched the decision in another PR too
     for (const l of issue.labels.filter((x) => isDecision(x) && !want.includes(x))) io.out(`= #${n}: ${l} — the decision is not in the PR diff, the label stays`);
     if (issue.parent && !epics.has(issue.parent.number)) epics.set(issue.parent.number, loadIssue(io, slug, issue.parent.number));
   }
@@ -1981,30 +2019,36 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
 }
 
 // ----------------------------------------------------------------------------
-// Проверка слияния перед мержем
+// Checking the merge before merging
 // ----------------------------------------------------------------------------
 
 /**
- * Быстрые проверки проекта — эти скрипты `package.json`, какие есть, по порядку CI: типы (семантический конфликт двух
- * PR, секунды), затем стандарты и архитектура — минуты, а не весь `test`.
+ * The project's fast checks — these `package.json` scripts, those that exist, in CI order: types (a semantic conflict
+ * of two PRs, seconds), then standards and architecture — minutes, not the whole `test`.
  */
 export const PREMERGE_SCRIPTS = ["typecheck", "test:spec"];
-/** Merge-ref GitHub строит до события, по которому создаётся check suite: движение main в эту минуту — уход. */
+/**
+ * GitHub builds the merge-ref before the event that creates the check suite: main moving within this minute counts as
+ * having moved.
+ */
 const MERGE_REF_SLACK_MS = 60_000;
 const LOCKFILES: [file: string, pm: string][] = [["bun.lock", "bun"], ["bun.lockb", "bun"], ["pnpm-lock.yaml", "pnpm"], ["yarn.lock", "yarn"], ["package-lock.json", "npm"]];
 const INSTALL: Record<string, string[]> = { bun: ["bun", "install", "--frozen-lockfile"], pnpm: ["pnpm", "install", "--frozen-lockfile"], yarn: ["yarn", "install", "--frozen-lockfile"], npm: ["npm", "ci"] };
-/** Строки об упавшем: тест — bun `(fail)`, Vitest `FAIL` и `×`, Jest `●`, Playwright `✘`; ошибка компилятора — `error TS2304:`. */
+/**
+ * Failure lines: a test — bun `(fail)`, Vitest `FAIL` and `×`, Jest `●`, Playwright `✘`; a compiler error —
+ * `error TS2304:`.
+ */
 const FAILED_LINE = /^\s*(\(fail\)|FAIL\s|×|✗|✘|●\s)|\berror TS\d+:/;
 /**
- * Ошибка `bun check` под агентом (`CLAUDECODE=1`) — блок `<error file="a.ts" line="3" column="5" code="TS2304">` с текстом
- * на следующей строке; приводится к строке tsc без TTY `a.ts(3,5): error TS2304: …`.
+ * A `bun check` error under an agent (`CLAUDECODE=1`) — a block `<error file="a.ts" line="3" column="5" code="TS2304">`
+ * with the text on the next line; it is brought to a tsc line without a TTY, `a.ts(3,5): error TS2304: …`.
  */
 const BUN_CHECK_ERROR = /<error file="([^"]+)" line="(\d+)" column="(\d+)" code="(TS\d+)">\n([^\n]*)/g;
 const asTsc = (out: string) => out.replace(BUN_CHECK_ERROR, "$1($2,$3): error $4: $5");
 
 /**
- * Команды проекта в каталоге: менеджер пакетов — `packageManager` в package.json, иначе по lockfile; зависимости
- * ставятся по lockfile без его правки, lockfile нет — без установки.
+ * The project's commands in a directory: the package manager — `packageManager` in package.json, otherwise by the
+ * lockfile; dependencies are installed from the lockfile without changing it, no lockfile — no install.
  */
 export function projectCommands(dir: string): { install: string[] | null; run: (script: string) => string[] } {
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
@@ -2015,18 +2059,21 @@ export function projectCommands(dir: string): { install: string[] | null; run: (
 
 const tail = (r: RunResult, n = 20) => `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => l.trim()).slice(-n);
 /**
- * Строка упавшего без времени прогона (bun `[1.2ms]`, Vitest `12ms`) и позиции ошибки компилятора (`a.ts(3,5):` — tsc
- * без TTY; правка PR выше по файлу её сдвигает) — одно падение на слиянии и на main.
+ * A failure line without the run time (bun `[1.2ms]`, Vitest `12ms`) and the compiler error position (`a.ts(3,5):` —
+ * tsc without a TTY; a PR edit higher up in the file shifts it) — one failure on the merge and on main.
  */
 const failure = (l: string) => l.trim().replace(/\s*\[[\d.]+\s*m?s\]$/, "").replace(/\s+[\d.]+\s*m?s$/, "").replace(/^(\S+?)\(\d+,\d+\)(?=:)/, "$1");
 
-/** Ожидание закрытия бага — скрипт ci-wait рядом (`../ci-wait`: так лежат копия в проекте, `~/.agents/skills` и клон). */
+/**
+ * Waiting for the bug to close — the ci-wait script next to it (`../ci-wait`: the project copy, `~/.agents/skills` and
+ * the clone are laid out this way).
+ */
 const WAIT_CI = path.resolve(import.meta.dir, "../../ci-wait/scripts/wait-ci.sh");
-// красный исход чека: отменённый (перезапуск, новый коммит) и ждущий решения человека — не красные
+// a red check outcome: cancelled (a rerun, a new commit) and waiting for a human's decision aren't red
 const RED_RUN = new Set(["failure", "timed_out", "startup_failure"]);
 const RED_STATUS = new Set(["failure", "error"]);
 
-/** Красные чеки последнего коммита основной ветки — check-runs (последний прогон каждого имени) и статусы хостинга. */
+/** Red checks of the default branch's last commit — check-runs (the last run of each name) and hosting statuses. */
 function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: string[] } {
   const ref = encodeURIComponent(base);
   const latest = new Map<string, Any>();
@@ -2041,12 +2088,15 @@ function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: 
   return { sha: String(status.sha ?? ""), names: [...new Set(names)].sort() };
 }
 
-/** Префиксы заголовка бага на красную основную ветку — `mainRed.title` каждого языка словаря, язык проекта первым. */
+/**
+ * Title prefixes of a bug about a red default branch — `mainRed.title` of each dictionary language, the project
+ * language first.
+ */
 const mainRedPrefixes = (base: string) => [...new Set([N, ...locale.everyNames()].map((n) => locale.fill(n.mainRed.title, { base })))];
 
 /**
- * Открытые баги на красную основную ветку — заголовок «<base> is red…» на любом языке словаря (поиск на каждый), по
- * номеру: поиск отстаёт, бывает и дубль.
+ * Open bugs about a red default branch — the title "<base> is red…" in any dictionary language (a search for each),
+ * by number: the search lags, and a duplicate happens.
  */
 function mainBugsOf(io: Io, slug: string, base: string): { number: number; title: string }[] {
   const prefixes = mainRedPrefixes(base);
@@ -2059,8 +2109,8 @@ function mainBugsOf(io: Io, slug: string, base: string): { number: number; title
 }
 
 /**
- * Заголовок бага «<base> is red…» называет чек — имя целиком после префикса, не часть другого: `test` — не в
- * «test:spec», `main` — не префикс.
+ * The bug title "<base> is red…" names the check — the whole name after the prefix, not part of another one: `test`
+ * isn't found in "test:spec", nor `main` in the prefix.
  */
 function bugNames(base: string, title: string, check: string): boolean {
   const prefix = mainRedPrefixes(base).find((p) => title.startsWith(p)) ?? "";
@@ -2068,11 +2118,12 @@ function bugNames(base: string, title: string, check: string): boolean {
 }
 
 /**
- * Перед мержем зелёного PR: main ушёл после его CI — слияние головы PR со свежим main во временном worktree и быстрые
- * проверки (`typecheck`, затем `test:spec`, как в CI); не ушёл — CI проверил ровно это слияние. Что проверил CI, GitHub
- * не хранит (merge-ref пересобирается), поэтому по времени: самый ранний check suite головы против последнего события
- * основной ветки (REST: квота GraphQL общая на все сессии). Неизвестное — проверяется. Красный main — не этот PR: красный чек последнего коммита main или
- * слияние красное тем же, что голый main. Код 0 — вливать, 1 — не вливать (PR ломает), 3 — main красный.
+ * Before merging a green PR: main moved after its CI — the PR head merged with a fresh main in a temporary worktree and
+ * the fast checks (`typecheck`, then `test:spec`, as in CI); didn't move — the CI checked exactly this merge. GitHub
+ * doesn't keep what the CI checked (the merge-ref is rebuilt), so by time: the head's earliest check suite against the
+ * last event of the default branch (REST: the GraphQL quota is shared by all sessions). The unknown is checked. A red
+ * main isn't this PR: a red check on main's last commit or a merge red by the same thing as bare main. Code 0 —
+ * merge, 1 — don't merge (the PR breaks it), 3 — main is red.
  */
 export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   const pr = restCall(io, ["api", `repos/${slug}/pulls/${number}`]);
@@ -2082,9 +2133,9 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   const closes = closingInBody(pr.body ?? "");
 
   /**
-   * Красный main: не вливать и в своём PR не чинить — один баг на всех, остальные ждут его закрытия. `red` — упавшие
-   * чеки (или скрипт), `what` — как их назвать в заголовке бага. PR, который закрывает этот баг, — починка: null,
-   * проверка идёт как обычно.
+   * A red main: don't merge and don't fix it in your PR — one bug for everyone, the others wait for it to close.
+   * `red` — the failed checks (or the script), `what` — how to name them in the bug title. A PR that closes this bug is
+   * the fix: null, the check goes as usual.
    */
   const mainRed = (lead: string, why: string, red: string[], what: (names: string[]) => string, say = what): number | null => {
     let bugs: { number: number; title: string }[] = [];
@@ -2094,15 +2145,17 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       if (!(e instanceof GhError)) throw e;
       io.out(`○ open bug on red ${base} not found by search: ${e.message}`);
     }
-    // починка — PR, который закрывает любой из открытых багов, без сверки с упавшим чеком (в отличие от ожидания ниже):
-    // один красный main назван то скриптом (test:spec на голом main), то чеком CI — сверка не дала бы влить починку
+    // the fix is a PR that closes any of the open bugs, without matching the failed check (unlike the wait below): one
+    // red main is named sometimes by the script (test:spec on bare main), sometimes by a CI check — matching would
+    // keep the fix from merging
     const fix = bugs.find((b) => closes.includes(b.number));
     if (fix) {
       io.out(`○ ${base} is red — ${why}; the PR closes bug #${fix.number} about it — checking the PR as usual`);
       return null;
     }
     io.out(lead);
-    // ждать — бага, чей заголовок называет упавший чек (в отличие от починки выше): баг про другой чек main зелёным не сделает
+    // wait for a bug whose title names the failed check (unlike the fix above): a bug about another check won't make
+    // main green
     const named = (b: { title: string }) => red.some((n) => bugNames(base, b.title, n));
     for (const b of bugs.filter((b) => !named(b))) io.out(`○ #${b.number} «${b.title}» — about another check: don't wait`);
     const wait = (n: string) => `wait for it to close — bash ${WAIT_CI} issue ${n} as a background command, then pr premerge ${number} again`;
@@ -2122,7 +2175,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     const red = redChecksOf(io, slug, base);
     if (red.names.length) {
       const checks = (names: string[]) => `${names.length > 1 ? "checks" : "check"} ${names.join(", ")}`;
-      // в заголовке бага — на языке проекта
+      // in the bug title — in the project language
       const titled = (names: string[]) => locale.fill(names.length > 1 ? N.mainRed.checks : N.mainRed.check, { names: names.join(", ") });
       const why = `${checks(red.names)} of the last commit of ${base} (${red.sha.slice(0, 7)})`;
       const code = mainRed(`${base} is red: ${why}`, why, red.names, titled, checks);
@@ -2162,7 +2215,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   if (git(io.cwd, "cat-file", "-e", `${head}^{commit}`).status !== 0) throw new GhError(`PR head ${head} not fetched from origin — was the PR updated? ci-wait again`);
 
   const dirs: string[] = [];
-  /** Временный worktree на origin/<base>: убирается всегда. */
+  /** A temporary worktree at origin/<base>: always removed. */
   const worktree = (): string => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "ai-dev-premerge-"));
     dirs.push(dir);
@@ -2172,7 +2225,10 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   };
   const ON_MERGE = "on the merge";
   type Red = { script: string; cmd: string; result: RunResult; failed: string[] };
-  /** Быстрые проверки дерева (`scripts` — какие есть) с зависимостями по его lockfile, до первой красной; ни одной — null. */
+  /**
+   * The tree's fast checks (`scripts` — those that exist) with dependencies from its lockfile, up to the first red one;
+   * none — null.
+   */
   const checks = (dir: string, where: string, scripts: string[]): { ran: string[]; red: Red | null } | null => {
     const pkg = path.join(dir, "package.json");
     const defined = existsSync(pkg) ? (JSON.parse(readFileSync(pkg, "utf8")).scripts ?? {}) : {};
@@ -2199,7 +2255,8 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   try {
     const dir = worktree();
     const short = (ref: string) => git(dir, "rev-parse", "--short=7", ref).stdout.trim();
-    // как merge-ref GitHub; rebase-мерж без конфликтов даёт то же дерево. Хуки проекта временному слиянию не нужны
+    // like GitHub's merge-ref; a rebase merge without conflicts gives the same tree. A temporary merge doesn't need the
+    // project's hooks
     const merge = git(dir, "-c", "user.name=ai-dev", "-c", "user.email=ai-dev@localhost", "-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "--no-verify", "--no-edit", head);
     if (merge.status !== 0) {
       const files = git(dir, "diff", "--name-only", "--diff-filter=U").stdout.split("\n").filter(Boolean);
@@ -2222,7 +2279,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     io.out(`${red.cmd} failed:`);
     for (const l of (red.failed.length ? red.failed.slice(0, 20) : tail(red.result))) io.out(`  ${l.trim()}`);
 
-    // красное слияние — красный ли голый main тем же: тогда ломает не этот PR
+    // a red merge — is bare main red by the same thing: then it's not this PR that breaks it
     io.out(`checking bare origin/${base}: is it red by itself`);
     const bare = checks(worktree(), `on origin/${base}`, [red.script])?.red;
     if (!bare) {
@@ -2231,7 +2288,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     }
     const onMain = new Set(bare.failed.map(failure));
     const own = red.failed.filter((l) => !onMain.has(failure(l)));
-    // не разобрать, что упало, — не отличить: main красный, после его починки premerge проверит PR снова
+    // can't tell what failed — can't tell them apart: main is red, after its fix premerge checks the PR again
     if (own.length && bare.failed.length) {
       io.out(`${base} is red by itself, the PR breaks beyond it:`);
       for (const l of own.slice(0, 20)) io.out(`  ${l}`);

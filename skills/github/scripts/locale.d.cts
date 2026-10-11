@@ -1,8 +1,9 @@
-// Типы модуля `locale.cjs`: без них TypeScript проекта с `checkJs` проверял бы сам файл. Names — форма
-// `locales/en.json`; у каждого языка те же ключи (стандарт flow-english), типизацию словаря сверяет его тест.
+// Types of the `locale.cjs` module: without them a project's TypeScript with `checkJs` would check the file itself.
+// Names is the shape of `locales/en.json`; each language has the same keys (the flow-english standard), the dictionary
+// typing is checked by its test.
 
 declare namespace locale {
-  /** Формы слова для числа по CLDR; у языка без формы — та же, что other. */
+  /** Word forms for a number by CLDR; a language without a form has the same as other. */
   interface Plural {
     one: string;
     few: string;
@@ -10,7 +11,7 @@ declare namespace locale {
     other: string;
   }
 
-  /** Названия, которые скрипты пишут в GitHub, в документы и тесты проекта и разбирают оттуда. */
+  /** Names the scripts write to GitHub, to the project's documents and tests, and parse from there. */
   interface Names {
     issueTypes: { task: string; bug: string; epic: string };
     sections: { questions: string; scenarios: string };
@@ -21,19 +22,22 @@ declare namespace locale {
     labelMarkers: { decision: string; slice: string; architecturePath: string };
     comments: { state: string; actual: string; closedByPr: string };
     subagentPrompt: { task: string; epic: string };
-    /** Баг на красную основную ветку: заголовок «<base> is red: <чеки>». */
+    /** A bug about a red default branch: the title "<base> is red: <checks>". */
     mainRed: { title: string; check: string; checks: string };
-    /** Задание субагенту актуализации блока (`github task actualize`). */
+    /** The assignment for the epic-refresh subagent (`github task actualize`). */
     actualize: { lead: string; shipped: string; prs: string; noPr: string; epic: string; openTask: string; checks: string; scope: string; comment: string; answer: string };
-    /** Комментарии «Оценка» и «Факт» скилла est и строки, которые в них дописывает человек. */
+    /** The est skill's "Estimate" and "Actual" comments and the lines a human appends to them. */
     est: {
       answer: string;
       manual: string;
       reason: string;
       hours: string;
-      /** Слова, которыми текст PR или коммита закрывает задачу (`Closes #N`), — через пробел; разбираются слова всех языков. */
+      /**
+       * Words with which a PR or commit text closes a task (`Closes #N`), space-separated; the words of all languages
+       * are parsed.
+       */
       closingWords: string;
-      /** Служебные слова заголовка для подбора аналогов — через пробел; отсекаются слова всех языков. */
+      /** Service words of a title for picking analogs, space-separated; the words of all languages are dropped. */
       stopWords: string;
       fact: {
         unavailable: string;
@@ -91,7 +95,7 @@ declare namespace locale {
         size: string;
       };
     };
-    /** Описание коммита копии флоу, который подсказывает `update`: «ai-dev flow <тег>». */
+    /** The description of a flow copy commit that `update` suggests: "ai-dev flow <tag>". */
     updateCommit: string;
     standardIssue: string;
     autoAnswer: string;
@@ -100,13 +104,13 @@ declare namespace locale {
     spec: SpecNames;
   }
 
-  /** Названия скилла spec: документация `spec-doc`, раздел PR `spec-diff`, схемы `c4`, тесты харнесса. */
+  /** Names of the spec skill: the `spec-doc` documentation, the `spec-diff` PR section, `c4` diagrams, harness tests. */
   interface SpecNames {
-    /** «12 тестов» — счётчики spec-doc и spec-diff. */
+    /** "12 tests" — the spec-doc and spec-diff counters. */
     tests: Plural;
-    /** Отключение линта: без правил — все, без описания — без причины. */
+    /** Disabling the linter: without rules — all of them, without a description — no reason. */
     lint: { allRules: string; noReason: string };
-    /** Названия тестов, которые регистрирует харнесс (`harness.ts`): это `it` проекта. */
+    /** Names of the tests the harness registers (`harness.ts`): these are the project's `it`. */
     harness: {
       registryNotEmpty: string;
       registryFinds: string;
@@ -144,7 +148,7 @@ declare namespace locale {
       ignoreNoReason: string;
       env: { inCode: string; declaredName: string; undeclared: string; declared: string; readName: string; unread: string };
     };
-    /** Реестры, названия тестов и нарушители проверки модели архитектуры (`architecture.ts`). */
+    /** Registries, test names and offenders of the architecture model check (`architecture.ts`). */
     architecture: {
       dirsRegistry: string;
       dirName: string;
@@ -192,7 +196,7 @@ declare namespace locale {
       readPerimeter: string;
       readViolator: string;
     };
-    /** Документация `docs/spec`: шапка-метка, заголовки, разделы трёх корней, счётчики и пометки тестов. */
+    /** The `docs/spec` documentation: the header mark, headings, sections of the three roots, test counters and marks. */
     doc: {
       mark: string;
       title: string;
@@ -213,7 +217,7 @@ declare namespace locale {
       none: string;
       rules: string;
     };
-    /** Страница архитектуры и схемы C4 из модели. */
+    /** The architecture page and C4 diagrams from the model. */
     c4: {
       title: string;
       intro: string;
@@ -234,7 +238,10 @@ declare namespace locale {
       containerCount: Plural;
       externalCount: Plural;
     };
-    /** Раздел PR `spec-diff`: списки тестов, перенос в дерево, сводка, решения вне названий, сверка сценариев. */
+    /**
+     * The `spec-diff` PR section: test lists, moving into the tree, the summary, decisions outside names, the scenarios
+     * check.
+     */
     diff: {
       base: string;
       unchanged: string;
@@ -282,7 +289,10 @@ declare namespace locale {
       addedKind: string;
       summarized: string;
     };
-    /** Тесты сверки точек входа `spec-claims`: describe, реестр и названия; «не пуст» и исключение — названия харнесса. */
+    /**
+     * Tests of the `spec-claims` entry points check: describe, registry and names; "not empty" and exception are
+     * harness names.
+     */
     claims: {
       describe: string;
       registry: string;
@@ -295,25 +305,28 @@ declare namespace locale {
   const LANGUAGE_CODE: RegExp;
   const DEFAULT_LANGUAGE: string;
   const LEGACY_LANGUAGE: string;
-  /** Корень проекта: ближайший вверх каталог с `.git`, иначе сам каталог. */
+  /** The project root: the nearest directory up with `.git`, otherwise the directory itself. */
   function projectRoot(dir: string): string;
-  /** Язык проекта каталога (по умолчанию — текущего): `language` манифеста, без поля — ru, без манифеста — en. */
+  /**
+   * The project language of a directory (by default — the current one): the manifest's `language`, no field — ru, no
+   * manifest — en.
+   */
   function projectLanguage(dir?: string): string;
-  /** Названия языка; файла языка нет — en. */
+  /** The names of a language; no file for the language — en. */
   function names(language: string): Names;
-  /** Языки словаря, en первым. */
+  /** The dictionary's languages, en first. */
   function languages(): string[];
-  /** Названия всех языков словаря — для разбора. */
+  /** The names of all dictionary languages — for parsing. */
   function everyNames(): Names[];
-  /** Одно название во всех языках словаря без повторов. */
+  /** One name in all dictionary languages without repeats. */
   function every(pick: (n: Names) => string): string[];
-  /** Подстановка `{имя}` в шаблон. */
+  /** Substitutes `{var}` in a template. */
   function fill(template: string, vars: Record<string, string | number>): string;
-  /** Форма слова для числа по правилам языка. */
+  /** The word form for a number by the language's rules. */
   function plural(language: string, forms: Plural, n: number): string;
-  /** Число и форма слова: «12 тестов». */
+  /** The number and the word form: "12 tests". */
   function count(language: string, forms: Plural, n: number): string;
-  /** Название для регулярки: спецсимволы экранированы. */
+  /** A name for a regex: special characters escaped. */
   function escapeRe(text: string): string;
 }
 

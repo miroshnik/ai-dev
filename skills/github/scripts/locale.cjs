@@ -1,30 +1,38 @@
 /**
- * locale — язык проекта и названия на нём, один модуль на скрипты всех скиллов и установщик: `est`, `spec` и
- * `dashboard` импортируют его из `github` — словарь один, в `locales/` этого скилла, а `github` от них не зависит;
- * `bin/ai-dev.mjs` — из своего пакета.
+ * locale — the project language and the names in it, one module for the scripts of all skills and the installer: `est`,
+ * `spec` and `dashboard` import it from `github` — there's one dictionary, in this skill's `locales/`, and `github`
+ * doesn't depend on them; `bin/ai-dev.mjs` imports it from its own package.
  *
- * Язык — `language` в `.agents/ai-dev.json` корня проекта (ближайший вверх каталог с `.git`, иначе сам каталог):
- * манифест без поля (установка прошлой версии) — `ru`, манифеста нет — `en`. Названия — `locales/<язык>.json`, одни
- * ключи у каждого языка; файла языка нет — `en`. Пишут скрипты на языке проекта, разбирают — названия любого языка словаря (`everyNames`): проект,
- * сменивший язык, и задачи чужих репозиториев читаются без знания их языка.
+ * The language is `language` in `.agents/ai-dev.json` of the project root (the nearest directory up with `.git`,
+ * otherwise the directory itself): a manifest without the field (an install of a previous version) — `ru`, no
+ * manifest — `en`. Names are `locales/<language>.json`, the same keys for each language; no file for the language —
+ * `en`. Scripts write in the project language and parse the names of any dictionary language (`everyNames`): a
+ * project that changed its language and tasks of other repositories are read without knowing their language.
  *
- * CommonJS, а не TypeScript: словарь ищется от `__dirname`, а харнесс `spec`, который импортирует модуль, Playwright и
- * Jest грузят как CommonJS — там `import.meta` синтаксическая ошибка (tests/standards/harness-load); установщик npx
- * запускает из node_modules, где Node не стирает типы. Типы — `locale.d.cts`.
+ * CommonJS, not TypeScript: the dictionary is looked up from `__dirname`, and the `spec` harness that imports the
+ * module is loaded by Playwright and Jest as CommonJS — `import.meta` is a syntax error there
+ * (tests/standards/harness-load); npx runs the installer from node_modules, where Node doesn't strip types. Types are
+ * in `locale.d.cts`.
  */
 "use strict";
 
 const { existsSync, readdirSync, readFileSync } = require("node:fs");
 const path = require("node:path");
 
-/** Код языка BCP 47: язык и необязательные подтеги — `ru`, `en`, `pt-BR`, `zh-Hant`. */
+/** A BCP 47 language code: the language and optional subtags — `ru`, `en`, `pt-BR`, `zh-Hant`. */
 const LANGUAGE_CODE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const DEFAULT_LANGUAGE = "en";
-/** Язык установки прошлой версии — манифест без поля `language`: флоу до поля работал только по-русски. */
+/**
+ * The language of an install of a previous version — a manifest without the `language` field: before the field the flow
+ * worked only in Russian.
+ */
 const LEGACY_LANGUAGE = "ru";
 const LOCALES = path.join(__dirname, "..", "locales");
 
-/** Корень проекта: ближайший вверх каталог с `.git` (каталог или файл worktree), иначе сам каталог. */
+/**
+ * The project root: the nearest directory up with `.git` (a directory or a worktree file), otherwise the directory
+ * itself.
+ */
 function projectRoot(dir) {
   const start = path.resolve(dir);
   for (let d = start; ; d = path.dirname(d)) {
@@ -33,7 +41,7 @@ function projectRoot(dir) {
   }
 }
 
-/** Язык проекта каталога `dir` (по умолчанию — текущего). */
+/** The project language of the `dir` directory (by default — the current one). */
 function projectLanguage(dir = process.cwd()) {
   const file = path.join(projectRoot(dir), ".agents", "ai-dev.json");
   if (!existsSync(file)) return DEFAULT_LANGUAGE;
@@ -41,53 +49,53 @@ function projectLanguage(dir = process.cwd()) {
   try {
     manifest = JSON.parse(readFileSync(file, "utf8")) ?? {};
   } catch {
-    // битый манифест — как манифест без поля
+    // a broken manifest — like a manifest without the field
   }
   return typeof manifest.language === "string" && LANGUAGE_CODE.test(manifest.language) ? manifest.language : LEGACY_LANGUAGE;
 }
 
 const cache = new Map();
 
-/** Названия языка: `locales/<язык>.json`, файла нет — `en`. */
+/** The names of a language: `locales/<language>.json`, no file — `en`. */
 function names(language) {
   const lang = existsSync(path.join(LOCALES, `${language}.json`)) ? language : DEFAULT_LANGUAGE;
   if (!cache.has(lang)) cache.set(lang, JSON.parse(readFileSync(path.join(LOCALES, `${lang}.json`), "utf8")));
   return cache.get(lang);
 }
 
-/** Языки словаря — файлы `locales/*.json`, `en` первым. */
+/** The dictionary's languages — the `locales/*.json` files, `en` first. */
 function languages() {
   const all = readdirSync(LOCALES).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length)).sort();
   return [DEFAULT_LANGUAGE, ...all.filter((l) => l !== DEFAULT_LANGUAGE)];
 }
 
-/** Названия всех языков словаря — для разбора. */
+/** The names of all dictionary languages — for parsing. */
 function everyNames() {
   return languages().map(names);
 }
 
-/** Одно название во всех языках словаря без повторов: `every((n) => n.sections.questions)`. */
+/** One name in all dictionary languages without repeats: `every((n) => n.sections.questions)`. */
 function every(pick) {
   return [...new Set(everyNames().map(pick))];
 }
 
-/** Подстановка `{имя}` в шаблон названия; неизвестное имя остаётся как есть. */
+/** Substitutes `{var}` in a name template; an unknown variable stays as is. */
 function fill(template, vars) {
   return template.replace(/\{(\w+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m));
 }
 
-/** Форма слова для числа по правилам языка (CLDR: one, few, many, other); формы нет — other. */
+/** The word form for a number by the language's rules (CLDR: one, few, many, other); no such form — other. */
 function plural(language, forms, n) {
   const form = new Intl.PluralRules(language).select(n);
   return forms[form] ?? forms.other;
 }
 
-/** «12 тестов»: число и форма слова. */
+/** "12 tests": the number and the word form. */
 function count(language, forms, n) {
   return `${n} ${plural(language, forms, n)}`;
 }
 
-/** Регулярка из названия: спецсимволы экранированы. */
+/** A regex from a name: special characters escaped. */
 function escapeRe(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
