@@ -59,7 +59,7 @@ call: a regular one won't return until the timeout.
 | `--repo o/r` | repository; by default — from the directory's `git remote origin` |
 | `--all-repos` | all repositories in the personal `est` registry (`~/.config/ai-dev/repos.json`); each task names its repository |
 | `--since 90d` | default period of «Estimate and actual» (`d`, `w`, `m`); without it — all time. On the page — «30 days», «90 days», «all time» |
-| `--port N` | port; by default — a free one, a busy one is an error |
+| `--port N` | port; by default — a free one, a busy one is an error; none can be opened (an agent's sandbox) — an error too, see the pitfalls below |
 | `--no-open` | don't open the browser |
 
 ## Sessions tab
@@ -156,6 +156,11 @@ no ring and no ratio.
 - The page is local: the server listens only on `127.0.0.1` and answers only
   to the names `127.0.0.1` and `localhost`. Don't expose it — it contains task
   titles of non-public repositories.
+- An agent's sandbox that denies local ports (Claude Code with
+  `sandbox.network.allowLocalBinding` off) — the script exits with
+  «can't listen on 127.0.0.1 …», even without `--port`: another port won't
+  help, run the background command outside the sandbox. The dashboard tests
+  open ports too.
 - A Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`): GitHub Projects are
   closed there, and its localhost isn't visible to the user's browser — the
   script exits with an explanation (`docs/cloud-sessions.md` in ai-dev).
