@@ -115,7 +115,7 @@ describe("task new заводит задачу со всем сразу", () => 
   });
 
   // заведённую задачу сессия с закреплённой задачей сама не возьмёт (`task status` откажет) — вывод сразу называет, куда её нести
-  it("в сессии с закреплённой задачей «Дальше:» называет новую сессию и первый промпт #M", () => {
+  it("в сессии с закреплённой задачей «Next:» называет новую сессию и первый промпт #M", () => {
     const f = new FakeGitHub(REC);
     const io = inSession(scratch());
     expect(task(f, ["new", "--title", "Импорт"], REPO, io).out).not.toContain("the session runs");
@@ -570,7 +570,7 @@ describe("task status берёт в работу одну задачу на се
   });
 
   // id сессии даёт Bash-инструмент Claude Code; у другого агента его нет — статус важнее гарда
-  it("CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «сессия не опознана», файла нет", () => {
+  it("CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «session not recognized», файла нет", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
     const io = { env: { AI_DEV_CONFIG_DIR: config } };
@@ -900,7 +900,7 @@ describe("task close закрывает задачу одной командой
     expect(statusSet(f)).toEqual([[49, "Готово"]]);
   });
 
-  it("est не установлен рядом — «факт недоступен: est не установлен», остальное сделано", () => {
+  it("est не установлен рядом — «actual unavailable: est is not installed», остальное сделано", () => {
     const f = new FakeGitHub(REC);
     mergedPr(f, 49);
     const calls: string[][] = [];

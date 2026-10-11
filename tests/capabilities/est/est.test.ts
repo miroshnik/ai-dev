@@ -1889,7 +1889,7 @@ describe("Сбой сети gh повторяется, ошибка запрос
     expect(callsWith(r, "issues/10/comments")).toBe(1);
   });
 
-  it("сеть, не вернувшаяся за повторы, — ошибка «сбой сети» с числом повторов", () => {
+  it("сеть, не вернувшаяся за повторы, — ошибка «network failure» с числом повторов", () => {
     const r = estimate({ match: "updateProjectV2ItemFieldValue", times: -1, stderr: TIMEOUT });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("connect: operation timed out — network failure, retries: 3");
@@ -1910,7 +1910,7 @@ describe("Сбой сети gh повторяется, ошибка запрос
     expect(callsWith(r, "user(login:$o)")).toBe(0);
   });
 
-  it("ошибка записи одной задачи в свипе не обрывает свип — задача в итоге «не записано»", () => {
+  it("ошибка записи одной задачи в свипе не обрывает свип — задача в итоге «not written»", () => {
     const r = withFakeGh(sweepWorld(), ["fact", "--sweep", "--repo", "o/r", "--write"], [{ match: "issues/42/comments", times: -1, stderr: "HTTP 422: Validation Failed (https://api.github.com/repos/o/r/issues/42/comments)" }]);
     expect(r.stdout).toContain("#42: error writing: command gh api -X… exited with code 1: HTTP 422: Validation Failed");
     expect(callsWith(r, "issues/43/comments")).toBe(1);
@@ -1918,7 +1918,7 @@ describe("Сбой сети gh повторяется, ошибка запрос
     expect(r.code).toBe(1);
   });
 
-  it("сеть, не вернувшаяся за повторы, останавливает свип — непройденные тоже в «не записано»", () => {
+  it("сеть, не вернувшаяся за повторы, останавливает свип — непройденные тоже в «not written»", () => {
     const r = withFakeGh(sweepWorld(), ["fact", "--sweep", "--repo", "o/r", "--write"], [{ match: "issues/42/comments", times: -1, stderr: onComments(42, TIMEOUT) }]);
     expect(r.stdout).toContain("the network didn't come back within the retries — sweep stopped, not processed: 1");
     expect(callsWith(r, "issues/42/comments")).toBe(4);
