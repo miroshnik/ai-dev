@@ -20,12 +20,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+import locale from "../../github/scripts/locale.cjs";
 import { exceptionFiles } from "./harness.ts";
 import type { Exception } from "./harness.ts";
 
 const USAGE =
   "spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions tests/standards/entry-points/exceptions] [--standard tests/standards/entry-points] [--report .spec-claims.xml]";
-const DESCRIBE = "Каждая точка входа вызывается хотя бы одним тестом capability";
 const CAPABILITIES = "tests/capabilities/";
 
 interface Case {
@@ -49,7 +49,7 @@ function readJournal(dir: string): Map<string, Set<string>> {
     for (const line of readFileSync(path.join(dir, f), "utf8").split("\n")) {
       if (!line.trim()) continue;
       const { id, test } = JSON.parse(line) as { id: string; test: string | null };
-      calls.set(id, (calls.get(id) ?? new Set()).add(test ?? "(не из теста)"));
+      calls.set(id, (calls.get(id) ?? new Set()).add(test ?? "(not from a test)"));
     }
   }
   return calls;
@@ -58,7 +58,7 @@ function readJournal(dir: string): Map<string, Set<string>> {
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** JUnit как у `bun test`: suite файла, вложенный suite — describe, testcase с file. */
-function junit(file: string, cases: Case[]): string {
+function junit(file: string, describe: string, cases: Case[]): string {
   const f = esc(file);
   const body = cases
     .map((c) =>
@@ -71,7 +71,7 @@ function junit(file: string, cases: Case[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites name="spec-claims" tests="${cases.length}" failures="${failures}">
   <testsuite name="${f}" file="${f}" tests="${cases.length}" failures="${failures}">
-    <testsuite name="${esc(DESCRIBE)}" file="${f}" tests="${cases.length}" failures="${failures}">
+    <testsuite name="${esc(describe)}" file="${f}" tests="${cases.length}" failures="${failures}">
 ${body}
     </testsuite>
   </testsuite>
@@ -108,7 +108,7 @@ export async function main(argv: string[]): Promise<number> {
   let calls: Map<string, Set<string>>;
   try {
     const raw = await load(path.resolve(v.entries));
-    if (!Array.isArray(raw)) throw new Error(`${v.entries}: реестр — массив точек входа`);
+    if (!Array.isArray(raw)) throw new Error(`${v.entries}: the registry is an array of entry points`);
     const ids = raw.map((e) => (typeof e === "string" ? e : String((e as { id?: unknown }).id)));
     const count = new Map<string, number>();
     for (const id of ids) count.set(id, (count.get(id) ?? 0) + 1);
@@ -117,12 +117,12 @@ export async function main(argv: string[]): Promise<number> {
     if (v.exceptions) {
       // файл на исключение: прежний массив в одном файле — переносится командой, а не читается вторым путём
       if (existsSync(v.exceptions) && !statSync(v.exceptions).isDirectory()) {
-        throw new Error(`--exceptions — каталог exceptions/ (файл на исключение), а не файл ${v.exceptions} — перенеси командой spec-exceptions`);
+        throw new Error(`--exceptions is an exceptions/ directory (a file per exception), not the file ${v.exceptions} — move it with spec-exceptions`);
       }
       exceptions = exceptionFiles(v.exceptions);
     }
     if (!existsSync(v.journal)) {
-      throw new Error(`нет журнала ${v.journal} — его пишет journal харнесса во время прогона тестов (журналы шардов — в один каталог)`);
+      throw new Error(`no log ${v.journal} — the harness's journal writes it during the test run (shard logs go into one directory)`);
     }
     calls = readJournal(v.journal);
   } catch (e) {
@@ -130,49 +130,54 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
 
+  // названия тестов сверки — на языке проекта, как названия харнесса: они попадают в спеку
+  const N = locale.names(locale.projectLanguage());
   const claimed = (id: string) => [...(calls.get(id) ?? [])].some((t) => t.startsWith(CAPABILITIES));
   const excepted = new Map(exceptions.map((e) => [e.item, e]));
   const cases: Case[] = [];
-  cases.push({ name: "реестр «точки входа» не пуст", failure: entries.length ? undefined : "реестр точек входа пуст — выборка из кода ошибочна" });
   cases.push({
-    name: "id точек входа в реестре не повторяются",
+    name: locale.fill(N.spec.harness.registryNotEmpty, { registry: N.spec.claims.registry, tag: "" }),
+    failure: entries.length ? undefined : "the entry-point registry is empty — the selection from the code is wrong",
+  });
+  cases.push({
+    name: N.spec.claims.unique,
     failure: repeated.length
-      ? `id повторяется в реестре: ${repeated.join(", ")} — у каждой точки входа свой id, иначе непокрытая прячется за покрытой`
+      ? `an id repeats in the registry: ${repeated.join(", ")} — each entry point has its own id, otherwise an uncovered one hides behind a covered one`
       : undefined,
   });
   for (const id of entries.filter((id) => !excepted.has(id))) {
     const from = [...(calls.get(id) ?? [])].sort();
     cases.push({
-      name: `${id} вызывается тестом capability`,
-      failure: claimed(id) ? undefined : `${id} не вызывается ни одним тестом capability${from.length ? ` (вызовы: ${from.join(", ")})` : ""} — тест или удалить точку входа`,
+      name: locale.fill(N.spec.claims.called, { entry: id }),
+      failure: claimed(id) ? undefined : `${id} is not called by any capability test${from.length ? ` (calls: ${from.join(", ")})` : ""} — add a test or remove the entry point`,
     });
   }
   const registered = new Set(entries);
   const unknown = [...calls.keys()]
     .filter((id) => !registered.has(id))
     .sort()
-    .map((id) => `${id} (вызовы: ${[...calls.get(id)!].sort().join(", ")})`);
+    .map((id) => `${id} (calls: ${[...calls.get(id)!].sort().join(", ")})`);
   cases.push({
-    name: "id из журнала есть в реестре",
+    name: N.spec.claims.known,
     failure: unknown.length
-      ? `id из журнала нет в реестре: ${unknown.join("; ")} — формат id журнала разошёлся с реестром, реестр неполон или журнал остался от прежнего прогона (resetJournal)`
+      ? `ids from the log are not in the registry: ${unknown.join("; ")} — the log's id format diverged from the registry, the registry is incomplete, or the log is left over from a previous run (resetJournal)`
       : undefined,
   });
   for (const e of [...excepted.values()].sort((a, b) => (a.item < b.item ? -1 : 1))) {
     let failure: string | undefined;
-    if (!Number.isInteger(e.issue) || e.issue <= 0) failure = `у исключения ${e.item} нет задачи`;
-    else if (!e.reason?.trim()) failure = `у исключения ${e.item} нет причины`;
-    else if (!entries.includes(e.item)) failure = `точки входа ${e.item} в реестре нет — убери исключение: удали ${e.file}`;
-    else if (claimed(e.item)) failure = `${e.item} уже вызывается тестом capability — убери исключение: удали ${e.file} (#${e.issue})`;
-    cases.push({ name: `исключение: ${e.item} (#${e.issue})`, failure });
+    if (!Number.isInteger(e.issue) || e.issue <= 0) failure = `exception ${e.item} has no issue`;
+    else if (!e.reason?.trim()) failure = `exception ${e.item} has no reason`;
+    else if (!entries.includes(e.item)) failure = `entry point ${e.item} is not in the registry — remove the exception: delete ${e.file}`;
+    else if (claimed(e.item)) failure = `${e.item} is already called by a capability test — remove the exception: delete ${e.file} (#${e.issue})`;
+    cases.push({ name: locale.fill(N.spec.harness.exception, { tag: "", item: e.item, issue: e.issue }), failure });
   }
 
   const standard = v.standard.replace(/\/+$/, "");
-  writeFileSync(v.report, junit(`${standard}/${path.posix.basename(standard)}.test.ts`, cases));
+  writeFileSync(v.report, junit(`${standard}/${path.posix.basename(standard)}.test.ts`, N.spec.claims.describe, cases));
   const unclaimed = entries.filter((id) => !excepted.has(id) && !claimed(id));
   const failed = cases.filter((c) => c.failure);
   console.error(
-    `spec-claims: точек входа ${entries.length}, не вызываются тестами capability: ${unclaimed.length}, исключений ${excepted.size}; отчёт — ${v.report}`,
+    `spec-claims: entry points: ${entries.length}, not called by capability tests: ${unclaimed.length}, exceptions: ${excepted.size}; report: ${v.report}`,
   );
   for (const c of failed) console.error(`spec-claims: ✗ ${c.failure}`);
   return failed.length ? 1 : 0;

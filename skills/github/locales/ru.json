@@ -300,6 +300,13 @@
       "addedKind": "{title} — добавлено",
       "summarized": "**{title} ({n}), сводкой:**"
     },
+    "claims": {
+      "describe": "Каждая точка входа вызывается хотя бы одним тестом capability",
+      "registry": "точки входа",
+      "unique": "id точек входа в реестре не повторяются",
+      "called": "{entry} вызывается тестом capability",
+      "known": "id из журнала есть в реестре"
+    },
     "harness": {
       "registryNotEmpty": "реестр «{registry}» не пуст{tag}",
       "registryFinds": "реестр «{registry}» находит {items}{tag}",
