@@ -108,10 +108,14 @@ interface Quote {
   text: string;
 }
 
-/** Цитаты «…» документов флоу (внутренние — у вложенных), без повторов; переносы строк — пробелом. */
-function quotes(): Quote[] {
+/**
+ * Цитаты «…» документов флоу (внутренние — у вложенных), без повторов; переносы строк — пробелом. Цитата — по первому
+ * документу в порядке путей, а не readdirSync: тот отдаёт файлы в порядке файловой системы, и имя теста расходилось бы
+ * на macOS и в CI.
+ */
+function quotes(docs: Doc[] = flowDocs()): Quote[] {
   const seen = new Map<string, Quote>();
-  for (const d of flowDocs()) {
+  for (const d of [...docs].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))) {
     for (const m of d.text.matchAll(/«([^«»]+)»/g)) {
       const text = m[1]!.replace(/\s+/g, " ").trim();
       if (!seen.has(text)) seen.set(text, { file: d.file, text });
@@ -155,6 +159,16 @@ describe("Строки вывода, которые цитируют доки ф
       { item: "shared commit … (share 1/k)", reason: "строка собрана из двух ключей en.json: est.fact.shared и est.fact.commitUnit" },
     ],
     includes: ["already newer", "Actual (cloud)", "closed in 90 days without an actual: N"],
+  });
+
+  // имя теста — утверждение спеки: локальный spec-diff против ветки spec показывал фантомные «Изменены» (#385)
+  it("имя теста цитаты не зависит от порядка, в котором файловая система отдаёт документы", () => {
+    const docs = [
+      { file: "docs/a.md", text: "The script prints «all quiet»." },
+      { file: "skills/b/SKILL.md", text: "Wait for «all quiet»." },
+    ];
+    expect(quotes([...docs].reverse())).toEqual(quotes(docs));
+    expect(quotes(docs)).toEqual([{ file: "docs/a.md", text: "all quiet" }]);
   });
 });
 
