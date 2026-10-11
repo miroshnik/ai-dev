@@ -1995,6 +1995,12 @@ const LOCKFILES: [file: string, pm: string][] = [["bun.lock", "bun"], ["bun.lock
 const INSTALL: Record<string, string[]> = { bun: ["bun", "install", "--frozen-lockfile"], pnpm: ["pnpm", "install", "--frozen-lockfile"], yarn: ["yarn", "install", "--frozen-lockfile"], npm: ["npm", "ci"] };
 /** Строки об упавшем: тест — bun `(fail)`, Vitest `FAIL` и `×`, Jest `●`, Playwright `✘`; ошибка компилятора — `error TS2304:`. */
 const FAILED_LINE = /^\s*(\(fail\)|FAIL\s|×|✗|✘|●\s)|\berror TS\d+:/;
+/**
+ * Ошибка `bun check` под агентом (`CLAUDECODE=1`) — блок `<error file="a.ts" line="3" column="5" code="TS2304">` с текстом
+ * на следующей строке; приводится к строке tsc без TTY `a.ts(3,5): error TS2304: …`.
+ */
+const BUN_CHECK_ERROR = /<error file="([^"]+)" line="(\d+)" column="(\d+)" code="(TS\d+)">\n([^\n]*)/g;
+const asTsc = (out: string) => out.replace(BUN_CHECK_ERROR, "$1($2,$3): error $4: $5");
 
 /**
  * Команды проекта в каталоге: менеджер пакетов — `packageManager` в package.json, иначе по lockfile; зависимости
@@ -2184,7 +2190,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       const result = run(cmd[0]!, cmd.slice(1), dir);
       ran.push(script);
       if (result.status === 0) continue;
-      const failed = [...new Set(`${result.stdout}\n${result.stderr}`.split("\n").filter((l) => FAILED_LINE.test(l)).map((l) => l.trim()))];
+      const failed = [...new Set(asTsc(`${result.stdout}\n${result.stderr}`).split("\n").filter((l) => FAILED_LINE.test(l)).map((l) => l.trim()))];
       return { ran, red: { script, cmd: cmd.join(" "), result, failed } };
     }
     return { ran, red: null };
