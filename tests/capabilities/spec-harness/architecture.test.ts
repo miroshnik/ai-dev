@@ -112,8 +112,8 @@ describe("Модель архитектуры проверяется кодом:
     const r = await outcomes((it) => architecture(it, { root: dir, model }));
     expect(r["каталог src/domain — в модуле domain"]).toBe("✓");
     expect(r["каталог src/ui — в модуле ui"]).toBe("✓");
-    expect(r["каталог src/scripts — в модуле ?"]).toStartWith("✗ src/scripts: код вне модулей модели");
-    expect(r["каталог src — в модуле ?"]).toStartWith("✗ src: код вне модулей модели");
+    expect(r["каталог src/scripts — в модуле ?"]).toStartWith("✗ src/scripts: code outside the model's modules");
+    expect(r["каталог src — в модуле ?"]).toStartWith("✗ src: code outside the model's modules");
   });
 
   // корень приложения и его библиотека: файлы корня src (proxy.ts, instrumentation.ts) — свой модуль, src/lib — свой
@@ -136,14 +136,14 @@ describe("Модель архитектуры проверяется кодом:
     const r = await outcomes((it) => architecture(it, { root: dir, model }));
     expect(r["infra импортирует pg"]).toBe("✓");
     expect(r["ui импортирует react"]).toBe("✓");
-    expect(r["domain импортирует pg"]).toStartWith("✗ модулю domain пакет pg не разрешён: src/domain/save.js");
+    expect(r["domain импортирует pg"]).toStartWith("✗ package pg is not allowed for module domain: src/domain/save.js");
   });
 
   it("разрешённый модулю пакет, который им не используется, — упавший тест: модель разошлась с кодом", async () => {
     writeTree(dir, { ...code, "src/ui/page.js": "export const page = 1;\n" });
     const r = await outcomes((it) => architecture(it, { root: dir, model }));
     expect(r["infra использует разрешённый пакет pg"]).toBe("✓");
-    expect(r["ui использует разрешённый пакет react"]).toStartWith("✗ модуль ui не импортирует react — убери пакет из модели");
+    expect(r["ui использует разрешённый пакет react"]).toStartWith("✗ module ui doesn't import react — remove the package from the model");
   });
 
   // корни модели — руками: пакет, добавленный в workspace, иначе остался бы вне проверки целиком
@@ -186,7 +186,7 @@ describe("Модель архитектуры проверяется кодом:
     expect(r["пакет workspace packages/tsconfig — в корнях кода"]).toBeUndefined();
     const narrow: Model = { ...ws, roots: ["apps/web/src", "packages/ui"] };
     const bad = await outcomes((it) => architecture(it, { root: dir, model: narrow }));
-    expect(bad["пакет workspace packages/new — в корнях кода"]).toStartWith("✗ packages/new: пакет workspace с кодом вне корней модели");
+    expect(bad["пакет workspace packages/new — в корнях кода"]).toStartWith("✗ packages/new: a workspace package with code outside the model's roots");
     expect(bad["нарушитель не проходит: пакет workspace вне корней"]).toBe("✓");
   });
 
@@ -210,7 +210,7 @@ describe("Модель архитектуры проверяется кодом:
     const r = Object.fromEntries(all);
     expect(all.filter(([n]) => n.startsWith("вне охвата"))).toEqual([
       ["вне охвата: apps/web/src/scripts", "✓"],
-      ["вне охвата: packages/gone", "✗ элемента packages/gone в реестре «каталоги кода» нет — убери из охвата"],
+      ["вне охвата: packages/gone", "✗ element packages/gone is not in registry «каталоги кода» — remove from scope"],
       ["вне охвата: packages/eslint-config", "✓"],
     ]);
     expect(r["каталог apps/web/src/scripts — в модуле ?"]).toBeUndefined();
@@ -352,13 +352,13 @@ describe("Внешние системы модели (C1) проверяются
     expect(ok["ключ TG_TOKEN внешней системы telegram читают только адаптеры bot, notify"]).toBe("✓");
     writeTree(dir, { "src/billing/pay.ts": 'export const p = fetch("https://api.telegram.org/x?t=" + process.env.TG_TOKEN);\n' });
     const bad = await outcomes((it) => architecture(it, { root: dir, model: multi }));
-    expect(bad["хост api.telegram.org — только в адаптерах bot, notify"]).toStartWith("✗ хост api.telegram.org внешней системы telegram — вне её адаптеров bot, notify: src/billing/pay.ts");
+    expect(bad["хост api.telegram.org — только в адаптерах bot, notify"]).toStartWith("✗ host api.telegram.org of external system telegram is outside its adapters bot, notify: src/billing/pay.ts");
     expect(bad["ключ TG_TOKEN внешней системы telegram читают только адаптеры bot, notify"]).toStartWith(
-      "✗ ключ TG_TOKEN внешней системы telegram читается вне адаптеров bot, notify: src/billing/pay.ts",
+      "✗ key TG_TOKEN of external system telegram is read outside its adapters bot, notify: src/billing/pay.ts",
     );
     const stray: Model = { ...multi, modules: { ...multi.modules, billing: { path: "src/billing", purpose: "счета", packages: ["grammy"] } } };
     const pkg = await outcomes((it) => architecture(it, { root: dir, model: stray }));
-    expect(pkg["пакет grammy внешней системы telegram — только у адаптеров bot, notify"]).toStartWith("✗ пакет grammy внешней системы telegram разрешён не только адаптерам: billing");
+    expect(pkg["пакет grammy внешней системы telegram — только у адаптеров bot, notify"]).toStartWith("✗ package grammy of external system telegram is allowed not only for the adapters: billing");
   });
 
   // CDN или WAF перед сайтом: трафик идёт через него, а код с ним не говорит — адаптера нет, и в коде его следов нет
@@ -376,9 +376,9 @@ describe("Внешние системы модели (C1) проверяются
     writeTree(dir, { "src/web/purge.ts": 'export const u = "https://edge.shop.io/purge";\nexport const k = process.env.EDGE_PURGE_KEY;\n' });
     const withSdk: Model = { ...edge, modules: { web: { path: "src/web", purpose: "страницы", packages: ["edge-sdk"] } } };
     const bad = await outcomes((it) => architecture(it, { root: dir, model: withSdk }));
-    expect(bad["хост edge.shop.io внешней системы cdn — не в коде: адаптера нет"]).toStartWith("✗ у внешней системы cdn нет адаптера, а хост edge.shop.io — в коде: src/web/purge.ts");
-    expect(bad["пакет edge-sdk внешней системы cdn — ни у одного модуля: адаптера нет"]).toStartWith("✗ у внешней системы cdn нет адаптера, а пакет edge-sdk разрешён модулям: web");
-    expect(bad["ключ EDGE_PURGE_KEY внешней системы cdn — не в коде: адаптера нет"]).toStartWith("✗ у внешней системы cdn нет адаптера, а ключ EDGE_PURGE_KEY читается в коде: src/web/purge.ts");
+    expect(bad["хост edge.shop.io внешней системы cdn — не в коде: адаптера нет"]).toStartWith("✗ external system cdn has no adapter, yet host edge.shop.io is in the code: src/web/purge.ts");
+    expect(bad["пакет edge-sdk внешней системы cdn — ни у одного модуля: адаптера нет"]).toStartWith("✗ external system cdn has no adapter, yet package edge-sdk is allowed for modules: web");
+    expect(bad["ключ EDGE_PURGE_KEY внешней системы cdn — не в коде: адаптера нет"]).toStartWith("✗ external system cdn has no adapter, yet key EDGE_PURGE_KEY is read in the code: src/web/purge.ts");
   });
 
   // интеграция через заголовки: периметр (Cloudflare, балансировщик) кладёт страну и IP посетителя в запрос
@@ -395,7 +395,7 @@ describe("Внешние системы модели (C1) проверяются
     const r = await outcomes((it) => architecture(it, { root: dir, model: cf }));
     expect(r["заголовок CF-IPCountry внешней системы cloudflare читает только адаптер geo"]).toBe("✓");
     expect(r["заголовок CF-Connecting-IP внешней системы cloudflare читает только адаптер geo"]).toStartWith(
-      "✗ заголовок CF-Connecting-IP внешней системы cloudflare читается вне адаптера geo: src/web/ip.ts",
+      "✗ header CF-Connecting-IP of external system cloudflare is read outside its adapter geo: src/web/ip.ts",
     );
     expect(r["нарушитель не проходит: заголовок вне адаптера"]).toBe("✓");
   });
@@ -406,8 +406,8 @@ describe("Внешние системы модели (C1) проверяются
       "src/billing/pay.ts": 'export const a = fetch("https://api.stripe.com/v1/charges");\nexport const b = fetch("https://evil.io/x");\n',
     });
     const r = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
-    expect(r["хост api.stripe.com — только в адаптере stripe"]).toStartWith("✗ хост api.stripe.com внешней системы payments — вне её адаптера stripe: src/billing/pay.ts");
-    expect(r["хост evil.io — только в адаптере ?"]).toStartWith("✗ хост evil.io не объявлен ни одной внешней системой модели: src/billing/pay.ts");
+    expect(r["хост api.stripe.com — только в адаптере stripe"]).toStartWith("✗ host api.stripe.com of external system payments is outside its adapter stripe: src/billing/pay.ts");
+    expect(r["хост evil.io — только в адаптере ?"]).toStartWith("✗ host evil.io is declared by no external system of the model: src/billing/pay.ts");
   });
 
   it("исключение — только у реестра, в котором есть его элемент", async () => {
@@ -423,14 +423,14 @@ describe("Внешние системы модели (C1) проверяются
     const ok = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
     expect(ok["пакет stripe внешней системы payments — только у адаптера stripe"]).toBe("✓");
     const bad = await outcomes((it) => architecture(it, { root: dir, model: both }));
-    expect(bad["пакет stripe внешней системы payments — только у адаптера stripe"]).toStartWith("✗ пакет stripe внешней системы payments разрешён не только адаптеру: billing");
+    expect(bad["пакет stripe внешней системы payments — только у адаптера stripe"]).toStartWith("✗ package stripe of external system payments is allowed not only for the adapter: billing");
   });
 
   it("ключ окружения внешней системы читает только её адаптер", async () => {
     writeTree(dir, { ...adapter, "src/billing/pay.ts": "export const k = process.env.STRIPE_KEY;\n" });
     const r = await outcomes((it) => architecture(it, { root: dir, model: c1 }));
     expect(r["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toStartWith(
-      "✗ ключ STRIPE_KEY внешней системы payments читается вне адаптера stripe: src/billing/pay.ts",
+      "✗ key STRIPE_KEY of external system payments is read outside its adapter stripe: src/billing/pay.ts",
     );
   });
 
@@ -441,7 +441,7 @@ describe("Внешние системы модели (C1) проверяются
     expect(plain["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toBe("✓");
     const r = await outcomes((it) => architecture(it, { root: dir, model: c1, readers: [configGet] }));
     expect(r["ключ STRIPE_KEY внешней системы payments читает только адаптер stripe"]).toStartWith(
-      "✗ ключ STRIPE_KEY внешней системы payments читается вне адаптера stripe: src/billing/pay.ts",
+      "✗ key STRIPE_KEY of external system payments is read outside its adapter stripe: src/billing/pay.ts",
     );
   });
 
@@ -462,15 +462,15 @@ describe("Внешние системы модели (C1) проверяются
 
   it("запрос к объявленному хосту без мока падает с именем хоста и внешней системы — в сеть не идёт", async () => {
     const { guard, calls } = guarded();
-    await expect(guard("https://api.stripe.com/v1/charges")).rejects.toThrow("запрос к хосту api.stripe.com внешней системы payments без мока");
+    await expect(guard("https://api.stripe.com/v1/charges")).rejects.toThrow("request to host api.stripe.com of external system payments without a mock");
     expect(calls).toEqual([]);
   });
 
   it("запрос к хосту вне модели падает; публичный IP и домен .test — не локальные", async () => {
     const { guard, calls } = guarded();
-    await expect(guard("https://evil.example.com/x")).rejects.toThrow("запрос к хосту evil.example.com вне модели");
-    await expect(guard("http://8.8.8.8/")).rejects.toThrow("запрос к хосту 8.8.8.8 вне модели");
-    await expect(guard("https://api.test/")).rejects.toThrow("запрос к хосту api.test вне модели");
+    await expect(guard("https://evil.example.com/x")).rejects.toThrow("request to host evil.example.com outside the model");
+    await expect(guard("http://8.8.8.8/")).rejects.toThrow("request to host 8.8.8.8 outside the model");
+    await expect(guard("https://api.test/")).rejects.toThrow("request to host api.test outside the model");
     expect(calls).toEqual([]);
   });
 
@@ -481,7 +481,7 @@ describe("Внешние системы модели (C1) проверяются
     expect(await swallow("https://api.stripe.com/v1/charges")).toBeNull();
     expect(await swallow("https://evil.io/x")).toBeNull();
     expect(guard.rejected).toEqual(["api.stripe.com", "evil.io"]);
-    expect(() => guard.check()).toThrow(/^запросы к сети, отвергнутые сторожем: api\.stripe\.com, evil\.io/);
+    expect(() => guard.check()).toThrow(/^network requests rejected by the guard: api\.stripe\.com, evil\.io/);
     expect(guard.rejected).toEqual([]);
     expect(() => guard.check()).not.toThrow();
   });
@@ -552,7 +552,7 @@ describe("Контейнеры модели (C2) сверяются с кодо�
     const orphan: Model = { ...c2, modules: { ...c2.modules, jobs: { path: "src/jobs", purpose: "задачи" } } };
     const r = await outcomes((it) => architecture(it, { root: dir, model: orphan }));
     expect(r["модуль web — в контейнере app"]).toBe("✓");
-    expect(r["модуль jobs — в контейнере ?"]).toStartWith("✗ модуль jobs не входит ни в один контейнер");
+    expect(r["модуль jobs — в контейнере ?"]).toStartWith("✗ module jobs is in no container");
   });
 
   it("зависимость модулей между контейнерами — упавший тест, связь только uses", async () => {
@@ -560,7 +560,7 @@ describe("Контейнеры модели (C2) сверяются с кодо�
     const cross: Model = { ...c2, modules: { ...c2.modules, mailer: { ...c2.modules.mailer!, dependsOn: ["domain"] } } };
     const r = await outcomes((it) => architecture(it, { root: dir, model: cross }));
     expect(r["зависимость web → domain — внутри контейнера"]).toBe("✓");
-    expect(r["зависимость mailer → domain — внутри контейнера"]).toStartWith("✗ mailer (mail) зависит от domain (app) — между контейнерами только связь uses");
+    expect(r["зависимость mailer → domain — внутри контейнера"]).toStartWith("✗ mailer (mail) depends on domain (app) — across containers only a uses link");
   });
 
   it("развёртываемая единица из конфигов деплоя — в модели, контейнер модели — в конфигах", async () => {
@@ -569,8 +569,8 @@ describe("Контейнеры модели (C2) сверяются с кодо�
     const ghost: Model = { ...c2, containers: { ...c2.containers, worker: { purpose: "фон", deploy: ["compose:worker"] } } };
     const r = await outcomes((it) => architecture(it, { root: dir, model: ghost }));
     expect(r["развёртываемая единица compose:app — контейнер app"]).toBe("✓");
-    expect(r["развёртываемая единица supabase-function:resize — контейнер ?"]).toStartWith("✗ supabase-function:resize есть в конфигах деплоя, но не в модели");
-    expect(r["развёртываемая единица compose:worker — контейнер worker"]).toStartWith("✗ compose:worker контейнера worker нет в конфигах деплоя");
+    expect(r["развёртываемая единица supabase-function:resize — контейнер ?"]).toStartWith("✗ supabase-function:resize is in the deploy configs but not in the model");
+    expect(r["развёртываемая единица compose:worker — контейнер worker"]).toStartWith("✗ compose:worker of container worker is not in the deploy configs");
   });
 
   // нарушитель, на котором проверка проходит, не доказывает, что она умеет упасть: тест «нарушитель» — красный
@@ -605,8 +605,8 @@ describe("Контейнеры модели (C2) сверяются с кодо�
     expect(r["библиотека tokens — в контейнерах backoffice, site"]).toBe("✓");
     expect(r["зависимость web → ui — внутри контейнера"]).toBe("✓");
     expect(r["зависимость ui → tokens — внутри контейнера"]).toBe("✓");
-    expect(r["библиотека legacy — в контейнерах ?"]).toStartWith("✗ библиотека legacy не входит ни в один контейнер: от неё не зависит ни один модуль контейнеров");
-    expect(r["модуль shared — в контейнере ?"]).toStartWith("✗ модуль shared — в нескольких контейнерах: backoffice, site — общий пакет отметь library: true");
+    expect(r["библиотека legacy — в контейнерах ?"]).toStartWith("✗ library legacy is in no container: no module of the containers depends on it");
+    expect(r["модуль shared — в контейнере ?"]).toStartWith("✗ module shared is in several containers: backoffice, site — mark a shared package with library: true");
   });
 
   it("зависимость библиотеки — внутри каждого её контейнера; клиент хранилища в библиотеке — со связью uses из каждого", async () => {
@@ -617,16 +617,16 @@ describe("Контейнеры модели (C2) сверяются с кодо�
       containers: { ...mono.containers, site: { ...mono.containers!.site!, modules: ["web", "data", "session"] } },
     };
     const r = await outcomes((it) => architecture(it, { root: dir, model: leaky }));
-    expect(r["зависимость ui → session — внутри контейнера"]).toStartWith("✗ ui (backoffice, site) зависит от session (site) — между контейнерами только связь uses");
+    expect(r["зависимость ui → session — внутри контейнера"]).toStartWith("✗ ui (backoffice, site) depends on session (site) — across containers only a uses link");
     expect(r["клиент pg хранилища db — в контейнере site"]).toBe("✓");
-    expect(r["клиент pg хранилища db — в контейнере backoffice"]).toStartWith("✗ контейнер backoffice импортирует клиент pg хранилища db без связи uses: packages/data/db.ts");
+    expect(r["клиент pg хранилища db — в контейнере backoffice"]).toStartWith("✗ container backoffice imports client pg of storage db without a uses link: packages/data/db.ts");
   });
 
   it("клиент хранилища импортирует только контейнер со связью с ним", async () => {
     writeTree(dir, { ...deploy, "src/mailer/send.ts": 'import pg from "pg";\nexport const send = pg;\n' });
     const r = await outcomes((it) => architecture(it, { root: dir, model: c2 }));
     expect(r["клиент pg хранилища db — в контейнере app"]).toBe("✓");
-    expect(r["клиент pg хранилища db — в контейнере mail"]).toStartWith("✗ контейнер mail импортирует клиент pg хранилища db без связи uses: src/mailer/send.ts");
+    expect(r["клиент pg хранилища db — в контейнере mail"]).toStartWith("✗ container mail imports client pg of storage db without a uses link: src/mailer/send.ts");
   });
 });
 

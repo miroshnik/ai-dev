@@ -63,7 +63,7 @@ describe("Соглашение проверяется на каждом элем
     const r = await outcomes((it) =>
       invariant(it, { registry: "мутации", items: [], name: (m: Mutation) => m.name, check: mustAudit, violator }),
     );
-    expect(r["реестр «мутации» не пуст"]).toStartWith("✗ реестр «мутации» пуст");
+    expect(r["реестр «мутации» не пуст"]).toStartWith("✗ registry «мутации» is empty");
   });
 
   it("проверка, которая прошла на заведомом нарушителе, — упавший тест: она ничего не проверяет", async () => {
@@ -71,7 +71,7 @@ describe("Соглашение проверяется на каждом элем
     const lax = await outcomes((it) =>
       invariant(it, { registry: "мутации", items, name: (m) => m.name, check: () => {}, violator }),
     );
-    expect(lax["нарушитель не проходит: мутация без записи аудита"]).toStartWith("✗ проверка прошла на нарушителе");
+    expect(lax["нарушитель не проходит: мутация без записи аудита"]).toStartWith("✗ the check passed on violator");
     const strict = await outcomes((it) => invariant(it, { registry: "мутации", items, name: (m) => m.name, check: mustAudit, violator }));
     expect(strict["нарушитель не проходит: мутация без записи аудита"]).toBe("✓");
     expect(strict["реестр «мутации» не пуст"]).toBe("✓");
@@ -143,12 +143,12 @@ describe("Реестр + инвариант на реальном коде: не
     const r = await outcomes((it) => invariant(it, { registry: "формы", items: forms, key: byNameKey, name: (m) => `${m.name} пишет аудит`, check: mustAudit, violator, outside }));
     expect(r["вне охвата: login"]).toBe("✓");
     expect(r["login пишет аудит"]).toBeUndefined();
-    expect(r["вне охвата: gone"]).toStartWith("✗ элемента gone в реестре «формы» нет — убери из охвата");
+    expect(r["вне охвата: gone"]).toStartWith("✗ element gone is not in registry «формы» — remove from scope");
   });
 
   it("обязательный элемент пропал из реестра — проверка красная", async () => {
     const r = await outcomes((it) => invariant(it, { registry: "формы", items: forms, key: byNameKey, name: (m) => m.name, check: mustAudit, violator, includes: ["invoice", "signup"] }));
-    expect(r["реестр «формы» находит invoice, signup"]).toStartWith("✗ в реестре «формы» нет: signup");
+    expect(r["реестр «формы» находит invoice, signup"]).toStartWith("✗ registry «формы» lacks: signup");
   });
 
   it("каждый из нескольких нарушителей валит проверку", async () => {
@@ -170,7 +170,7 @@ describe("Реестр + инвариант на реальном коде: не
       }),
     );
     expect(r["нарушитель не проходит: без проверки на клиенте"]).toBe("✓");
-    expect(r["нарушитель не проходит: без проверки на сервере"]).toStartWith("✗ проверка прошла на нарушителе");
+    expect(r["нарушитель не проходит: без проверки на сервере"]).toStartWith("✗ the check passed on violator");
   });
 
   it("реестр из исходников читает текст лениво, нарушитель — текстом", async () => {
