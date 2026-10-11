@@ -80,12 +80,12 @@ const pr77 = (): PR => ({
 describe("Факт — активные часы работы над задачей по её сессиям", () => {
   it("записи на ветке задачи и субагента с подсказкой считаются, паузы ≤ gap — время, токены и цена — с долей", () => {
     const s = parseSessionFile(claudeFixture());
-    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     expect(res.h).toBe(0.22); // 10:00 → 10:13 непрерывно
     expect(res.cov).toBe("full");
     expect(res.sessions).toBe(1);
     expect(res.prompts).toBe(3);
-    expect(res.details[0]!.rules).toEqual({ ветка: 7, субагент: 2 });
+    expect(res.details[0]!.rules).toEqual({ branch: 7, subagent: 2 });
     expect(res.tok).toEqual({ in: 110, out: 55, cw: 1000, cr: 5000, total: 6165 });
     expect(res.usd).toBe(0.02);
     expect(res.diff).toBe(12);
@@ -95,7 +95,7 @@ describe("Факт — активные часы работы над задач�
 
   it("общий PR на две задачи — доля ½ на записях ветки, субагент с подсказкой — целиком; в результате есть «shared»", () => {
     const s = parseSessionFile(claudeFixture());
-    const res = computeFact(stubRepo([s], [pr77()], { "77": [43] }), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([s], [pr77()], { "77": [43] }), 42, [{ ...pr77(), why: "closed the issue" }], []);
     // 11 мин ветки × ½ + 2 мин субагента = 0.125 ч; округление как round() в Python — к чётному
     expect(res.h).toBe(0.12);
     expect(res.h_raw).toBe(0.22);
@@ -108,7 +108,7 @@ describe("Факт — активные часы работы над задач�
       prlinks: [], commits: [], first_refs: [7], first_urls: [], usage: [], models: [], title: "", title_refs: [], title_urls: [], n_subagents: 0, source: "claude", routine: false,
     };
     const pr78: PR = { ...pr77(), number: 78, headRefName: "fix/7-login", closing: [7], commits: [], body: "" };
-    const res = computeFact(stubRepo([foreign], [pr77(), pr78]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([foreign], [pr77(), pr78]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     expect(res.h).toBeNull();
     expect(res.cov).toBe("none");
     expect(res.tok).toBeNull();
@@ -140,7 +140,7 @@ describe("Фан-аут задачи — число её субагентов в
       ]);
     writeFileSync(path.join(subs, "agent-2.jsonl"), sub("10:09", "Задача #42: проверь линт"));
     writeFileSync(path.join(subs, "agent-3.jsonl"), sub("10:09", "Задача #43: другое"));
-    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     expect(res.agents).toBe(2);
     const body = factCommentBody(res, 0.25, [], 0, null);
     expect(body).toContain("1 сессия, 3 промпта, 2 субагента,");
@@ -158,9 +158,9 @@ describe("Фан-аут задачи — число её субагентов в
       ]);
     writeFileSync(path.join(subs, "agent-2.jsonl"), sub("10:09", "Задача #42 (эпик #40): перенеси спеку в тесты"));
     writeFileSync(path.join(subs, "agent-3.jsonl"), sub("10:09", "Задача #40 (эпик #42): другое"));
-    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     expect(res.agents).toBe(2);
-    expect(res.details[0]!.rules["субагент"]).toBe(4); // agent-1 и agent-2 — по две записи
+    expect(res.details[0]!.rules["subagent"]).toBe(4); // agent-1 и agent-2 — по две записи
   });
 
   it("история показывает число субагентов задачи; у факта без признака — прочерк", () => {
@@ -169,7 +169,7 @@ describe("Фан-аут задачи — число её субагентов в
       est: 1, fact: 0.5, status: "Готово", est_marker: { type: "feat" }, fact_marker: { cov: "full", tok: { total: 2e6 }, usd: 1.5, ...(agents === undefined ? {} : { agents }) },
     });
     const lines = historyTable([row(12, 4), row(13)]);
-    expect(lines[0]).toContain(" | аг. | ");
+    expect(lines[0]).toContain(" | agents | ");
     expect(lines[1]).toMatch(/ \|\s+4 \| /);
     expect(lines[2]).toMatch(/ \|\s+— \| /);
   });
@@ -206,17 +206,17 @@ describe("Сессия, которая ведёт задачи подряд, д�
   }
   const pr = (number: number, headRefName: string, issue: number): PR => ({ ...pr77(), number, headRefName, closing: [issue], commits: [], body: `Closes #${issue}` });
   const prs = [pr(101, "fix/41-export", 41), pr(102, "fix/42-import", 42), pr(103, "fix/43-report", 43)];
-  const fact = (s: Session, n: number, recorded?: Recorded) => computeFact(stubRepo([s], prs, {}, recorded), n, [{ ...prs.find((p) => p.closing[0] === n)!, why: "закрыл issue" }], []);
+  const fact = (s: Session, n: number, recorded?: Recorded) => computeFact(stubRepo([s], prs, {}, recorded), n, [{ ...prs.find((p) => p.closing[0] === n)!, why: "closed the issue" }], []);
 
   it("записи безномерной ветки достаются задаче из названия на момент записи, а не из последнего; ни одна не засчитана двум задачам", () => {
     const s = session();
     const [f41, f42, f43] = [fact(s, 41), fact(s, 42), fact(s, 43)] as const;
     expect(f41.h).toBe(0.25); // 10:00–10:12 на ветке worktree под «#41» + 10:30–10:33 на своей ветке
-    expect(f41.details[0]!.rules).toEqual({ название: 3, ветка: 2 });
+    expect(f41.details[0]!.rules).toEqual({ title: 3, branch: 2 });
     expect(f42.h).toBe(0.3); // 10:18–10:24 на ветке worktree под «#42» + 10:36–10:48 на своей ветке
-    expect(f42.details[0]!.rules).toEqual({ название: 2, ветка: 3 });
+    expect(f42.details[0]!.rules).toEqual({ title: 2, branch: 3 });
     expect(f43.h).toBe(0.2); // только своя ветка: под «#43» на ветке worktree уже не работали
-    expect(f43.details[0]!.rules).toEqual({ ветка: 3 });
+    expect(f43.details[0]!.rules).toEqual({ branch: 3 });
     const all = [f41, f42, f43].flatMap((f) => f.intervals);
     const len = (iv: [number, number][]) => iv.reduce((a, [x, y]) => a + y - x, 0);
     expect(len(mergeIntervals(all))).toBe(len(all));
@@ -234,7 +234,7 @@ describe("Сессия, которая ведёт задачи подряд, д�
     const merged = { ...prs[0]!, mergedAt: ts("10:14") };
     const f44 = computeFact(stubRepo([parseSessionFile(file)], [merged]), 44, [], []);
     expect(f44.h).toBe(0.2); // 10:18–10:30 под «#44»
-    expect(f44.details[0]!.rules).toEqual({ название: 3 }); // промпт и две записи работы; pr-link — не запись работы
+    expect(f44.details[0]!.rules).toEqual({ title: 3 }); // промпт и две записи работы; pr-link — не запись работы
   });
 
   it("окно своего PR не тянется назад через переименование: записи на HEAD под прошлым названием остаются прошлой задаче", () => {
@@ -246,7 +246,7 @@ describe("Сессия, которая ведёт задачи подряд, д�
       prompt("10:18", "HEAD", "теперь #45"), work("10:24", "fix/45-report"), prLink("10:30", 105), work("10:30", "fix/45-report"),
     ]));
     const p105 = pr(105, "fix/45-report", 45);
-    const f45 = computeFact(stubRepo([parseSessionFile(file)], [p105]), 45, [{ ...p105, why: "закрыл issue" }], []);
+    const f45 = computeFact(stubRepo([parseSessionFile(file)], [p105]), 45, [{ ...p105, why: "closed the issue" }], []);
     expect(f45.h).toBe(0.2); // 10:18–10:30; 10:00–10:12 — время #41
   });
 
@@ -308,7 +308,7 @@ describe("Свип ищет двойной счёт внутри сессии, �
       { h: 1, iv: { aaaaaaaa: iv("10:00", "11:00") } },
       { h: 1, iv: { aaaaaaaa: iv("10:30", "11:00"), bbbbbbbb: iv("12:00", "12:30") } },
     ];
-    expect(sweepOverlapWarning(facts)).toBe("ВНИМАНИЕ: интервалы одной сессии в фактах разных задач: сумма 2 ч при объединении по сессиям 1.5 ч — двойной счёт ≈ 0.5 ч");
+    expect(sweepOverlapWarning(facts)).toBe("WARNING: intervals of one session in the actuals of different tasks: sum 2 h against the union by session 1.5 h — double counting ≈ 0.5 h");
   });
 });
 
@@ -345,12 +345,12 @@ describe("Закреплённая сессия целиком — задаче 
     return parseSessionFile(file);
   }
   const fact = (s: Session, n: number, pins?: Map<string, string>, recorded?: Recorded) =>
-    computeFact(stubRepo([s], [pr78], {}, recorded, pins), n, n === 7 ? [{ ...pr78, why: "закрыл issue" }] : [], []);
+    computeFact(stubRepo([s], [pr78], {}, recorded, pins), n, n === 7 ? [{ ...pr78, why: "closed the issue" }] : [], []);
 
   it("сессия с файлом закрепления целиком относится к задаче из файла, даже если в её выводах хеши и ветки чужих задач", () => {
     const f42 = fact(session(), 42, pinTo("o/r#42"));
     expect(f42.h).toBe(0.33); // 10:00–10:20, с субагентом
-    expect(f42.details[0]!.rules).toEqual({ закрепление: 7 });
+    expect(f42.details[0]!.rules).toEqual({ pin: 7 });
     expect(f42.agents).toBe(1);
     const f7 = fact(session(), 7, pinTo("o/r#42"));
     expect(f7.h).toBeNull();
@@ -368,7 +368,7 @@ describe("Закреплённая сессия целиком — задаче 
   it("закрепление за задачей другого репозитория уводит сессию и от задачи с тем же номером в этом", () => {
     const file = path.join(dir, SID + ".jsonl");
     writeFileSync(file, jsonl([{ type: "custom-title", customTitle: "#42 Экспорт", sessionId: SID }, prompt("10:00", "feat/42-export", "#42"), work("10:10", "feat/42-export")]));
-    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()], {}, new Map(), pinTo("o/x#42")), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([parseSessionFile(file)], [pr77()], {}, new Map(), pinTo("o/x#42")), 42, [{ ...pr77(), why: "closed the issue" }], []);
     expect(res.cov).toBe("none");
   });
 
@@ -465,10 +465,10 @@ describe("Хеш в листинге git — якорь, только если �
       work("10:25"), work("10:30"),
     ]);
     const repo = stubRepo([s], [pr20, pr21]);
-    const f12 = computeFact(repo, 12, [{ ...pr21, why: "закрыл issue" }], []);
+    const f12 = computeFact(repo, 12, [{ ...pr21, why: "closed the issue" }], []);
     expect(f12.h).toBeNull();
     expect(f12.cov).toBe("none");
-    const f10 = computeFact(repo, 10, [{ ...pr20, why: "закрыл issue" }], []);
+    const f10 = computeFact(repo, 10, [{ ...pr20, why: "closed the issue" }], []);
     expect(f10.h).toBe(0.5); // 10:00–10:30: чужой хеш не обрывает окно названия
   });
 
@@ -534,7 +534,7 @@ describe("Сессия из каталога другого репозитори
   const inA = (s: Session) => ({ ...stubRepo([{ ...s, guest: true }], [pr7]), full: "o/a" });
 
   it("сессия из каталога другого репозитория с PR и коммитом задачи даёт ей факт — с переименования под задачу, ветка того репозитория не в счёт", () => {
-    const res = computeFact(inA(session([...discussion, ...task])), 57, [{ ...pr7, why: "закрыл issue" }], []);
+    const res = computeFact(inA(session([...discussion, ...task])), 57, [{ ...pr7, why: "closed the issue" }], []);
     expect(res.h).toBe(0.42); // 10:00–10:25; обсуждение 09:00–09:15 на ветке feat/57-legacy — не задача o/a#57
     expect(res.cov).toBe("full");
     expect(res.details[0]!.rules.ветка).toBeUndefined();
@@ -554,7 +554,7 @@ describe("Сессия из каталога другого репозитори
   it("номер в названии сессии другого репозитория без признака репозитория задачи — не привязка", () => {
     // на main: привязать могло бы только название
     const s = session([rename("#57 Правила"), prompt("10:00", "сделай #57", "main"), work("10:10", "…", "main"), work("10:20", "…", "main")]);
-    const res = computeFact(inA(s), 57, [{ ...pr7, why: "закрыл issue" }], []);
+    const res = computeFact(inA(s), 57, [{ ...pr7, why: "closed the issue" }], []);
     expect(res.h).toBeNull();
     expect(res.cov).toBe("none");
   });
@@ -563,7 +563,7 @@ describe("Сессия из каталога другого репозитори
     // своя сессия o/r, PR #7 есть и у o/r (задача #9), но ссылка — на PR #7 репозитория o/a
     const own: PR = { ...pr77(), number: 7, headRefName: "fix/9-x", closing: [9], body: "Closes #9", commits: [] };
     const s = session([prompt("10:00", "посмотри", "main"), work("10:10", "…", "main"), prLink("10:20", 7, "o/a"), work("10:25", "…", "main")]);
-    const res = computeFact(stubRepo([s], [own]), 9, [{ ...own, why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([s], [own]), 9, [{ ...own, why: "closed the issue" }], []);
     expect(res.h).toBeNull();
   });
 
@@ -622,7 +622,7 @@ describe("Сессия из временной папки приложения �
     const sessions = candidates().map((f) => ({ ...parseSessionFile(f), guest: true }));
     const res = computeFact({ ...stubRepo(sessions, []), full: "o/a" }, 57, [], []);
     expect(res.h).toBe(0.33); // 10:00–10:20
-    expect(res.details[0]!.rules.название).toBe(3);
+    expect(res.details[0]!.rules.title).toBe(3);
   });
 });
 
@@ -648,13 +648,13 @@ describe("PR достаётся задаче, которую он делает, 
 
   it("PR без закрываемых задач, упоминающий задачу, — слабая связь, когда сильных нет", () => {
     const [prs, , weak] = resolveLinks(repo([pr(60, [], "продолжение #50")]), issue(50, [60]));
-    expect(prs.map((p) => [p.number, p.why])).toEqual([[60, "упоминание"]]);
+    expect(prs.map((p) => [p.number, p.why])).toEqual([[60, "mention"]]);
     expect(weak).toBe(true);
   });
 
   it("сильная связь — Closes #N или номер в ветке — важнее упоминаний", () => {
     const [prs, , weak] = resolveLinks(repo([pr(61, [], "Closes #50"), pr(62, [], "см. #50"), pr(63, [], "", "fix/50-x")]), issue(50, [62]));
-    expect(prs.map((p) => [p.number, p.why])).toEqual([[61, "Closes #50 в теле PR"], [63, "номер в ветке"]]);
+    expect(prs.map((p) => [p.number, p.why])).toEqual([[61, "Closes #50 in the PR body"], [63, "number in the branch"]]);
     expect(weak).toBe(false);
   });
 
@@ -873,7 +873,7 @@ describe("Облачная сессия считается по событиям
 
   it("облачная сессия считается в факт наравне с локальной — покрытие full, агент назван", () => {
     const s = parseCloudFile(exportFile(events()));
-    const res = computeFact(stubRepo([s], [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([s], [cloudPr()]), 42, [{ ...cloudPr(), why: "closed the issue" }], []);
     expect(res.h).toBe(0.15); // 10:00–10:09: задача названа в первом промпте; с 10:10 — чужая ветка
     expect(res.cov).toBe("full");
     expect(res.cloud_missing).toEqual([]);
@@ -884,7 +884,7 @@ describe("Облачная сессия считается по событиям
     const local = parseCloudFile(exportFile(events()));
     local.sid = "local-session"; // та же работа, но как будто локальная — а облачной части нет
     local.source = "claude";
-    const res = computeFact(stubRepo([local], [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([local], [cloudPr()]), 42, [{ ...cloudPr(), why: "closed the issue" }], []);
     expect(res.cov).toBe("partial");
     expect(res.cloud_missing).toEqual([SESSION]);
     expect(factCommentBody(res, 1, [], 0, null)).toContain(`Облачная сессия https://claude.ai/code/${SESSION} не импортирована — est cloud-import.`);
@@ -917,7 +917,7 @@ describe("Облачная сессия считается по событиям
       session: SESSION, h: 0.2, iv: [[ts("10:00"), ts("10:12")]], prompts: 1,
       tok: { in: 1, out: 1000, cw: 0, cr: 100000, total: 101001 }, models: { "claude-opus-5-5": { mtok: 0.1, usd: 0.08 } },
     };
-    const fact = (sessions: Session[], parts: CloudPart[]) => computeFact(stubRepo(sessions, [cloudPr()]), 42, [{ ...cloudPr(), why: "закрыл issue" }], [], 30, parts);
+    const fact = (sessions: Session[], parts: CloudPart[]) => computeFact(stubRepo(sessions, [cloudPr()]), 42, [{ ...cloudPr(), why: "closed the issue" }], [], 30, parts);
 
     it("облачная часть считается, как сессия: время, токены, стоимость, покрытие full по трейлеру; в маркере — сохраняется", () => {
       const res = fact([], [part]);
@@ -962,11 +962,11 @@ describe("Облачная сессия считается по событиям
     expect(r.status).toBe(0);
     const stored = path.join(dir, "ai-dev", "cloud", "o", "r", `${SESSION}.json`);
     expect(JSON.parse(readFileSync(stored, "utf8")).session).toBe(SESSION);
-    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 12 событий, 1 промпт, 10:00–10:10 UTC → ${stored}`);
+    expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 12 events, 1 prompt, 10:00–10:10 UTC → ${stored}`);
     writeFileSync(path.join(dir, "bad.json"), JSON.stringify({ data: [] }));
     const bad = spawnSync("bun", [EST, "cloud-import", path.join(dir, "bad.json")], { encoding: "utf8", env });
     expect(bad.status).toBe(1);
-    expect(bad.stderr).toContain("не выгрузка облачной сессии");
+    expect(bad.stderr).toContain("not a cloud session export");
   });
 });
 
@@ -1025,7 +1025,7 @@ describe("В облачной сессии est считает свою част�
     for (const args of [["estimate", "42", "--type", "feat", "--hours", "1"], ["history"], ["fact", "--sweep"]]) {
       const r = cloud(...args);
       expect(r.status).toBe(1);
-      expect(r.stderr).toContain("облачная сессия");
+      expect(r.stderr).toContain("Claude Code cloud session");
     }
   });
 });
@@ -1051,7 +1051,7 @@ describe("Комментарии «Оценка» и «Факт» обновля
 
   it("текст с часами, отношением к оценке, PR и диффом; маркер разбирается обратно; строки человека сохранены", () => {
     const s = parseSessionFile(claudeFixture());
-    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     res.type = "feat";
     const body = factCommentBody(res, 1, ["+ вручную: 1 ч"], 1, null);
     expect(body).toContain("Факт: 0.22 ч активных в Claude Code (оценка 1 ч, ×0.22). 1 сессия, 3 промпта, 1 субагент, стена 0.2 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.");
@@ -1067,7 +1067,7 @@ describe("Комментарии «Оценка» и «Факт» обновля
 
   it("в проекте на en — комментарий «Actual: …» по-английски, маркер тот же", () => {
     const s = parseSessionFile(claudeFixture());
-    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     const body = factCommentBody(res, 1, ["+ manually: 1 h"], 1, null, "en");
     expect(body).toContain("Actual: 0.22 h active in Claude Code (estimate 1 h, ×0.22). 1 session, 3 prompts, 1 subagent, wall 0.2 h, coverage full. PR #77; 1 commit, diff 12 lines.");
     expect(body).toContain("Tokens: 0.01 M (input 0 · output 0 · cache write 0 · cache read 0.01); cost at API rates ≈ $0.02.\n");
@@ -1080,7 +1080,7 @@ describe("Комментарии «Оценка» и «Факт» обновля
   });
 
   it("без сессий — «Факт недоступен» и покрытие none в маркере", () => {
-    const res = computeFact(stubRepo([], [pr77()]), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+    const res = computeFact(stubRepo([], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     const body = factCommentBody(res, null, [], 0, null);
     expect(body.startsWith("Факт недоступен: сессии не найдены (покрытие none). PR #77;")).toBe(true);
     expect(parseMarker(body, "fact").cov).toBe("none");
@@ -1286,7 +1286,7 @@ describe("Оценка в публичном репо не называет за
   it("в публичный репо не пишется аналог из непубличного репо — отказ до записи", () => {
     const r = estimate("o/pub", "1,o/priv#1,o/priv#2");
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("ошибка: o/pub — публичный репо, а аналоги o/priv#1, o/priv#2 — из непубличного");
+    expect(r.stderr).toContain("error: o/pub is a public repo, and the analogs o/priv#1, o/priv#2 — from a non-public one");
     expect(r.stderr).toContain("--hours");
     expect(r.writes).toEqual([]);
   });
@@ -1294,7 +1294,7 @@ describe("Оценка в публичном репо не называет за
   it("без --write аналог из непубличного репо в публичный — предупреждение, оценка только печатается", () => {
     const r = estimate("o/pub", "o/priv#1,o/priv#2", false);
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("предупреждение: o/pub — публичный репо, а аналоги o/priv#1, o/priv#2 — из непубличного");
+    expect(r.stderr).toContain("warning: o/pub is a public repo, and the analogs o/priv#1, o/priv#2 — from a non-public one");
     expect(r.stdout).toContain("Оценка: 0.5 ч");
     expect(r.writes).toEqual([]);
   });
@@ -1447,11 +1447,11 @@ describe("Бэктест сравнивает механическую оцен�
     const r = withFakeGh(WORLD, ["backtest", "--repo", "o/b"]);
     expect(r.stderr).toBe("");
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("задач с фактом (покрытие full, без эпиков): 6; механике хватило аналогов (≥ 2): 4, в допуске ×0.5…×2 — 75 %, k=1.5");
-    expect(r.stdout).toContain("на одной выборке с ручной оценкой, n=3:");
-    expect(r.stdout).toMatch(/ {2}механика {2,}в допуске 67 %, k=2\n/);
-    expect(r.stdout).toMatch(/ {2}ручная {2,}в допуске 33 %, k=1\n/);
-    expect(r.stdout).toMatch(/ {2}механика × поправка ручной {2,}в допуске 100 %, k=2\n/);
+    expect(r.stdout).toContain("tasks with an actual (coverage full, no epics): 6; the mechanics had enough analogs (≥ 2): 4, within ×0.5…×2 — 75 %, k=1.5");
+    expect(r.stdout).toContain("on one sample with a manual estimate, n=3:");
+    expect(r.stdout).toMatch(/ {2}mechanics {2,}within tolerance 67 %, k=2\n/);
+    expect(r.stdout).toMatch(/ {2}manual {2,}within tolerance 33 %, k=1\n/);
+    expect(r.stdout).toMatch(/ {2}mechanics × manual correction {2,}within tolerance 100 %, k=2\n/);
     expect(r.writes).toEqual([]);
   });
 });
@@ -1489,7 +1489,7 @@ describe("Вывод читается человеком: часы без хво
     expect(fmtH(0.004)).toBe("0");
     expect(fmtH(null)).toBe("—");
     expect(fmtH(33, 1)).toBe("33");
-    expect([1, 2, 5, 11, 21].map((n) => plural(n, "сессия", "сессии", "сессий"))).toEqual(["сессия", "сессии", "сессий", "сессий", "сессия"]);
+    expect([0, 1, 2, 5, 11, 21].map((n) => plural(n, "session", "sessions"))).toEqual(["sessions", "session", "sessions", "sessions", "sessions", "sessions"]);
   });
 
   it("период --since: дни, недели, месяцы, часы; иное — ошибка", () => {
@@ -1520,16 +1520,16 @@ describe("Неверный вызов — справка или ошибка д�
     expect(run().stdout).toContain("est history");
     const r = run("frobnicate");
     expect(exitOf(r)).toBe(1);
-    expect(r.stderr).toContain("ошибка: неизвестная команда «frobnicate»");
+    expect(r.stderr).toContain("error: unknown command «frobnicate»");
   });
 
   it("проверки аргументов — до обращения к GitHub", () => {
-    expect(run("fact", "1", "--repo", "o/r", "--gap", "0").stderr).toContain("--gap должен быть ≥ 1 минуты");
-    expect(run("fact", "1", "--sweep", "--repo", "o/r").stderr).toContain("номер issue и --sweep несовместимы");
-    expect(run("fact", "1", "--model", "claude-opus-5-5", "--repo", "o/r").stderr).toContain("--model — только со --sweep");
-    expect(run("estimate", "1", "--repo", "o/r").stderr).toContain("--type обязателен");
-    expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("укажите номер issue");
-    expect(run("estimate", "1", "--repo", "o/r", "--type", "feat", "--analogs", "2,3", "--tok-mult", "2.5").stderr).toContain("--tok-mult допускает только 0.5, 1, 1.5, 2 или 3");
+    expect(run("fact", "1", "--repo", "o/r", "--gap", "0").stderr).toContain("--gap must be ≥ 1 minute");
+    expect(run("fact", "1", "--sweep", "--repo", "o/r").stderr).toContain("an issue number and --sweep are incompatible");
+    expect(run("fact", "1", "--model", "claude-opus-5-5", "--repo", "o/r").stderr).toContain("--model — only with --sweep");
+    expect(run("estimate", "1", "--repo", "o/r").stderr).toContain("--type is required");
+    expect(run("estimate", "--repo", "o/r", "--type", "feat").stderr).toContain("pass the issue number");
+    expect(run("estimate", "1", "--repo", "o/r", "--type", "feat", "--analogs", "2,3", "--tok-mult", "2.5").stderr).toContain("--tok-mult allows only 0.5, 1, 1.5, 2 or 3");
     expect(exitOf(run("fact", "--repo", "o/r", "--bogus"))).toBe(2);
   });
 });
@@ -1553,7 +1553,7 @@ describe("Факт — ходы и контекст задачи", () => {
     }
     return parseSessionFile(file);
   }
-  const fact = (s: Session, closing: Record<string, number[]> = {}) => computeFact(stubRepo([s], [pr77()], closing), 42, [{ ...pr77(), why: "закрыл issue" }], []);
+  const fact = (s: Session, closing: Record<string, number[]> = {}) => computeFact(stubRepo([s], [pr77()], closing), 42, [{ ...pr77(), why: "closed the issue" }], []);
 
   it("ход — один ответ модели: повтор usage того же message.id и ответы субагента другой задачи не считаются", () => {
     const file = claudeFixture(); // верхний уровень: один ответ, записанный дважды; субагент задачи — один ответ
@@ -1600,7 +1600,7 @@ describe("Факт — ходы и контекст задачи", () => {
       est: 1, fact: 0.5, status: "Готово", est_marker: { type: "feat" }, fact_marker: { cov: "full", tok: { total: 2e6 }, usd: 1.5, agents: 0, ...(steps === undefined ? {} : { steps }) },
     });
     const lines = historyTable([row(12, 250), row(13)]);
-    expect(lines[0]).toContain(" | ходы | ");
+    expect(lines[0]).toContain(" | turns | ");
     expect(lines[1]).toMatch(/ \|\s+250 \| /);
     expect(lines[2]).toMatch(/ \|\s+— \| /);
   });
@@ -1719,25 +1719,25 @@ describe("Сводка периода — все сессии репозитор
     const before = period({});
     const after = period({ since: ts("12:00"), until: ts("18:00"), prs: 2, machine: 3600, tok: 30e6, out: 300_000, usd: 10, models: { "claude-opus-5-5": 10 }, steps: 300, agents: 2, prompts: 4 });
     const lines = periodTable([before, after]);
-    expect(lines[0]).toContain("после / до");
-    expect(cells(lines, "влитых PR")).toEqual(["влитых PR", "4", "2", "×0.5"]);
-    expect(cells(lines, "параллельность сессий")).toEqual(["параллельность сессий", "×2", "×4", "×2"]);
-    expect(cells(lines, "  часы агента")).toEqual(["часы агента", "1", "2", "×2"]);
-    expect(cells(lines, "  часы машины")).toEqual(["часы машины", "0.5", "0.5", "×1"]);
-    expect(cells(lines, "  токены, млн")).toEqual(["токены, млн", "10", "15", "×1.5"]);
-    expect(cells(lines, "  выход, тыс.")).toEqual(["выход, тыс.", "100", "150", "×1.5"]);
-    expect(cells(lines, "  стоимость, $")).toEqual(["стоимость, $", "10.00", "5.00", "×0.5"]);
-    expect(cells(lines, "  субагентов")).toEqual(["субагентов", "2", "1", "×0.5"]);
-    expect(cells(lines, "  промптов человека")).toEqual(["промптов человека", "3", "2", "×0.67"]);
-    expect(cells(lines, "$ за 1 млн токенов")).toEqual(["$ за 1 млн токенов", "1.00", "0.33", "×0.33"]);
+    expect(lines[0]).toContain("after / before");
+    expect(cells(lines, "merged PRs")).toEqual(["merged PRs", "4", "2", "×0.5"]);
+    expect(cells(lines, "session parallelism")).toEqual(["session parallelism", "×2", "×4", "×2"]);
+    expect(cells(lines, "  agent hours")).toEqual(["agent hours", "1", "2", "×2"]);
+    expect(cells(lines, "  machine hours")).toEqual(["machine hours", "0.5", "0.5", "×1"]);
+    expect(cells(lines, "  tokens, M")).toEqual(["tokens, M", "10", "15", "×1.5"]);
+    expect(cells(lines, "  output, K")).toEqual(["output, K", "100", "150", "×1.5"]);
+    expect(cells(lines, "  cost, $")).toEqual(["cost, $", "10.00", "5.00", "×0.5"]);
+    expect(cells(lines, "  subagents")).toEqual(["subagents", "2", "1", "×0.5"]);
+    expect(cells(lines, "  human prompts")).toEqual(["human prompts", "3", "2", "×0.67"]);
+    expect(cells(lines, "$ per 1M tokens")).toEqual(["$ per 1M tokens", "1.00", "0.33", "×0.33"]);
     // тариф отдельно от флоу: доля $ по моделям у каждого периода и напоминание сравнивать флоу по токенам и выходу
-    expect(lines.filter((l) => l.startsWith("$ по моделям"))).toHaveLength(2);
+    expect(lines.filter((l) => l.startsWith("$ by model"))).toHaveLength(2);
     expect(lines.join("\n")).toContain("claude-fable-5 75 %, claude-opus-5 25 %");
-    expect(lines.join("\n")).toContain("тренд $ смешивает флоу с тарифом модели");
+    expect(lines.join("\n")).toContain("the $ trend mixes the flow with the model rate");
     // без влитых PR делить не на что; один период — без отношения
     const alone = periodTable([period({ prs: 0 })]);
-    expect(alone[0]).not.toContain("после / до");
-    expect(cells(alone, "  часы агента")).toEqual(["часы агента", "—"]);
+    expect(alone[0]).not.toContain("after / before");
+    expect(cells(alone, "  agent hours")).toEqual(["agent hours", "—"]);
   });
 
   it("период — пары --since … [--until …] по порядку, без --until — до сейчас; дата, время ISO или 90d", () => {
@@ -1748,10 +1748,10 @@ describe("Сводка периода — все сессии репозитор
     ]);
     expect(parsePeriods(["7d"], [], now)).toEqual([[now - 7 * 86400, now]]);
     expect(parsePeriods(["2026-09-01"], [], now)[0]![0]).toBe(new Date(2026, 8, 1).getTime() / 1000);
-    expect(() => parsePeriods([], [], now)).toThrow("укажите --since");
-    expect(() => parsePeriods(["вчера"], [], now)).toThrow("неверная дата «вчера»");
-    expect(() => parsePeriods(["2026-09-05"], ["2026-09-01"], now)).toThrow("конец не позже начала");
-    expect(() => parsePeriods(["2026-09-01"], ["2026-09-02", "2026-09-03"], now)).toThrow("--until без своего --since");
+    expect(() => parsePeriods([], [], now)).toThrow("pass --since");
+    expect(() => parsePeriods(["вчера"], [], now)).toThrow("invalid date «вчера»");
+    expect(() => parsePeriods(["2026-09-05"], ["2026-09-01"], now)).toThrow("the end isn't after the start");
+    expect(() => parsePeriods(["2026-09-01"], ["2026-09-02", "2026-09-03"], now)).toThrow("--until without its --since");
   });
 
   it("est period печатает два периода рядом по транскриптам и влитым PR — в GitHub не пишет", () => {
@@ -1768,10 +1768,10 @@ describe("Сводка периода — все сессии репозитор
     const r = withFakeGh(world, ["period", "--repo", "o/r", "--since", at("09:00"), "--until", at("10:30"), "--since", at("10:30"), "--until", at("12:00")]);
     expect(r.stderr).toBe("");
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("после / до");
-    expect(cells(r.stdout, "влитых PR")).toEqual(["влитых PR", "1", "2", "×2"]);
-    expect(cells(r.stdout, "стоимость, $")).toEqual(["стоимость, $", "2.00", "4.00", "×2"]);
-    expect(cells(r.stdout, "  стоимость, $")).toEqual(["стоимость, $", "2.00", "2.00", "×1"]);
+    expect(r.stdout).toContain("after / before");
+    expect(cells(r.stdout, "merged PRs")).toEqual(["merged PRs", "1", "2", "×2"]);
+    expect(cells(r.stdout, "cost, $")).toEqual(["cost, $", "2.00", "4.00", "×2"]);
+    expect(cells(r.stdout, "  cost, $")).toEqual(["cost, $", "2.00", "2.00", "×1"]);
     expect(r.stdout).toContain("claude-opus-5 100 %");
     expect(r.writes).toEqual([]);
   });
@@ -1795,8 +1795,8 @@ describe("Тариф модели — отдельно от флоу: истор
     };
     const r = withFakeGh(world, ["history", "--repo", "o/h"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("$ по моделям: claude-fable-5 75 %, claude-opus-5-5 25 %");
-    expect(r.stdout).toContain("тренд $ смешивает флоу с тарифом модели");
+    expect(r.stdout).toContain("$ by model: claude-fable-5 75 %, claude-opus-5-5 25 %");
+    expect(r.stdout).toContain("the $ trend mixes the flow with the model rate");
   });
 });
 
@@ -1815,11 +1815,11 @@ describe("Поправка вниз к чужим аналогам — толь�
   it("поправка вниз к аналогам из другого репо без причины не записывается", () => {
     const r = estimate("0.5", "--write");
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("ошибка: поправка вниз к чужим аналогам (×0.5): назови отличие в --note");
+    expect(r.stderr).toContain("error: downward correction against another repo's analogs (×0.5): name the difference in --note");
     expect(r.writes).toEqual([]);
     const dry = estimate("0.5");
     expect(dry.code).toBe(0);
-    expect(dry.stderr).toContain("предупреждение: поправка вниз к чужим аналогам (×0.5): назови отличие в --note");
+    expect(dry.stderr).toContain("warning: downward correction against another repo's analogs (×0.5): name the difference in --note");
     expect(dry.stdout).toContain("Оценка: 1 ч");
   });
 
@@ -1878,52 +1878,52 @@ describe("Сбой сети gh повторяется, ошибка запрос
     expect(callsWith(r, "organization(login:$o)")).toBe(2);
     expect(callsWith(r, "issues/10/comments")).toBe(3);
     expect(callsWith(r, "updateProjectV2ItemFieldValue")).toBe(2);
-    expect(r.stderr).toContain("сбой сети, повтор через 0 с: команда gh api -X…");
+    expect(r.stderr).toContain("network failure, retry in 0 s: command gh api -X…");
   });
 
   it("ошибка запроса без сбоя сети не повторяется", () => {
     const r = estimate({ match: "issues/10/comments", times: 1, stderr: "HTTP 403: Resource not accessible by personal access token (https://api.github.com/repos/o/r/issues/10/comments)" });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("HTTP 403: Resource not accessible");
-    expect(r.stderr).not.toContain("сбой сети");
+    expect(r.stderr).not.toContain("network failure");
     expect(callsWith(r, "issues/10/comments")).toBe(1);
   });
 
   it("сеть, не вернувшаяся за повторы, — ошибка «сбой сети» с числом повторов", () => {
     const r = estimate({ match: "updateProjectV2ItemFieldValue", times: -1, stderr: TIMEOUT });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("connect: operation timed out — сбой сети, повторов: 3");
+    expect(r.stderr).toContain("connect: operation timed out — network failure, retries: 3");
     expect(callsWith(r, "updateProjectV2ItemFieldValue")).toBe(4);
   });
 
   it("новый комментарий после обрыва ответа не повторяется — GitHub мог его принять", () => {
     const r = estimate({ match: "issues/10/comments", times: 1, stderr: onComments(10, RESET) });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("запрос мог дойти до GitHub");
+    expect(r.stderr).toContain("the request may have reached GitHub");
     expect(callsWith(r, "issues/10/comments")).toBe(1);
   });
 
   it("сетевой сбой при чтении проекта организации не превращается в «не найден пользователь»", () => {
     const r = estimate({ match: "organization(login:$o)", times: -1, stderr: TIMEOUT });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("сбой сети, повторов: 3");
+    expect(r.stderr).toContain("network failure, retries: 3");
     expect(callsWith(r, "user(login:$o)")).toBe(0);
   });
 
   it("ошибка записи одной задачи в свипе не обрывает свип — задача в итоге «не записано»", () => {
     const r = withFakeGh(sweepWorld(), ["fact", "--sweep", "--repo", "o/r", "--write"], [{ match: "issues/42/comments", times: -1, stderr: "HTTP 422: Validation Failed (https://api.github.com/repos/o/r/issues/42/comments)" }]);
-    expect(r.stdout).toContain("#42: ошибка записи: команда gh api -X… завершилась с кодом 1: HTTP 422: Validation Failed");
+    expect(r.stdout).toContain("#42: error writing: command gh api -X… exited with code 1: HTTP 422: Validation Failed");
     expect(callsWith(r, "issues/43/comments")).toBe(1);
-    expect(r.stdout).toContain("не записано: 1 — #42\nповтор: est fact --sweep --since 90d --repo o/r --write — записанные он пропустит");
+    expect(r.stdout).toContain("not written: 1 — #42\nretry: est fact --sweep --since 90d --repo o/r --write — it skips the written ones");
     expect(r.code).toBe(1);
   });
 
   it("сеть, не вернувшаяся за повторы, останавливает свип — непройденные тоже в «не записано»", () => {
     const r = withFakeGh(sweepWorld(), ["fact", "--sweep", "--repo", "o/r", "--write"], [{ match: "issues/42/comments", times: -1, stderr: onComments(42, TIMEOUT) }]);
-    expect(r.stdout).toContain("сеть не вернулась за повторы — свип остановлен, не пройдено: 1");
+    expect(r.stdout).toContain("the network didn't come back within the retries — sweep stopped, not processed: 1");
     expect(callsWith(r, "issues/42/comments")).toBe(4);
     expect(callsWith(r, "issues/43/comments")).toBe(0);
-    expect(r.stdout).toContain("не записано: 2 — #42, #43");
+    expect(r.stdout).toContain("not written: 2 — #42, #43");
     expect(r.code).toBe(1);
   });
 
@@ -1931,7 +1931,7 @@ describe("Сбой сети gh повторяется, ошибка запрос
     const world = sweepWorld({ fact: 0.5, models: { "claude-opus-5-5": { mtok: 1, usd: 1 } } });
     const r = withFakeGh(world, ["fact", "--sweep", "--model", "claude-opus-5-5", "--repo", "o/r", "--write"], [{ match: "issues/43/comments", times: -1, stderr: "HTTP 422: Validation Failed" }]);
     expect(callsWith(r, "issues/42/comments")).toBe(1);
-    expect(r.stdout).toContain("не записано: 1 — #43\nповтор по задаче, по порядку (свип пересчитал бы и записанные): est fact <N> --repo o/r --write — #43");
+    expect(r.stdout).toContain("not written: 1 — #43\nretry task by task, in order (a sweep would recompute the written ones too): est fact <N> --repo o/r --write — #43");
     expect(r.code).toBe(1);
   });
 });
