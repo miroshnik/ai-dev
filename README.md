@@ -31,7 +31,7 @@ One task — from issue to actual:
 flowchart LR
   subgraph task ["1 · Task"]
     direction TB
-    I["Issue<br>goal · questions · scenarios"] --> E["est estimate<br>from analogs with actuals"] --> S["Session #42<br>branch feat/42-slug"]
+    I["Issue<br>goal · questions · scenarios"] --> E["task new estimates it<br>from analogs with actuals"] --> S["Session #42<br>branch feat/42-slug"]
   end
   subgraph work ["2 · Work"]
     direction TB
@@ -193,7 +193,7 @@ Checks and fixes the GitHub project and the default-branch rule, creates a task 
 
 ### [`est`](skills/est/SKILL.md) — estimates from actuals
 
-An estimate in one call from analogs with a measured actual, the script picks the analogs; the actual — active hours, tokens and the API equivalent in $ from Claude Code, Codex and cloud session transcripts; a backtest checks the mechanics against manual estimates; a period summary over all of a repo's sessions compares the flow before and after a change.
+An estimate from analogs with a measured actual, set by `github task new` itself — the script picks the analogs, the agent has no step; the actual — active hours, tokens and the API equivalent in $ from Claude Code, Codex and cloud session transcripts; a backtest checks the mechanics against manual estimates; a period summary over all of a repo's sessions compares the flow before and after a change.
 
 `est estimate` · `est fact` · `est history` · `est backtest` · `est period` · `est cloud-import`
 

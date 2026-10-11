@@ -1,6 +1,6 @@
 ---
 name: est
-description: Estimates GitHub tasks from the project's history (the «Estimate, h» field from analogs with actuals) and records the actual from Claude Code, Codex and claude.ai/code cloud session transcripts when a task is closed. When — always when «Estimate, h» is set on a new task or an epic's subtask; when a task is closed or a PR is merged (actual); in a cloud session when closing a task — its part of the actual («Actual (cloud)»); when the cloud part wasn't counted (a Claude-Session trailer in commits, «not imported» in the actual) — importing the session's events; when asked "how many hours", "estimate it", "how accurate are the estimates", for estimate history, an estimate backtest, the k coefficient, an actuals backfill or estimate vs actual; when comparing the flow before and after a change or spend over a period across all of a repo's sessions (`est period`) — even if the word "estimate" wasn't said but the talk is about planning the amount of work.
+description: Estimates GitHub tasks from the project's history (the «Estimate, h» field from analogs with actuals — `github task new` sets it by itself, the agent has no step) and records the actual from Claude Code, Codex and claude.ai/code cloud session transcripts when a task is closed. When — a task created past `task new` (the GitHub UI) has no estimate; when a task is closed or a PR is merged (actual); in a cloud session when closing a task — its part of the actual («Actual (cloud)»); when the cloud part wasn't counted (a Claude-Session trailer in commits, «not imported» in the actual) — importing the session's events; when asked "how many hours", "estimate it", "how accurate are the estimates", for estimate history, an estimate backtest, the k coefficient, a manual re-estimate on the owner's request, an actuals backfill or estimate vs actual; when comparing the flow before and after a change or spend over a period across all of a repo's sessions (`est period`).
 allowed-tools: Bash(bun *skills/est/scripts/est.ts *) Bash(gh issue view *) Bash(gh pr view *)
 ---
 
@@ -30,9 +30,10 @@ claude.ai/code cloud sessions — section "Cloud session"), not memory and not a
 number by eye. A task done by an agent whose transcripts `est` doesn't read has
 its actual "unavailable" until its source is added.
 
-**Project fields are set only by the skill:** «Estimate, h» — `est estimate --write`
-(from analogs with actuals, not off the top of the head); «Actual, h», «Tokens, M»,
-«Cost, $» — `est fact --write` when the task is closed; never touch them by hand.
+**Project fields are set only by the scripts:** «Estimate, h» — `est estimate --write`
+inside `github task new` (from analogs with actuals, not off the top of the head);
+«Actual, h», «Tokens, M», «Cost, $» — `est fact --write` inside `github task close`;
+never touch them by hand.
 
 Run: `bun <skill folder>/scripts/est.ts <subcommand> …` (Bun, no dependencies) —
 the skill folder is the one holding this file (`~/.claude/skills/est`,
@@ -50,7 +51,8 @@ project from its link to the repository.
 
 | Moment | Action |
 |---|---|
-| You create a small task or an epic's subtask | `est estimate <N> --type <type> --write` — section "Estimating a new task" below |
+| You create a task or an epic's subtask | nothing: `github task new --branch-type <type>` sets the estimate itself — section "The estimate of a new task" below |
+| A task without an estimate (created in the GitHub UI or by another tool), before taking it into work | `est estimate <N> --type <type> --write` — the same call `task new` makes, one call, nothing to choose |
 | PR merged / issue closed | `github task close <N>` — runs `est fact <N> --write` inside; recomputing the actual — `est fact <N> --write` |
 | `est history` prints «closed in 90 days without an actual: N» | `est fact --sweep --since 90d --write` — fill in the actuals of closed tasks |
 | A model's rate in the price list was fixed or added | `est fact --sweep --model <id> --write` — recompute the recorded actuals with it and their epics |
@@ -61,18 +63,17 @@ An epic isn't estimated separately: its estimate and actual are the sum of its
 subtasks (`est fact <epic>` sums them itself and says how many subtasks have no
 actual).
 
-## Estimating a new task
+## The estimate of a new task
 
-An estimate is a **forecast from the actuals of similar tasks**, in one call: the
-script picks the analogs itself and computes hours, tokens and cost from their
-actuals.
-
-```bash
-est estimate <N> --repo <r> --type feat --write
-```
-
-`--type` — like the branch prefix (feat / fix / docs / refactor / perf / test /
-chore / ci / build / research). Without `--write` everything is only printed.
+An estimate is a **forecast from the actuals of similar tasks**, and
+`github task new --branch-type <type>` sets it itself: it runs
+`est estimate <N> --type <type> --write` — the agent doesn't open this skill and
+chooses nothing. A task created past `task new` (the GitHub UI, another tool)
+gets the same call by hand before it's taken into work:
+`est estimate <N> --type <branch type> --write`. Precision isn't the goal: every closed task becomes an analog
+for the next estimates, so they follow the actuals by themselves. `--type` — like
+the branch prefix (feat / fix / docs / refactor / perf / test / chore / ci /
+build / research); without `--write` everything is only printed.
 
 1. **Analogs** — the three most similar closed tasks with an actual (coverage
    `full`, not epics), **closed before the estimated one was created**.
@@ -82,40 +83,43 @@ chore / ci / build / research). Without `--write` everything is only printed.
    answers to questions — those are added after the estimate); on a tie — the
    more recently closed. The comment names the analogs and how they are similar:
    `Analogs (picked by the script): #24 (actual 0.21 h: label est · type feat · words «estimate», «analogs» · description ×1.3); …`
-2. **Correction** — only for a named difference that the features don't see:
-   ×0.5 / ×1 / ×1.5 / ×2 (`--mult`, the reason — `--note`, one sentence). No
-   difference — ×1: in the backtest, agents' corrections on top of the mechanics
-   didn't add accuracy. A downward correction against analogs from another repo
-   isn't written without `--note` (`--write` refuses, without it — a warning):
-   "someone else's project is slower" without a named difference underestimated
-   big tasks threefold. If the fan-out differs from the analogs — also
-   `--tok-mult` (×0.5 / ×1 / ×1.5 / ×2 / ×3, the reason — `--tok-note`): with
-   parallel subagents hours shrink while tokens grow (each one re-reads the
-   context), so tokens and cost get their own correction; without it — the same
-   as for hours.
-3. The script takes the median of the analogs' actuals × the correction and
-   rounds it to the **nearest** step of the scale 0.1 · 0.25 · 0.5 · 1 · 1.5 · 2 ·
-   3 · 5 · 8 · 13 h; the correction applies to the token and cost medians too. It
-   sets the «Estimate, h» field and writes a comment (the marker has `"auto": true`):
-   `Estimate: 1 h, ≈ 80.7M tokens, ≈ $136 (type fix, confidence A; forecast from the analogs' actuals). Analogs (picked by the script): #4 (actual 0.38 h: …); #5 (actual 0.51 h: …); #9 (actual 1.2 h: …). Correction: ×2 (twice as many rules). k=0.93 (n=20, level «repo»; for reference, not applied to the forecast).`
-   If the analogs' actuals spread by more than ×3, the script adds a range; the
-   field gets the median × correction rounded to the scale. The scale is capped
-   at 13: if the analogs (before rounding) or `--hours` give more, the script
+2. **Forecast** — the median of the analogs' actuals (hours, tokens, cost),
+   rounded to the **nearest** step of the scale 0.1 · 0.25 · 0.5 · 1 · 1.5 · 2 ·
+   3 · 5 · 8 · 13 h. The script sets the «Estimate, h» field and writes a comment
+   (the marker has `"auto": true`):
+   `Estimate: 1 h, ≈ 80.7M tokens, ≈ $136 (type fix, confidence A; forecast from the analogs' actuals). Analogs (picked by the script): #4 (actual 0.38 h: …); #5 (actual 0.51 h: …); #9 (actual 1.2 h: …). Correction: ×1. k=0.93 (n=20, level «repo»; for reference, not applied to the forecast).`
+   If the analogs' actuals spread by more than ×3, the script adds a range. The
+   scale is capped at 13: if the analogs (before rounding) give more, the script
    warns — the task should be split.
+3. **Cold start** — fewer than two analogs with an actual closed before the task
+   was created: the script prints «No estimate: …», writes nothing, exits with 0
+   and doesn't read other repositories; the task stays without an estimate, and
+   the tasks created after two have closed get one.
 4. k (actual/estimate over history) is for reference: it isn't applied to the
-   analog forecast (the forecast already comes from actuals); `est history` shows
-   it with the number of pairs, to see whether estimates match actuals.
+   forecast (the forecast already comes from actuals); `est history` shows it
+   with the number of pairs, to see whether estimates match actuals.
 
-**Analogs by hand** — `--analogs 254,260`, when the agent sees a difference the
-features don't catch (a subsystem without a label, a different scope with a
-similar description); then — 2–3 analogs from `est history --repo <r> [--grep
-<word>]` («agents» — the task's subagents, «turns» — model responses, a size
-signal), and when in doubt about scope —
-`gh issue view <k> --json body,closedByPullRequestsReferences` and
-`gh pr view <pr> --json additions,deletions,changedFiles`. Only actuals with
-`full` coverage go into analogs (partial is marked «not counted»), at
-least two are needed. If parallel subagents will do the task (fan-out) — analogs
-with a similar «agents» count.
+Confidence: A — ≥ 3 analogs with an actual and ≥ 5 closed tasks of the same type
+with an actual (coverage full) in this repo; B — ≥ 2 analogs with an actual; C — an
+expert estimate (`--hours`).
+
+**A manual re-estimate — only on the owner's request,** before work starts:
+`est estimate <N> --type <type> … --write` with
+
+- `--analogs 254,260` — analogs by hand (2–3, from `est history [--grep <word>]`);
+  from another registry repo — `owner/repo#254`, labeled «from project …» in the
+  comment. An analog from a non-public repo isn't written into a public repo:
+  `--write` refuses before writing (without it — a warning), since the other
+  task's name and number would stay in the comment's edit history too;
+- `--mult 0.5|1.5|2` with `--note "reason"` — a named difference the features
+  don't see (in the backtest, agents' corrections on top of the mechanics didn't
+  add accuracy; a downward correction against another repo's analogs isn't
+  written without `--note`); `--tok-mult 0.5…3` with `--tok-note` — when the
+  fan-out differs from the analogs' (parallel subagents shrink hours and grow
+  tokens);
+- `--hours H` — an expert estimate (confidence C), rounded to the scale; with
+  analogs it goes on top of the forecast, and tokens and cost are rescaled in
+  proportion.
 
 **Backtest** — `est backtest [--repo <r>] [--all-repos]`: every closed task with
 an actual is estimated by the mechanics the way the script would have estimated
@@ -125,24 +129,6 @@ and for the mechanics with the agent's correction — on one sample (tasks that 
 have a manual estimate). It is how a change to the picking rule is checked: the
 weights above were chosen with it (#279) — on a history of ~470 tasks the
 mechanics lands within tolerance as often as manual picking.
-
-Confidence: A — ≥ 3 analogs with an actual and ≥ 5 closed tasks of the same type
-with an actual (coverage full) in this repo; B — ≥ 2 analogs with an actual; C — an
-expert estimate (`--hours`, with or without analogs).
-
-**Cold start — honestly.** If the repo has < 2 actuals closed before the task was
-created, the script won't pick analogs and says so → analogs from other repos by
-hand (`--analogs owner/repo#254`, the list — `est history --all-repos`; in the
-comment they are labeled «from project …», confidence B). An
-analog from a non-public repo isn't written into a public repo: `--write` refuses
-before writing (without it — a warning), since the other task's name and number
-would stay in the comment's edit history too; take analogs from this repo or use
-`--hours`. No analogs with an actual anywhere → `--hours H` as an expert estimate
-(confidence C), and the comment says so; no "starting rates per operation" — that
-is made-up precision. `--hours` together with analogs is an expert estimate on top
-of the forecast (confidence C): the comment shows what the analogs would give,
-tokens and cost are recomputed in proportion to the hours. `--hours` is rounded to
-the scale, and the script warns about it.
 
 **Don't rewrite the estimate after work starts.** A discrepancy is explained in
 the actual comment: the actual there is compared with the «Estimate, h» field, and k
@@ -385,11 +371,11 @@ est history [--repo o/r] [--grep WORD] [--all-repos] [--last N]
 est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
 est fact --sweep [--since 90d] [--repo o/r] [--write]
 est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   # recompute recorded actuals with the model and their epics
-est estimate <N> [--repo o/r] --type <type> \
-    [--mult 0.5|1|1.5|2] [--note "reason"] \
-    [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]   # the script picks analogs; hours, tokens, $ from their actuals
-est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--write]   # analogs by hand
-est estimate <N> [--repo o/r] --type <type> --hours H [--write]   # expert, when there are no analogs
+est estimate <N> [--repo o/r] --type <type> [--write]   # github task new runs it: the script picks analogs; hours, tokens, $ from their actuals
+# a manual re-estimate on the owner's request:
+est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] \
+    [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--analogs a,b[,c]] [--write]
+est estimate <N> [--repo o/r] --type <type> --hours H [--write]   # expert, confidence C
 est backtest [--repo o/r] [--all-repos]   # mechanics vs manual estimates on closed tasks
 est period --since DATE [--until DATE] [--since DATE [--until DATE]] [--repo o/r] [--gap 30]   # all of the repo's sessions over the period
 # an analog from another registry repo: --analogs owner/repo#254

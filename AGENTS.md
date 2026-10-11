@@ -200,9 +200,13 @@ may change scope and approach.
 
 - **Unit** — the agent's active hours on the task (work + pauses ≤ 30 min),
   not person-hours and not calendar time.
-- **Estimate** — only via the `est` skill, from analogs with actuals; no
-  analogs — "expert, confidence C". The estimate field is never written by
-  hand and never rewritten after work starts.
+- **Estimate** — set by `github task new` itself (`--branch-type`): the
+  script picks analogs with actuals, the agent has no step of its own; fewer
+  than two in the repository — no estimate; a task created elsewhere (the
+  GitHub UI) — `est estimate <N> --type <type> --write`, the same
+  mechanics, before taking it into work. Not super precise: closed tasks
+  become analogs for the next ones. The field is never written by hand and
+  never rewritten after work starts.
 - **Actual at closing** (PR merged / issue closed) — `github task close <N>`
   (runs `est fact <N> --write` inside): the actual comment and the actual
   fields; never touch them by hand; no actual — "actual unavailable", not a

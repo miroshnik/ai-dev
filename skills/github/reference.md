@@ -112,10 +112,11 @@ added to the project right on creation (`github task new`). Required:
   Done.
 - **The `Estimate, h` field** (Number) — the agent's active hours
   (`AGENTS.md`, section "Estimate and actual — the `est` skill"). Set **only
-  via the `est` skill** — from analogs with actuals, not off the top of my
-  head: for every subtask and small task on creation; for an epic — the sum
-  of its subtasks' estimates, recalculated when a subtask is added or its
-  estimate changes. After work starts I don't rewrite the estimate — the
+  by `github task new`** (the `est` script inside) — from analogs with
+  actuals picked by the script, not off the top of my head: for every subtask
+  and small task on creation; fewer than two analogs in the repository — no
+  estimate; for an epic — the sum of its subtasks' estimates, recalculated
+  when a subtask is added or its estimate changes. After work starts I don't rewrite the estimate — the
   discrepancy is explained in the actual comment.
 - **The `Actual, h`, `Tokens, M`, `Cost, $` fields** (Number) — the actual:
   active hours, all tokens
@@ -308,7 +309,7 @@ gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -f state=closed
 ### Numeric project fields
 
 `Estimate, h`, `Actual, h`, `Tokens, M`, `Cost, $` are set only by the
-`est` skill. By hand — only an epic's `Estimate, h`, the sum of its subtasks'
+`est` script (`github task new` and `task close` run it). By hand — only an epic's `Estimate, h`, the sum of its subtasks'
 estimates:
 
 ```bash

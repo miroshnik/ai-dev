@@ -1,6 +1,6 @@
 ---
 name: github
-description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by and milestone at once; `task status`, `task drop`; `task actualize` prints the epic-refresh subagent's assignment right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
+description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task status`, `task drop`; `task actualize` prints the epic-refresh subagent's assignment right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
 allowed-tools: Bash(bun *skills/github/scripts/github.ts *) Bash(git remote get-url *)
 ---
 
@@ -192,7 +192,7 @@ description is rewritten.
 ## Tasks — task
 
 ```bash
-bun <skill dir>/scripts/github.ts task new --title "…" [--body-file F | --body "…"] [--type Task|Bug|Epic] \
+bun <skill dir>/scripts/github.ts task new --title "…" --branch-type <type> [--body-file F | --body "…"] [--type Task|Bug|Epic] \
     [--epic N] [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] \
     [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
 bun <skill dir>/scripts/github.ts task status <N> "In progress"   # Backlog | In progress | Done
@@ -205,8 +205,8 @@ bun <skill dir>/scripts/github.ts pr premerge <PR>               # before the me
 
 | Moment | Action |
 |---|---|
-| New task, an epic's subtask, an epic | first — whether one already exists (`gh issue list --search`); `task new`; then the estimate — the `est` skill (an epic isn't estimated: its estimate is the sum of its subtasks, `reference.md`) |
-| Took into work · reopened | `task status N "In progress"` — a separate call, no pipeline (`tail` hides the refusal code), before creating the branch |
+| New task, an epic's subtask, an epic | first — whether one already exists (`gh issue list --search`); `task new --branch-type <type>` — it sets the estimate itself (an epic isn't estimated: its estimate is the sum of its subtasks, `reference.md`) |
+| Took into work · reopened | a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress"` — a separate call, no pipeline (`tail` hides the refusal code), before creating the branch |
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed assignment; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
@@ -237,7 +237,19 @@ label — created with the kind's color; a regular label must exist, otherwise a
 error before creating. A slice label by name (`api`) is a regular task label,
 not passed to the epic; `kind:name` with a slice label's name is an error
 before creating: a decision with that name isn't marked by a label. Prints
-`Created #N …`, `+` lines and the next step; in a session with a
+`Created #N …`, `+` lines and the next step.
+
+**The estimate — by `task new` itself**, like the actual in `task close`:
+after creating a task or a bug it runs `est estimate <N> --type <branch type>
+--write` by the est script next to it (`../est/scripts/est.ts`) and prints its
+output — the script picks the analogs, the agent has no step and doesn't open the
+`est` skill. `--branch-type` — the type of the task's branch (`feat fix docs
+refactor perf test chore ci build research`) and of its estimate: required for
+a task, a bug without it is `fix`, an epic gets none (error before creating —
+an epic has no branch and no estimate of its own). Fewer than two analogs with
+an actual in the repository — est prints «No estimate», the task stays without
+one; est is missing — the line `○ no estimate`, failed — its error as a `!`
+line; the task is created anyway (code 0). In a session with a
 pinned task (`task status` below) — a second line «Next:»:
 `the session runs owner/repo#N — #M in a new session, first prompt: #M`.
 
