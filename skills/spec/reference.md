@@ -57,7 +57,7 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
   error with its location, not an empty test list.
 - There is one parse — `parseCode` in `speclib.ts`: it serves the name
   scanner, the harness (ESLint comments, `codeOnly`, lines of neighboring
-  files) and the "Harness checks" section of `spec-diff` —
+  files) and the «Harness checks» section of `spec-diff` —
   the `registry` option of `invariant` and `rule` of `examples` in the call
   arguments (`callOptions`); regexes over the text took a fixture in a string
   and an invariant's `rule` for a check (#289). Copies of the hand-written

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * github — the repository's GitHub project and tasks by the AGENTS.md canon (the "Task tracking" section; the full
- * rules are in reference.md next to SKILL.md: types, decision labels, epics, the project, milestones, epic refresh).
+ * github — the repository's GitHub project and tasks by the canon (AGENTS.md, "Task tracking"; the full rules are in
+ * reference.md next to SKILL.md: types, decision labels, epics, the project, milestones, epic refresh).
  *
  * Subcommands:
  *   github project check — a check against the canon, item by item ✅/❌
