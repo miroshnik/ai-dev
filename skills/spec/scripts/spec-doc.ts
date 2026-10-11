@@ -338,6 +338,9 @@ export function loadMeta(dir: string): Map<string, Meta> {
 // язык блока кода примера по расширению его файла
 const FENCE_LANG: Record<string, string> = { ts: "ts", mts: "ts", cts: "ts", tsx: "tsx", js: "js", mjs: "js", cjs: "js", jsx: "jsx" };
 
+/** Файл отключений линта — из названия теста `lintExceptions` харнесса на любом языке словаря: «exceptions in <файл>: …». */
+const LINT_FILE = new RegExp(`^(?:${locale.every((n) => n.spec.harness.lintExceptions).map((t) => locale.escapeRe(t.split("{file}")[0]!)).join("|")})(.+?): `);
+
 /** Под строкой теста: путь и код примера, задача и причина исключения, отключения правил в файле. */
 function metaLines(t: Test): string[] {
   const m = META.get(t.path + "\0" + t.name);
@@ -349,7 +352,7 @@ function metaLines(t: Test): string[] {
   }
   if (m.issue !== undefined) out.push(`  > #${m.issue} — ${m.reason ?? ""}`);
   else if (m.reason) out.push(`  > ${m.reason}`); // вне охвата — причина без задачи: это решение, а не долг
-  const codeFile = /^исключения в (.+?): /.exec(t.name)?.[1] ?? "";
+  const codeFile = LINT_FILE.exec(t.name)?.[1] ?? "";
   for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || N.spec.lint.allRules} — ${d.description || N.spec.lint.noReason}`);
   if (m.sequence?.length && !PLACED.has(t.path + "\0" + t.name)) out.push(...sequenceLines(m.sequence).map((l) => "  " + l));
   return out;

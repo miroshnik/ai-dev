@@ -102,6 +102,92 @@ declare namespace locale {
     tests: Plural;
     /** Отключение линта: без правил — все, без описания — без причины. */
     lint: { allRules: string; noReason: string };
+    /** Названия тестов, которые регистрирует харнесс (`harness.ts`): это `it` проекта. */
+    harness: {
+      registryNotEmpty: string;
+      registryFinds: string;
+      violator: string;
+      oneRecord: string;
+      markOneElement: string;
+      outside: string;
+      exception: string;
+      exceptionFiles: string;
+      exceptionJson: string;
+      exceptionRules: string;
+      markRules: string;
+      badExample: string;
+      bad: string;
+      good: string;
+      outsideExample: string;
+      codeFiles: string;
+      lintExceptions: string;
+      knip: {
+        files: string;
+        exports: string;
+        types: string;
+        dependencies: string;
+        unlisted: string;
+        unresolved: string;
+        enumMembers: string;
+        nsMembers: string;
+        duplicates: string;
+        binaries: string;
+        catalog: string;
+        catalogReferences: string;
+        known: string;
+        hints: string;
+      };
+      ignoreNoReason: string;
+      env: { inCode: string; declaredName: string; undeclared: string; declared: string; readName: string; unread: string };
+    };
+    /** Реестры, названия тестов и нарушители проверки модели архитектуры (`architecture.ts`). */
+    architecture: {
+      dirsRegistry: string;
+      dirName: string;
+      dirViolator: string;
+      workspaceRegistry: string;
+      workspaceName: string;
+      workspaceViolator: string;
+      importsRegistry: string;
+      importsName: string;
+      importsViolator: string;
+      allowedRegistry: string;
+      allowedName: string;
+      allowedViolator: string;
+      containersRegistry: string;
+      libraryName: string;
+      moduleName: string;
+      containersViolator: string;
+      edgesRegistry: string;
+      edgeName: string;
+      edgeViolator: string;
+      unitsRegistry: string;
+      unitName: string;
+      unitViolator: string;
+      clientsRegistry: string;
+      clientName: string;
+      clientViolator: string;
+      hostsRegistry: string;
+      hostName: string;
+      hostPerimeter: string;
+      hostViolator: string;
+      inAdapter: string;
+      inAdapters: string;
+      packagesRegistry: string;
+      packageName: string;
+      packagePerimeter: string;
+      packageViolator: string;
+      withAdapter: string;
+      withAdapters: string;
+      envRegistry: string;
+      envNoun: string;
+      headersRegistry: string;
+      headerNoun: string;
+      readName: string;
+      readNameMany: string;
+      readPerimeter: string;
+      readViolator: string;
+    };
     /** Документация `docs/spec`: шапка-метка, заголовки, разделы трёх корней, счётчики и пометки тестов. */
     doc: {
       mark: string;

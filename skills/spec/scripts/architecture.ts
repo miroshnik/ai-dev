@@ -16,6 +16,8 @@ import type { Dirent } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 
+import locale from "../../github/scripts/locale.cjs";
+import type { Names } from "../../github/scripts/locale.cjs";
 import { codeOnly, envNamesInCode, invariant } from "./harness.ts";
 import type { EnvReader, Exception, Invariant, It } from "./harness.ts";
 
@@ -419,6 +421,8 @@ export function architecture(
   opts: { root: string; model: Model; exceptions?: readonly Exception[]; outside?: readonly Outside[]; readers?: readonly EnvReader[] },
 ): void {
   const { model } = opts;
+  // реестры и названия тестов — на языке проекта (каталог, из которого идёт раннер), при регистрации
+  const N = locale.names(locale.projectLanguage());
   // реестры собираются целиком, потом регистрируются: исключение уходит только в реестр, где есть его элемент
   const specs: Invariant<unknown>[] = [];
   const add: Add = (spec) => void specs.push(spec as Invariant<unknown>);
@@ -427,16 +431,16 @@ export function architecture(
   const moduleOf = (dir: string) => owners(model, dir);
 
   add({
-    registry: "каталоги кода",
+    registry: N.spec.architecture.dirsRegistry,
     items: dirs,
-    name: (d) => `каталог ${d} — в модуле ${moduleOf(d).length === 1 ? moduleOf(d)[0] : "?"}`,
+    name: (d) => locale.fill(N.spec.architecture.dirName, { dir: d, module: moduleOf(d).length === 1 ? moduleOf(d)[0]! : "?" }),
     key: (d) => d,
     check: (d) => {
       const own = moduleOf(d);
       if (!own.length) throw new Error(`${d}: код вне модулей модели — добавь модуль в tests/architecture/model.ts или перенеси код`);
       if (own.length > 1) throw new Error(`${d}: каталог в нескольких модулях — ${own.join(", ")}`);
     },
-    violator: { name: "каталог вне модулей", item: "__вне_модели__" },
+    violator: { name: N.spec.architecture.dirViolator, item: "__вне_модели__" },
   });
 
   // корни модели — руками: новый пакет workspace вне них проверка не видела бы целиком
@@ -445,16 +449,16 @@ export function architecture(
   const packages = roots.some((r) => r === "" || r === ".") ? [] : workspacePackages(opts.root).filter((p) => hasCode(path.join(opts.root, p)));
   if (packages.length) {
     add({
-      registry: "пакеты workspace",
+      registry: N.spec.architecture.workspaceRegistry,
       items: packages,
-      name: (p) => `пакет workspace ${p} — в корнях кода`,
+      name: (p) => locale.fill(N.spec.architecture.workspaceName, { path: p }),
       key: (p) => p,
       // «вне охвата» и исключение пакета — отметкой в его package.json: удалили пакет — ушла и отметка
       fileOf: (p) => path.join(opts.root, p, "package.json"),
       check: (p) => {
         if (!inRoots(p)) throw new Error(`${p}: пакет workspace с кодом вне корней модели — добавь его в roots tests/architecture/model.ts`);
       },
-      violator: { name: "пакет workspace вне корней", item: "__вне_корней__" },
+      violator: { name: N.spec.architecture.workspaceViolator, item: "__вне_корней__" },
     });
   }
 
@@ -470,30 +474,30 @@ export function architecture(
   const imports = [...used].flatMap(([mod, byPkg]) => [...byPkg].map(([pkg, files]) => ({ mod, pkg, files })));
   const allowed = (mod: string) => model.modules[mod]?.packages ?? [];
   add({
-    registry: "внешние пакеты модулей",
+    registry: N.spec.architecture.importsRegistry,
     items: imports,
-    name: (i) => `${i.mod} импортирует ${i.pkg}`,
+    name: (i) => locale.fill(N.spec.architecture.importsName, { module: i.mod, package: i.pkg }),
     key: (i) => `${i.mod}:${i.pkg}`,
     check: (i) => {
       if (!allowed(i.mod).includes(i.pkg)) throw new Error(`модулю ${i.mod} пакет ${i.pkg} не разрешён: ${i.files.join(", ")}`);
     },
-    violator: { name: "пакет, не разрешённый модулю", item: { mod: names(model)[0] ?? "", pkg: "__не_разрешён__", files: ["__нарушитель__"] } },
+    violator: { name: N.spec.architecture.importsViolator, item: { mod: names(model)[0] ?? "", pkg: "__не_разрешён__", files: ["__нарушитель__"] } },
   });
 
   const declared = names(model).flatMap((mod) => allowed(mod).map((pkg) => ({ mod, pkg })));
   add({
-    registry: "разрешённые пакеты модели",
+    registry: N.spec.architecture.allowedRegistry,
     items: declared,
-    name: (d) => `${d.mod} использует разрешённый пакет ${d.pkg}`,
+    name: (d) => locale.fill(N.spec.architecture.allowedName, { module: d.mod, package: d.pkg }),
     key: (d) => `${d.mod}:${d.pkg}`,
     check: (d) => {
       if (!used.get(d.mod)?.has(d.pkg)) throw new Error(`модуль ${d.mod} не импортирует ${d.pkg} — убери пакет из модели или поправь код`);
     },
-    violator: { name: "разрешённый пакет без импорта", item: { mod: "__нет_модуля__", pkg: "__не_используется__" } },
+    violator: { name: N.spec.architecture.allowedViolator, item: { mod: "__нет_модуля__", pkg: "__не_используется__" } },
   });
 
-  if (model.externals) c1(add, model, src);
-  if (model.containers) c2(add, opts.root, model, src);
+  if (model.externals) c1(add, N, model, src);
+  if (model.containers) c2(add, N, opts.root, model, src);
   const exceptions = route(opts.exceptions ?? [], specs);
   const outside = route(opts.outside ?? [], specs);
   for (const [i, spec] of specs.entries()) invariant(it, { ...spec, exceptions: exceptions[i], outside: outside[i] });
@@ -508,6 +512,24 @@ export interface Outside {
   rule?: string;
 }
 
+/** Реестры модели: `rule` исключения называет реестр на любом языке словаря — проект мог сменить язык. */
+const REGISTRIES: ((n: Names) => string)[] = [
+  (n) => n.spec.architecture.dirsRegistry,
+  (n) => n.spec.architecture.workspaceRegistry,
+  (n) => n.spec.architecture.importsRegistry,
+  (n) => n.spec.architecture.allowedRegistry,
+  (n) => n.spec.architecture.containersRegistry,
+  (n) => n.spec.architecture.edgesRegistry,
+  (n) => n.spec.architecture.unitsRegistry,
+  (n) => n.spec.architecture.clientsRegistry,
+  (n) => n.spec.architecture.hostsRegistry,
+  (n) => n.spec.architecture.packagesRegistry,
+  (n) => n.spec.architecture.envRegistry,
+  (n) => n.spec.architecture.headersRegistry,
+];
+/** Название реестра на языке проекта для `rule` на любом языке словаря; не реестр модели — как есть. */
+const registryOf = (rule: string, n: Names): string => REGISTRIES.find((pick) => locale.every(pick).includes(rule))?.(n) ?? rule;
+
 /**
  * Исключения и «вне охвата» по реестрам: с `rule` — реестру с этим именем, без — реестрам, в которых есть его элемент;
  * элемента нет нигде — первому реестру, чтобы храповик сказал «убери исключение» («убери из охвата»), а не молчал.
@@ -515,8 +537,9 @@ export interface Outside {
 function route<X extends { item: string; rule?: string }>(xs: readonly X[], specs: Invariant<unknown>[]): Omit<X, "rule">[][] {
   const keys = specs.map((sp) => new Set(sp.items.map((x) => String((sp.key ?? sp.name)(x)))));
   const out: Omit<X, "rule">[][] = specs.map(() => []);
+  const n = locale.names(locale.projectLanguage());
   for (const { rule, ...x } of xs) {
-    const byRule = rule ? specs.findIndex((sp) => sp.registry === rule) : -1;
+    const byRule = rule ? specs.findIndex((sp) => sp.registry === registryOf(rule, n)) : -1;
     let to = byRule >= 0 ? [byRule] : keys.flatMap((k, i) => (!rule && k.has(x.item) ? [i] : []));
     if (!to.length) to = [0];
     for (const i of to) out[i]!.push(x);
@@ -553,16 +576,18 @@ export function moduleContainers(model: Model): Map<string, string[]> {
  * цель есть в каждом контейнере источника (между контейнерами — только `uses`); развёртываемые единицы конфигов и
  * модели совпадают в обе стороны; клиент хранилища — только в контейнере со связью `uses` с этим хранилищем.
  */
-function c2(add: Add, root: string, model: Model, src: Source[]): void {
+function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void {
   const cont = model.containers!;
   const of = moduleContainers(model);
   const containerOf = (m: string) => of.get(m) ?? [];
   const isLibrary = (m: string) => !!model.modules[m]?.library;
   add({
-    registry: "модули в контейнерах",
+    registry: N.spec.architecture.containersRegistry,
     items: names(model),
     name: (m) =>
-      isLibrary(m) ? `библиотека ${m} — в контейнерах ${containerOf(m).join(", ") || "?"}` : `модуль ${m} — в контейнере ${containerOf(m).length === 1 ? containerOf(m)[0] : "?"}`,
+      isLibrary(m)
+        ? locale.fill(N.spec.architecture.libraryName, { module: m, containers: containerOf(m).join(", ") || "?" })
+        : locale.fill(N.spec.architecture.moduleName, { module: m, container: containerOf(m).length === 1 ? containerOf(m)[0]! : "?" }),
     key: (m) => m,
     check: (m) => {
       const c = containerOf(m);
@@ -573,15 +598,15 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
       if (!c.length) throw new Error(`модуль ${m} не входит ни в один контейнер модели`);
       if (c.length > 1) throw new Error(`модуль ${m} — в нескольких контейнерах: ${c.join(", ")} — общий пакет отметь library: true`);
     },
-    violator: { name: "модуль вне контейнеров", item: "__вне_контейнеров__" },
+    violator: { name: N.spec.architecture.containersViolator, item: "__вне_контейнеров__" },
   });
 
   const edges = names(model).flatMap((m) => (model.modules[m]!.dependsOn ?? []).map((d) => ({ m, d })));
   if (edges.length) {
     add({
-      registry: "зависимости модулей",
+      registry: N.spec.architecture.edgesRegistry,
       items: edges,
-      name: (e) => `зависимость ${e.m} → ${e.d} — внутри контейнера`,
+      name: (e) => locale.fill(N.spec.architecture.edgeName, { from: e.m, to: e.d }),
       key: (e) => `${e.m}→${e.d}`,
       check: (e) => {
         const a = containerOf(e.m);
@@ -591,7 +616,7 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
           throw new Error(`${e.m} (${a.join(", ") || "?"}) зависит от ${e.d} (${b.join(", ") || "?"}) — между контейнерами только связь uses`);
         }
       },
-      violator: { name: "зависимость через контейнер", item: { m: "__a__", d: "__b__" } },
+      violator: { name: N.spec.architecture.edgeViolator, item: { m: "__a__", d: "__b__" } },
     });
   }
 
@@ -599,15 +624,15 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
   const declared = new Map<string, string>();
   for (const [c, x] of Object.entries(cont)) for (const d of x.deploy ?? []) declared.set(d, c);
   add({
-    registry: "развёртываемые единицы",
+    registry: N.spec.architecture.unitsRegistry,
     items: sorted([...new Set([...found, ...declared.keys()])]),
-    name: (u) => `развёртываемая единица ${u} — контейнер ${declared.get(u) ?? "?"}`,
+    name: (u) => locale.fill(N.spec.architecture.unitName, { unit: u, container: declared.get(u) ?? "?" }),
     key: (u) => u,
     check: (u) => {
       if (!declared.has(u)) throw new Error(`${u} есть в конфигах деплоя, но не в модели — добавь контейнер в tests/architecture/model.ts`);
       if (!found.includes(u)) throw new Error(`${u} контейнера ${declared.get(u)} нет в конфигах деплоя — модель разошлась с деплоем`);
     },
-    violator: { name: "единица вне модели", item: "__вне_модели__" },
+    violator: { name: N.spec.architecture.unitViolator, item: "__вне_модели__" },
   });
 
   // клиенты хранилищ: какой контейнер их импортирует на деле (библиотека — каждый свой контейнер)
@@ -628,16 +653,16 @@ function c2(add: Add, root: string, model: Model, src: Source[]): void {
       }
     }
     add({
-      registry: "клиенты хранилищ в контейнерах",
+      registry: N.spec.architecture.clientsRegistry,
       items: [...uses.values()],
-      name: (u) => `клиент ${u.pkg} хранилища ${u.s} — в контейнере ${u.c}`,
+      name: (u) => locale.fill(N.spec.architecture.clientName, { package: u.pkg, storage: u.s, container: u.c }),
       key: (u) => `${u.pkg}:${u.c}`,
       check: (u) => {
         if (u.c !== u.s && !(cont[u.c]?.uses ?? []).includes(u.s)) {
           throw new Error(`контейнер ${u.c} импортирует клиент ${u.pkg} хранилища ${u.s} без связи uses: ${u.files.join(", ")}`);
         }
       },
-      violator: { name: "клиент без связи", item: { s: "__хранилище__", pkg: "__клиент__", c: "__контейнер__", files: [] } },
+      violator: { name: N.spec.architecture.clientViolator, item: { s: "__хранилище__", pkg: "__клиент__", c: "__контейнер__", files: [] } },
     });
   }
 }
@@ -654,7 +679,7 @@ const adapterWord = (a: string[], one: string, many: string): string => `${a.len
  * (адаптера нет) ничего из этого в коде нет. Реестры — из модели и кода; реестр, которого модель не объявляет (у внешних
  * систем нет пакетов), не регистрируется.
  */
-function c1(add: Add, model: Model, src: Source[]): void {
+function c1(add: Add, N: Names, model: Model, src: Source[]): void {
   const ext = model.externals!;
   const inAdapters = (s: Source, a: string[]) => owners(model, s.dir).some((m) => a.includes(m));
   const files = (xs: Source[]) => xs.map((s) => s.file).join(", ");
@@ -665,13 +690,14 @@ function c1(add: Add, model: Model, src: Source[]): void {
   const hosts = sorted([...new Set([...hostOwner.keys(), ...hostFiles.keys()])]);
   if (hosts.length) {
     add({
-      registry: "хосты внешних систем",
+      registry: N.spec.architecture.hostsRegistry,
       items: hosts,
       name: (h) => {
         const x = hostOwner.get(h);
-        if (!x) return `хост ${h} — только в адаптере ?`;
+        if (!x) return locale.fill(N.spec.architecture.hostName, { host: h, adapters: locale.fill(N.spec.architecture.inAdapter, { list: "?" }) });
         const a = adaptersOf(ext[x]!);
-        return a.length ? `хост ${h} — только в ${adapterWord(a, "адаптере", "адаптерах")}` : `хост ${h} внешней системы ${x} — не в коде: адаптера нет`;
+        const adapters = locale.fill(a.length === 1 ? N.spec.architecture.inAdapter : N.spec.architecture.inAdapters, { list: a.join(", ") });
+        return a.length ? locale.fill(N.spec.architecture.hostName, { host: h, adapters }) : locale.fill(N.spec.architecture.hostPerimeter, { host: h, system: x });
       },
       key: (h) => h,
       check: (h) => {
@@ -684,16 +710,18 @@ function c1(add: Add, model: Model, src: Source[]): void {
         if (!a.length) throw new Error(`у внешней системы ${x} нет адаптера, а хост ${h} — в коде: ${files(outside)}`);
         throw new Error(`хост ${h} внешней системы ${x} — вне её ${adapterWord(a, "адаптера", "адаптеров")}: ${files(outside)}`);
       },
-      violator: { name: "хост вне модели", item: "__вне_модели__.example" },
+      violator: { name: N.spec.architecture.hostViolator, item: "__вне_модели__.example" },
     });
   }
   const pkgs = Object.entries(ext).flatMap(([x, e]) => (e.packages ?? []).map((p) => ({ x, p, a: adaptersOf(e) })));
   if (pkgs.length) {
     add({
-      registry: "пакеты внешних систем",
+      registry: N.spec.architecture.packagesRegistry,
       items: pkgs,
       name: (i) =>
-        i.a.length ? `пакет ${i.p} внешней системы ${i.x} — только у ${adapterWord(i.a, "адаптера", "адаптеров")}` : `пакет ${i.p} внешней системы ${i.x} — ни у одного модуля: адаптера нет`,
+        i.a.length
+          ? locale.fill(N.spec.architecture.packageName, { package: i.p, system: i.x, adapters: locale.fill(i.a.length === 1 ? N.spec.architecture.withAdapter : N.spec.architecture.withAdapters, { list: i.a.join(", ") }) })
+          : locale.fill(N.spec.architecture.packagePerimeter, { package: i.p, system: i.x }),
       key: (i) => `${i.x}:${i.p}`,
       check: (i) => {
         const allowedTo = names(model).filter((n) => (model.modules[n]!.packages ?? []).includes(i.p));
@@ -707,7 +735,7 @@ function c1(add: Add, model: Model, src: Source[]): void {
         const others = allowedTo.filter((n) => !i.a.includes(n));
         if (others.length) throw new Error(`пакет ${i.p} внешней системы ${i.x} разрешён не только ${i.a.length === 1 ? "адаптеру" : "адаптерам"}: ${others.join(", ")}`);
       },
-      violator: { name: "пакет без адаптера", item: { x: "__нарушитель__", p: "__нет__", a: ["__нет_модуля__"] } },
+      violator: { name: N.spec.architecture.packageViolator, item: { x: "__нарушитель__", p: "__нет__", a: ["__нет_модуля__"] } },
     });
   }
 
@@ -721,8 +749,8 @@ function c1(add: Add, model: Model, src: Source[]): void {
       items,
       name: (i) =>
         i.a.length
-          ? `${noun} ${i.k} внешней системы ${i.x} ${i.a.length === 1 ? "читает только адаптер" : "читают только адаптеры"} ${i.a.join(", ")}`
-          : `${noun} ${i.k} внешней системы ${i.x} — не в коде: адаптера нет`,
+          ? locale.fill(i.a.length === 1 ? N.spec.architecture.readName : N.spec.architecture.readNameMany, { noun, key: i.k, system: i.x, list: i.a.join(", ") })
+          : locale.fill(N.spec.architecture.readPerimeter, { noun, key: i.k, system: i.x }),
       key: (i) => `${i.x}:${i.k}`,
       check: (i) => {
         const outside = (i.src ?? src).filter((s) => reads(s, i.k) && !inAdapters(s, i.a));
@@ -731,13 +759,13 @@ function c1(add: Add, model: Model, src: Source[]): void {
         throw new Error(`${noun} ${i.k} внешней системы ${i.x} читается вне ${adapterWord(i.a, "адаптера", "адаптеров")}: ${files(outside)}`);
       },
       violator: {
-        name: `${noun} вне адаптера`,
+        name: locale.fill(N.spec.architecture.readViolator, { noun }),
         item: { x: "__нарушитель__", k: "__КЛЮЧ__", a: ["__нет_модуля__"], src: [{ file: "__нарушитель__.ts", dir: "__вне_модели__", packages: [], hosts: [], env: [], headers: [], ...fake }] },
       },
     });
   };
-  readOnlyByAdapters("ключи окружения внешних систем", "ключ", (e) => e.env, (s, k) => s.env.includes(k), { env: ["__КЛЮЧ__"] });
-  readOnlyByAdapters("заголовки внешних систем", "заголовок", (e) => e.headers, (s, k) => s.headers.includes(k.toLowerCase()), { headers: ["__ключ__"] });
+  readOnlyByAdapters(N.spec.architecture.envRegistry, N.spec.architecture.envNoun, (e) => e.env, (s, k) => s.env.includes(k), { env: ["__КЛЮЧ__"] });
+  readOnlyByAdapters(N.spec.architecture.headersRegistry, N.spec.architecture.headerNoun, (e) => e.headers, (s, k) => s.headers.includes(k.toLowerCase()), { headers: ["__ключ__"] });
 }
 
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;

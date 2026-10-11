@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 import { eslintLinter, exceptionsIn, invariant, lintExceptions, marksIn } from "../../../skills/spec/scripts/harness.ts";
 import type { Exception, It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
+import { SCRIPTS, setLanguage, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -90,7 +90,11 @@ describe("Исключение из соглашения — явное, с за
 
 let dir: string;
 let cleanup: () => void;
-beforeEach(() => ({ dir, cleanup } = tmpDir()));
+// проект на ru: тесты файла ждут русские названия, без манифеста проект — en
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  setLanguage(dir, "ru");
+});
 afterEach(() => cleanup());
 
 const exception = (item: string, issue: number, reason: string, rule?: string) => JSON.stringify({ item, ...(rule ? { rule } : {}), issue, reason }, null, 2) + "\n";
