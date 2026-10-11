@@ -3013,8 +3013,7 @@ function cmdHistory(args: HistoryArgs): void {
 }
 
 /** k by repo, otherwise by all repos (n≥5), otherwise none; the level is in the project language. */
-function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string] {
-  const rows = repo.projectRows();
+function calibForEstimate(repo: Repo, registry: Registry, rows: Row[]): [Calib, string] {
   let c = calib(rows);
   let level = projectNames().est.estimate.levelRepo;
   if (c.n < 5) {
@@ -3034,7 +3033,7 @@ function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string
       level = projectNames().est.estimate.levelAll;
     }
   }
-  return [rows, c, level];
+  return [c, level];
 }
 
 // ----------------------------------------------------------------------------
@@ -3556,8 +3555,8 @@ function analogWhy(a: Analog, type: string, language: string): string {
 
 /**
  * Estimate = forecast from the analogs' actuals: hours, tokens and cost — medians of actuals × correction. The script
- * picks analogs (pickAnalogs), --analogs is a manual choice when the agent sees a difference the features don't catch.
- * --hours — only an expert estimate, when there are no analogs with an actual (confidence C). k is for reference.
+ * picks analogs (pickAnalogs): `github task new` calls it for every task; fewer than two — no estimate. --analogs,
+ * --mult and --hours (an expert estimate, confidence C) — a manual re-estimate on the owner's request. k is for reference.
  */
 function cmdEstimate(args: EstimateArgs): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
@@ -3600,7 +3599,7 @@ function cmdEstimate(args: EstimateArgs): void {
     console.error(`warning: ${msg}; with --write — refused`);
   }
   const meta = repo.projectMeta();
-  const [rows, c, level] = calibForEstimate(repo, registry);
+  const rows = repo.projectRows();
   const byNum = new Map(rows.map((r) => [r.number, r]));
   const facts: number[] = [];
   const toks: number[] = [];
@@ -3663,7 +3662,11 @@ function cmdEstimate(args: EstimateArgs): void {
     // without --analogs and --hours there are no analogs in the list — the script picks them
     const target = { number: args.number, title: issue.title, labels: (issue.labels?.nodes ?? []).map((l: Any) => l.name), createdAt: parseTs(issue.createdAt), size: descSize(issue.body ?? "") };
     const picked = pickAnalogs(target, args.type, rows);
-    if (picked.length < 2) throw new EstError(`${repo.full} has fewer than two tasks with an actual (coverage full) closed before #${args.number} was created — analogs from another repo (--analogs owner/repo#N) or an expert estimate (--hours)`);
+    // a cold start isn't an error: `task new` calls this for every task, and the estimate appears once two tasks close
+    if (picked.length < 2) {
+      console.log(`No estimate: ${repo.full} has fewer than two tasks with an actual (coverage full) closed before #${args.number} was created — the task stays without an estimate`);
+      return;
+    }
     for (const a of picked) {
       analogs.push(a.row.number);
       take(a.row, `#${a.row.number}`, parts, analogWhy(a, args.type, language));
@@ -3714,6 +3717,8 @@ function cmdEstimate(args: EstimateArgs): void {
   const note = args.note ? ` (${args.note})` : "";
   let multTxt = facts.length ? locale.fill(n.est.estimate.correction, { mult: fmtH(args.mult), note }) : "";
   if (facts.length && tokMult !== args.mult) multTxt += locale.fill(n.est.estimate.tokCorrection, { mult: fmtH(tokMult), note: args.tokNote ? ` (${args.tokNote})` : "" });
+  // k is for reference — computed only once there is an estimate: other repos are read for it when this one has few pairs
+  const [c, level] = calibForEstimate(repo, registry, rows);
   const kTxt = c.n ? locale.fill(n.est.estimate.k, { k: String(c.k), n: c.n, level }) : n.est.estimate.noK;
   const text = locale.fill(n.est.estimate.body, { headline, type: args.type, conf, basis, auto: auto ? n.est.estimate.auto : "", analogs: analogTxt, correction: multTxt, spread: spreadTxt ?? "", k: kTxt });
   const marker = {
@@ -4053,9 +4058,9 @@ const USAGE = `est — estimates tasks from the project's history and records th
   est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
   est fact --sweep [--since 90d] [--repo o/r] [--write]
   est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   — recompute the recorded actuals with this model and their epics
-  est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]   — the script picks analogs
-  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — analogs by hand
-  est estimate <N> [--repo o/r] --type <type> --hours H [--write]   — expert, when there are no analogs
+  est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]   — the script picks analogs (github task new runs it); fewer than two — no estimate
+  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — analogs by hand, on the owner's request
+  est estimate <N> [--repo o/r] --type <type> --hours H [--write]   — expert, on the owner's request
   est backtest [--repo o/r] [--all-repos]   — mechanics vs manual estimates on closed tasks
   est period --since DATE [--until DATE] [--since DATE [--until DATE]] [--repo o/r] [--gap 30]   — all of the repo's sessions over the period; two periods — side by side, «after / before»
   est cloud-import <export.json>...   — cloud session events (SKILL.md, «Cloud session») into the sources of the actual
