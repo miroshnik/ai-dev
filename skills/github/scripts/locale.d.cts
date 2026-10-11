@@ -278,6 +278,14 @@ declare namespace locale {
       addedKind: string;
       summarized: string;
     };
+    /** Тесты сверки точек входа `spec-claims`: describe, реестр и названия; «не пуст» и исключение — названия харнесса. */
+    claims: {
+      describe: string;
+      registry: string;
+      unique: string;
+      called: string;
+      known: string;
+    };
   }
 
   const LANGUAGE_CODE: RegExp;

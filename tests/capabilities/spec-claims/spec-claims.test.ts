@@ -65,7 +65,7 @@ it("счёт создаётся", () => { createInvoice(); });
     expect(passed(xml, "POST /invoices вызывается тестом capability")).toBe(true);
     expect(failed(xml, "GET /reports вызывается тестом capability")).toBe(true);
     expect(failed(xml, "job:cleanup вызывается тестом capability")).toBe(true);
-    expect(r.stderr).toContain("не вызываются тестами capability: 2");
+    expect(r.stderr).toContain("not called by capability tests: 2");
   });
 
   it("журналы шардов складываются: вызов в любом шарде засчитан", () => {
@@ -102,7 +102,7 @@ it("счёт создаётся", () => { createInvoice(); });
     expect(r.code).toBe(1);
     const xml = report();
     expect(failed(xml, "id точек входа в реестре не повторяются")).toBe(true);
-    expect(xml).toContain("id повторяется в реестре: GET /items ×2");
+    expect(xml).toContain("an id repeats in the registry: GET /items ×2");
   });
 
   // разошедшийся формат («GET /reports/42» против «GET /reports/:id») иначе виден только косвенно — «не вызывается»
@@ -115,7 +115,7 @@ it("счёт создаётся", () => { createInvoice(); });
     expect(r.code).toBe(1);
     const xml = report();
     expect(failed(xml, "id из журнала есть в реестре")).toBe(true);
-    expect(xml).toContain("id из журнала нет в реестре: GET /reports/42 (вызовы: tests/capabilities/reports/reports.test.ts)");
+    expect(xml).toContain("ids from the log are not in the registry: GET /reports/42 (calls: tests/capabilities/reports/reports.test.ts)");
     expect(failed(xml, "GET /reports/:id вызывается тестом capability")).toBe(true);
   });
 });
@@ -145,7 +145,7 @@ it("счёт создаётся", () => { journal("POST /invoices"); });
 });
 
 describe("Точка входа без теста — исключение с задачей, пока тест не появился", () => {
-  it("исключение на точку без теста — зелёное; точка, у которой тест появился, — «убери исключение»", () => {
+  it("исключение на точку без теста — зелёное; точка, у которой тест появился, — «remove the exception»", () => {
     const EXC = "tests/standards/entry-points/exceptions";
     writeTree(dir, {
       "entries.json": JSON.stringify(["POST /invoices", "job:cleanup", "GET /reports"]),
@@ -158,7 +158,7 @@ describe("Точка входа без теста — исключение с з
     const xml = report();
     expect(passed(xml, "исключение: job:cleanup \\(#12\\)")).toBe(true);
     expect(failed(xml, "исключение: POST /invoices \\(#13\\)")).toBe(true);
-    expect(xml).toContain(`POST /invoices уже вызывается тестом capability — убери исключение: удали ${EXC}/POST-invoices.json (#13)`);
+    expect(xml).toContain(`POST /invoices is already called by a capability test — remove the exception: delete ${EXC}/POST-invoices.json (#13)`);
   });
 
   it("исключения — каталог: файл вместо каталога — код 2 и подсказка переноса", () => {
@@ -169,7 +169,7 @@ describe("Точка входа без теста — исключение с з
     });
     const r = claims("--exceptions", "tests/standards/entry-points/exceptions.ts");
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("--exceptions — каталог exceptions/ (файл на исключение), а не файл tests/standards/entry-points/exceptions.ts — перенеси командой spec-exceptions");
+    expect(r.stderr).toContain("--exceptions is an exceptions/ directory (a file per exception), not the file tests/standards/entry-points/exceptions.ts — move it with spec-exceptions");
   });
 });
 
@@ -185,6 +185,29 @@ describe("Сверка попадает в спеку как стандарт", 
     expect(doc.code).toBe(0);
     expect(doc.stdout).toContain("### entry-points\n\nКаждая точка входа вызывается тестом capability.\n\n#### Каждая точка входа вызывается хотя бы одним тестом capability");
     expect(doc.stdout).toContain("- ✅ POST /invoices вызывается тестом capability");
+  });
+
+  // названия сверки попадают в спеку проекта, как названия харнесса: язык — проекта, а не ai-dev
+  it("названия тестов сверки — на языке проекта: в проекте на en — по-английски", () => {
+    setLanguage(dir, "en");
+    const EXC = "tests/standards/entry-points/exceptions";
+    writeTree(dir, {
+      "entries.json": JSON.stringify(["POST /invoices", "job:cleanup"]),
+      [`${EXC}/job-cleanup.json`]: JSON.stringify({ item: "job:cleanup", issue: 12, reason: "cleanup test in #12" }),
+      ".spec-journal/1.jsonl": line("POST /invoices", "tests/capabilities/billing/billing.test.ts"),
+    });
+    expect(claims("--exceptions", EXC).code).toBe(0);
+    const xml = report();
+    expect(xml).toContain('<testsuite name="Every entry point is called by at least one capability test"');
+    for (const name of [
+      "registry «entry points» is not empty",
+      "entry-point ids do not repeat in the registry",
+      "POST /invoices is called by a capability test",
+      "ids from the log are in the registry",
+      "exception: job:cleanup \\(#12\\)",
+    ]) {
+      expect(passed(xml, name)).toBe(true);
+    }
   });
 
   it("нет журнала — код 2 и подсказка, откуда он берётся", () => {

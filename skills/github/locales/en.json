@@ -300,6 +300,13 @@
       "addedKind": "{title} — added",
       "summarized": "**{title} ({n}), as a summary:**"
     },
+    "claims": {
+      "describe": "Every entry point is called by at least one capability test",
+      "registry": "entry points",
+      "unique": "entry-point ids do not repeat in the registry",
+      "called": "{entry} is called by a capability test",
+      "known": "ids from the log are in the registry"
+    },
     "harness": {
       "registryNotEmpty": "registry «{registry}» is not empty{tag}",
       "registryFinds": "registry «{registry}» finds {items}{tag}",
