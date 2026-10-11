@@ -1,45 +1,47 @@
 #!/usr/bin/env node
 // @ts-check
 /**
- * ai-dev — установка флоу: общие правила, справочники и все скиллы ai-dev в проект или на машину; проверка, не
- * отстала ли установка от последнего релиза ai-dev, обновление и выпуск релиза.
+ * ai-dev — installs the flow: the shared rules, references and all ai-dev skills into a project or onto the machine;
+ * checks whether an install has fallen behind the latest ai-dev release, updates it and cuts a release.
  *
- *   npx -y github:miroshnik/ai-dev install                — в проект: корень git (или текущий каталог)
- *   npx -y github:miroshnik/ai-dev install -g             — на машину: только скиллы и хук, правила — из проекта
- *   node <клон ai-dev>/bin/ai-dev.mjs install -g --link   — из клона: симлинки на клон, правки видны сразу
- *   npx -y github:miroshnik/ai-dev check [-g]             — отстала ли установка: 0 — нет, 1 — да, 2 — не проверить
- *   npx -y github:miroshnik/ai-dev update [-g]            — довести установку до актуальной
- *   node <клон ai-dev>/bin/ai-dev.mjs release             — выпустить релиз: тег и список изменений флоу
+ *   npx -y github:miroshnik/ai-dev install                — into the project: the git root (or the current directory)
+ *   npx -y github:miroshnik/ai-dev install -g             — machine-wide: skills and hook only, rules from the project
+ *   node <ai-dev clone>/bin/ai-dev.mjs install -g --link  — from a clone: symlinks to the clone, edits show at once
+ *   npx -y github:miroshnik/ai-dev check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
+ *   npx -y github:miroshnik/ai-dev update [-g]            — bring the install up to date
+ *   node <ai-dev clone>/bin/ai-dev.mjs release            — cut a release: a tag and the list of flow changes
  *
- * Раскладка как у скиллов (`npx skills`): канон в `.agents/` — `.agents/ai-dev/` (AGENTS.md, claude/CLAUDE.md,
- * docs/*.md) и `.agents/skills/<name>/`; Claude Code получает симлинки в `.claude/skills` и `.claude/rules`
- * (грузит их сам, независимо от CLAUDE.md проекта), остальные агенты — ссылку в `AGENTS.md` проекта. На машине
- * (`-g`) правил нет — только скиллы (`~/.agents/skills`, `~/.claude/skills`) и хук: правила грузятся из проекта,
- * вторая копия на машине стоила бы ~20k токенов на каждом ходу каждого агента. `.agents/ai-dev.json` — SHA ai-dev,
- * из которого поставлено, список поставленных скиллов (по нему переустановка убирает скиллы, которых в ai-dev
- * больше нет, и не трогает чужие), у машины с `--link` — путь клона, у проекта — `auto`: ведёт ли агент задачу
- * целиком сам — ответы на вопросы по рекомендации, commit, push, починка CI и мерж своего PR по зелёным чекам
- * (AGENTS.md, «What I do without asking and what needs a yes»), и `language` — язык работы агента в проекте: диалог,
- * задачи, промпты, документы (AGENTS.md, «Language»); флоу написан по-английски. Их задаёт `install` в проекте —
- * вопросом в терминале или флагами `--auto` / `--no-auto` и `--lang <код>`; по умолчанию auto — «нет», язык — `en`,
- * без терминала и флага — прежнее значение, `update` его сохраняет. У установки прошлой версии поля `language` нет, а
- * флоу до него работал только по-русски: её язык — `ru` (`LEGACY_LANGUAGE` модуля языка скилла github), `update` его
- * записывает. С auto `install`
- * подсказывает правило разрешений Claude Code на мерж (MERGE_HINT) — настройки машины не меняет. В клон ai-dev флоу
- * не ставится (канон — в его корне): `install` пишет в нём один манифест с `auto` и `language`.
- * Копия в проекте коммитится — файлы флоу, которые игнорирует git проекта (шаблон `CLAUDE.md`, каталог `.claude/`),
- * установка снимает исключениями блоком ai-dev в конце `.gitignore`, `check` называет их несоответствием
- * (`gitignoreFlow`). Проверки проекта — скрипты `package.json` `lint`, `typecheck`, `test`, `test:*` — установка
- * оборачивает в очередь машины, скилл slot (`slotScripts`); зовёт такой скрипт turbo, а turbo.json не пропускает
- * задачам переменные очереди, — предупреждает готовой строкой (`turboEnv`).
+ * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/ai-dev/` (AGENTS.md,
+ * claude/CLAUDE.md, docs/*.md) and `.agents/skills/<name>/`; Claude Code gets symlinks in `.claude/skills` and
+ * `.claude/rules` (it loads them itself, whatever the project's CLAUDE.md), the other agents — a link in the project's
+ * `AGENTS.md`. On the machine (`-g`) there are no rules — only skills (`~/.agents/skills`, `~/.claude/skills`) and the
+ * hook: rules load from the project, a second copy on the machine would cost ~20k tokens on every turn of every agent.
+ * `.agents/ai-dev.json` — the ai-dev SHA it was installed from, the list of installed skills (by it a reinstall removes
+ * skills ai-dev no longer has and leaves others' alone), for a machine with `--link` — the clone path, for a project —
+ * `auto`: whether the agent runs a task entirely by itself — answers to questions by recommendation, commit, push,
+ * fixing CI and merging its own PR on green checks (AGENTS.md, "What I do without asking and what needs a yes"), and
+ * `language` — the language the agent works in in the project: dialog, tasks, prompts, documents (AGENTS.md,
+ * "Language"); the flow is written in English. `install` in a project sets them — by a question in the terminal or by
+ * the flags `--auto` / `--no-auto` and `--lang <code>`; by default auto is "no", the language is `en`, without a
+ * terminal and a flag — the previous value, `update` keeps it. An install of a previous version has no `language`
+ * field, and the flow before it worked only in Russian: its language is `ru` (`LEGACY_LANGUAGE` of the github skill's
+ * language module), `update` writes it. With auto `install` suggests the Claude Code permission rule for the merge
+ * (MERGE_HINT) — it doesn't change the machine's settings. The flow isn't installed into an ai-dev clone (the canon is
+ * at its root): `install` writes a single manifest there, with `auto` and `language`.
+ * The copy in a project is committed — the flow files the project's git ignores (the `CLAUDE.md` template, the
+ * `.claude/` directory) the install un-ignores with exceptions in an ai-dev block at the end of `.gitignore`, `check`
+ * reports them as a mismatch (`gitignoreFlow`). The project's checks — the `package.json` scripts `lint`, `typecheck`,
+ * `test`, `test:*` — the install wraps in the machine queue, the slot skill (`slotScripts`); if such a script calls
+ * turbo and turbo.json doesn't pass the queue variables to tasks, it warns with a ready-made line (`turboEnv`).
  *
- * Копия (проект, машина без `--link`) следует за релизами ai-dev — тегами vГГГГ.ММ.ДД, — а не за main: пакет npx
- * (он из main) находит последний релиз и перезапускается из него (`toRelease`). `check` — та же установка вхолостую:
- * пакет релиза перечисляет, что бы он изменил. Машина с `--link` — иначе: клон сверяется с `origin/main` после
- * `git fetch`, `update` делает `git pull --ff-only` и переставляет ссылки кодом из обновлённого клона.
+ * A copy (a project, a machine without `--link`) follows ai-dev releases — tags vYYYY.MM.DD — not main: the npx package
+ * (it is from main) finds the latest release and restarts from it (`toRelease`). `check` is the same install as a dry
+ * run: the release package lists what it would change. A machine with `--link` is different: the clone is compared
+ * with `origin/main` after `git fetch`, `update` does `git pull --ff-only` and re-creates the links with the code of
+ * the updated clone.
  *
- * JavaScript, а не TypeScript, как скрипты скиллов: npx кладёт пакет в node_modules, а там Node типы не
- * стирает (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). Без зависимостей, только node:-API.
+ * JavaScript, not TypeScript like the skills' scripts: npx puts the package into node_modules, and there Node doesn't
+ * strip types (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). No dependencies, only node: APIs.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
@@ -62,21 +64,21 @@ const BLOCK = [
 ].join("\n");
 
 /**
- * Хук SessionStart Claude Code: в начале сессии — `check --hook` (машина и проект). Вывод хука с кодом 0 Claude Code
- * добавляет в контекст, с другим — нет, поэтому код всегда 0: и `check --hook`, и запасной `echo`, если npx не
- * запустился. Таймаут — чтобы сеть не держала старт; ошибка сессию не блокирует — страхует правило «Первый шаг
- * сессии» в AGENTS.md.
+ * Claude Code's SessionStart hook: at the start of a session — `check --hook` (machine and project). Claude Code adds
+ * the output of a hook with code 0 to the context, with any other code — doesn't, so the code is always 0: both
+ * `check --hook` and the fallback `echo` if npx didn't start. The timeout keeps the network from holding up the start;
+ * an error doesn't block the session — the "First step of a session" rule in AGENTS.md is the safety net.
  */
 const HOOK_COMMAND = `npx -y --loglevel=error github:${SOURCE} check --hook 2>&1 || echo "ai-dev check unavailable (exit $?): work by the current flow and say so"`;
 const HOOK = { matcher: "startup|resume|clear", hooks: [{ type: "command", command: HOOK_COMMAND, timeout: 60 }] };
 
-/** Файлы флоу в клоне: то, что `install` ставит из него (pathspec git). */
+/** Flow files in the clone: what `install` installs from it (a git pathspec). */
 const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md", "skills"];
-/** Что делает релиз нужным: флоу и установщик — его код проекты тоже получают из релиза. */
+/** What makes a release necessary: the flow and the installer — projects get its code from the release too. */
 const RELEASED = [...FLOW, "bin"];
-/** Тег релиза: vГГГГ.ММ.ДД, патч того же дня — vГГГГ.ММ.ДД.N. */
+/** Release tag: vYYYY.MM.DD, a same-day patch — vYYYY.MM.DD.N. */
 const RELEASE_TAG = /^v(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?$/;
-/** Строк списка изменений в выводе `check` — дальше «… и ещё N». */
+/** Lines of the change list in `check` output — beyond that, "… and N more". */
 const MAX_LINES = 20;
 
 const USAGE = `Usage: ai-dev <command> [-g]
@@ -113,27 +115,30 @@ Run: npx -y github:${SOURCE} <command> [-g]
 `;
 
 /**
- * Холостой прогон (`check`): вместо записи на диск установка складывает сюда, что бы она изменила, файлы флоу,
- * которые игнорирует git проекта (`❌`, в note — правило, manual — исключением не снять), и предупреждения о
- * настройке проекта, которую установка не правит (`!`, в note — что поправить); null — пишет.
+ * Dry run (`check`): instead of writing to disk the install collects here what it would change, the flow files the
+ * project's git ignores (`❌`, the note has the rule, manual — an exception can't un-ignore it), and warnings about
+ * project settings the install doesn't touch (`!`, the note says what to fix); null — it writes.
  * @typedef {{ op: "+" | "-" | "~" | "❌" | "!", path: string, note?: string, manual?: boolean }} Change
  * @type {Change[] | null}
  */
 let dry = null;
 
-/** Тег релиза, из которого идёт установка (`toRelease`); null — не релиз: клон или релизов ещё нет. @type {string | null} */
+/**
+ * The release tag the install runs from (`toRelease`); null — not a release: a clone or no releases yet.
+ * @type {string | null}
+ */
 let release = null;
 
 /** @param {string} s */
 const note = (s) => dry || process.stdout.write(s + "\n");
 /** @param {string} s */
 const warn = (s) => dry || process.stderr.write("!! " + s + "\n");
-/** Несоответствие, которое установка не исправила. @param {string} s */
+/** A mismatch the install didn't fix. @param {string} s */
 const fail = (s) => dry || process.stderr.write("❌ " + s + "\n");
 
 /**
- * Что изменила бы установка: `+` появится, `-` уберётся, `~` изменится, `❌` — файл флоу игнорирует git, `!` —
- * предупреждение (не отставание: update его не исправит); каталог — с `/` в конце.
+ * What the install would change: `+` will appear, `-` will be removed, `~` will change, `❌` — git ignores a flow
+ * file, `!` — a warning (not falling behind: update won't fix it); a directory ends with `/`.
  * @param {Change["op"]} op @param {string} p @param {{ note?: string, manual?: boolean }} [extra]
  */
 const change = (op, p, extra = {}) => dry?.push({ op, path: p, ...extra });
@@ -161,12 +166,12 @@ function samePath(a, b) {
   }
 }
 
-/** git в каталоге dir; ошибка — исключение. @param {string} dir @param {string[]} args */
+/** git in directory dir; an error throws. @param {string} dir @param {string[]} args */
 function git(dir, ...args) {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
-/** Первая строка stderr упавшей команды. @param {unknown} e */
+/** The first stderr line of a failed command. @param {unknown} e */
 function reason(e) {
   const err = /** @type {{ stderr?: string | Buffer, message?: string }} */ (e);
   return (String(err.stderr ?? "").trim() || String(err.message)).split("\n")[0];
@@ -176,8 +181,9 @@ function reason(e) {
 const short = (sha) => (sha ? sha.slice(0, 7) : null);
 
 /**
- * SHA ai-dev, из которого идёт установка: у клона — HEAD; у пакета npx — из `resolved` lock-файла npm (npx ставит
- * пакет из GitHub архивом, без `.git`, коммит виден только там); иначе null.
+ * The ai-dev SHA the install runs from: for a clone — HEAD; for the npx package — from `resolved` in the npm lock file
+ * (npx installs the package from GitHub as an archive, without `.git`, the commit is visible only there); otherwise
+ * null.
  * @param {string} src
  */
 function sourceSha(src) {
@@ -196,16 +202,16 @@ function sourceSha(src) {
       const m = /#([0-9a-f]{40})$/.exec(resolved);
       if (m) return m[1];
     } catch {
-      /* нет lock-файла */
+      /* no lock file */
     }
   }
   return null;
 }
 
 /**
- * Релизы ai-dev по возрастанию — теги RELEASE_TAG из `git ls-remote --tags remote` (по дате, затем по номеру патча);
- * у аннотированного тега — SHA коммита, а не объекта тега. Чужие теги не в счёт. Ошибка git — исключение.
- * @param {string} remote URL или имя remote в cwd @param {string} [cwd]
+ * ai-dev releases in ascending order — RELEASE_TAG tags from `git ls-remote --tags remote` (by date, then by patch
+ * number); for an annotated tag — the commit SHA, not the tag object's. Other tags don't count. A git error throws.
+ * @param {string} remote a URL or a remote name in cwd @param {string} [cwd]
  * @returns {{ tag: string, sha: string }[]}
  */
 function releases(remote, cwd) {
@@ -220,7 +226,7 @@ function releases(remote, cwd) {
   for (const line of out.split("\n")) {
     const [sha, ref = ""] = line.split("\t");
     const m = /^refs\/tags\/([^^]+)(\^\{\})?$/.exec(ref);
-    // `тег^{}` идёт после тега: коммит аннотированного тега
+    // `tag^{}` comes after the tag: the annotated tag's commit
     if (sha && m?.[1] && RELEASE_TAG.test(m[1]) && (m[2] || !tags.has(m[1]))) tags.set(m[1], sha);
   }
   const key = (/** @type {string} */ tag) => (RELEASE_TAG.exec(tag) ?? []).slice(1).map((n) => Number(n ?? 0));
@@ -229,11 +235,11 @@ function releases(remote, cwd) {
 }
 
 /**
- * Копия следует за релизами ai-dev, а не за main: пакет npx (он из main) находит последний релиз и, если сам им не
- * является, перезапускается из него по SHA — дальше и код, и файлы релиза. AI_DEV_RELEASE — тег, из которого
- * перезапущен: второй раз не ищет. Релизов ещё нет — работает сам, как раньше; клон ставит себя как есть. Теги —
- * из AI_DEV_REPO (зеркало, тесты) или GitHub.
- * @param {string[]} argv @returns {number | null} код перезапущенного; null — работать здесь
+ * A copy follows ai-dev releases, not main: the npx package (it is from main) finds the latest release and, if it
+ * isn't that release itself, restarts from it by SHA — from then on both the code and the files are the release's.
+ * AI_DEV_RELEASE — the tag it was restarted from: it doesn't search a second time. No releases yet — it works itself,
+ * as before; a clone installs itself as is. Tags come from AI_DEV_REPO (a mirror, tests) or GitHub.
+ * @param {string[]} argv @returns {number | null} the restarted process's code; null — work here
  */
 function toRelease(argv) {
   if (existsSync(path.join(SRC, ".git"))) return null;
@@ -255,16 +261,19 @@ function toRelease(argv) {
   return r.status ?? 2;
 }
 
-/** Строка симлинка dst → target, как её пишет link(). @param {string} target @param {string} dst @param {string} root */
+/**
+ * The symlink dst → target text, as link() writes it.
+ * @param {string} target @param {string} dst @param {string} root
+ */
 function linkText(target, dst, root) {
   const inRoot = !path.relative(root, target).startsWith("..");
   return inRoot ? path.relative(path.dirname(dst), target) : target;
 }
 
 /**
- * Симлинк dst → target: внутри root — относительный (в проекте его коммитят), вне — абсолютный (относительный
- * ломается, если путь к root идёт через симлинк: macOS /var → /private/var). Заменяет симлинк и пустой файл;
- * чужой файл или каталог — предупреждение.
+ * Symlink dst → target: inside root — relative (it is committed in a project), outside — absolute (a relative one
+ * breaks if the path to root goes through a symlink: macOS /var → /private/var). Replaces a symlink and an empty file;
+ * someone else's file or directory — a warning.
  * @param {string} target @param {string} dst @param {string} root
  */
 function link(target, dst, root) {
@@ -284,10 +293,13 @@ function link(target, dst, root) {
   return true;
 }
 
-/** Каталог или симлинк — долой. @param {string} p */
+/** Removes a directory or a symlink. @param {string} p */
 const remove = (p) => lstat(p) && rmSync(p, { recursive: true, force: true });
 
-/** Файлы каталога (и симлинки) рекурсивно: путь от dir → полный путь. .DS_Store Finder — не в счёт. @param {string} dir */
+/**
+ * The directory's files (and symlinks) recursively: path from dir → full path. Finder's .DS_Store doesn't count.
+ * @param {string} dir
+ */
 function walk(dir, rel = "", out = /** @type {Map<string, string>} */ (new Map())) {
   for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true })) {
     if (e.name === ".DS_Store") continue;
@@ -305,7 +317,10 @@ function sameFile(a, b) {
   return readFileSync(a).equals(readFileSync(b));
 }
 
-/** Холостой прогон копии: чем каталог dst отличается от файлов expected (путь в dst → источник). @param {Map<string, string>} expected @param {string} dst */
+/**
+ * Dry run of a copy: how directory dst differs from the files expected (path in dst → source).
+ * @param {Map<string, string>} expected @param {string} dst
+ */
 function diffTree(expected, dst) {
   const st = lstat(dst);
   if (!st) return change("+", dst + "/");
@@ -320,7 +335,7 @@ function diffTree(expected, dst) {
 }
 
 /**
- * Каталог dst — копия каталога src или, при linkMode, симлинк на него; прежнее содержимое dst уходит целиком.
+ * Directory dst — a copy of directory src or, in linkMode, a symlink to it; the previous contents of dst go entirely.
  * @param {string} src @param {string} dst @param {string} root @param {boolean} linkMode
  */
 function placeDir(src, dst, root, linkMode) {
@@ -335,7 +350,7 @@ function placeDir(src, dst, root, linkMode) {
   cpSync(src, dst, { recursive: true });
 }
 
-/** Скиллы ai-dev: каталоги skills/<name> с SKILL.md. @param {string} src */
+/** ai-dev skills: skills/<name> directories with SKILL.md. @param {string} src */
 function sourceSkills(src) {
   return readdirSync(path.join(src, "skills"))
     .filter((n) => existsSync(path.join(src, "skills", n, "SKILL.md")))
@@ -343,7 +358,7 @@ function sourceSkills(src) {
 }
 
 /**
- * Канон правил: `.agents/ai-dev/` — копия AGENTS.md, claude/CLAUDE.md и docs/*.md или симлинк на клон.
+ * The rules canon: `.agents/ai-dev/` — a copy of AGENTS.md, claude/CLAUDE.md and docs/*.md or a symlink to the clone.
  * @param {string} src @param {string} root @param {boolean} linkMode
  */
 function installRules(src, root, linkMode) {
@@ -360,7 +375,12 @@ function installRules(src, root, linkMode) {
   note(`${path.relative(root, canon)}/ ← AGENTS.md, claude/CLAUDE.md, docs/ (${docs.length})`);
 }
 
-/** `.agents/ai-dev.json` установки; нет или битый — пустой. @param {string} root @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[], auto?: boolean, language?: string }} */
+/**
+ * The install's `.agents/ai-dev.json`; missing or broken — empty.
+ * @param {string} root
+ * @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[], auto?: boolean,
+ *   language?: string }}
+ */
 function readManifest(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, ".agents/ai-dev.json"), "utf8"));
@@ -370,15 +390,16 @@ function readManifest(root) {
 }
 
 /**
- * Скиллы: `.agents/skills/<name>` — копия (или симлинк на клон), Claude Code — симлинк из `.claude/skills`.
- * Чужой каталог с тем же именем не трогается; скиллы из прошлой установки, которых в ai-dev больше нет, убираются.
- * В `.agents/ai-dev.json` — SHA источника, тег релиза и поставленные скиллы; холостой прогон SHA и тег не сравнивает:
- * установка актуальна, если совпадает то, что она ставит (релиз с правкой одного установщика проекты не трогает).
- * auto и language — настройки проекта «задача целиком без спроса» и язык работы агента, пишутся всегда; у машины их
- * нет (undefined). Холостой прогон их тоже не сравнивает: правка поля руками установку «отставшей» не делает.
+ * Skills: `.agents/skills/<name>` — a copy (or a symlink to the clone), Claude Code — a symlink from `.claude/skills`.
+ * Someone else's directory with the same name is left alone; skills from a previous install that ai-dev no longer
+ * has are removed. `.agents/ai-dev.json` holds the source SHA, the release tag and the installed skills; a dry run
+ * doesn't compare the SHA and the tag: the install is up to date if what it installs matches (a release that changes
+ * only the installer doesn't touch projects). auto and language — the project settings "a task entirely without
+ * asking" and the language the agent works in, always written; the machine doesn't have them (undefined). A dry run
+ * doesn't compare them either: editing a field by hand doesn't make the install "behind".
  * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude @param {boolean} [auto]
  * @param {string} [language]
- * @returns {string[]} поставленные скиллы
+ * @returns {string[]} installed skills
  */
 function installSkills(src, root, linkMode, claude, auto, language) {
   const manifestPath = path.join(root, ".agents/ai-dev.json");
@@ -408,7 +429,7 @@ function installSkills(src, root, linkMode, claude, auto, language) {
     if (lstat(path.join(root, ".claude/skills", name))?.isSymbolicLink()) rmSync(path.join(root, ".claude/skills", name));
     note(`${path.relative(root, dst)} — removed: ai-dev no longer has it`);
   }
-  const clone = linkMode ? path.resolve(src) : undefined; // машина с --link: по нему check и update находят клон
+  const clone = linkMode ? path.resolve(src) : undefined; // a --link machine: check and update find the clone by it
   if (dry) {
     const m = readManifest(root);
     if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
@@ -420,23 +441,27 @@ function installSkills(src, root, linkMode, claude, auto, language) {
   return installed;
 }
 
-/** Скрипт очереди машины в копии флоу проекта: его зовут скрипты package.json, в CI тоже (там — сразу, без очереди). */
+/**
+ * The machine queue script in the project's flow copy: package.json scripts call it, in CI too (there — at once,
+ * without a queue).
+ */
 const SLOT_SCRIPT = ".agents/skills/slot/scripts/slot.ts";
-/** Скрипт package.json, уже обёрнутый в slot (любым рантаймом): команда — в кавычках sh. */
+/** A package.json script already wrapped in slot (by any runtime): the command is in sh quotes. */
 const SLOT_WRAPPED = /^(?:node|bun) \.agents\/skills\/slot\/scripts\/slot\.ts '((?:[^']|'\\'')*)'$/;
 /**
- * Скрипты проверок, которые идут очередью машины: `lint`, `typecheck`, `test`, `test:*`. Не `build` — его запускают
- * хостинг и Docker, где копии скилла может не быть; не watch — долгий, занял бы слот надолго.
+ * Check scripts that go through the machine queue: `lint`, `typecheck`, `test`, `test:*`. Not `build` — hosting and
+ * Docker run it, where the skill's copy may be missing; not watch — long-running, it would hold a slot for long.
  * @param {string} name
  */
 const slotted = (name) => /^(?:lint|typecheck|test)$|^test:/.test(name) && !name.includes("watch");
 
 /**
- * Проверки проекта — очередью машины (скилл slot): скрипты `slotted` в package.json корня оборачиваются в
- * `<рантайм> SLOT_SCRIPT '<команда>'` — их зовёт любой агент и человек. Рантайм — bun у проекта на Bun
- * (`packageManager`, `bun.lock`), иначе node. Уже обёрнутый — переписывается только при смене рантайма. Отступ и
- * перевод строки в конце файла — как были. Скилл slot не поставлен (чужой каталог с тем же именем) — не трогаем.
- * @param {string} root @param {string[]} skills поставленные скиллы @returns {boolean} package.json изменён
+ * The project's checks — through the machine queue (the slot skill): `slotted` scripts in the root package.json are
+ * wrapped in `<runtime> SLOT_SCRIPT '<command>'` — any agent and human call them. The runtime is bun for a project on
+ * Bun (`packageManager`, `bun.lock`), otherwise node. An already wrapped one is rewritten only when the runtime
+ * changes. The indentation and the trailing newline stay as they were. The slot skill isn't installed (someone else's
+ * directory with the same name) — left alone.
+ * @param {string} root @param {string[]} skills installed skills @returns {boolean} package.json changed
  */
 function slotScripts(root, skills) {
   const file = path.join(root, "package.json");
@@ -468,31 +493,37 @@ function slotScripts(root, skills) {
   return true;
 }
 
-/** Переменные очереди, нужные команде в слоте: доля ядер раннеру и «уже в слоте» — вложенному скрипту в slot. */
+/**
+ * Queue variables a command in a slot needs: the runner's share of cores and "already in a slot" for a nested script
+ * in slot.
+ */
 const SLOT_ENV = ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"];
-/** Команда зовёт turbo — `turbo run test`, `turbo test`, `npx turbo …`, — но не флаг `--turbo` и не путь `turbo.json`. */
+/**
+ * The command calls turbo — `turbo run test`, `turbo test`, `npx turbo …` — but not the `--turbo` flag and not the
+ * `turbo.json` path.
+ */
 const TURBO = /(?:^|[\s;&|(])turbo(?=\s|$)/;
-/** Строка JSON идёт как есть; вне строк — комментарий JSONC, затем висячая запятая. */
+/** A JSON string goes as is; outside strings — a JSONC comment, then a trailing comma. */
 const JSON_STRING = String.raw`("(?:[^"\\]|\\.)*")`;
 const JSONC_COMMENT = new RegExp(`${JSON_STRING}|//[^\\n]*|/\\*[^]*?\\*/`, "g");
 const TRAILING_COMMA = new RegExp(`${JSON_STRING}|,(?=\\s*[}\\]])`, "g");
 
-/** turbo.json — JSONC: комментарии и висячие запятые долой, строки как были. @param {string} text */
+/** turbo.json is JSONC: comments and trailing commas go, strings stay as they were. @param {string} text */
 const parseJsonc = (text) => JSON.parse(text.replace(JSONC_COMMENT, (_, s) => s ?? "").replace(TRAILING_COMMA, (_, s) => s ?? ""));
 
-/** Маска переменных turbo: `*` — любые символы, остальное — буквально. @param {string} mask @param {string} name */
+/** A turbo variable mask: `*` — any characters, the rest — literally. @param {string} mask @param {string} name */
 function envMatch(mask, name) {
   const literal = mask.split("*").map((s) => s.replace(/[.+?^$|()[\]{}\\]/g, "\\$&"));
   return new RegExp(`^${literal.join(".*")}$`).test(name);
 }
 
 /**
- * turbo 2 в strict env mode (по умолчанию) пропускает задачам только переменные, названные в turbo.json: скрипт в slot,
- * который зовёт turbo, теряет по дороге `AI_DEV_SLOT_CPUS` — раннер берёт машину целиком — и `AI_DEV_SLOT` — вложенный
- * скрипт в slot ждёт собственный слот. Проброс — `globalPassThroughEnv`, а не `globalEnv`: в хэш кэша он не входит, а
- * `AI_DEV_SLOT` у каждого прогона свой. turbo.json ведёт проект, в нём бывают комментарии (JSONC) — не правим, а
- * предупреждаем готовой строкой; в `check` — строка `!`, не отставание. Не разобрать turbo.json — молчим: его разберёт
- * сам turbo.
+ * turbo 2 in strict env mode (the default) passes to tasks only the variables named in turbo.json: a script in slot
+ * that calls turbo loses `AI_DEV_SLOT_CPUS` on the way — the runner takes the whole machine — and `AI_DEV_SLOT` — a
+ * nested script in slot waits for its own slot. The pass-through is `globalPassThroughEnv`, not `globalEnv`: it isn't
+ * part of the cache hash, and `AI_DEV_SLOT` is different on every run. The project owns turbo.json, and it may have
+ * comments (JSONC) — we don't edit it but warn with a ready-made line; in `check` — a `!` line, not falling behind.
+ * turbo.json can't be parsed — we stay silent: turbo itself will parse it.
  * @param {string} root
  */
 function turboEnv(root) {
@@ -528,15 +559,15 @@ function turboEnv(root) {
   else warn(`${name} — ${text}`);
 }
 
-/** Claude Code: правила из `.claude/rules` грузятся сами, при любом CLAUDE.md. @param {string} root */
+/** Claude Code: rules from `.claude/rules` load by themselves, whatever the CLAUDE.md. @param {string} root */
 function claudeRules(root) {
   link(path.join(root, ".agents/ai-dev/AGENTS.md"), path.join(root, ".claude/rules/ai-dev.md"), root);
   link(path.join(root, ".agents/ai-dev/claude/CLAUDE.md"), path.join(root, ".claude/rules/ai-dev-claude.md"), root);
 }
 
 /**
- * Хук SessionStart в `~/.claude/settings.json` (HOOK): свои настройки и хуки пользователя на месте, хук прошлой версии
- * заменяется, повторная установка его не дублирует.
+ * The SessionStart hook in `~/.claude/settings.json` (HOOK): the user's own settings and hooks stay in place, a hook
+ * of a previous version is replaced, a repeated install doesn't duplicate it.
  * @param {string} home
  */
 function claudeHook(home) {
@@ -562,7 +593,10 @@ function claudeHook(home) {
   note(".claude/settings.json — SessionStart hook: ai-dev check --hook");
 }
 
-/** Блок со ссылкой на правила в AGENTS.md проекта: в начале файла, повторная установка заменяет его. @param {string} root */
+/**
+ * The block linking to the rules in the project's AGENTS.md: at the start of the file, a repeated install replaces it.
+ * @param {string} root
+ */
 function agentsBlock(root) {
   const file = path.join(root, "AGENTS.md");
   const text = existsSync(file) ? readFileSync(file, "utf8") : "";
@@ -582,7 +616,7 @@ const GI_BEGIN = "# ai-dev:begin";
 const GI_END = "# ai-dev:end";
 const GI_HEAD = `${GI_BEGIN} — flow files git would otherwise ignore; set by \`npx -y github:${SOURCE} install\`, don't edit by hand`;
 
-/** `.gitignore` без блока ai-dev; блока нет — как есть. @param {string} text */
+/** `.gitignore` without the ai-dev block; no block — as is. @param {string} text */
 function withoutGiBlock(text) {
   const b = text.indexOf(GI_BEGIN);
   const e = text.indexOf(GI_END, b);
@@ -591,29 +625,32 @@ function withoutGiBlock(text) {
   return rest ? rest + "\n" : "";
 }
 
-/** Блок — в конце `.gitignore`: исключение действует, только если идёт после игнорирующего правила. @param {string} base @param {string[]} lines */
+/**
+ * The block goes at the end of `.gitignore`: an exception works only if it comes after the ignoring rule.
+ * @param {string} base @param {string[]} lines
+ */
 function withGiBlock(base, lines) {
   if (!lines.length) return base;
   const block = [GI_HEAD, ...lines, GI_END].join("\n") + "\n";
   return base ? base.replace(/\n*$/, "\n\n") + block : block;
 }
 
-/** Путь как шаблон `.gitignore`: спецсимволы — буквально. @param {string} p */
+/** A path as a `.gitignore` pattern: special characters — literally. @param {string} p */
 const glob = (p) => p.replace(/[\\*?[]/g, "\\$&");
 
 /**
- * Порядок строк блока: исключение каталога `!/a/`, затем `/a/*` — его прочее содержимое снова игнорируется, затем
- * исключения глубже. @param {string} line
+ * Order of the block's lines: the directory exception `!/a/`, then `/a/*` — the rest of its contents is ignored again,
+ * then deeper exceptions. @param {string} line
  */
 const giKey = (line) => line.replace(/^!?\//, "").replace(/\/$/, "/\0").replace(/\/\*$/, "/\x01");
 
-/** Каталоги над путём от корня: `a/b/c` → `a`, `a/b`. @param {string} p */
+/** Directories above a path from the root: `a/b/c` → `a`, `a/b`. @param {string} p */
 const dirsAbove = (p) => p.split("/").slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join("/"));
 
 /**
- * Что из путей (от корня проекта) игнорирует git проекта: путь → правило «источник:строка «шаблон»». Отслеживаемых git
- * не называет — правила на них не действуют. local — правило из `.gitignore` репозитория, а не личное
- * (core.excludesFile, `.git/info/exclude`).
+ * Which of the paths (from the project root) the project's git ignores: path → the rule `<source>:<line> «<pattern>»`.
+ * Git doesn't name tracked ones — rules don't apply to them. local — a rule from the repository's `.gitignore`, not a
+ * personal one (core.excludesFile, `.git/info/exclude`).
  * @param {string} root @param {string[]} paths @returns {Map<string, { rule: string, local: boolean }>}
  */
 function ignoredBy(root, paths) {
@@ -627,14 +664,17 @@ function ignoredBy(root, paths) {
   const fields = r.stdout.split("\0");
   for (let i = 0; i + 3 < fields.length; i += 4) {
     const [source = "", line = "", pattern = "", p = ""] = fields.slice(i, i + 4);
-    if (pattern.startsWith("!")) continue; // -v называет и исключения: путь не игнорируется
+    if (pattern.startsWith("!")) continue; // -v names exceptions too: the path isn't ignored
     const shown = source.startsWith(home + path.sep) ? `~${source.slice(home.length)}` : source;
     out.set(p, { rule: `${shown}:${line} «${pattern}»`, local: !path.isAbsolute(source) && path.basename(source) === ".gitignore" });
   }
   return out;
 }
 
-/** Что ставит установка в проект и что должно попасть в коммит: каталоги копий, файлы и симлинки. @param {string} root */
+/**
+ * What the install puts into a project and what must go into the commit: copy directories, files and symlinks.
+ * @param {string} root
+ */
 function flowEntries(root) {
   const skills = readManifest(root).skills ?? [];
   return [
@@ -651,11 +691,12 @@ function flowEntries(root) {
 /** @typedef {{ rule: string, personal?: boolean }} Ignored */
 
 /**
- * Один проход: файлы флоу, которые игнорирует git, → строки исключений и что игнорируется (путь — файл или верхний
- * исключённый каталог). Каталог флоу (`.agents/skills/spec/…/vendor/`) исключается целиком — всё в нём наше. Каталог над
- * файлом флоу (`.claude/`) — цепочкой `!/.claude/`, `/.claude/*`, `!/.claude/rules/` … до файла: прочее в нём
- * игнорируется, как раньше; только по правилу репозитория — `/.claude/*` из личного правила спрятал бы прочее у всех,
- * у кого его нет (personal). Шаблон глубже снимет следующий проход.
+ * One pass: flow files that git ignores → exception lines and what is ignored (the path — a file or the topmost
+ * ignored directory). A flow directory (`.agents/skills/spec/…/vendor/`) is un-ignored as a whole — everything in it
+ * is ours. A directory above a flow file (`.claude/`) — by the chain `!/.claude/`, `/.claude/*`, `!/.claude/rules/` …
+ * down to the file: the rest of it stays ignored, as before; only for a repository rule — for a personal rule
+ * `/.claude/*` would hide the rest for everyone who doesn't have that rule (personal). The next pass lifts a deeper
+ * pattern.
  * @param {string} root @param {{ path: string, dir: boolean }[]} entries
  */
 function giRound(root, entries) {
@@ -689,18 +730,21 @@ function giRound(root, entries) {
   return { lines, found };
 }
 
-/** Почему путь игнорируется: правило и, если исключением его не снять, что делать. @param {Ignored} i @param {boolean} stuck */
+/**
+ * Why a path is ignored: the rule and, if an exception can't un-ignore it, what to do.
+ * @param {Ignored} i @param {boolean} stuck
+ */
 function ignoredNote(i, stuck) {
   if (i.personal) return `${i.rule}: the directory is excluded outside the project, an exception in the project's .gitignore would hide the rest of it for everyone — fix the rule`;
   return stuck ? `${i.rule}: an exception at the end of .gitignore doesn't un-ignore it — fix the rule` : i.rule;
 }
 
 /**
- * Файлы флоу — в коммит: копию, которую игнорирует git проекта, не видят чужой чекаут и облачная сессия, а
- * закоммиченный симлинк `.claude/rules` ведёт в пустоту. Исключения — блоком ai-dev в конце `.gitignore` корня
- * (giRound), он пересобирается каждой установкой: проходы, пока появляются новые строки; не нужен — убирается. Что
- * исключением не снять — `❌`. Холостой прогон только называет игнорируемое. Не git — проверять нечего.
- * @param {string} root @returns {boolean} `.gitignore` изменён
+ * Flow files go into the commit: a copy the project's git ignores is invisible to another checkout and to a cloud
+ * session, and the committed symlink `.claude/rules` points into nowhere. Exceptions — as an ai-dev block at the end
+ * of the root `.gitignore` (giRound), rebuilt by every install: passes while new lines appear; not needed — removed.
+ * What an exception can't un-ignore — `❌`. A dry run only names what is ignored. Not git — nothing to check.
+ * @param {string} root @returns {boolean} `.gitignore` changed
  */
 function gitignoreFlow(root) {
   try {
@@ -753,7 +797,7 @@ function gitignoreFlow(root) {
   return after !== before;
 }
 
-/** Корень git-репозитория текущего каталога; null — не репозиторий. */
+/** The git repository root of the current directory; null — not a repository. */
 function gitRoot() {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
@@ -762,12 +806,12 @@ function gitRoot() {
   }
 }
 
-/** Корень проекта: корень git или текущий каталог. */
+/** The project root: the git root or the current directory. */
 function projectRoot() {
   return gitRoot() ?? process.cwd();
 }
 
-/** Клон ai-dev: канон в нём — корневой AGENTS.md, ставить флоу в него не нужно. @param {string} root */
+/** An ai-dev clone: its canon is the root AGENTS.md, the flow needn't be installed into it. @param {string} root */
 function isAiDevClone(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).name === "ai-dev";
@@ -776,27 +820,34 @@ function isAiDevClone(root) {
   }
 }
 
-/** Ведёт ли агент задачу целиком сам — `auto` манифеста проекта; нет поля — «нет». @param {string} root */
+/**
+ * Whether the agent runs a task entirely by itself — `auto` of the project manifest; no field — "no".
+ * @param {string} root
+ */
 const autoOf = (root) => readManifest(root).auto === true;
 
-/** Код языка BCP 47: язык и необязательные подтеги — `ru`, `en`, `pt-BR`, `zh-Hant`. */
+/** A BCP 47 language code: the language and optional subtags — `ru`, `en`, `pt-BR`, `zh-Hant`. */
 const LANGUAGE_CODE = locale.LANGUAGE_CODE;
 
 /**
- * Язык работы агента в проекте — модулем языка скилла github, тем же, что у скриптов скиллов: `language` манифеста;
- * манифест без поля (установка прошлой версии) — `ru`, манифеста нет — `en`, язык флоу. Модуль — CommonJS без типов:
- * npx запускает установщик из node_modules, где Node типы не стирает, а этот файл ему и не нужно стирать.
+ * The language the agent works in in the project — via the github skill's language module, the same one the skills'
+ * scripts use: `language` of the manifest; a manifest without the field (an install of a previous version) — `ru`, no
+ * manifest — `en`, the flow's language. The module is CommonJS without types: npx runs the installer from
+ * node_modules, where Node doesn't strip types, and this file needs no stripping.
  * @param {string} root
  */
 const languageOf = (root) => locale.projectLanguage(root);
 
-/** Строки режима и языка проекта в выводе `check`: их видит начало сессии (хук). @param {string} root */
+/**
+ * Lines with the project's mode and language in `check` output: the session start (hook) sees them.
+ * @param {string} root
+ */
 const modeLines = (root) => [`  tasks: ${autoOf(root) ? "entirely by itself" : "with permission"}`, `  language: ${languageOf(root)}`];
 
 const CLONE_NOTE = "an ai-dev clone: the flow isn't installed into it — the canon is at its root";
 
 /**
- * Клон ai-dev: из установки в нём — только режим и язык, манифест из двух полей.
+ * An ai-dev clone: of the install it gets only the mode and the language, a manifest of two fields.
  * @param {string} root @param {boolean} auto @param {string} language
  */
 function installClone(root, auto, language) {
@@ -807,10 +858,10 @@ function installClone(root, auto, language) {
 }
 
 /**
- * auto и language — режим и язык проекта; их задаёт только `install` (флаг или вопрос в терминале), `update` и
- * `check` идут с прежним значением манифеста.
+ * auto and language — the project's mode and language; only `install` sets them (a flag or a question in the
+ * terminal), `update` and `check` go with the manifest's previous value.
  * @param {string} src @param {string} root @param {boolean} [auto] @param {string} [language] @returns {string[]}
- * изменённые файлы проекта вне копии флоу — им тоже в коммит
+ * changed project files outside the flow copy — they go into the commit too
  */
 function installProject(src, root, auto = autoOf(root), language = languageOf(root)) {
   installRules(src, root, false);
@@ -822,14 +873,14 @@ function installProject(src, root, auto = autoOf(root), language = languageOf(ro
   return [...(gitignoreFlow(root) ? [".gitignore"] : []), ...(pkg ? ["package.json"] : [])];
 }
 
-/** Глобальные файлы правил агентов, которые прошлая установка делала симлинками на `~/.agents/ai-dev/AGENTS.md`. */
+/** Agents' global rule files that a previous install made symlinks to `~/.agents/ai-dev/AGENTS.md`. */
 const AGENT_RULE_FILES = [".codex/AGENTS.md", ".gemini/GEMINI.md", ".copilot/copilot-instructions.md", ".config/opencode/AGENTS.md", ".config/amp/AGENTS.md"];
 
 /**
- * Правил на машине нет: их грузит проект (`.claude/rules`, `AGENTS.md`), а вторая копия с машины — те же ~20k токенов
- * на каждом ходу каждого агента. Прошлая установка их ставила — убираем: `~/.agents/ai-dev` (копия или симлинк на
- * клон), симлинки `~/.claude/rules/ai-dev*.md` и симлинки глобальных файлов агентов на канон. Чужой файл и чужой
- * симлинк не трогаем.
+ * There are no rules on the machine: the project loads them (`.claude/rules`, `AGENTS.md`), and a second copy from
+ * the machine is the same ~20k tokens on every turn of every agent. A previous install put them there — we remove
+ * them: `~/.agents/ai-dev` (a copy or a symlink to the clone), the `~/.claude/rules/ai-dev*.md` symlinks and the
+ * symlinks of agents' global files to the canon. Someone else's file or symlink is left alone.
  * @param {string} home
  */
 function removeGlobalRules(home) {
@@ -862,7 +913,7 @@ function installGlobal(src, linkMode) {
 
   if (claude) {
     claudeHook(home);
-    // install.sh ставил ~/.claude/CLAUDE.md симлинком на claude/CLAUDE.md, а тот импортировал AGENTS.md
+    // install.sh installed ~/.claude/CLAUDE.md as a symlink to claude/CLAUDE.md, and that one imported AGENTS.md
     const old = path.join(home, ".claude/CLAUDE.md");
     if (lstat(old)?.isSymbolicLink() && readlinkSync(old).endsWith(path.join("claude", "CLAUDE.md"))) {
       if (dry) change("-", old);
@@ -872,8 +923,9 @@ function installGlobal(src, linkMode) {
 
   if (has(".cursor")) note("Cursor: sees the skills in ~/.agents/skills; rules — from the project's AGENTS.md");
 
-  // Место личной конфигурации по умолчанию. AI_DEV_CONFIG_DIR здесь намеренно не читается: переменная переопределяет
-  // каталог целиком, симлинк ей не нужен — скрипты скиллов смотрят туда, куда она указывает (tests/standards/config-dir).
+  // The default location of the personal configuration. AI_DEV_CONFIG_DIR is deliberately not read here: the
+  // variable overrides the whole directory and needs no symlink — the skills' scripts look where it points
+  // (tests/standards/config-dir).
   const priv = process.env.AI_DEV_PRIVATE;
   if (priv) {
     const dst = path.join(home, ".config/ai-dev");
@@ -890,7 +942,7 @@ function installGlobal(src, linkMode) {
   }
 }
 
-/** Установка вхолостую: что бы она изменила. @param {() => void} fn */
+/** A dry-run install: what it would change. @param {() => void} fn */
 function dryRun(fn) {
   dry = [];
   try {
@@ -901,27 +953,32 @@ function dryRun(fn) {
   }
 }
 
-/** Строки списка: ограничены MAX_LINES. @param {string[]} lines */
+/** List lines, capped at MAX_LINES. @param {string[]} lines */
 function capped(lines) {
   return lines.length > MAX_LINES ? [...lines.slice(0, MAX_LINES), `  … and ${lines.length - MAX_LINES} more`] : lines;
 }
 
-/** Изменения холостого прогона — строками `  ~ путь`; на машине путь от `~/`. @param {Change[]} changes @param {string} root @param {boolean} global */
+/**
+ * Dry-run changes as `  ~ path` lines; on the machine the path is from `~/`.
+ * @param {Change[]} changes @param {string} root @param {boolean} global
+ */
 function changeLines(changes, root, global) {
   return changes.map((c) => `  ${c.op} ${global ? "~/" : ""}${path.relative(root, c.path)}${c.path.endsWith("/") ? "/" : ""}${c.note ? ` — ${c.note}` : ""}`);
 }
 
 /**
- * behind — отстаёт: update поставит новое; ignored — файлы флоу игнорирует git проекта: update допишет исключения.
+ * behind — falls behind: update will install something new; ignored — the project's git ignores flow files: update
+ * will add exceptions.
  * @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean, behind?: boolean, ignored?: boolean }} Result
  */
 
-/** Проверка упала: что и почему. @param {boolean} global @param {unknown} e @returns {Result} */
+/** The check failed: what and why. @param {boolean} global @param {unknown} e @returns {Result} */
 const unavailable = (global, e) => ({ code: 2, text: `ai-dev ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
 
 /**
- * Клон, на который ссылается установка `--link` на машине: путь из манифеста; у установки прошлой версии — симлинк
- * `~/.agents/ai-dev` (его `update -g` уберёт и запишет путь). null — копия или не установлено.
+ * The clone a `--link` install on the machine refers to: the path from the manifest; for an install of a previous
+ * version — the `~/.agents/ai-dev` symlink (`update -g` removes it and writes the path). null — a copy or not
+ * installed.
  * @param {string} home
  */
 function linkedClone(home) {
@@ -931,34 +988,38 @@ function linkedClone(home) {
   return lstat(canon)?.isSymbolicLink() ? path.resolve(path.dirname(canon), readlinkSync(canon)) : null;
 }
 
-/** Установка на машине (global) или в проекте: корень и стоит ли там флоу. @param {boolean} global */
+/**
+ * The install on the machine (global) or in the project: the root and whether the flow is there.
+ * @param {boolean} global
+ */
 function target(global) {
   const home = os.homedir();
   const root = global ? home : projectRoot();
   const canon = path.join(root, ".agents/ai-dev");
-  // домашний каталог — установка машины, а не проект; клон ai-dev — сам канон: манифест в нём хранит только режим
+  // the home directory is the machine's install, not a project; an ai-dev clone is the canon itself: its manifest
+  // keeps only the mode
   const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || (!samePath(root, home) && !isAiDevClone(root)));
   return { home, root, canon, installed };
 }
 
 /**
- * Отстала ли установка на машине (global) или в проекте. Копию сверяет этот пакет (SRC, релиз — `toRelease`)
- * холостой установкой, клон `--link` — с `origin/main`.
+ * Whether the install on the machine (global) or in the project is behind. This package (SRC, the release —
+ * `toRelease`) checks a copy with a dry-run install, a `--link` clone — against `origin/main`.
  * @param {boolean} global @returns {Result}
  */
 function check(global) {
   const { home, root, installed } = target(global);
   const where = global ? "on the machine" : "in the project";
-  // клон ai-dev сверять не с чем, но режим сессии в нём нужен — как в проекте
+  // an ai-dev clone has nothing to compare against, but the session mode is needed in it — as in a project
   if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`ai-dev ${where}: not installed — an ai-dev clone, the canon is at its root`, ...modeLines(root)].join("\n") };
   if (!installed) return { code: 0, text: `ai-dev ${where}: not installed`, absent: true };
   const clone = global ? linkedClone(home) : null;
   if (clone) return checkLink(home, clone);
   const changes = dryRun(() => (global ? installGlobal(SRC, false) : installProject(SRC, root)));
   const fresh = release ?? short(sourceSha(SRC)) ?? "SHA unknown";
-  // режим и язык — настройки проекта: последними строками, их видит и начало сессии (хук)
+  // mode and language are project settings: the last lines, the session start (hook) sees them too
   const mode = global ? [] : modeLines(root);
-  // предупреждения — настройка проекта, которую update не правит: строки `!`, код не меняют
+  // warnings — project settings that update doesn't fix: `!` lines, they don't change the exit code
   const warnings = changeLines(changes.filter((c) => c.op === "!"), root, global);
   const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
   const ignored = changes.filter((c) => c.op === "❌");
@@ -975,7 +1036,7 @@ function check(global) {
       ...capped(changeLines(stale, root, global)),
       ...(stale.length && ignored.length ? [`Git ${lost}`] : []),
       ...capped(changeLines(ignored, root, global)),
-      // личное правило update не исправит — что делать, сказано в строке ❌
+      // update won't fix a personal rule — what to do is said in the ❌ line
       ...(stale.length || fixable ? [`${stale.length ? "Update" : "Fix"}: npx -y github:${SOURCE} update${global ? " -g" : ""}${fixable ? " — adds exceptions to .gitignore" : ""}`] : []),
       ...warnings,
       ...mode,
@@ -984,9 +1045,9 @@ function check(global) {
 }
 
 /**
- * Машина с `--link`: клон против `origin/main` после `git fetch` — файлы скиллов, которых в клоне ещё нет, и ссылки,
- * которых не хватает (новый скилл, хук). Правила и справочники в main машину не задевают (их грузит проект), коммиты
- * без файлов скиллов — не отставание.
+ * A machine with `--link`: the clone against `origin/main` after `git fetch` — skill files the clone doesn't have
+ * yet, and missing links (a new skill, the hook). Rules and references in main don't affect the machine (the project
+ * loads them), commits without skill files aren't falling behind.
  * @param {string} home @param {string} clone @returns {Result}
  */
 function checkLink(home, clone) {
@@ -1020,8 +1081,9 @@ function checkLink(home, clone) {
 }
 
 /**
- * Напоминание владельцу на машине с клоном `--link`: в origin/main есть изменения флоу, которых нет в последнем
- * релизе, — проекты их не получат, пока он не выйдет. Не отставание: код проверки не меняет. Не узнать — строки нет.
+ * A reminder to the owner on a machine with a `--link` clone: origin/main has flow changes that aren't in the latest
+ * release — projects won't get them until it's cut. Not falling behind: it doesn't change the check's code. Can't
+ * tell — no line.
  * @param {string} clone @returns {string[]}
  */
 function unreleased(clone) {
@@ -1037,8 +1099,8 @@ function unreleased(clone) {
 }
 
 /**
- * Хук SessionStart: машина и проект одним выводом в контекст сессии; код всегда 0, ошибки — в stdout. failed —
- * последний релиз не узнать: установленное — «проверка недоступна».
+ * The SessionStart hook: the machine and the project in one output to the session context; the code is always 0,
+ * errors go to stdout. failed — the latest release couldn't be found: what's installed is "check unavailable".
  * @param {unknown} [failed]
  */
 function hook(failed) {
@@ -1052,7 +1114,8 @@ function hook(failed) {
     }
   }
   const shown = results.filter((r) => !r.absent);
-  // правила грузятся только из проекта: git-репозиторий без флоу — как поставить (клон ai-dev — сам канон, он не absent)
+  // rules load only from the project: a git repository without the flow — how to install it (an ai-dev clone is the
+  // canon itself, it isn't absent)
   if (results[1]?.absent && gitRoot()) shown.push({ code: 0, text: `ai-dev in the project: not installed — install it: npx -y github:${SOURCE} install --lang <project language>` });
   if (!shown.length) return 0;
   const tail = [];
@@ -1064,15 +1127,15 @@ function hook(failed) {
 }
 
 /**
- * Описание коммита копии флоу — на языке проекта, ключ `updateCommit` словаря скилла github этого пакета: «флоу ai-dev
- * <тег>», «ai-dev flow <тег>».
+ * The flow copy's commit subject — in the project language, the `updateCommit` key of this package's github skill
+ * dictionary: "ai-dev flow <tag>" in English, the same phrase translated in other languages.
  * @param {string} root @param {string | null | undefined} version
  */
 const commitSubject = (root, version) => locale.fill(locale.names(languageOf(root)).updateCommit, { version: version ?? "" }).trim();
 
 /**
- * Довести установку до актуальной. Машина с `--link` — `updateLink`; копия — `install` этим пакетом, в проекте с
- * подсказкой коммита.
+ * Bring the install up to date. A machine with `--link` — `updateLink`; a copy — `install` by this package, in a
+ * project with a commit hint.
  * @param {boolean} global
  */
 function update(global) {
@@ -1096,9 +1159,9 @@ function update(global) {
 }
 
 /**
- * Клон `--link`: только main и без изменений в отслеживаемых файлах — иначе отказ (код 1), клон не трогаем: это
- * работа пользователя. Затем `git pull --ff-only` и `install -g --link` кодом из обновлённого клона: этот процесс
- * мог загрузить его старую версию, а ссылки нужны и новым скиллам.
+ * A `--link` clone: only main and without changes in tracked files — otherwise a refusal (code 1), the clone is left
+ * alone: that's the user's work. Then `git pull --ff-only` and `install -g --link` with the code of the updated clone:
+ * this process may have loaded its old version, and new skills need links too.
  * @param {string} clone
  */
 function updateLink(clone) {
@@ -1106,7 +1169,7 @@ function updateLink(clone) {
   try {
     branch = git(clone, "symbolic-ref", "--quiet", "--short", "HEAD");
   } catch {
-    /* HEAD отсоединён */
+    /* HEAD is detached */
   }
   if (branch !== "main") return warn(`update: clone ${clone} is not on main (${branch ? `branch ${branch}` : "HEAD detached"}) — switch it yourself and retry`), 1;
   const dirty = execFileSync("git", ["-C", clone, "status", "--porcelain", "--untracked-files=no"], { encoding: "utf8" }).trimEnd();
@@ -1122,11 +1185,12 @@ function updateLink(clone) {
 }
 
 /**
- * Релиз — шаг владельца, из клона: тег vГГГГ.ММ.ДД (дата по UTC; второй за день — .1, .2…) на origin/main и GitHub
- * Release со списком изменений с прошлого релиза — коммиты первого родителя, затронувшие флоу или установщик (PR,
- * влитый merge-коммитом, — заголовком и номером; влитый rebase — своими коммитами с номером задачи из `Refs #N`).
- * Выпускать нечего — отказ (код 1): проекты не должны обновляться впустую.
- * @param {boolean} preview `--dry-run`: показать тег и список, ничего не создавать
+ * A release is the owner's step, from a clone: the tag vYYYY.MM.DD (the date in UTC; a second one the same day — .1,
+ * .2…) on origin/main and a GitHub Release with the list of changes since the previous release — first-parent commits
+ * that touched the flow or the installer (a PR merged with a merge commit — by its title and number; one merged by
+ * rebase — by its own commits with the task number from `Refs #N`). Nothing to release — a refusal (code 1): projects
+ * mustn't update for nothing.
+ * @param {boolean} preview `--dry-run`: show the tag and the list, create nothing
  */
 function releaseCmd(preview) {
   if (!existsSync(path.join(SRC, ".git"))) return warn("release — only from an ai-dev clone: node <clone>/bin/ai-dev.mjs release"), 2;
@@ -1171,15 +1235,21 @@ function releaseCmd(preview) {
   return 0;
 }
 
-/** Вопрос `install` в проекте о настройке `auto`: «да» разрешает агенту всё перечисленное без «да» на каждое действие. */
+/**
+ * The `install` question in a project about the `auto` setting: "yes" allows the agent everything listed without a
+ * "yes" for each action.
+ */
 const AUTO_QUESTION = "Let the agent do tasks entirely by itself — answers by recommendation, commit, push, fixing CI, merge on green checks?";
 
-/** Вопрос `install` в проекте о языке: на нём агент говорит с человеком и пишет задачи, промпты и документы. */
+/**
+ * The `install` question in a project about the language: in it the agent talks to the human and writes tasks,
+ * prompts and documents.
+ */
 const LANGUAGE_QUESTION = "Project language the agent works in — dialog, tasks, prompts, documents (code: ru, en, …)?";
 
 /**
- * Ответ на вопрос в терминале: строка без пробелов по краям; ввод закрыт или не читается — null. Синхронно и без
- * зависимостей — `readSync(0)`: `main` синхронный.
+ * The answer to a question in the terminal: the line trimmed of spaces; input closed or unreadable — null.
+ * Synchronous and without dependencies — `readSync(0)`: `main` is synchronous.
  * @param {string} prompt
  */
 function readAnswer(prompt) {
@@ -1194,8 +1264,8 @@ function readAnswer(prompt) {
 }
 
 /**
- * Вопрос «да/нет» в терминале: Enter — значение по умолчанию (оно заглавной буквой), непонятный ответ — вопрос снова.
- * Ввод закрыт или не читается — значение по умолчанию.
+ * A yes/no question in the terminal: Enter — the default value (shown in upper case), an unclear answer — the
+ * question again. Input closed or unreadable — the default value.
  * @param {string} question @param {boolean} def
  */
 function ask(question, def) {
@@ -1208,7 +1278,8 @@ function ask(question, def) {
 }
 
 /**
- * Вопрос о языке в терминале: Enter — значение по умолчанию, не код языка — вопрос снова; ввод закрыт — по умолчанию.
+ * A language question in the terminal: Enter — the default value, not a language code — the question again; input
+ * closed — the default.
  * @param {string} def
  */
 function askLanguage(def) {
@@ -1220,8 +1291,8 @@ function askLanguage(def) {
 }
 
 /**
- * `--lang <код>` или `--lang=<код>` среди флагов: код и остальные флаги; флаг без значения — код "", его отвергнет
- * проверка кода.
+ * `--lang <code>` or `--lang=<code>` among the flags: the code and the other flags; a flag without a value — code "",
+ * the code check will reject it.
  * @param {string[]} flags @returns {{ lang: string | undefined, rest: string[] }}
  */
 function takeLang(flags) {
@@ -1239,9 +1310,10 @@ function takeLang(flags) {
 }
 
 /**
- * Подсказка `install` с auto. Мерж без ревью человека приложение Claude Code отклоняет и в режиме auto: его решает
- * правило разрешений машины, а оно действует на все её репозитории — шире проекта. Поэтому `install` правило называет,
- * а не ставит: иначе владелец узнаёт о нём из отказа в конце первой задачи.
+ * The `install` hint with auto. The Claude Code app rejects a merge without human review even in auto mode: the
+ * machine's permission rule decides it, and that rule applies to all the machine's repositories — wider than the
+ * project. So `install` names the rule instead of setting it: otherwise the owner learns about it from a refusal at
+ * the end of the first task.
  */
 const MERGE_HINT = (/** @type {string} */ language) =>
   [
@@ -1256,7 +1328,7 @@ const FLAGS = { install: ["-g", "--global", "--link", "--auto", "--no-auto"], ch
 function main(/** @type {string[]} */ argv) {
   const [cmd = "", ...args] = argv;
   if (cmd === "help" || cmd === "-h" || cmd === "--help") return note(USAGE.trimEnd()), 0;
-  // --lang со значением — только у install: у остальных команд он — неизвестный флаг
+  // --lang with a value — only for install: for the other commands it's an unknown flag
   const { lang, rest: flags } = cmd === "install" ? takeLang(args) : { lang: undefined, rest: args };
   const allowed = Object.hasOwn(FLAGS, cmd) ? FLAGS[cmd] : undefined;
   const unknown = allowed ? flags.filter((f) => !allowed.includes(f)) : [];
@@ -1271,7 +1343,7 @@ function main(/** @type {string[]} */ argv) {
   }
   if (cmd === "release") return releaseCmd(flags.includes("--dry-run"));
   const hookMode = cmd === "check" && flags.includes("--hook");
-  // «не установлен» релиз не нужен: хук в чужом проекте не ходит в сеть зря
+  // "not installed" needs no release: the hook in someone else's project doesn't go to the network for nothing
   if (cmd !== "check" || (hookMode ? [true, false].some((g) => target(g).installed) : target(global).installed)) {
     try {
       const code = toRelease(argv);
@@ -1313,7 +1385,8 @@ function main(/** @type {string[]} */ argv) {
   }
   if (global) return installGlobal(SRC, linkMode), 0;
   const root = projectRoot();
-  // вопросы — только здесь и только в терминале: `update` и `check` (хук в начале сессии) идут через installProject без них
+  // questions — only here and only in a terminal: `update` and `check` (the hook at session start) go through
+  // installProject without them
   const tty = isatty(0) && isatty(1);
   const language = lang ?? (tty ? askLanguage(languageOf(root)) : languageOf(root));
   const before = autoOf(root);
