@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 /**
- * est — оценка задач по истории проекта и факт из транскриптов Claude Code и Codex.
+ * est — task estimates from the project's history and actuals from Claude Code and Codex transcripts.
  *
- * Подкоманды:
- *   est history  — таблица закрытых задач с фактом, калибровочный коэффициент k
- *   est fact     — факт (активные часы агента) по транскриптам Claude Code и Codex для issue
- *   est estimate — записать оценку с аналогами и маркером
- *   est period   — сводка всех сессий репо за период без привязки к задачам: сравнение флоу до и после
+ * Subcommands:
+ *   est history  — table of closed tasks with an actual, the calibration coefficient k
+ *   est fact     — actual (the agent's active hours) from Claude Code and Codex transcripts for an issue
+ *   est estimate — record an estimate with analogs and a marker
+ *   est period   — summary of all the repo's sessions over a period, not tied to tasks: the flow before and after
  *
- * Запуск — Bun (`bun est.ts …`), только `node:`-API + CLI `gh`. Источник истины — GitHub (поля
- * проекта «Оценка, ч», «Факт, ч» и комментарии с HTML-маркерами <!-- est {...} --> /
- * <!-- fact {...} -->). Без --write ничего в GitHub не пишется. Форматы кэшей в
- * ~/.config/ai-dev/cache совместимы с прежним est.py.
+ * Runs on Bun (`bun est.ts …`), only `node:` APIs + the `gh` CLI. The source of truth is GitHub (the project fields
+ * "Estimate, h", "Actual, h" and comments with HTML markers <!-- est {...} --> /
+ * <!-- fact {...} -->). Without --write nothing is written to GitHub. Cache formats in
+ * ~/.config/ai-dev/cache are compatible with the former est.py.
  */
 
 import { spawnSync } from "node:child_process";
@@ -27,25 +27,25 @@ import type { Names, Plural } from "../../github/scripts/locale.cjs";
 type Any = any;
 
 const HOME = os.homedir();
-// Личное состояние скилла (реестр репозиториев, цены, кэш) — нейтральный к агенту каталог:
-// $AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev — выражение одно на все скрипты (стандарт config-dir ai-dev): github
-// закрепляет задачу за сессией в том же каталоге. Старый ~/.claude/est переезжает автоматически
-// (см. ensureConfigDir), на его месте остаётся симлинк.
+// The skill's personal state (repository registry, prices, cache) lives in an agent-neutral directory:
+// $AI_DEV_CONFIG_DIR, otherwise ~/.config/ai-dev — one expression in all scripts (the ai-dev config-dir standard):
+// github pins a task to a session in the same directory. The old ~/.claude/est moves automatically
+// (see ensureConfigDir), leaving a symlink in its place.
 export const EST_DIR = process.env.AI_DEV_CONFIG_DIR || path.join(HOME, ".config", "ai-dev");
 const LEGACY_EST_DIR = path.join(HOME, ".claude", "est");
 export const REGISTRY_PATH = path.join(EST_DIR, "repos.json");
 const CACHE_DIR = path.join(EST_DIR, "cache");
-// Источники факта: транскрипты Claude Code (~/.claude/projects), сессии Codex (~/.codex/sessions) и выгрузки
-// событий облачных сессий Claude Code (<каталог состояния>/cloud/<owner>/<repo>/<session>.json, est cloud-import).
+// Actual sources: Claude Code transcripts (~/.claude/projects), Codex sessions (~/.codex/sessions) and event exports
+// of Claude Code cloud sessions (<state directory>/cloud/<owner>/<repo>/<session>.json, est cloud-import).
 export const PROJECTS_DIR = path.join(HOME, ".claude", "projects");
 const CODEX_DIRS = [path.join(HOME, ".codex", "sessions"), path.join(HOME, ".codex", "archived_sessions")];
 export const CLOUD_DIR = path.join(EST_DIR, "cloud");
-// Закрепления сессий за задачами: `github task status` «В работе» пишет <каталог состояния>/sessions/<id сессии> со
-// строкой owner/repo#N — прямой факт «эта сессия вела эту задачу», сильнее любых признаков в транскрипте.
+// Session pinning to tasks: `github task status` "In progress" writes <state directory>/sessions/<session id> with the
+// line owner/repo#N — direct evidence "this session worked on this task", stronger than any feature in the transcript.
 export const PINS_DIR = path.join(EST_DIR, "sessions");
 
-// Перенос — только пока каталога нет: github до переноса кладёт закрепления в старый каталог и новый не создаёт
-// (github.ts, configDir) — иначе реестр и цены остались бы в старом.
+// Move only while the directory doesn't exist: before the move github puts pins into the old directory and doesn't
+// create the new one (github.ts, configDir) — otherwise the registry and prices would stay in the old one.
 function ensureConfigDir(): void {
   let legacyDir = false;
   try {
@@ -62,15 +62,16 @@ function ensureConfigDir(): void {
   mkdirSync(EST_DIR, { recursive: true });
 }
 
-// Поля проекта — по ключу словаря (`fields` в locales скилла github): «Оценка, ч» и «Estimate, h» — одно поле, название
-// любого языка; комментарии пишутся на языке проекта (`locale.projectLanguage`), разбираются — на любом.
+// Project fields by dictionary key (`fields` in the github skill's locales): "Estimate, h" and its Russian name are
+// one field, a name in any language; comments are written in the project language (`locale.projectLanguage`), parsed
+// in any.
 export const FIELD_EST = "estimate";
 export const FIELD_FACT = "actual";
 export const FIELD_STATUS = "status";
-export const FIELD_TOK = "tokens"; // необязательные поля: есть в проекте — заполняем, нет — пропускаем
+export const FIELD_TOK = "tokens"; // optional fields: present in the project — filled in, absent — skipped
 export const FIELD_USD = "cost";
 
-/** Ключ поля проекта по его названию на любом языке словаря; не поле est — null. */
+/** Key of a project field by its name in any dictionary language; not an est field — null. */
 function fieldKey(name: string | undefined): string | null {
   if (name === "Status") return FIELD_STATUS;
   for (const n of locale.everyNames()) {
@@ -81,22 +82,22 @@ function fieldKey(name: string | undefined): string | null {
   }
   return null;
 }
-/** Названия на языке проекта текущего каталога. */
+/** Names in the project language of the current directory. */
 const projectNames = (): Names => locale.names(locale.projectLanguage());
-/** Название поля в выводе: как в проекте, нет поля — на языке проекта. */
+/** Field name in output: as in the project; no field — in the project language. */
 function fieldShown(meta: Meta, key: string): string {
   const n = projectNames();
   const byKey: Record<string, string> = { [FIELD_EST]: n.fields.estimate, [FIELD_FACT]: n.fields.actual, [FIELD_TOK]: n.fields.tokens, [FIELD_USD]: n.fields.cost, [FIELD_STATUS]: "Status" };
   return meta.fields[key]?.name ?? byKey[key] ?? key;
 }
 
-// Публичные API-тарифы Anthropic, $ за 1 млн токенов: (вход, выход, чтение кэша).
-// Запись кэша = вход × 1.25 (TTL 5 мин) или × 2 (TTL 1 ч). Ключ — id модели без даты: у id модели
-// дата после ключа (-ГГГГММДД, у Vertex AI — @ГГГГММДД) тариф не меняет, другое продолжение — другая
-// версия (claude-opus-5-5 при ключе claude-opus-5), она без цены, пока её нет в прайсе (#345).
-// Это API-эквивалент: на подписке эти деньги не списываются, но величина сравнима между задачами.
-// Переопределение/дополнение — <каталог состояния>/prices.json в том же формате:
-// {"<id модели>": [вход, выход, чтение_кэша]}.
+// Anthropic public API rates, $ per 1M tokens: (input, output, cache read).
+// Cache write = input × 1.25 (TTL 5 min) or × 2 (TTL 1 h). The key is the model id without the date: a date after the
+// key in the model id (-YYYYMMDD, on Vertex AI @YYYYMMDD) doesn't change the rate, another continuation is another
+// version (claude-opus-5-5 with the key claude-opus-5), it has no price until it is in the price list (#345).
+// This is the API equivalent: on a subscription this money isn't charged, but the value is comparable between tasks.
+// Override/extension — <state directory>/prices.json in the same format:
+// {"<model id>": [input, output, cache_read]}.
 export const PRICES_DATE = "2026-10-06";
 type Price = [number, number, number];
 export const PRICES: Record<string, Price> = {
@@ -114,19 +115,22 @@ export const PRICES: Record<string, Price> = {
   "claude-sonnet-4-6": [3.0, 15.0, 0.3],
   "claude-haiku-4-5": [1.0, 5.0, 0.1],
 };
-// speed=fast; чтение кэша — ×0,1 входа; для прочих моделей тариф fast не опубликован
+// speed=fast; cache read — ×0.1 of input; for other models a fast rate isn't published
 const FAST_PRICES: Record<string, Price> = { "claude-opus-5-5": [8.0, 40.0, 0.8], "claude-opus-5": [10.0, 50.0, 1.0] };
 const PRICES_PATH = path.join(EST_DIR, "prices.json");
 let pricesCache: Record<string, Price> | null = null;
 
-/** Версия модели — её id без даты: `claude-haiku-4-5-20251001` и `claude-opus-4-5@20251101` — `claude-haiku-4-5`, `claude-opus-4-5`. */
+/**
+ * Model version — its id without the date: `claude-haiku-4-5-20251001` and `claude-opus-4-5@20251101` —
+ * `claude-haiku-4-5`, `claude-opus-4-5`.
+ */
 const modelVersion = (model: string) => model.replace(/[-@]\d{8}$/, "");
 
-/** Тариф модели в таблице: по id целиком, иначе по версии; префикс другой версии не в счёт. */
+/** A model's rate in the table: by the whole id, otherwise by version; a prefix of another version doesn't count. */
 const priceIn = (table: Record<string, Price>, model: string): Price | null =>
   Object.hasOwn(table, model) ? table[model]! : Object.hasOwn(table, modelVersion(model)) ? table[modelVersion(model)]! : null;
 
-/** (вход, выход, чтение кэша) $/млн для модели или null, если модели нет в прайсе. */
+/** (input, output, cache read) $/M for the model, or null if the model isn't in the price list. */
 export function priceFor(model: string, fast = false, table?: Record<string, Price>): Price | null {
   if (!table) {
     if (pricesCache === null) {
@@ -142,7 +146,7 @@ export function priceFor(model: string, fast = false, table?: Record<string, Pri
   return (fast ? priceIn(FAST_PRICES, model) : null) ?? priceIn(table, model);
 }
 
-/** Стоимость одного ответа модели в $; vals = (вход, выход, запись кэша 5м, запись кэша 1ч, чтение кэша). */
+/** Cost of one model response in $; vals = (input, output, cache write 5m, cache write 1h, cache read). */
 export function usageCost(model: string, vals: [number, number, number, number, number], fast = false, table?: Record<string, Price>): number | null {
   const p = priceFor(model, fast, table);
   if (!p) return null;
@@ -151,29 +155,31 @@ export function usageCost(model: string, vals: [number, number, number, number, 
   return (i * pin + o * pout + cw5 * pin * 1.25 + cw1 * pin * 2.0 + cr * pcr) / 1e6;
 }
 
-// Типы задач = типы conventional commits + research (спайк без кода). Те же слова —
-// префиксы веток: <type>/<issue>-<slug> (допускается префикс области: <area>/<type>/<issue>-<slug>).
+// Task types = conventional commit types + research (a spike without code). The same words are
+// branch prefixes: <type>/<issue>-<slug> (an area prefix is allowed: <area>/<type>/<issue>-<slug>).
 export const EST_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"] as const;
-// та же копия — TASK_TYPES и TASK_BRANCH_RE в skills/github/scripts/github.ts: общего модуля нет (скилл ставится
-// один), одинаковость разбора держит стандарт tests/standards/task-branch
+// the same copy — TASK_TYPES and TASK_BRANCH_RE in skills/github/scripts/github.ts: there's no shared module (a skill
+// is installed alone), the standard tests/standards/task-branch keeps the parsing identical
 const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 const PR_PAGE = 50;
 const PR_MAX = 500;
-const ISSUES_MAX = 500; // сколько закрытых issue держим в индексе коммитов-закрывателей
-const SESSION_CACHE_V = 18; // версия формата кэша транскриптов (сменилась — переразбор); 11 = история названий сессии (title_hist), 12 = облачные сессии, 13 = все каталоги сессии (cwds), 14 = репозиторий PR у pr-link, 16 = хеши листинга git и gh — только свои, 17 = ключевые слова оболочки в листинге, 18 = номер агента у записи (фан-аут задачи)
-const PROJECT_META_TTL = 86400; // сутки: кэш id проекта/полей перечитываем
-const OPEN_PRS_TTL = 3600; // час: список открытых PR (их ветки — чужие)
-// Долгоживущие ветки: «нейтральные» — сами по себе задачу не привязывают, но внутри окна якоря считаются.
+const ISSUES_MAX = 500; // how many closed issues the index of closing commits keeps
+const SESSION_CACHE_V = 18; // transcript cache format version (changed — reparse); 11 = session name history
+// (title_hist), 12 = cloud sessions, 13 = all session directories (cwds), 14 = PR repository on pr-link, 16 = git and
+// gh listing hashes — only own ones, 17 = shell keywords in a listing, 18 = agent number on a record (task fan-out)
+const PROJECT_META_TTL = 86400; // a day: reread the cache of project/field ids
+const OPEN_PRS_TTL = 3600; // an hour: the list of open PRs (their branches are someone else's)
+// Long-lived branches: "neutral" — by themselves they don't link a task, but inside an anchor window they count.
 const BASE_BRANCHES = new Set(["main", "master", "develop", "dev", "staging", "production", "release"]);
 
-// Реестр репозиториев — личный файл <каталог состояния>/repos.json (в репо скилла не входит).
-// Формат: {"owner/repo": {"paths": ["/abs/path/to/checkout", ...],
+// Repository registry — the personal file <state directory>/repos.json (not part of the skill's repo).
+// Format: {"owner/repo": {"paths": ["/abs/path/to/checkout", ...],
 //                         "project": {"owner": "<owner>", "number": <N>}}}
-// Без записи репо определяется из git remote origin текущего каталога, проект — по
-// привязке к репозиторию; paths нужны, чтобы найти транскрипты (~/.claude/projects).
+// Without an entry the repo is determined from git remote origin of the current directory, the project — by its
+// link to the repository; paths are needed to find transcripts (~/.claude/projects).
 export type Registry = Record<string, { paths?: string[]; project?: { owner: string; number: number | string } }>;
 
-// Файлы, которые не считаем в диффе: lock-файлы, снапшоты, минифицированное, сборка.
+// Files not counted in the diff: lock files, snapshots, minified code, build output.
 const DIFF_EXCLUDE = new RegExp(
   "(^|/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock|bun\\.lockb?|Cargo\\.lock|" +
     "poetry\\.lock|composer\\.lock|Gemfile\\.lock|go\\.sum|Podfile\\.lock)$" +
@@ -183,7 +189,7 @@ const DIFF_EXCLUDE = new RegExp(
 
 export class EstError extends Error {}
 
-/** Номер существует не как issue (обычно это PR). */
+/** The number exists, but not as an issue (usually it's a PR). */
 export class NotAnIssue extends EstError {}
 
 const errIs = (e: unknown, text: string) => String((e as Error).message ?? e).toLowerCase().includes(text.toLowerCase());
@@ -194,10 +200,10 @@ function die(msg: string, code = 1): never {
 }
 
 // ----------------------------------------------------------------------------
-// Утилиты
+// Utilities
 // ----------------------------------------------------------------------------
 
-/** ISO-строка (UTC, с Z или смещением) → epoch-секунды. */
+/** ISO string (UTC, with Z or an offset) → epoch seconds. */
 export function parseTs(s: string | null | undefined): number | null {
   if (!s) return null;
   const t = Date.parse(s);
@@ -245,11 +251,11 @@ export function median(vals: number[]): number {
 }
 
 /**
- * round(x, nd) как в Python: к ближайшему, а точная половина (0.125 → 0.12) — к чётному.
- * Так факты и k совпадают с посчитанными прежним est.py; toFixed один даёт половину вверх.
+ * round(x, nd) as in Python: to the nearest, and an exact half (0.125 → 0.12) — to even.
+ * This way actuals and k match those computed by the former est.py; toFixed alone rounds a half up.
  */
 export function pyRound(x: number, nd: number): number {
-  const long = x.toFixed(nd + 30); // точное десятичное разложение двоичного значения
+  const long = x.toFixed(nd + 30); // exact decimal expansion of the binary value
   const dot = long.indexOf(".");
   const tail = long.slice(dot + 1 + nd);
   if (/^50*$/.test(tail)) {
@@ -263,7 +269,7 @@ export function pyRound(x: number, nd: number): number {
 const round2 = (x: number) => pyRound(x, 2);
 const round1 = (x: number) => pyRound(x, 1);
 
-/** Как json.dumps(ensure_ascii=False): разделители ", " и ": " — маркеры остаются читаемыми и совместимыми. */
+/** Like json.dumps(ensure_ascii=False): separators ", " and ": " — markers stay readable and compatible. */
 export function pyDumps(v: unknown): string {
   if (v === null || v === undefined) return "null";
   if (typeof v === "boolean") return v ? "true" : "false";
@@ -283,7 +289,7 @@ export function loadJson<T>(file: string, dflt: T): T {
 
 export function saveJson(file: string, data: unknown): void {
   mkdirSync(path.dirname(file), { recursive: true });
-  // временный файл — свой у каждой записи: одновременные est (параллельные сессии, свип, дашборд) пишут один кэш (#347)
+  // each write has its own temp file: concurrent est runs (parallel sessions, sweep, dashboard) write one cache (#347)
   const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   writeFileSync(tmp, JSON.stringify(data));
   renameSync(tmp, file);
@@ -295,7 +301,7 @@ function mtimeOf(file: string): number {
 
 const sameMtime = (a: unknown, b: number) => typeof a === "number" && Math.abs(a - b) < 1e-3;
 
-/** *.jsonl рекурсивно (как glob **\/*.jsonl), отсортировано. */
+/** *.jsonl recursively (like glob **\/*.jsonl), sorted. */
 function walkJsonl(dir: string): string[] {
   const out: string[] = [];
   const walk = (d: string) => {
@@ -329,23 +335,23 @@ const pad = (s: string, n: number, right = false) => (right ? s.padStart(n) : s.
 // gh
 // ----------------------------------------------------------------------------
 
-/** Сеть не вернулась за все повторы вызова gh: дальше по списку идти незачем (#353). */
+/** The network didn't come back over all the retries of a gh call: no point going further down the list (#353). */
 export class NetworkError extends EstError {}
 
-/** Сбой сети или сервера GitHub (таймаут, обрыв соединения, 5xx) — не ошибка запроса: повтор может пройти. */
+/** A network or GitHub server failure (timeout, dropped connection, 5xx) — not a request error: a retry may succeed. */
 const NETWORK_FAILURE = /dial tcp|i\/o timeout|timed out|TLS handshake|connection reset|connection refused|broken pipe|unexpected EOF|no such host|network is unreachable|stream error|Client\.Timeout|deadline exceeded|HTTP 5\d\d|status code: 5\d\d/i;
-/** Запрос до GitHub не дошёл: соединение не установлено. */
+/** The request didn't reach GitHub: the connection wasn't established. */
 const NOT_SENT = /dial tcp|TLS handshake|no such host|network is unreachable/i;
 
-/** Паузы перед повторами вызова gh при сбое сети, мс: `AI_DEV_GH_RETRY_MS` через запятую, иначе 2, 5 и 15 с. */
+/** Pauses before gh call retries on a network failure, ms: `AI_DEV_GH_RETRY_MS`, comma-separated, else 2, 5, 15 s. */
 function retryPauses(): number[] {
   const env = process.env.AI_DEV_GH_RETRY_MS;
   return env === undefined ? [2000, 5000, 15000] : env.split(",").filter(Boolean).map(Number);
 }
 
 /**
- * Команда; gh при сбое сети повторяется с паузами (#353). `idempotent: false` (новый комментарий) — повтор, только если
- * запрос не ушёл: иначе GitHub мог его принять, и повтор задвоил бы комментарий.
+ * A command; gh is retried with pauses on a network failure (#353). `idempotent: false` (a new comment) — retry only if
+ * the request wasn't sent: otherwise GitHub may have accepted it, and a retry would duplicate the comment.
  */
 function run(cmd: string[], stdin?: string, idempotent = true): string {
   const pauses = cmd[0] === "gh" ? retryPauses() : [];
@@ -390,7 +396,7 @@ function ghRest(p: string, method = "GET", body?: unknown): Any {
 }
 
 // ----------------------------------------------------------------------------
-// Реестр репозиториев и проекты
+// Repository registry and projects
 // ----------------------------------------------------------------------------
 
 export function loadRegistry(): Registry {
@@ -421,7 +427,7 @@ export function resolveRepo(arg?: string): string {
 }
 
 // ----------------------------------------------------------------------------
-// Типы данных кэшей (совместимы с est.py)
+// Cache data types (compatible with est.py)
 // ----------------------------------------------------------------------------
 
 export interface PR {
@@ -441,7 +447,7 @@ export interface PR {
   commits: { oid: string; at: number | null }[];
   commits_total: number;
   files: { path: string; a: number; d: number }[];
-  /** Облачные сессии из трейлера `Claude-Session` коммитов PR — их транскрипт в облаке (est cloud-import). */
+  /** Cloud sessions from the `Claude-Session` trailer of PR commits: transcripts in the cloud (est cloud-import). */
   cloud?: string[];
   why?: string;
 }
@@ -456,11 +462,11 @@ export interface Row {
   closedAt: number | null;
   createdAt: number | null;
   labels: string[];
-  /** Тип issue организации («Эпик»); в личном аккаунте типов нет — эпик помечен меткой `epic`. */
+  /** The organization's issue type ("Epic"); a personal account has no types — an epic has the `epic` label. */
   issueType?: string | null;
-  /** Номер эпика задачи (родитель sub-issue). */
+  /** Number of the task's epic (the sub-issue parent). */
   parent?: number | null;
-  /** Размер описания issue, знаков без ответов на вопросы (descSize) — признак объёма при подборе аналогов. */
+  /** Issue description size, chars, without answers to questions (descSize) — a size feature for picking analogs. */
   size?: number;
   est: number | null;
   fact: number | null;
@@ -474,7 +480,7 @@ interface Meta {
   owner: string;
   number: number;
   title: string;
-  /** Поля по ключу (FIELD_*): id, название в проекте, варианты. */
+  /** Fields by key (FIELD_*): id, name in the project, options. */
   fields: Record<string, { id: string; name: string; options: Record<string, string> }>;
   fetched_at: number;
 }
@@ -489,61 +495,63 @@ export interface Closers {
   pr: Record<string, number[]>;
 }
 
-/** Сводка сессии (Claude Code или Codex), как в кэше sessions.json. */
+/** Session summary (Claude Code or Codex), as in the sessions.json cache. */
 export interface Session {
   sid: string;
   cwd: string | null;
-  cwds?: string[]; // все каталоги записей по порядку появления: сессия может перейти в репозиторий по ходу работы
+  cwds?: string[]; // all record directories in order of appearance: a session may move to another repository mid-work
   n_human: number;
-  ev: Any[][]; // [ts, ветка, human, hint?, uidx?, агент? (0 — сама сессия, k — k-й субагент)]
-  prlinks: [number, number, string?][]; // [ts, номер PR, репозиторий PR owner/name — у Claude Code prRepository]
+  ev: Any[][]; // [ts, branch, human, hint?, uidx?, agent? (0 — the session itself, k — the k-th subagent)]
+  prlinks: [number, number, string?][]; // [ts, PR number, PR repository owner/name — prRepository in Claude Code]
   commits: [number, string][];
   first_refs: number[];
   first_urls: string[];
   usage: Any[][]; // [mid, model_idx, in, out, cw5, cw1, cr, fast]
   models: string[];
-  title: string; // последнее название
+  title: string; // the latest name
   title_refs: number[];
   title_urls: string[];
-  title_hist?: [number, string][]; // (время переименования, название) — по порядку в транскрипте
+  title_hist?: [number, string][]; // (rename time, name) — in transcript order
   n_subagents: number;
   source: string;
   routine: boolean;
   mtime?: number;
   v?: number;
-  guest?: boolean; // транскрипт из каталога другого репозитория реестра или временной папки приложения: привязка только признаками репозитория задачи
+  guest?: boolean; // a transcript from another registry repository's directory or the app's temp folder:
+  // linked only by features of the task's repository
 }
 
 /**
- * Часть факта, посчитанная облачной сессией по своему транскрипту в контейнере (`est fact <N>` в облаке) и отданная
- * маркером `cloud` комментария «Факт»: поля проекта из облака не поставить — их ставит локальный расчёт, складывая части.
+ * The part of an actual computed by a cloud session from its own transcript in the container (`est fact <N>` in the
+ * cloud) and handed over by the `cloud` marker of the "Actual" comment: project fields can't be set from the cloud —
+ * the local computation sets them, adding up the parts.
  */
 export interface CloudPart {
   session: string;
   h: number;
   iv: [number, number][];
   prompts: number;
-  agents?: number; // субагенты облачной сессии, чья работа привязана к задаче
+  agents?: number; // the cloud session's subagents whose work is linked to the task
   tok: { in: number; out: number; cw: number; cr: number; total: number } | null;
   models: Record<string, { mtok: number; usd: number | null }>;
-  steps?: number; // ходы части (ответы модели), включая субагентов
+  steps?: number; // the part's turns (model responses), including subagents
   steps_agents?: number;
-  tail?: number; // ходов с контекстом больше TAIL_CTX
-  preamble?: number; // контекст первого хода верхнего уровня
-  ctx_end?: number; // контекст последнего хода верхнего уровня
+  tail?: number; // turns with context larger than TAIL_CTX
+  preamble?: number; // context of the first top-level turn
+  ctx_end?: number; // context of the last top-level turn
 }
 
-/** Контекст хода, с которого ход — «хвост»: ходы с таким контекстом были 20 % ходов и 45 % токенов. */
+/** Turn context from which a turn is "tail": turns with such context were 20 % of turns and 45 % of tokens. */
 export const TAIL_CTX = 400_000;
 
-/** Части облака из всех комментариев с маркером «Факт»: по сессии — последняя, порядок — первого появления. */
+/** Cloud parts from all comments with the "Actual" marker: per session — the last one, order — of first appearance. */
 export function cloudPartsIn(bodies: string[]): CloudPart[] {
   const by = new Map<string, CloudPart>();
   for (const b of bodies) for (const p of parseMarker(b, "fact")?.cloud ?? []) if (p && typeof p.session === "string") by.set(p.session, p);
   return [...by.values()];
 }
 
-/** Подмножество Repo, нужное расчёту факта (в тестах — стаб без GitHub). */
+/** The subset of Repo the actual computation needs (in tests — a stub without GitHub). */
 export interface FactRepo {
   full: string;
   prs(): Map<number, PR>;
@@ -552,9 +560,9 @@ export interface FactRepo {
   sessions(): Session[];
   neutralBranches(): Set<string>;
   commitDiff(oid: string): number | null;
-  /** Интервалы уже записанных фактов: issue → sid (8 знаков) → [(начало, конец)]; из маркеров «Факт». */
+  /** Intervals of already recorded actuals: issue → sid (8 chars) → [(start, end)]; from the "Actual" markers. */
   recorded?(): Recorded;
-  /** Закрепления сессий за задачами: id сессии → `owner/repo#N` (loadPins); сессия без закрепления — по признакам. */
+  /** Session pinning to tasks: session id → `owner/repo#N` (loadPins); a session without a pin — by features. */
   pins?(): Map<string, string>;
 }
 
@@ -565,7 +573,7 @@ const PR_FIELDS = `number title state headRefName baseRefName body mergedAt upda
         commits(first:100){totalCount nodes{commit{oid authoredDate messageBody}}}
         files(first:100){nodes{path additions deletions}}`;
 
-/** Облачные сессии из трейлеров `Claude-Session: https://claude.ai/code/session_…` в тексте коммита. */
+/** Cloud sessions from `Claude-Session: https://claude.ai/code/session_…` trailers in a commit message. */
 export function cloudSessionsIn(message: string): string[] {
   return uniqSortedStrs([...String(message ?? "").matchAll(/^Claude-Session:\s*https:\/\/claude\.ai\/code\/(session_[A-Za-z0-9]+)/gm)].map((m) => m[1]!));
 }
@@ -595,7 +603,7 @@ export function packPr(p: Any): PR {
 
 const nowTs = () => Date.now() / 1000;
 
-/** Репозиторий + его проект GitHub + кэши. */
+/** A repository + its GitHub project + caches. */
 export class Repo implements FactRepo {
   full: string;
   owner: string;
@@ -623,14 +631,15 @@ export class Repo implements FactRepo {
     this.name = name;
     const cfg = registry[full] ?? {};
     this.paths = cfg.paths ?? [];
-    // каталоги других репозиториев реестра: там ищутся сессии-гости (задача начата из чужого каталога)
+    // directories of other registry repositories: guest sessions are looked up there (a task started
+    // from another repository's directory)
     this.otherPaths = uniqSortedStrs(Object.entries(registry).filter(([k]) => k !== full).flatMap(([, c]) => c.paths ?? [])).filter((x) => !this.paths.includes(x));
     this.projectRef = cfg.project;
     this.cacheDir = path.join(CACHE_DIR, full.replace("/", "__"));
   }
 
-  // --- проект -----------------------------------------------------------
-  /** id проекта, id полей и вариантов Status. Кэшируется на диске (сутки, с проверкой реестра). */
+  // --- project ----------------------------------------------------------
+  /** Project id, field ids and Status options. Cached on disk (a day, with a registry check). */
   projectMeta(force = false): Meta {
     if (this.meta_ && !force) return this.meta_;
     const file = path.join(this.cacheDir, "project.json");
@@ -657,7 +666,7 @@ export class Repo implements FactRepo {
     try {
       pv = ghGraphql(q, { o: owner, n: number })?.organization?.projectV2 ?? null;
     } catch (e) {
-      if (!(e instanceof EstError) || e instanceof NetworkError) throw e; // сеть — не «не организация»: иначе ложное «Could not resolve to a User»
+      if (!(e instanceof EstError) || e instanceof NetworkError) throw e; // the network isn't "not an organization": otherwise a false "Could not resolve to a User"
       pv = null;
     }
     if (!pv) {
@@ -682,13 +691,13 @@ export class Repo implements FactRepo {
     return meta;
   }
 
-  /** Элементы проекта, один раз за запуск. */
+  /** Project items, once per run. */
   projectRows(): Row[] {
     if (this.rows_ === null) this.rows_ = this.projectItems();
     return this.rows_;
   }
 
-  /** Интервалы записанных фактов (маркер «Факт», поле iv); запись в этом запуске их дополняет. */
+  /** Intervals of recorded actuals (the "Actual" marker, the iv field); a write in this run adds to them. */
   recorded(): Recorded {
     if (this.recorded_ === null) {
       this.recorded_ = new Map();
@@ -700,7 +709,7 @@ export class Repo implements FactRepo {
     return this.recorded_;
   }
 
-  /** Закрепления сессий за задачами, один раз за запуск. */
+  /** Session pinning to tasks, once per run. */
   pins(): Map<string, string> {
     if (this.pins_ === null) this.pins_ = loadPins();
     return this.pins_;
@@ -715,7 +724,7 @@ export class Repo implements FactRepo {
     return [nodes[0].owner.login, nodes[0].number];
   }
 
-  /** Все элементы проекта с полями и последними комментариями issue. */
+  /** All project items with fields and the issue's latest comments. */
   private projectItems(): Row[] {
     const meta = this.projectMeta();
     const q = `
@@ -774,14 +783,14 @@ export class Repo implements FactRepo {
   }
 
   // --- PR ---------------------------------------------------------------
-  /** Кэш смёрженных PR (инкрементально по updatedAt). */
+  /** Cache of merged PRs (incrementally by updatedAt). */
   prs(): Map<number, PR> {
     if (this.prs_ !== null) return this.prs_;
     const file = path.join(this.cacheDir, "prs.json");
     const cache = loadJson<Any>(file, { prs: {} });
     let prs = new Map<number, PR>();
     for (const [k, v] of Object.entries(cache.prs ?? {})) prs.set(Number(k), v as PR);
-    if ([...prs.values()].some((v) => !("baseRefName" in v) || !("cloud" in v))) prs = new Map(); // старый формат кэша — перечитать
+    if ([...prs.values()].some((v) => !("baseRefName" in v) || !("cloud" in v))) prs = new Map(); // old cache format — reread
     this.defaultBranch = cache.default_branch ?? null;
     const knownMax = prs.size ? Math.max(...[...prs.values()].map((v) => v.updatedAt || 0)) : 0;
     const q = `query($o:String!,$r:String!,$c:String){ repository(owner:$o,name:$r){ defaultBranchRef{name} pullRequests(first:${PR_PAGE},after:$c,states:[MERGED],orderBy:{field:UPDATED_AT,direction:DESC}){ pageInfo{hasNextPage endCursor} nodes{ ${PR_FIELDS} } } } }`;
@@ -820,7 +829,7 @@ export class Repo implements FactRepo {
     saveJson(file, c);
   }
 
-  /** Один PR (в т.ч. не смёрженный) — из кэша или запросом. null — только если такого PR нет. */
+  /** One PR (including unmerged ones) — from the cache or by a request. null — only if there's no such PR. */
   pr(number: number): PR | null {
     const prs = this.prs();
     const cached = prs.get(number);
@@ -843,7 +852,7 @@ export class Repo implements FactRepo {
     return packed;
   }
 
-  /** Открытые PR: {номер: {headRefName, closing}} — их ветки чужие для остальных задач (кэш на час). */
+  /** Open PRs: {number: {headRefName, closing}} — their branches are foreign to other tasks (cached for an hour). */
   openPrs(): OpenPrs {
     if (this.open_ !== null) return this.open_;
     this.prs();
@@ -874,7 +883,7 @@ export class Repo implements FactRepo {
   }
 
   /**
-   * Индекс закрывателей всех закрытых issue репо (инкрементально по updatedAt):
+   * Index of the closers of all the repo's closed issues (incrementally by updatedAt):
    * {"oid": {oid: {"issues": [...], "at": ts}}, "pr": {"N": [issues]}}.
    */
   closers(): Closers {
@@ -932,7 +941,7 @@ export class Repo implements FactRepo {
     return this.closers_;
   }
 
-  /** Дифф одиночного коммита (для issue без PR): строки без lock/снапшотов/минифицированного. Кэш. */
+  /** Diff of a single commit (for an issue without a PR): lines without lock files/snapshots/minified code. Cached. */
   commitDiff(oid: string): number | null {
     const file = path.join(this.cacheDir, "commits.json");
     const cache = loadJson<Record<string, number>>(file, {});
@@ -952,8 +961,8 @@ export class Repo implements FactRepo {
     return n;
   }
 
-  // --- транскрипты -------------------------------------------------------
-  /** Сессии для факта: из каталогов репозитория без рутин, гости и закреплённые (selectSessions). */
+  // --- transcripts -------------------------------------------------------
+  /** Sessions for the actual: the repository's own (no routines), guests and pinned ones (selectSessions). */
   sessions(): Session[] {
     if (this.sessions_ === null) {
       const p = this.parsed();
@@ -962,7 +971,7 @@ export class Repo implements FactRepo {
     return this.sessions_;
   }
 
-  /** Сессии для сводки периода: все из каталогов репозитория и закреплённые, без гостей (selectPeriodSessions). */
+  /** Sessions for a period summary: all of the repository's own and pinned ones, no guests (selectPeriodSessions). */
   periodSessions(): Session[] {
     const p = this.parsed();
     return selectPeriodSessions(p.all, this.paths, p.pinned);
@@ -975,7 +984,7 @@ export class Repo implements FactRepo {
 }
 
 // ----------------------------------------------------------------------------
-// Маркеры в комментариях
+// Markers in comments
 // ----------------------------------------------------------------------------
 
 export function parseMarker(body: string | null | undefined, kind: string): Any | null {
@@ -990,23 +999,23 @@ export function parseMarker(body: string | null | undefined, kind: string): Any 
 }
 
 // ----------------------------------------------------------------------------
-// Транскрипты Claude Code
+// Claude Code transcripts
 // ----------------------------------------------------------------------------
 
 export const encodePath = (p: string) => p.replace(/[^A-Za-z0-9]/g, "-");
 
 const HASH_RE = /(?<![0-9a-zA-Z])[0-9a-f]{7,40}(?![0-9a-zA-Z])/g;
-// «#N» — границы как у \w в Python (буквы и цифры любого алфавита)
+// "#N" — boundaries like \w in Python (letters and digits of any alphabet)
 const ISSUE_REF_RE = /(?<![\p{L}\p{N}_/])#(\d{1,6})(?![\p{L}\p{N}_])/gu;
-const ISSUE_URL_RE = /github\.com\/([\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+)\/issues\/(\d{1,6})(?!\d)/gu; // URL issue c репо
-// Не человеческие промпты: уведомления, служебные вставки, автоматические рутины (scheduled-task).
+const ISSUE_URL_RE = /github\.com\/([\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+)\/issues\/(\d{1,6})(?!\d)/gu; // issue URL with the repo
+// Not human prompts: notifications, service insertions, automatic routines (scheduled-task).
 const SKIP_PROMPT_PREFIXES = ["<task-notification", "<\\task-notification", "<local-command", "<command-", "<system-reminder", "<\\system-reminder", "<bash-", "<scheduled-task", "<\\scheduled-task"];
 
 const refsIn = (txt: string) => uniqSortedNums([...txt.matchAll(ISSUE_REF_RE)].map((m) => parseInt(m[1]!, 10)));
 const urlsIn = (txt: string) => uniqSortedStrs([...txt.matchAll(ISSUE_URL_RE)].map((m) => `${m[1]}#${parseInt(m[2]!, 10)}`));
 
-// Задание субагенту: номер или ссылка сразу после слова «задача» (`subagentPrompt.task` любого языка словаря: «Задача
-// #42», «Task #42») либо в самом начале — задача; после «эпик» (`subagentPrompt.epic`, с окончанием) и «PR» — нет
+// Subagent assignment: a number or link right after the word "task" (`subagentPrompt.task` in any dictionary language:
+// "Task #42") or at the very start is the task; after "epic" (`subagentPrompt.epic`, with any ending) and "PR" it isn't
 const ISSUE_ALT = String.raw`#(\d{1,6})(?![\p{L}\p{N}_])|(?:https?:\/\/)?github\.com\/([\p{L}\p{N}_.-]+\/[\p{L}\p{N}_.-]+)\/issues\/(\d{1,6})(?!\d)`;
 const TASK_WORDS = locale.every((n) => n.subagentPrompt.task).map(locale.escapeRe).join("|");
 const EPIC_WORDS = locale.every((n) => n.subagentPrompt.epic).map((w) => `${locale.escapeRe(w)}\\p{L}*`).join("|");
@@ -1015,10 +1024,11 @@ const TASK_LEAD_RE = new RegExp(String.raw`^\s*(?:${ISSUE_ALT})`, "u");
 const NOT_TASK_RE = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:${EPIC_WORDS}|PR)\s*[:—-]?\s*(?:${ISSUE_ALT})`, "giu");
 
 /**
- * Задача из задания субагенту: «Задача #42 (эпик #40). …» — 42, «#42 (эпик #40): …» — 42, ссылка на issue — с
- * репозиторием (`o/r#42`). Без этих примет — как раньше: ровно один номер без ссылок или ровно одна ссылка (и
- * совпадающий с ней номер), не считая номеров после «эпик» и «PR». Подсказка жёсткая (своя запись — целиком, чужая —
- * ноль, ветки и окна не смотрятся), поэтому при неясности её нет: «посмотри #42 и #39» — пусто, записи идут по ветке.
+ * The task from a subagent assignment: "Task #42 (epic #40). …" — 42, "#42 (epic #40): …" — 42, an issue link — with
+ * the repository (`o/r#42`). Without these signs — as before: exactly one number without links or exactly one link
+ * (and the number matching it), not counting numbers after "epic" and "PR". The hint is hard (its own record — whole,
+ * someone else's — zero, branches and windows aren't looked at), so when unclear there is none: "look at #42 and #39"
+ * — empty, records go by branch.
  */
 function taskHintIn(txt: string): string {
   const key = (m: RegExpExecArray) => (m[1] ? String(parseInt(m[1], 10)) : `${m[2]}#${parseInt(m[3]!, 10)}`);
@@ -1048,11 +1058,11 @@ function textOfContent(c: unknown): string {
   return "";
 }
 
-// Вставка приложения в текст промпта: Claude Code desktop (Code tab) ставит её перед текстом
-// человека. Незакрытая — до конца текста.
+// The app's insertion into the prompt text: Claude Code desktop (Code tab) puts it before the
+// human's text. An unclosed one runs to the end of the text.
 const REMINDER_RE = /<system-reminder>[\s\S]*?(?:<\/system-reminder>|$)/g;
 
-/** Текст промпта без вставок <system-reminder>: по нему решается, человек ли это, и ищется номер задачи. */
+/** Prompt text without <system-reminder> insertions: by it we decide if it's a human and look up the task number. */
 function promptText(c: unknown): string {
   return textOfContent(c).replace(REMINDER_RE, "");
 }
@@ -1075,7 +1085,7 @@ interface Acc {
   ev: Any[][];
   prlinks: [number, number, string?][];
   commits: [number, string][];
-  listed: [number, string][]; // хеши из вывода листинга git — в commits только свои (finishCommits)
+  listed: [number, string][]; // hashes from git listing output — only own ones go into commits (finishCommits)
   first_refs: number[] | null;
   first_urls: string[];
   usage: Any[][];
@@ -1100,7 +1110,7 @@ function* jsonlRecords(file: string): Generator<Any> {
   }
 }
 
-/** Хеши коммитов из вывода инструмента (не больше 60 на вывод, 5000 на сессию). */
+/** Commit hashes from a tool's output (at most 60 per output, 5000 per session). */
 function collectHashes(into: [number, string][], ts: number, txt: string): void {
   const seen = new Set<string>();
   for (const m of txt.matchAll(HASH_RE)) {
@@ -1112,30 +1122,33 @@ function collectHashes(into: [number, string][], ts: number, txt: string): void 
   }
 }
 
-// Листинг: git и gh, которые коммитов не делают, а перечисляют — в том числе чужие (соседние worktree, ветки, лог,
-// fetch, PR и issue через API). Канон велит смотреть на соседей до работы и после мержа, и свежий хеш чужого PR в таком
-// выводе рядом по времени с его коммитом — ложный якорь (#134). `gh pr view` — не листинг: SKILL.md советует напечатать
-// им коммиты своего PR перед `est fact`, это якорь.
+// Listing: git and gh commands that don't make commits but list them — including someone else's (neighbor worktrees,
+// branches, log, fetch, PRs and issues via the API). The canon says to look at neighbors before work and after a
+// merge, and a fresh hash of someone else's PR in such output close in time to its commit is a false anchor (#134).
+// `gh pr view` isn't a listing: SKILL.md advises printing your PR's commits with it before `est fact`, it's an anchor.
 const LIST_GIT = new Set(["worktree", "branch", "log", "show", "status", "fetch", "switch", "checkout", "rev-parse", "rev-list", "reflog", "for-each-ref", "show-ref", "cherry", "describe", "diff", "ls-remote", "remote", "name-rev", "merge-base", "shortlog", "blame", "ls-files", "ls-tree", "cat-file"]);
 const LIST_GH = new Set(["issue", "run", "project", "label", "search", "pr list", "pr checks", "pr status", "pr diff", "repo view", "api"]);
-// оболочка вокруг листинга: коммитов не делает; всё прочее (скрипт, bun, make…) может коммитить — не листинг
+// a shell around a listing: makes no commits; everything else (a script, bun, make…) may commit — not a listing
 const LIST_SHELL = new Set(["cd", "pwd", "echo", "printf", "true", "set", "export", "read", "head", "tail", "grep", "rg", "sed", "awk", "cut", "tr", "sort", "uniq", "wc", "cat", "ls", "column", "jq", "date"]);
-// ключевые слова оболочки (#142): перед командой — снимаются, и проверяется сама команда (условие `if`/`while` — тоже);
-// заголовок `for … in …` и `case … in` — не команда; закрывающие — пропускаются
+// shell keywords (#142): before a command they're stripped, and the command itself is checked (an `if`/`while`
+// condition too); a `for … in …` and `case … in` header isn't a command; closing ones are skipped
 const SHELL_PREFIX = new Set(["do", "then", "else", "elif", "if", "while", "until", "!", "{"]);
 const SHELL_SKIP = new Set(["for", "case", "done", "fi", "esac", "}"]);
 
-/** Команда — только листинг git и gh (с оболочкой вокруг): хеши её вывода не якоря, если коммит не сделала сама сессия. */
+/**
+ * The command is only a git and gh listing (with a shell around it): hashes in its output aren't anchors unless the
+ * session made the commit itself.
+ */
 function gitListingOnly(cmd: string): boolean {
-  if (/\bmutation\b/.test(cmd)) return false; // GraphQL-мутация может создать коммит (createCommitOnBranch)
+  if (/\bmutation\b/.test(cmd)) return false; // a GraphQL mutation may create a commit (createCommitOnBranch)
   let quotedSub = false;
   const bare = cmd.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, (q) => ((quotedSub ||= q[0] === '"' && /\$\(|`/.test(q)), "''"));
-  if (quotedSub) return false; // "$(…)" — команда внутри кавычек не видна разбору
+  if (quotedSub) return false; // "$(…)" — a command inside quotes is invisible to the parsing
   let list = false;
   const segs = bare.replace(/\d*[<>]+&?\s*[^\s;&|()]*/g, " ").replace(/\$\(|`/g, ";").split(/&&|\|\||[;|&\n()]/);
   for (const seg of segs) {
     const w = seg.trim().split(/\s+/).filter(Boolean);
-    while (w.length && (SHELL_PREFIX.has(w[0]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!))) w.shift(); // VAR=… перед командой
+    while (w.length && (SHELL_PREFIX.has(w[0]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!))) w.shift(); // VAR=… before the command
     if (!w.length || SHELL_SKIP.has(w[0]!)) continue;
     if (w[0] === "git") {
       let i = 1;
@@ -1144,7 +1157,7 @@ function gitListingOnly(cmd: string): boolean {
       list = true;
     } else if (w[0] === "gh") {
       if (!LIST_GH.has(w[1] ?? "") && !LIST_GH.has(`${w[1]} ${w[2]}`)) return false;
-      if (w[1] === "api" && w.some((x) => /^(-X|--method)/.test(x))) return false; // PUT contents — коммит
+      if (w[1] === "api" && w.some((x) => /^(-X|--method)/.test(x))) return false; // PUT contents — a commit
       list = true;
     } else if (!LIST_SHELL.has(w[0]!)) return false;
   }
@@ -1152,8 +1165,8 @@ function gitListingOnly(cmd: string): boolean {
 }
 
 /**
- * Хеши листинга — в якоря, только если тот же коммит есть в выводах самой сессии (git commit, push, скрипт):
- * свой коммит в `git log` продлевает окно, чужой в `git worktree list` не привязывает. Затем — по времени.
+ * Listing hashes become anchors only if the same commit is in the session's own outputs (git commit, push, a script):
+ * an own commit in `git log` extends the window, someone else's in `git worktree list` doesn't link. Then — by time.
  */
 function finishCommits(acc: Acc): void {
   const own = new Map<string, string[]>();
@@ -1163,30 +1176,30 @@ function finishCommits(acc: Acc): void {
 }
 
 /**
- * Разобрать один jsonl (сессия или её субагент) в общий аккумулятор acc.
+ * Parse one jsonl (a session or its subagent) into the shared accumulator acc.
  *
- * Субагенты (<sid>/subagents/**\/*.jsonl — Agent/Workflow) — часть той же сессии: их записи идут в
- * таймлайн и дают якоря по коммитам, но «человеческие» промпты в них — это задания от оркестратора,
- * а не от человека, поэтому n_human и первый промпт берём только с верхнего уровня. Зато задание
- * субагенту называет задачу («Задача #N (эпик #M)», «#N» или URL issue — taskHintIn): все записи
- * этого субагента получают подсказку hint=N — так работа параллельных субагентов в workflow
- * привязывается к своим задачам, а не делится по порядку коммитов.
+ * Subagents (<sid>/subagents/**\/*.jsonl — Agent/Workflow) are part of the same session: their records go into the
+ * timeline and give commit anchors, but the "human" prompts in them are assignments from the orchestrator, not from a
+ * human, so n_human and the first prompt are taken only from the top level. On the other hand, a subagent's
+ * assignment names the task ("Task #N (epic #M)", "#N" or an issue URL — taskHintIn): all records of that subagent
+ * get the hint hint=N — this way the work of parallel subagents in a workflow is linked to their own tasks instead of
+ * being split by commit order.
  */
 function scanJsonl(file: string, acc: Acc, agent: number): void {
   scanRecords(jsonlRecords(file), acc, agent);
 }
 
 /**
- * То же по готовым записям: у облачной сессии они собираются из её событий (parseCloudFile). agent — 0 у самой
- * сессии, k у k-го субагента: номер уходит в запись, по нему факт считает фан-аут задачи.
+ * The same from ready records: for a cloud session they're assembled from its events (parseCloudFile). agent — 0 for
+ * the session itself, k for the k-th subagent: the number goes into the record, by it the actual computes task fan-out.
  */
 function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
   const subagent = agent > 0;
   const commitToolIds = new Set<string>();
   const listingToolIds = new Set<string>();
-  let hint = ""; // подсказка задачи для записей субагента: "N" или "owner/repo#N"
+  let hint = ""; // task hint for subagent records: "N" or "owner/repo#N"
   let hintDone = !subagent;
-  let pending: string[] = []; // переименования без времени: время — у следующей записи
+  let pending: string[] = []; // renames without a time: the time comes from the next record
   let lastTs: number | null = null;
   for (const r of records) {
     const t = r.type;
@@ -1194,9 +1207,9 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
     if (acc.cwd === null && r.cwd) acc.cwd = r.cwd;
     if (r.cwd && !acc.cwds.includes(r.cwd)) acc.cwds.push(r.cwd);
     if (t === "custom-title" && !subagent) {
-      // название сессии по конвенции «#<номер> <название задачи>» привязывает к задаче записи с момента
-      // переименования (первое — с начала сессии); Claude Code пишет его без времени
-      // Claude Code повторяет запись по ходу сессии — период открывает только смена названия
+      // the session name by the "#<number> <task name>" convention links records to the task from the moment of the
+      // rename (the first one — from the session start); Claude Code writes it without a time
+      // Claude Code repeats the record during the session — only a change of name opens a period
       const title = String(r.customTitle || "");
       const prev = pending.length ? pending[pending.length - 1] : acc.titles.length ? acc.titles[acc.titles.length - 1]![1] : null;
       acc.title = title;
@@ -1212,7 +1225,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
     }
     if (t === "pr-link") {
       const pr = r.prNumber;
-      // номер PR без репозитория неоднозначен: у каждого репозитория свои номера
+      // a PR number without a repository is ambiguous: each repository has its own numbers
       const prRepo = String(r.prRepository || /github\.com\/([^/\s]+\/[^/\s]+)\/pull\//.exec(String(r.prUrl ?? ""))?.[1] || "");
       if (ts && Number.isInteger(pr)) acc.prlinks.push(prRepo ? [ts, pr, prRepo] : [ts, pr]);
       continue;
@@ -1224,15 +1237,15 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
     const msg = r.message ?? {};
     const content = msg.content;
     if (!hintDone && t === "user") {
-      // первый промпт субагента — задание от оркестратора
+      // a subagent's first prompt is the assignment from the orchestrator
       const txt = textOfContent(content);
       if (txt.trim()) {
         hintDone = true;
         hint = taskHintIn(txt);
       }
     }
-    // Токены: usage дублируется на каждой записи одного ответа (по блоку контента) —
-    // считаем один раз на message.id.
+    // Tokens: usage is duplicated on every record of one response (per content block) —
+    // count it once per message.id.
     let uidx = -1;
     if (t === "assistant") {
       const u = msg.usage;
@@ -1264,23 +1277,23 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         if (typeof cmd === "string" && cmd.includes("git commit")) commitToolIds.add(b.id);
         if (typeof cmd === "string" && gitListingOnly(cmd)) listingToolIds.add(b.id);
       } else if (t === "user" && b.type === "tool_result") {
-        // Хеши берём из ЛЮБОГО tool_result, не только после `git commit`: коммит часто делает
-        // скрипт (проверки + commit + push), и хеш всплывает в его выводе. Ложные якоря (старые
-        // хеши из git log) отсекает ANCHOR_TOLERANCE — хеш должен появиться рядом по времени с
-        // authoredDate коммита; свежие чужие из листинга git (соседние worktree) — finishCommits.
+        // Hashes are taken from ANY tool_result, not only after `git commit`: a commit is often made by
+        // a script (checks + commit + push), and the hash surfaces in its output. False anchors (old
+        // hashes from git log) are cut off by ANCHOR_TOLERANCE — the hash must appear close in time to the
+        // commit's authoredDate; fresh foreign ones from a git listing (neighbor worktrees) — by finishCommits.
         let txt = textOfContent(b.content);
         const tur = r.toolUseResult;
         if (tur && typeof tur === "object") txt += "\n" + String(tur.stdout ?? "") + "\n" + String(tur.stderr ?? "");
-        if (!commitToolIds.has(b.tool_use_id) && !txt.includes("git") && txt.length > 20000) continue; // огромный вывод без git — не тратим время
+        if (!commitToolIds.has(b.tool_use_id) && !txt.includes("git") && txt.length > 20000) continue; // huge output without git — don't spend time on it
         collectHashes(listingToolIds.has(b.tool_use_id) ? acc.listed : acc.commits, ts, txt);
       }
     }
   }
-  // переименование в самом конце: записей после него нет
+  // a rename at the very end: there are no records after it
   for (const title of pending) acc.titles.push([lastTs === null ? 0 : lastTs + 1, title]);
 }
 
-/** Транскрипты субагентов сессии: <dir>/<sid>/subagents/**\/*.jsonl. */
+/** A session's subagent transcripts: <dir>/<sid>/subagents/**\/*.jsonl. */
 function subagentFiles(file: string): string[] {
   const sdir = path.join(file.slice(0, -6), "subagents");
   let isDir = false;
@@ -1294,7 +1307,7 @@ function subagentFiles(file: string): string[] {
 
 const byTs = (a: Any[], b: Any[]) => (a[0] as number) - (b[0] as number);
 
-/** Компактная сводка одной сессии: jsonl верхнего уровня + её субагенты. */
+/** Compact summary of one session: the top-level jsonl + its subagents. */
 export function parseSessionFile(file: string): Session {
   const acc = newAcc();
   scanJsonl(file, acc, 0);
@@ -1331,7 +1344,7 @@ export function parseSessionFile(file: string): Session {
   };
 }
 
-/** Команда shell из аргументов вызова Codex: `{"cmd": "…"}` или `{"command": ["bash", "-lc", "…"]}`. */
+/** A shell command from Codex call arguments: `{"cmd": "…"}` or `{"command": ["bash", "-lc", "…"]}`. */
 function codexCommand(args: unknown): string {
   let a: Any;
   try {
@@ -1353,12 +1366,12 @@ function codexText(out: unknown): string {
 }
 
 /**
- * Сводка сессии Codex (~/.codex/sessions/**\/rollout-*.jsonl) в том же формате, что у Claude Code.
+ * Codex session summary (~/.codex/sessions/**\/rollout-*.jsonl) in the same format as Claude Code's.
  *
- * Записи: session_meta (cwd, id), event_msg/item_completed с item.type=UserMessage — человеческий
- * промпт, response_item/{message,custom_tool_call,function_call,*_output} — работа агента (хеши
- * коммитов ищем в выводах инструментов), token_usage_record — токены ответа (раз на response_id),
- * turn_context / thread_settings_applied — модель. Ветки у записей нет — считается нейтральной.
+ * Records: session_meta (cwd, id), event_msg/item_completed with item.type=UserMessage — a human
+ * prompt, response_item/{message,custom_tool_call,function_call,*_output} — the agent's work (commit
+ * hashes are looked for in tool outputs), token_usage_record — the response's tokens (once per response_id),
+ * turn_context / thread_settings_applied — the model. Records have no branch — it's considered neutral.
  */
 export function parseCodexFile(file: string): Session {
   const acc = newAcc();
@@ -1449,7 +1462,7 @@ export function parseCodexFile(file: string): Session {
 }
 
 
-/** Выгрузка облачной сессии: то, что сохраняет браузерный сниппет из SKILL.md (раздел «Cloud session»). */
+/** A cloud session export: what the browser snippet from SKILL.md saves (section "Cloud session"). */
 export interface CloudExport {
   v: number;
   session: string;
@@ -1463,11 +1476,11 @@ export function isCloudExport(x: Any): x is CloudExport {
 }
 
 /**
- * Сводка облачной сессии Claude Code из её событий (claude.ai/v1/code/sessions/<id>/events) в том же формате, что у
- * локальной: события assistant/user — это те же записи транскрипта. Ветки у записи нет — её приносит событие
- * `vcs_state_changed` (при коммите и push), до первого такого события ветка нейтральная; человек — `source: client`;
- * ответы субагентов (`parent_tool_use_id`) — отдельный поток, как файл субагента у локальной сессии. Название
- * сессии — из выгрузки: «#N …» привязывает, как у локальной.
+ * Claude Code cloud session summary from its events (claude.ai/v1/code/sessions/<id>/events) in the same format as a
+ * local one: assistant/user events are the same transcript records. A record has no branch — the `vcs_state_changed`
+ * event brings it (on commit and push), before the first such event the branch is neutral; a human is
+ * `source: client`; subagent responses (`parent_tool_use_id`) are a separate stream, like a local session's subagent
+ * file. The session name comes from the export: "#N …" links, as for a local one.
  */
 export function parseCloudFile(file: string): Session {
   const data = JSON.parse(readFileSync(file, "utf8"));
@@ -1500,7 +1513,7 @@ export function parseCloudFile(file: string): Session {
       if (!subs.has(parent)) subs.set(parent, []);
       subs.get(parent)!.push(rec);
     }
-    // облако сообщает ветку только при коммите — переход на другую ветку виден в выводе git
+    // the cloud reports the branch only on commit — a switch to another branch is visible in git output
     if (e.event_type === "user") branch = gitBranchIn(textOfContent(p.message?.content) + "\n" + String(p.tool_use_result?.stdout ?? "")) ?? branch;
   }
   const acc = newAcc();
@@ -1529,7 +1542,7 @@ export function parseCloudFile(file: string): Session {
   };
 }
 
-/** Последняя ветка, на которую перешёл git в этом выводе: `Switched to branch 'x'` или строка коммита `[x abc1234]`. */
+/** The last branch git switched to in this output: `Switched to branch 'x'` or a commit line `[x abc1234]`. */
 function gitBranchIn(txt: string): string | null {
   let last: string | null = null;
   for (const m of txt.matchAll(/Switched to (?:a new )?branch '([^']+)'|^\[([^\s\]]+)(?: \(root-commit\))? [0-9a-f]{7,40}\]/gm)) last = m[1] ?? m[2] ?? last;
@@ -1537,12 +1550,13 @@ function gitBranchIn(txt: string): string | null {
 }
 
 /**
- * Ключ сессии в маркере «Факт» (iv) и в выводе — 8 знаков id: у локальной — начало UUID, у облачной — после префикса
- * `session_`, общего для всех облачных (иначе их интервалы склеились бы в один ключ).
+ * Session key in the "Actual" marker (iv) and in output — 8 chars of the id: for a local one — the UUID start, for a
+ * cloud one — after the `session_` prefix shared by all cloud ones (otherwise their intervals would merge into one
+ * key).
  */
 export const sidKey = (sid: string) => sid.replace(/^session_/, "").slice(0, 8);
 
-/** Путь выгрузки облачной сессии в каталоге состояния: по репозиторию, файл — id сессии. */
+/** Path of a cloud session export in the state directory: by repository, the file is the session id. */
 export const cloudPath = (repoFull: string, session: string) => path.join(CLOUD_DIR, ...repoFull.split("/"), `${session}.json`);
 
 function cloudFiles(repo: Repo): string[] {
@@ -1556,7 +1570,7 @@ function cloudFiles(repo: Repo): string[] {
 
 const isCloudFile = (file: string) => file.startsWith(CLOUD_DIR.replace(/\/+$/, "") + "/");
 
-/** cwd из первой записи session_meta. */
+/** cwd from the first session_meta record. */
 function codexCwd(file: string): string | null {
   try {
     for (const r of jsonlRecords(file)) {
@@ -1570,8 +1584,9 @@ function codexCwd(file: string): string | null {
 }
 
 /**
- * Сессия относится к репозиторию, если хоть одна её запись сделана в его каталоге (или в worktree внутри): сессию
- * начинают и вне проекта, а потом переносят в него. Облачная — по каталогу выгрузки, не по cwd контейнера.
+ * A session belongs to the repository if at least one of its records was made in its directory (or a worktree
+ * inside): sessions are also started outside the project and then moved into it. A cloud one — by the export
+ * directory, not by the container's cwd.
  */
 export function inRepo(s: Session, paths: string[]): boolean {
   if (s.source === "cloud") return true;
@@ -1580,11 +1595,11 @@ export function inRepo(s: Session, paths: string[]): boolean {
 }
 
 function cwdMatches(cwd: string | null | undefined, paths: string[]): boolean {
-  if (!cwd) return true; // не знаем — не отбрасываем
+  if (!cwd) return true; // unknown — don't discard
   return paths.some((p) => cwd === p || cwd.startsWith(p.replace(/\/+$/, "") + "/"));
 }
 
-/** Сессии Codex, чей cwd — путь репозитория; индекс cwd кэшируется по mtime файла. */
+/** Codex sessions whose cwd is a repository path; the cwd index is cached by file mtime. */
 function codexFiles(repo: Repo): string[] {
   let files: string[] = [];
   for (const d of CODEX_DIRS) files = files.concat(walkJsonl(d));
@@ -1614,14 +1629,14 @@ function codexFiles(repo: Repo): string[] {
 
 const isCodexFile = (file: string) => CODEX_DIRS.some((d) => file.startsWith(d.replace(/\/+$/, "") + "/"));
 
-/** mtime сессии с учётом субагентов (их файлы дописываются позже верхнего уровня). */
+/** Session mtime including subagents (their files are appended later than the top level). */
 function sessionMtime(file: string): number {
   let m = mtimeOf(file);
   for (const sf of subagentFiles(file)) {
     try {
       m = Math.max(m, mtimeOf(sf));
     } catch {
-      /* файл исчез — не важно */
+      /* the file is gone — doesn't matter */
     }
   }
   return m;
@@ -1631,13 +1646,13 @@ function transcriptFiles(repo: Repo): string[] {
   return transcriptFilesIn(repo.paths);
 }
 
-/** Транскрипты Claude Code по каталогам работы: ~/.claude/projects/<путь-через-дефисы>*\/*.jsonl. */
+/** Claude Code transcripts by work directory: ~/.claude/projects/<path-with-dashes>*\/*.jsonl. */
 function transcriptFilesIn(paths: string[], projectsDir = PROJECTS_DIR): string[] {
   const encs = paths.map(encodePath);
   return transcriptFilesWhere((d) => encs.some((e) => d.startsWith(e)), projectsDir);
 }
 
-/** Транскрипты Claude Code в каталогах ~/.claude/projects, чьё имя подходит под match. */
+/** Claude Code transcripts in ~/.claude/projects directories whose name fits match. */
 function transcriptFilesWhere(match: (dir: string) => boolean, projectsDir = PROJECTS_DIR): string[] {
   let dirs: string[];
   try {
@@ -1659,20 +1674,24 @@ function transcriptFilesWhere(match: (dir: string) => boolean, projectsDir = PRO
 }
 
 /**
- * Каталог транскриптов временной папки приложения Claude (`…/Claude/scratch-workspaces/…`): там работает сессия без
- * выбранной папки. Перейдя в репозиторий (change_directory), она пишет транскрипт туда же, пока приложение не перенесёт
- * его в каталог репозитория — уже после закрытия задачи.
+ * Transcript directory of the Claude app's temp folder (`…/Claude/scratch-workspaces/…`): a session without a chosen
+ * folder works there. Having moved into a repository (change_directory), it keeps writing its transcript there until
+ * the app moves it into the repository's directory — already after the task is closed.
  */
 const isScratchDir = (dir: string) => dir.includes("-scratch-workspaces-");
 
-/** Имя репозитория `owner/name` в тексте: в URL, pr-link, выводе `git push` (`…/owner/name.git`), но не часть другого имени. */
+/**
+ * Repository name `owner/name` in text: in a URL, a pr-link, `git push` output (`…/owner/name.git`), but not as part
+ * of another name.
+ */
 const slugRe = (slug: string) => new RegExp(`(?<![\\w.-])${reEscape(slug)}(?![\\w-]|\\.(?!git\\b)[\\w-])`, "i");
 
 /**
- * Сессии-гости: транскрипты из каталогов других репозиториев реестра и временных папок приложения, в которых (или в
- * субагентах) встречается имя репозитория задачи — разговор в одном репозитории перерос в задачу другого, сессия без
- * папки перешла в репозиторий задачи. Без имени репозитория работы над его задачей там нет: коммит, push, PR и URL
- * issue его называют. Индекс — по mtime (indexFile), текст читается раз.
+ * Guest sessions: transcripts from other registry repositories' directories and the app's temp folders in which (or
+ * in whose subagents) the task repository's name occurs — a conversation in one repository grew into a task of
+ * another, a session without a folder moved into the task's repository. Without the repository's name there's no work
+ * on its task there: a commit, push, PR and issue URL name it. The index is by mtime (indexFile), the text is read
+ * once.
  */
 export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: string[], projectsDir = PROJECTS_DIR, indexFile?: string): string[] {
   const own = new Set(transcriptFilesIn(ownPaths, projectsDir));
@@ -1709,7 +1728,10 @@ export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: s
 
 const PIN_RE = /^[\w.-]+\/[\w.-]+#\d+$/;
 
-/** Закрепления сессий за задачами: файл — id сессии, строка в нём — задача `owner/repo#N`; прочее (`.gitignore`) — мимо. */
+/**
+ * Session pinning to tasks: the file is the session id, the line in it is the task `owner/repo#N`; anything else
+ * (`.gitignore`) is skipped.
+ */
 export function loadPins(dir = PINS_DIR): Map<string, string> {
   const out = new Map<string, string>();
   let names: string[];
@@ -1732,8 +1754,9 @@ export function loadPins(dir = PINS_DIR): Map<string, string> {
 }
 
 /**
- * Транскрипты сессий, закреплённых за задачами репозитория, — в любом каталоге ~/.claude/projects: закрепление
- * называет сессию по id, а id — имя файла её транскрипта. Сессия, начатая вне каталогов реестра, тоже найдётся.
+ * Transcripts of sessions pinned to the repository's tasks — in any ~/.claude/projects directory: a pin names the
+ * session by id, and the id is its transcript's file name. A session started outside registry directories is found
+ * too.
  */
 export function pinnedTranscripts(slug: string, pins: Map<string, string>, projectsDir = PROJECTS_DIR): string[] {
   const prefix = slug.toLowerCase() + "#";
@@ -1742,8 +1765,9 @@ export function pinnedTranscripts(slug: string, pins: Map<string, string>, proje
 }
 
 /**
- * Сессии репозитория из разобранных транскриптов: из его каталогов, гости и закреплённые за его задачами. Закреплённая
- * не отбрасывается как рутина (мало промптов, без PR и коммитов) и не помечается гостем: её задачу назвал `task status`.
+ * The repository's sessions from parsed transcripts: from its directories, guests and those pinned to its tasks. A
+ * pinned one isn't discarded as a routine (few prompts, no PR or commits) and isn't marked a guest: `task status` named
+ * its task.
  */
 export function selectSessions(parsed: Record<string, Session>, paths: string[], guests: Set<string>, pinned: Set<string>): Session[] {
   const sessions: Session[] = [];
@@ -1758,8 +1782,9 @@ export function selectSessions(parsed: Record<string, Session>, paths: string[],
 }
 
 /**
- * Сессии для сводки периода: все из каталогов репозитория — и короткие без коммитов и PR, которые факт отбрасывает как
- * рутину, — и закреплённые за его задачами. Гостей нет: их работа — в своём репозитории, здесь — лишь упоминание.
+ * Sessions for a period summary: all from the repository's directories — including short ones without commits and
+ * PRs, which the actual discards as routines — and those pinned to its tasks. No guests: their work is in their own
+ * repository, here it's only a mention.
  */
 export function selectPeriodSessions(parsed: Record<string, Session>, paths: string[], pinned: Set<string>): Session[] {
   return Object.entries(parsed)
@@ -1767,14 +1792,14 @@ export function selectPeriodSessions(parsed: Record<string, Session>, paths: str
     .map(([, s]) => s);
 }
 
-/** Разобранные транскрипты репозитория по файлу и какие из них гости и закреплённые. */
+/** The repository's parsed transcripts by file, and which of them are guests and pinned. */
 interface Parsed {
   all: Record<string, Session>;
   guests: Set<string>;
   pinned: Set<string>;
 }
 
-/** Разбор транскриптов с кэшем по mtime (инкрементально). */
+/** Transcript parsing with an mtime cache (incremental). */
 function loadSessions(repo: Repo): Parsed {
   if (!repo.paths.length) throw new EstError(`no local paths for ${repo.full} in ${REGISTRY_PATH} — nowhere to look for transcripts`);
   const file = path.join(repo.cacheDir, "sessions.json");
@@ -1814,10 +1839,10 @@ function loadSessions(repo: Repo): Parsed {
 }
 
 // ----------------------------------------------------------------------------
-// Привязка задачи к PR/коммитам
+// Linking a task to PRs/commits
 // ----------------------------------------------------------------------------
 
-/** Ветка задачи по канону — `[<область>/]<type>/<N>-<slug>`: тип (в нижнем регистре) и номер, иначе null. */
+/** Task branch by the canon — `[<area>/]<type>/<N>-<slug>`: type (lowercase) and number, otherwise null. */
 export function taskBranch(branch: string | null | undefined): { type: string; issue: number } | null {
   const m = BRANCH_CONV_RE.exec(branch || "");
   return m ? { type: m[1]!.toLowerCase(), issue: parseInt(m[2]!, 10) } : null;
@@ -1827,9 +1852,9 @@ const branchTokens = (branch: string | null | undefined) => (branch || "").split
 const isDigits = (s: string) => /^\d+$/.test(s);
 
 /**
- * Ветка по конвенции <type>/N-slug — задача N и только она: число в слаге (код ответа, версия) — не номер.
- * Иначе — номер как отдельный токен (issue-N-…, /N-…, -N-…), соседние токены не чисто числовые (чтобы даты
- * вида 2026-09-16 не ловились).
+ * A branch by the <type>/N-slug convention — task N and only it: a number in the slug (a response code, a version)
+ * isn't the number. Otherwise — the number as a separate token (issue-N-…, /N-…, -N-…), neighboring tokens not purely
+ * numeric (so that dates like 2026-09-16 aren't caught).
  */
 export function branchHasIssue(branch: string | null | undefined, n: number): boolean {
   const conv = taskBranch(branch);
@@ -1843,7 +1868,7 @@ export function branchHasIssue(branch: string | null | undefined, n: number): bo
     if ([`issue${sn}`, `issues${sn}`, `gh${sn}`].includes(t.toLowerCase())) return true;
     if (t === sn) {
       if (isDigits(prev) || isDigits(nxt)) continue;
-      if (n < 10 && !["issue", "issues", "gh"].includes(prev.toLowerCase())) continue; // однозначные номера — только с явным issue-N
+      if (n < 10 && !["issue", "issues", "gh"].includes(prev.toLowerCase())) continue; // single-digit numbers — only with an explicit issue-N
       return true;
     }
   }
@@ -1851,8 +1876,8 @@ export function branchHasIssue(branch: string | null | undefined, n: number): bo
 }
 
 /**
- * Номер задачи из ветки: <type>/N-slug (конвенция) или issue-N / issues/N.
- * Голые числа в других местах (release/2026-09) номером не считаются.
+ * Task number from a branch: <type>/N-slug (convention) or issue-N / issues/N.
+ * Bare numbers elsewhere (release/2026-09) aren't counted as a number.
  */
 export function branchIssueNumber(branch: string | null | undefined): number | null {
   const conv = taskBranch(branch);
@@ -1861,7 +1886,7 @@ export function branchIssueNumber(branch: string | null | undefined): number | n
   return m2 ? parseInt(m2[1]!, 10) : null;
 }
 
-/** Тип задачи из ветки <type>/N-slug, если ветка по конвенции. */
+/** Task type from a <type>/N-slug branch, if the branch follows the convention. */
 export function branchType(branch: string | null | undefined): string | null {
   return taskBranch(branch)?.type ?? null;
 }
@@ -1904,7 +1929,7 @@ function fetchIssue(repo: Repo, number: number): Any {
   }
   const issue = data.repository.issue;
   if (!issue) throw new EstError(`issue #${number} not found in ${repo.full}`);
-  // события закрытия — в общий список timeline (маркеры fact/est ищем в последних 100 комментариях)
+  // close events — into the common timeline list (fact/est markers are looked for in the last 100 comments)
   issue.timelineItems.nodes.push(...(issue.closedEvents?.nodes ?? []));
   return issue;
 }
@@ -1916,7 +1941,7 @@ interface IssueFields {
   status: string | null;
 }
 
-/** Значения полей проекта для issue (item_id, est, fact, status). */
+/** Project field values for an issue (item_id, est, fact, status). */
 function issueProjectFields(issue: Any, meta: Meta): IssueFields {
   for (const it of issue.projectItems?.nodes ?? []) {
     if (it.project.id !== meta.id) continue;
@@ -1934,10 +1959,10 @@ function issueProjectFields(issue: Any, meta: Meta): IssueFields {
 
 type Closer = { oid: string; at: number | null };
 
-/** Что нужно привязке PR от репозитория: имя, кэш PR и PR по номеру. */
+/** What PR linking needs from a repository: the name, the PR cache and a PR by number. */
 type LinkRepo = Pick<Repo, "full" | "owner" | "name" | "prs" | "pr">;
 
-/** Issue → PR (сильные и слабые связи) и коммиты-закрыватели. */
+/** Issue → PRs (strong and weak links) and closing commits. */
 export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boolean] {
   const n: number = issue.number;
   const same = (o: Any) => (o?.repository?.nameWithOwner ?? repo.full) === repo.full;
@@ -1977,20 +2002,20 @@ export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boole
     else if (mention.test(p.body)) add(weak, num, "mention in the PR body");
   }
   for (const num of strong.keys()) weak.delete(num);
-  // Упоминание в PR, который закрывает другие задачи, — чужая работа: иначе задача без своего PR получает его
-  // время (с делением, хотя факт той задачи уже записан) и тип по его ветке.
+  // A mention in a PR that closes other tasks is someone else's work: otherwise a task without its own PR gets its
+  // time (with splitting, though that task's actual is already recorded) and the type from its branch.
   for (const num of [...weak.keys()]) {
     const p = repo.pr(num);
     if (p && p.closing.length && !p.closing.includes(n)) weak.delete(num);
   }
-  // Слабые связи используем только если сильных нет
+  // Weak links are used only if there are no strong ones
   const [use, weakUsed] = strong.size ? [strong, false] : [weak, weak.size > 0];
   const prObjs: PR[] = [];
   for (const [num, why] of [...use.entries()].sort((a, b) => a[0] - b[0])) {
     const p = repo.pr(num);
     if (p) prObjs.push({ ...p, why });
   }
-  // коммиты-закрыватели, не принадлежащие ни одному найденному PR
+  // closing commits that belong to none of the found PRs
   const prOids = new Set<string>();
   for (const p of prObjs) {
     for (const c of p.commits) prOids.add(c.oid);
@@ -2001,7 +2026,7 @@ export function resolveLinks(repo: LinkRepo, issue: Any): [PR[], Closer[], boole
 }
 
 // ----------------------------------------------------------------------------
-// Расчёт факта по транскриптам
+// Computing the actual from transcripts
 // ----------------------------------------------------------------------------
 
 function diffSize(pr: PR): number {
@@ -2011,9 +2036,9 @@ function diffSize(pr: PR): number {
   return pr.additions + pr.deletions;
 }
 
-const ANCHOR_TOLERANCE = 30 * 60; // хеш в выводе инструмента должен быть рядом по времени с authoredDate коммита
+const ANCHOR_TOLERANCE = 30 * 60; // a hash in tool output must be close in time to the commit's authoredDate
 
-/** Индекс: первые 7 символов oid → [(oid, pr_number, authoredDate)] для проверки префиксов. */
+/** Index: the first 7 chars of an oid → [(oid, pr_number, authoredDate)] for prefix checks. */
 function oidIndex(prs: Map<number, PR>): Map<string, [string, number, number | null][]> {
   const idx = new Map<string, [string, number, number | null][]>();
   for (const [num, p] of prs) {
@@ -2028,7 +2053,7 @@ function oidIndex(prs: Map<number, PR>): Map<string, [string, number, number | n
 
 const near = (ts: number, at: number | null) => at === null || at === undefined || Math.abs(ts - at) <= ANCHOR_TOLERANCE;
 
-/** Короткий хеш h является префиксом одного из oids (или наоборот). */
+/** Short hash h is a prefix of one of oids (or vice versa). */
 export function hashMatches(h: string, oids: Iterable<string>): boolean {
   for (const o of oids) if (o.startsWith(h) || h.startsWith(o)) return true;
   return false;
@@ -2058,12 +2083,13 @@ export interface Fact {
   cov: "full" | "partial" | "none";
   sessions: number;
   prompts: number;
-  agents?: number; // субагенты, чья работа привязана к задаче (фан-аут); нет — факт посчитан до признака
-  steps?: number; // ходы задачи — ответы модели, по одному на message.id, включая субагентов; нет — факт до признака
-  steps_agents?: number; // из них у субагентов
-  tail?: number; // ходов с контекстом больше TAIL_CTX — самые дорогие
-  preamble?: number; // контекст первого хода верхнего уровня самой ранней сессии — цена правил и инструментов
-  ctx_end?: number; // контекст последнего хода верхнего уровня самой поздней сессии
+  agents?: number; // subagents whose work is linked to the task (fan-out); absent — the actual predates the feature
+  steps?: number; // task turns — model responses, one per message.id, subagents included; absent — the actual
+  // predates the feature
+  steps_agents?: number; // of them, subagents'
+  tail?: number; // turns with context larger than TAIL_CTX — the most expensive
+  preamble?: number; // context of the first top-level turn of the earliest session — the price of rules and tools
+  ctx_end?: number; // context of the last top-level turn of the latest session
   prs: number[];
   commits: number;
   diff: number;
@@ -2086,19 +2112,19 @@ export interface Fact {
   is_pr?: boolean;
   subtasks?: Any[];
   sub_missing?: number;
-  iv?: Record<string, [number, number][]>; // интервалы по сессиям (sid, 8 знаков) — в маркер «Факт»
-  taken?: { issue: number; h: number }[]; // не засчитано: уже в записанном факте другой задачи
-  overlap?: { issue: number; h: number }[]; // засчитано (закрепление, ветка, субагент, коммит), но есть и в чужом факте
-  cloud_missing?: string[]; // облачные сессии из трейлера коммитов PR, выгрузки которых нет (est cloud-import)
-  cloud_parts?: CloudPart[]; // части, посчитанные облачными сессиями (маркер cloud) — хранятся в маркере при перезаписи
+  iv?: Record<string, [number, number][]>; // intervals by session (sid, 8 chars) — into the "Actual" marker
+  taken?: { issue: number; h: number }[]; // not counted: already in another task's recorded actual
+  overlap?: { issue: number; h: number }[]; // counted (pinning, branch, subagent, commit), but also in someone else's actual
+  cloud_missing?: string[]; // cloud sessions from the PR commits' trailer whose export is missing (est cloud-import)
+  cloud_parts?: CloudPart[]; // parts computed by cloud sessions (the cloud marker) — kept in the marker on rewrite
 }
 
-type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, доля)
+type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, share)
 
 /**
- * Окно привязки по времени: [a, z] (z не включительно, если zOpen), только ветка br (null — любая не чужая)
- * или нейтральная; rule — «якорь» (свой PR/коммит) или «название» / «промпт» (задача названа в названии
- * сессии или в первом промпте — слабая привязка: уступает уже записанному факту другой задачи).
+ * Time window for linking: [a, z] (z exclusive if zOpen), only branch br (null — any one that isn't foreign)
+ * or a neutral one; rule — "anchor" (own PR/commit) or "title" / "prompt" (the task is named in the session
+ * name or in the first prompt — a weak link: it yields to an already recorded actual of another task).
  */
 interface Win {
   a: number;
@@ -2120,7 +2146,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
 
   const ourPrs = new Set(prObjs.map((p) => p.number));
 
-  // --- «единицы» задачи (PR, коммит-закрыватель) и их доля: один PR/коммит на k задач → 1/k ----------
+  // --- the task's "units" (PR, closing commit) and their share: one PR/commit for k tasks → 1/k ----------
   const issuesOfPr = (num: number) => {
     const s = new Set<number>([...(prsAll.get(num)?.closing ?? []), ...(cidx.pr[String(num)] ?? [])]);
     s.add(number);
@@ -2140,14 +2166,14 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     prW.set(p.number, 1.0 / iss.size);
     if (iss.size > 1) shared.push({ unit: `PR #${p.number}`, with: others(iss), k: iss.size });
   }
-  const ourBranches = new Map<string, number>(); // ветка → доля
+  const ourBranches = new Map<string, number>(); // branch → share
   for (const p of prObjs) {
     if (p.headRefName) ourBranches.set(p.headRefName, Math.max(ourBranches.get(p.headRefName) ?? 0, prW.get(p.number)!));
   }
   for (const p of Object.values(openPrs)) {
     if (p.closing.includes(number) && p.headRefName && !ourBranches.has(p.headRefName)) ourBranches.set(p.headRefName, 1.0);
   }
-  const ourOid = new Map<string, [number | null, number]>(); // oid → (authoredDate, доля)
+  const ourOid = new Map<string, [number | null, number]>(); // oid → (authoredDate, share)
   for (const p of prObjs) for (const c of p.commits) ourOid.set(c.oid, [c.at, prW.get(p.number)!]);
   for (const c of closers) {
     const iss = issuesOfOid(c.oid);
@@ -2155,8 +2181,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     if (iss.size > 1) shared.push({ unit: locale.fill(projectNames().est.fact.commitUnit, { oid: c.oid.slice(0, 7) }), with: others(iss), k: iss.size });
   }
 
-  const idx = oidIndex(prsAll); // коммиты смёрженных PR (чужие якоря)
-  const foreignClosers = new Map<string, [string, number | null][]>(); // коммиты-закрыватели других issue: префикс → [(oid, at)]
+  const idx = oidIndex(prsAll); // commits of merged PRs (foreign anchors)
+  const foreignClosers = new Map<string, [string, number | null][]>(); // closing commits of other issues: prefix → [(oid, at)]
   for (const [oid, info] of Object.entries(cidx.oid)) {
     if (!(info.issues ?? []).includes(number) && !ourOid.has(oid)) {
       const k = oid.slice(0, 7);
@@ -2174,7 +2200,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   for (const [num, p] of Object.entries(openPrs)) {
     if (p.headRefName && !p.closing.includes(number)) {
       if (!branch2prs.has(p.headRefName)) branch2prs.set(p.headRefName, new Set());
-      branch2prs.get(p.headRefName)!.add(-Number(num)); // открытый PR: точно не наш
+      branch2prs.get(p.headRefName)!.add(-Number(num)); // an open PR: definitely not ours
     }
   }
 
@@ -2190,8 +2216,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   };
 
   /**
-   * (свой/чужой/нейтральный, доля); хеш — якорь только рядом по времени с датой коммита
-   * (в выводе git commit бывают и чужие хеши — из git log, rebase и т.п.).
+   * (own/foreign/neutral, share); a hash is an anchor only close in time to the commit date
+   * (git commit output can also contain foreign hashes — from git log, rebase etc.).
    */
   const hashClass = (h: string, ts: number): [string, number] => {
     for (const [oid, [at, w]] of ourOid) if ((oid.startsWith(h) || h.startsWith(oid)) && near(ts, at)) return ["own", w];
@@ -2200,8 +2226,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     return ["neutral", 0.0];
   };
 
-  const intervals: [number, number][] = []; // (a, b) без веса — для объединения между сессиями
-  const tok = { in: 0.0, out: 0.0, cw: 0.0, cr: 0.0 }; // токены привязанных ответов (с долей)
+  const intervals: [number, number][] = []; // (a, b) without weight — for the union across sessions
+  const tok = { in: 0.0, out: 0.0, cw: 0.0, cr: 0.0 }; // tokens of linked responses (with share)
   const byModel = new Map<string, { tok: number; usd: number; priced: boolean }>();
   const seenMids = new Set<string>();
   let rawTotal = 0.0;
@@ -2211,8 +2237,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   const seenHashes = new Set<string>();
   let nSessions = 0;
   let nPrompts = 0;
-  let nAgents = 0; // субагенты, чья работа привязана к задаче: признак фан-аута
-  // ходы — ответы модели по одному на message.id; цена задачи растёт квадратично от их числа
+  let nAgents = 0; // subagents whose work is linked to the task: a fan-out signal
+  // turns — model responses, one per message.id; a task's price grows quadratically with their number
   let steps = 0;
   let stepsAgents = 0;
   let tail = 0;
@@ -2224,10 +2250,10 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   let lastTs: number | null = null;
   const details: Detail[] = [];
   const iv: Record<string, [number, number][]> = {};
-  const takenS = new Map<number, number>(); // задача → секунды, отданные её записанному факту
+  const takenS = new Map<number, number>(); // task → seconds given to its recorded actual
   const overlapS = new Map<number, number>();
   const recorded = repo.recorded?.() ?? new Map();
-  const sharedWith = new Set(shared.flatMap((x) => x.with)); // общий PR/коммит: пересечение — это доля, не ошибка
+  const sharedWith = new Set(shared.flatMap((x) => x.with)); // a shared PR/commit: an overlap is a share, not an error
   const ourKey = `${repo.full}#${number}`;
   const cmpAnchor = (a: Anchor, b: Anchor) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0) || a[3] - b[3];
 
@@ -2237,14 +2263,16 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   for (const s of sessions) {
     const ev = s.ev;
     if (!ev.length) continue;
-    // Закреплённая сессия (github task status) целиком — задаче из закрепления, с субагентами (у них тот же id) и с
-    // временем до «В работе»: признаки ниже ей не нужны, чужие хеши, ветки и номера в её выводах время не уводят.
-    // Закреплённая за другой задачей — не наша, какие бы признаки этой в ней ни были. Без закрепления — признаки.
+    // A pinned session (github task status) goes whole to the task from the pin, with subagents (they have the same id)
+    // and with the time before "In progress": it doesn't need the features below, foreign hashes, branches and numbers
+    // in its outputs don't take the time away. Pinned to another task — not ours, whatever features of this one it
+    // has. Without a pin — features.
     const pin = pins.get(s.sid);
     if (pin !== undefined && pin.toLowerCase() !== ourKey.toLowerCase()) continue;
     const pinned = pin !== undefined;
-    // Гость — транскрипт из каталога другого репозитория: номера задач и ветки там свои. Его ветка — наша, только
-    // если это точно ветка нашего PR; чужая — только если это ветка чужого PR нашего репозитория.
+    // A guest is a transcript from another repository's directory: task numbers and branches there are its own. Its
+    // branch is ours only if it's exactly our PR's branch; foreign — only if it's the branch of a foreign PR of our
+    // repository.
     const guest = !!s.guest;
     const ourBr = (b: string) => (guest ? !!b && ourBranches.has(b) : isOurBranch(b));
     const foreignBr = (b: string) => {
@@ -2252,14 +2280,16 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       const nums = b && !isNeutral(b) && !ourBranches.has(b) ? branch2prs.get(b) : undefined;
       return !!nums?.size && ![...nums].some((x) => ourPrs.has(x));
     };
-    // pr-link без репозитория у гостя неоднозначен, со своим репозиторием — наш, с другим — не наш и не чужой
+    // a guest's pr-link without a repository is ambiguous; with our repository — ours, with another — neither ours nor
+    // foreign
     const links = s.prlinks.filter(([, , r]) => (r ? sameRepo(r) : !guest));
     const anchors: Anchor[] = [];
     for (const [ts, pr] of links) {
       const own = ourPrs.has(pr);
-      // Claude Code повторяет pr-link привязанного к сессии PR и после мержа — это статус приложения, а не работа:
-      // после мержа он не якорь ни для своей задачи (иначе она заберёт время следующих), ни для чужой (иначе
-      // оборвёт окно следующей задачи, под которую переименовали сессию)
+      // Claude Code repeats the pr-link of the PR bound to the session even after the merge — that's the app's status,
+      // not work: after the merge it's an anchor neither for its own task (otherwise it would take the time of the
+      // following ones) nor for someone else's (otherwise it would cut off the window of the next task the session
+      // was renamed for)
       const mergedAt = prsAll.get(pr)?.mergedAt ?? null;
       if (mergedAt !== null && ts > mergedAt) continue;
       anchors.push([ts, own ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0]);
@@ -2270,7 +2300,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       if (cls !== "neutral") anchors.push([ts, cls, "commit", w]);
     }
     anchors.sort(cmpAnchor);
-    // гостя привязывает только признак нашего репозитория; номер в названии — лишь вместе с ним
+    // a guest is linked only by a feature of our repository; a number in the name — only together with it
     if (
       guest &&
       !pinned &&
@@ -2285,10 +2315,10 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     for (const e of ev) if (e[1]) seenBranches.add(e[1]);
     const foreignTs = anchors.filter((a) => a[1] === "foreign").map((a) => a[0]);
 
-    // окна по якорям: от предыдущего чужого якоря до своего; внутри окна считаются только
-    // записи на ветке якоря или на нейтральной ветке (HEAD/пусто/main…) — чужие ветки нет.
-    // Переименование сессии — тоже граница: до него сессия работала над задачей из прежнего названия.
-    const renames = [...(s.title_hist ?? [])].map((t) => t[0]).sort((x, y) => x - y).slice(1); // первое — с начала сессии
+    // windows by anchors: from the previous foreign anchor to our own; inside a window only records
+    // on the anchor's branch or on a neutral branch (HEAD/empty/main…) count — foreign branches don't.
+    // A session rename is a boundary too: before it, the session worked on the task from the previous name.
+    const renames = [...(s.title_hist ?? [])].map((t) => t[0]).sort((x, y) => x - y).slice(1); // the first one — from the session start
     const windows: Win[] = [];
     let prevForeign = -1e18;
     for (const [ts, cls, kind, w] of anchors) {
@@ -2304,7 +2334,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         if (!isNeutral(e[1])) brAt = e[1];
       }
       if (kind === "pr") {
-        // хвост после pr-link: пока ветка та же и нет чужого якоря (правки после ревью)
+        // the tail after a pr-link: while the branch is the same and there's no foreign anchor (fixes after review)
         const later = [...foreignTs, ...renames].filter((t) => t > ts);
         const nxtForeign = later.length ? Math.min(...later) : 1e18;
         for (const e of ev) {
@@ -2315,10 +2345,10 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
       windows.push({ a: start, z: end, zOpen: false, br: brAt, w, rule: "anchor" });
     }
-    // Задача названа в названии сессии или в первом промпте. Название действует с момента переименования
-    // (первое — с начала сессии): сессия, которую переименовывали под каждую следующую задачу, отдаёт
-    // записи безномерной ветки той задаче, под чьим названием они сделаны, а не последней. Название без
-    // номера — решает первый промпт; названия нет — первый промпт на всю сессию.
+    // The task is named in the session name or in the first prompt. A name applies from the moment of the rename
+    // (the first one — from the session start): a session renamed for each next task gives the records of a
+    // numberless branch to the task under whose name they were made, not to the last one. A name without a
+    // number — the first prompt decides; no name — the first prompt for the whole session.
     const promptRefs = new Set<number>([...s.first_refs, ...urlRefs(s.first_urls ?? [])]);
     const titleRefs = (title: string) => new Set<number>([...refsIn(title), ...urlRefs(urlsIn(title))]);
     let hist: [number, Set<number>][] = [...(s.title_hist ?? [])].sort((x, y) => x[0] - y[0]).map(([t, title]) => [t, titleRefs(title)]);
@@ -2328,13 +2358,13 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       : [{ a: -1e18, z: 1e18, refs: promptRefs, rule: "prompt" }];
     for (const seg of segs) {
       if (!(seg.refs.size === 1 && seg.refs.has(number))) continue;
-      // в периоде — PR другого репозитория: «#N» в названии — номер его задачи, а не нашей
+      // in the period — a PR of another repository: "#N" in the name is the number of its task, not ours
       if (s.prlinks.some(([t, , r]) => !!r && !sameRepo(r) && t >= seg.a && t < seg.z)) continue;
-      // до конца периода, первого чужого якоря в нём или первого перехода на ветку, которая не наша и
-      // не нейтральная (стартовая ветка периода допускается, если она не чужая — на ней и делалась задача)
+      // to the end of the period, the first foreign anchor in it or the first switch to a branch that is neither ours
+      // nor neutral (the period's starting branch is allowed if it isn't foreign — the task was done on it)
       const later = foreignTs.filter((t) => t >= seg.a);
       let end = Math.min(seg.z, later.length ? Math.min(...later) : 1e18);
-      let zOpen = end === seg.z && seg.z < 1e18; // запись в момент переименования — уже следующей задачи
+      let zOpen = end === seg.z && seg.z < 1e18; // a record at the moment of a rename already belongs to the next task
       let startBranch: string | null = null;
       for (const e of ev) {
         if (e[0] < seg.a) continue;
@@ -2351,8 +2381,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       windows.push({ a: seg.a, z: end, zOpen, br: null, w: 1.0, rule: seg.rule });
     }
 
-    const attributed: number[] = []; // доля (0 — не наша запись)
-    const weak: string[] = []; // правило слабой привязки («название» / «промпт») или ""
+    const attributed: number[] = []; // share (0 — not our record)
+    const weak: string[] = []; // weak link rule ("title" / "prompt") or ""
     const rules: Record<string, number> = {};
     for (const e of ev) {
       if (pinned) {
@@ -2366,8 +2396,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       let w = 0.0;
       let weakRule = "";
       if (hint) {
-        // запись субагента, задание которого называет задачу: своя — целиком,
-        // чужая — не наша, какие бы ветки/окна ни были
+        // a record of a subagent whose assignment names the task: ours — whole,
+        // someone else's — not ours, whatever branches/windows there are
         if (hint === String(number) || hint === ourKey) {
           w = 1.0;
           rules["subagent"] = (rules["subagent"] ?? 0) + 1;
@@ -2392,9 +2422,9 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       attributed.push(w);
       weak.push(weakRule);
     }
-    // Запись, уже засчитанная в записанном факте другой задачи этой сессии (маркер хранит интервалы):
-    // привязанная только названием или первым промптом — не засчитывается повторно; привязанная закреплением,
-    // веткой, субагентом или своим коммитом — остаётся, но пересечение выводится (чужой факт, вероятно, неверен).
+    // A record already counted in a recorded actual of another task of this session (the marker stores intervals):
+    // linked only by the name or the first prompt — not counted again; linked by pinning,
+    // a branch, a subagent or its own commit — stays, but the overlap is printed (the other actual is probably wrong).
     const sid8 = sidKey(s.sid);
     const others: [number, [number, number][]][] = [];
     for (const [n, bySid] of recorded) if (n !== number && bySid[sid8]?.length) others.push([n, bySid[sid8]]);
@@ -2404,8 +2434,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         if (!orig[i]) continue;
         const t = ev[i]![0] as number;
         const pair = i > 0 && t - ev[i - 1]![0] <= gap && (orig[i - 1]! > 0 || !!ev[i - 1]![2]);
-        const x = pair ? (ev[i - 1]![0] + t) / 2 : t; // интервал записи — по середине, одиночная — по времени
-        const tol = pair ? 0 : 1; // границы в маркере округлены до секунды
+        const x = pair ? (ev[i - 1]![0] + t) / 2 : t; // a record's interval — by the midpoint, a single one — by time
+        const tol = pair ? 0 : 1; // marker boundaries are rounded to a second
         const hit = others.find(([, ivs]) => ivs.some(([a, b]) => a - tol <= x && x <= b + tol));
         if (!hit) continue;
         const d = pair ? t - ev[i - 1]![0] : 0;
@@ -2420,8 +2450,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
     }
     if (!attributed.some((w) => w > 0)) continue;
-    // интервал до предыдущей записи считается, только если она тоже наша
-    // или это человеческий промпт, с которого начался наш сегмент
+    // the interval to the previous record counts only if that one is ours too
+    // or it's the human prompt our segment started with
     let sessRaw = 0.0;
     let sessW = 0.0;
     let prompts = 0;
@@ -2430,7 +2460,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const brs: Record<string, number> = {};
     const sessIv: [number, number][] = [];
     const sessAgents = new Set<number>();
-    const sessUsage: [Any[], number, boolean][] = []; // (usage-запись, доля, субагент ли) для привязанных ответов модели
+    const sessUsage: [Any[], number, boolean][] = []; // (usage record, share, whether a subagent) for linked model responses
     const sUsage = s.usage ?? [];
     const sModels = s.models ?? [];
     for (let i = 0; i < ev.length; i++) {
@@ -2454,21 +2484,21 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         brs[key] = (brs[key] ?? 0) + (d * w) / 3600;
       }
     }
-    if (sessRaw < 60 && prompts === 0) continue; // меньше минуты и без промптов (случайный хеш в выводе) — сессией не считаем
+    if (sessRaw < 60 && prompts === 0) continue; // less than a minute and no prompts (a random hash in output) — not counted as a session
     if (sessIv.length) iv[sid8] = mergeIntervals([...(iv[sid8] ?? []), ...sessIv]).map(([a, b]) => [Math.floor(a), Math.ceil(b)]);
     nSessions++;
     nPrompts += prompts;
     nAgents += sessAgents.size;
     rawTotal += sessRaw;
     weightedTotal += sessW;
-    let sFirstTop: number | null = null; // контекст первого и последнего хода верхнего уровня сессии
+    let sFirstTop: number | null = null; // context of the session's first and last top-level turns
     let sLastTop: number | null = null;
     for (const [u, w, sub] of sessUsage) {
-      if (seenMids.has(u[0])) continue; // возобновлённая сессия копирует историю — не считаем дважды
+      if (seenMids.has(u[0])) continue; // a resumed session copies the history — don't count twice
       seenMids.add(u[0]);
       const model: string = u[1] < sModels.length ? sModels[u[1]]! : "?";
       const vals: [number, number, number, number, number] = [u[2], u[3], u[4], u[5], u[6]];
-      // ход — целый у каждой задачи, долей общего PR делятся только токены
+      // a turn is whole for each task, only tokens are split by a shared PR's share
       const ctx = vals[0] + vals[2] + vals[3] + vals[4];
       steps++;
       if (sub) stepsAgents++;
@@ -2497,8 +2527,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     details.push({ sid: s.sid, src: s.source ?? "claude", start: sFirst!, hours: round2(sessW / 3600), prompts, rules, branches });
   }
 
-  // Части облака (их посчитала сама облачная сессия) — как ещё одна сессия; сессия с импортированной выгрузкой
-  // считается по выгрузке, её часть — нет.
+  // Cloud parts (computed by the cloud session itself) — as one more session; a session with an imported export
+  // is counted from the export, its part isn't.
   const known = new Set(sessions.map((s) => s.sid));
   const partsUsed = parts.filter((p) => !known.has(p.session) && p.h > 0);
   for (const p of partsUsed) {
@@ -2527,7 +2557,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const pLast = piv.length ? Math.max(...piv.map((x) => x[1])) : null;
     if (pFirst !== null) firstTs = firstTs === null ? pFirst : Math.min(firstTs, pFirst);
     if (pLast !== null) lastTs = lastTs === null ? pLast : Math.max(lastTs, pLast);
-    // ходы и хвост складываются, преамбула — у самой ранней части или сессии, контекст в конце — у самой поздней
+    // turns and tail add up, preamble — from the earliest part or session, context at the end — from the latest
     steps += p.steps || 0;
     stepsAgents += p.steps_agents || 0;
     tail += p.tail || 0;
@@ -2538,11 +2568,11 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   const partSids = new Set(partsUsed.map((p) => p.session));
 
   const merged = mergeIntervals(intervals);
-  const activeRaw = merged.reduce((s, [a, b]) => s + (b - a), 0); // без двойного счёта между сессиями
+  const activeRaw = merged.reduce((s, [a, b]) => s + (b - a), 0); // without double counting across sessions
   const overlap = rawTotal > 0 ? activeRaw / rawTotal : 1.0;
   const active = (weightedTotal * overlap) / 3600;
 
-  // покрытие
+  // coverage
   const prSeen = (p: PR) =>
     seenPrs.has(p.number) || (!!p.headRefName && seenBranches.has(p.headRefName)) || [...seenHashes].some((h) => hashMatches(h, p.commits.map((c) => c.oid))) || (p.cloud ?? []).some((sid) => partSids.has(sid));
   const units = [...prObjs.map(prSeen), ...closers.map((c) => [...seenHashes].some((h) => hashMatches(h, [c.oid])))];
@@ -2550,7 +2580,8 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   if (nSessions === 0) cov = "none";
   else if (units.length && units.every(Boolean)) cov = "full";
   else cov = "partial";
-  // коммиты PR сделаны в облачной сессии, а ни её выгрузки, ни её части нет — часть работы не видна
+  // the PR's commits were made in a cloud session, and there's neither its export nor its part — part of the work
+  // isn't visible
   const cloudMissing = uniqSortedStrs(prObjs.flatMap((p) => p.cloud ?? [])).filter((sid) => !known.has(sid) && !partSids.has(sid));
   if (cloudMissing.length && cov === "full") cov = "partial";
 
@@ -2596,12 +2627,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   return res;
 }
 
-/** {задача: секунды} → [{issue, h}] по номеру задачи; меньше 0,01 ч не показываем. */
+/** {task: seconds} → [{issue, h}] by task number; less than 0.01 h isn't shown. */
 function hoursByIssue(m: Map<number, number>): { issue: number; h: number }[] {
   return [...m].sort((a, b) => a[0] - b[0]).map(([issue, sec]) => ({ issue, h: round2(sec / 3600) })).filter((x) => x.h > 0);
 }
 
-/** Свести токены и стоимость в поля результата: tok (целые), usd, usd_partial, models. */
+/** Fold tokens and cost into result fields: tok (integers), usd, usd_partial, models. */
 function tokensResult(tok: { in: number; out: number; cw: number; cr: number }, byModel: Map<string, { tok: number; usd: number; priced: boolean }>): Partial<Fact> {
   const total = tok.in + tok.out + tok.cw + tok.cr;
   if (total <= 0) return { tok: null, usd: null };
@@ -2616,8 +2647,11 @@ function tokensResult(tok: { in: number; out: number; cw: number; cr: number }, 
 
 const fmtMtok = (n: number | null | undefined) => fmtH((n || 0) / 1e6, 2);
 
-/** «Токены: 12.3 млн (вход … · выход … · запись кэша … · чтение кэша …); стоимость по API-тарифам ≈ $…». */
-/** «Ходы: 250 (субагентов 2, их ходов 120), преамбула 104 тыс., контекст в конце 581 тыс., ходов с контекстом > 400 тыс. — 31 %.» */
+/** "Tokens: 12.3 M (input … · output … · cache write … · cache read …); cost at API rates ≈ $…". */
+/**
+ * "Turns: 250 (subagents 2, their turns 120), preamble 104K, context at the end 581K, turns with context > 400K —
+ * 31 %."
+ */
 function stepsTxt(res: Fact, language = locale.projectLanguage()): string {
   const k = (v: number | null | undefined) => (v === null || v === undefined ? "—" : String(Math.round(v / 1000)));
   const n = res.steps ?? 0;
@@ -2641,9 +2675,10 @@ function tokensTxt(res: Fact, language = locale.projectLanguage()): string {
 }
 
 /**
- * Предупреждение свипа о двойном счёте: сумма часов задач против объединения их интервалов внутри каждой сессии
- * (ключ — как iv в маркере «Факт»), сложенного по сессиям. Параллельные сессии законно идут одновременно —
- * пересечение между ними не двойной счёт; двойной — когда записи одной сессии вошли в факты двух задач.
+ * Sweep warning about double counting: the sum of task hours against the union of their intervals within each
+ * session (the key is like iv in the "Actual" marker), summed over sessions. Parallel sessions legitimately run at the
+ * same time — an overlap between them isn't double counting; double counting is when records of one session went into
+ * the actuals of two tasks.
  */
 export function sweepOverlapWarning(facts: { h: number; iv?: Record<string, [number, number][]> }[]): string | null {
   const total = facts.reduce((s, f) => s + f.h, 0);
@@ -2668,7 +2703,7 @@ export function mergeIntervals(iv: [number, number][]): [number, number][] {
 }
 
 // ----------------------------------------------------------------------------
-// Комментарии с маркерами (fact / est)
+// Comments with markers (fact / est)
 // ----------------------------------------------------------------------------
 
 function findMarkerComment(issue: Any, kind: string): Any | null {
@@ -2677,12 +2712,12 @@ function findMarkerComment(issue: Any, kind: string): Any | null {
 }
 
 const alt = (xs: string[]) => xs.map(locale.escapeRe).join("|");
-// «+ вручную: N ч» и «Причина: …» — на любом языке словаря: строку пишет человек, язык мог смениться
+// "+ manually: N h" and "Reason: …" in any dictionary language: a human writes the line, the language may have changed
 const MANUAL_WORDS = locale.every((n) => n.est.manual).map((m) => m.replace(/^\+\s*/, "").replace(/:$/, ""));
 const MANUAL_RE = new RegExp(String.raw`^\+\s*(?:${alt(MANUAL_WORDS)}):\s*([\d.,]+)\s*(?:${alt(locale.every((n) => n.est.hours))})`, "iu");
 const REASON_RE = new RegExp(`^(?:${alt(locale.every((n) => n.est.reason))})`, "iu");
 
-/** Строки «+ вручную: N ч» и «Причина: …» (`est.manual`, `est.reason` любого языка словаря), дописанные человеком. */
+/** Lines "+ manually: N h" and "Reason: …" (`est.manual`, `est.reason` in any dictionary language) added by a human. */
 export function extractKeptLines(body: string | null | undefined): [number, string | null, string[]] {
   let manual = 0.0;
   let cause: string | null = null;
@@ -2701,7 +2736,10 @@ export function extractKeptLines(body: string | null | undefined): [number, stri
   return [manual, cause, lines];
 }
 
-/** Комментарий «Факт» на языке проекта (`language`, по умолчанию — текущего каталога); маркер — один на все языки. */
+/**
+ * The "Actual" comment in the project language (`language`, by default — of the current directory); the marker is the
+ * same in all languages.
+ */
 export function factCommentBody(res: Fact, est: number | null, keptLines: string[], manual: number, cause: string | null, language = locale.projectLanguage()): string {
   const n = locale.names(language);
   const count = (forms: Plural, x: number) => locale.count(language, forms, x);
@@ -2731,36 +2769,38 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
     if (res.models) marker.models = res.models;
   }
   if (res.steps) Object.assign(marker, { steps: res.steps, steps_agents: res.steps_agents ?? 0, tail: res.tail ?? 0, preamble: res.preamble ?? null, ctx_end: res.ctx_end ?? null });
-  if (res.type) marker.type = res.type; // тип из ветки по конвенции <type>/N-slug
+  if (res.type) marker.type = res.type; // type from the branch by the <type>/N-slug convention
   if (res.shared?.length) {
     const sh: Record<string, number[]> = {};
     for (const s of res.shared) sh[s.unit] = s.with;
     marker.shared = sh;
   }
-  if (res.iv && Object.keys(res.iv).length) marker.iv = res.iv; // по ним следующий расчёт видит, что уже засчитано
+  if (res.iv && Object.keys(res.iv).length) marker.iv = res.iv; // by them the next computation sees what's already counted
   if (res.cloud_missing?.length) marker.cloud_missing = res.cloud_missing;
-  if (res.cloud_parts?.length) marker.cloud = res.cloud_parts; // посчитала облачная сессия — без них пересчёт её потеряет
+  if (res.cloud_parts?.length) marker.cloud = res.cloud_parts; // computed by the cloud session — without them a recomputation would lose it
   return [text, ...keptLines, `<!-- fact ${pyDumps(marker)} -->`].join("\n");
 }
 
-// Облачная сессия Claude Code (claude.ai/code): GitHub — только REST своего репозитория, GraphQL и проекты закрыты
-// прокси сессии, поэтому ни оценки, ни факта там не посчитать — честное «недоступен (облако)» со ссылкой на сессию.
-// Цифру даёт локальная сессия: импорт событий облачной сессии (est cloud-import, parseCloudFile).
+// Claude Code cloud session (claude.ai/code): GitHub — only REST of its own repository, GraphQL and projects are
+// closed by the session proxy, so neither an estimate nor an actual can be computed there — an honest "unavailable
+// (cloud)" with a link to the session. A local session gives the number: importing the cloud session's events
+// (est cloud-import, parseCloudFile).
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
 const CLOUD_ERR = "Claude Code cloud session: GitHub GraphQL and projects are unreachable from here — estimate, history and sweep only in a local session (docs/cloud-sessions.md in ai-dev)";
 
-/** Комментарий «Факт» задачи, закрытой из облачной сессии: факт недоступен, маркер с cov none и src cloud. */
-/** id облачной сессии для ссылки: env даёт cse_…, ссылка — session_…. */
+/** "Actual" comment of a task closed from a cloud session: actual unavailable, a marker with cov none and src cloud. */
+/** Cloud session id for a link: env gives cse_…, the link needs session_…. */
 const cloudSid = (sessionId: string | undefined) => (sessionId ? "session_" + sessionId.replace(/^(cse|session)_/, "") : null);
 
 /**
- * Часть факта этой облачной сессии — по её транскрипту в контейнере (каталог работы — корень git). Без GitHub:
- * привязка — ветка `<type>/<N>-…`, первый промпт «#N», задание субагенту; PR и коммиты отсюда не видны.
+ * This cloud session's part of the actual — from its transcript in the container (the work directory is the git
+ * root). Without GitHub: linking is by the `<type>/<N>-…` branch, a "#N" first prompt, a subagent assignment; PRs and
+ * commits aren't visible from here.
  */
 function cloudOwnPart(number: number, session: string, gap: number): CloudPart | null {
   const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
   const cwd = top.status === 0 && top.stdout.trim() ? top.stdout.trim() : process.cwd();
-  const sessions = transcriptFilesIn([cwd]).map((f) => parseSessionFile(f)).filter((x) => x.ev.length); // рутинную не отбрасываем: облачная сессия — часто один промпт
+  const sessions = transcriptFilesIn([cwd]).map((f) => parseSessionFile(f)).filter((x) => x.ev.length); // don't discard a routine one: a cloud session is often a single prompt
   if (!sessions.length) return null;
   const stub: FactRepo = {
     full: "cloud",
@@ -2790,7 +2830,7 @@ function cloudOwnPart(number: number, session: string, gap: number): CloudPart |
   };
 }
 
-/** Комментарий «Факт (облако)» на языке проекта (`language`, по умолчанию — текущего каталога). */
+/** The "Actual (cloud)" comment in the project language (`language`, by default — of the current directory). */
 export function cloudFactBody(sessionId: string | undefined, part: CloudPart | null = null, number?: number, language = locale.projectLanguage()): string {
   const n = locale.names(language);
   const sid = cloudSid(sessionId);
@@ -2809,7 +2849,7 @@ export function cloudFactBody(sessionId: string | undefined, part: CloudPart | n
 
 const diffTxt = (res: Fact, language = locale.projectLanguage()) => (res.diff_na ? locale.names(language).est.fact.diffNa : locale.fill(locale.names(language).est.fact.diffLines, { n: res.diff }));
 
-/** «общий коммит a9e2854 с #7, #8 (доля 1/3)». */
+/** "shared commit a9e2854 with #7, #8 (share 1/3)". */
 const sharedTxt = (res: Fact, language = locale.projectLanguage()) =>
   (res.shared ?? []).map((s) => locale.fill(locale.names(language).est.fact.shared, { unit: s.unit, list: s.with.map((n) => `#${n}`).join(", "), k: s.k })).join("; ");
 
@@ -2837,18 +2877,18 @@ function setNumberField(repo: Repo, issue: Any, fieldName: string, value: number
     ghGraphql(q, { p: meta.id, i: itemId, f: meta.fields[fieldName]!.id, v: Number(value) });
   } catch (e) {
     if (!(e instanceof EstError) || !(errIs(e, "not found") || errIs(e, "could not resolve"))) throw e;
-    // устаревший кэш id проекта/поля — перечитать и повторить один раз
+    // stale cache of the project/field id — reread and retry once
     meta = repo.projectMeta(true);
     ghGraphql(q, { p: meta.id, i: itemId, f: meta.fields[fieldName]!.id, v: Number(value) });
   }
 }
 
-/** Поставить необязательное числовое поле, если оно есть в проекте (иначе false). */
+/** Set an optional number field if the project has it (otherwise false). */
 function setOptionalNumberField(repo: Repo, issue: Any, fieldName: string, value: number): boolean {
   let meta = repo.projectMeta();
   if (!meta.fields[fieldName] && !repo.optRefreshed) {
     repo.optRefreshed = true;
-    meta = repo.projectMeta(true); // кэш метаданных мог быть старше поля
+    meta = repo.projectMeta(true); // the metadata cache may be older than the field
   }
   if (!meta.fields[fieldName]) return false;
   setNumberField(repo, issue, fieldName, value);
@@ -2856,7 +2896,7 @@ function setOptionalNumberField(repo: Repo, issue: Any, fieldName: string, value
 }
 
 // ----------------------------------------------------------------------------
-// История и k
+// History and k
 // ----------------------------------------------------------------------------
 
 interface Calib {
@@ -2868,7 +2908,7 @@ interface Calib {
   n_partial: number;
 }
 
-/** k = медиана(факт/оценка) по последним `last` закрытым задачам с маркером est и фактом. */
+/** k = median(actual/estimate) over the last `last` closed tasks with an est marker and an actual. */
 export function calib(rows: Row[], last = 20): Calib {
   const cands: [number, number][] = [];
   let nPartial = 0;
@@ -2878,7 +2918,7 @@ export function calib(rows: Row[], last = 20): Calib {
     if (!est || est <= 0) continue;
     const fm = r.fact_marker;
     if (fm && fm.cov !== undefined && fm.cov !== null && fm.cov !== "full") {
-      nPartial++; // неполное покрытие транскриптами — в k не берём (см. вывод history)
+      nPartial++; // incomplete transcript coverage — not taken into k (see the history output)
       continue;
     }
     cands.push([r.closedAt || 0, r.fact / est]);
@@ -2896,12 +2936,12 @@ export function calib(rows: Row[], last = 20): Calib {
   };
 }
 
-/** Тип задачи строки проекта: фактический (из ветки, маркер «Факт»), иначе из маркера «Оценка». */
+/** Task type of a project row: the actual one (from the branch, the "Actual" marker), else the "Estimate" marker's. */
 const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type || "";
 
 /**
- * Таблица истории: колонка меток — по самой длинной строке меток (метки решений — первый признак
- * аналога, обрезанными их не сравнить); `epic` — не признак, его нет.
+ * History table: the labels column is sized by the longest labels string (decision labels are the first feature of an
+ * analog, truncated they can't be compared); `epic` isn't a feature, it's left out.
  */
 export function historyTable(rows: Row[]): string[] {
   const labelsOf = (r: Row) => r.labels.filter((l) => l !== "epic").join(",");
@@ -2912,7 +2952,7 @@ export function historyTable(rows: Row[]): string[] {
     const cov = fm.cov || "—";
     const mt = fm.tok ? fmtMtok(fm.tok.total) : "—";
     const usd = fm.usd !== undefined && fm.usd !== null ? Number(fm.usd).toFixed(2) : "—";
-    // субагенты и ходы задачи — признаки фан-аута и размера; факт, посчитанный до признака, — прочерк
+    // the task's subagents and turns are fan-out and size features; an actual computed before the feature — a dash
     const ag = typeof fm.agents === "number" ? String(fm.agents) : "—";
     const st = typeof fm.steps === "number" ? String(fm.steps) : "—";
     out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 6, true)} | ${pad(st, 5, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
@@ -2972,7 +3012,7 @@ function cmdHistory(args: HistoryArgs): void {
   }
 }
 
-/** k по репо, иначе по всем репо (n≥5), иначе нет; уровень — на языке проекта. */
+/** k by repo, otherwise by all repos (n≥5), otherwise none; the level is in the project language. */
 function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string] {
   const rows = repo.projectRows();
   let c = calib(rows);
@@ -2998,7 +3038,7 @@ function calibForEstimate(repo: Repo, registry: Registry): [Row[], Calib, string
 }
 
 // ----------------------------------------------------------------------------
-// Команда fact
+// The fact command
 // ----------------------------------------------------------------------------
 
 function factForIssue(repo: Repo, number: number, gap: number, quiet = false): [Any, Fact] {
@@ -3013,7 +3053,7 @@ function factForIssue(repo: Repo, number: number, gap: number, quiet = false): [
   }
   const labels: string[] = issue.labels.nodes.map((l: Any) => l.name);
   const itype = String(issue.issueType?.name ?? "").toLowerCase();
-  // эпик — по типу issue «Эпик»/«Epic»; метка epic — запасной вариант для репо без типов
+  // epic — by the issue type "Epic" in any dictionary language; the epic label is the fallback for repos without types
   if (locale.every((n) => n.issueTypes.epic.toLowerCase()).includes(itype) || labels.includes("epic")) return factForEpic(repo, issue, gap, quiet);
   const [prObjs, closers, weakUsed] = resolveLinks(repo, issue);
   const parts = cloudPartsIn(issue.comments.nodes.map((c: Any) => c.body));
@@ -3027,7 +3067,7 @@ function factForIssue(repo: Repo, number: number, gap: number, quiet = false): [
   return [issue, res];
 }
 
-/** Номер оказался PR, а не issue: считаем факт по самому PR (без записи). */
+/** The number turned out to be a PR, not an issue: compute the actual for the PR itself (no write). */
 function factForPr(repo: Repo, pr: PR, gap: number): [Any, Fact] {
   const res = computeFact(repo, pr.number, [{ ...pr, why: "the PR itself" }], [], gap);
   res.title = pr.title || "";
@@ -3041,8 +3081,8 @@ function factForPr(repo: Repo, pr: PR, gap: number): [Any, Fact] {
 }
 
 /**
- * Факт эпика = сумма фактов подзадач: из поля «Факт, ч» (+ «вручную» из маркера), а для подзадач
- * без поля — по транскриптам.
+ * An epic's actual = the sum of its subtasks' actuals: from the "Actual, h" field (+ "manually" from the marker), and
+ * for subtasks without the field — from transcripts.
  */
 function factForEpic(repo: Repo, issue: Any, gap: number, quiet = false): [Any, Fact] {
   const number: number = issue.number;
@@ -3118,7 +3158,7 @@ function factForEpic(repo: Repo, issue: Any, gap: number, quiet = false): [Any, 
   return [issue, res];
 }
 
-/** «Claude Code», «Codex» или «Claude Code и Codex» — по источникам привязанных сессий. */
+/** "Claude Code", "Codex" or "Claude Code and Codex" — by the sources of linked sessions. */
 function agentsTxt(res: Fact, language = locale.projectLanguage()): string {
   const n = locale.names(language);
   const srcs = new Set((res.details ?? []).map((d) => d.src ?? "claude"));
@@ -3161,14 +3201,14 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
   for (const sid of res.cloud_missing ?? []) console.log(`WARNING: part of the work is the cloud session https://claude.ai/code/${sid}, its events aren't imported: export them through the browser and est cloud-import (SKILL.md est, «Cloud session»)`);
 }
 
-/** Записывает факт (комментарий и поля проекта); возвращает тело комментария. */
+/** Writes the actual (comment and project fields); returns the comment body. */
 function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): string {
   if (res.is_pr) throw new EstError(`#${res.issue} is a PR, not an issue: an actual for a PR isn't written`);
   const existing = findMarkerComment(issue, "fact");
   const [manual, cause, kept] = extractKeptLines(existing ? existing.body : "");
   const body = factCommentBody(res, est, kept, manual, cause);
   const what = upsertComment(repo, issue, "fact", body);
-  if (res.iv && Object.keys(res.iv).length) repo.recorded().set(res.issue, res.iv); // следующая задача sweep видит этот факт
+  if (res.iv && Object.keys(res.iv).length) repo.recorded().set(res.issue, res.iv); // the sweep's next task sees this actual
   let msg = `«Actual» comment ${what}`;
   if (res.h !== null) {
     setNumberField(repo, issue, FIELD_FACT, res.h);
@@ -3188,8 +3228,9 @@ function writeFact(repo: Repo, issue: Any, res: Fact, est: number | null): strin
 }
 
 /**
- * Факты к пересчёту по модели (#345): закрытые задачи окна, в расходе которых (маркер факта, `models`) есть эта
- * версия модели, свежие первыми, затем их закрытые эпики — стоимость эпика — сумма фактов подзадач.
+ * Actuals to recompute for a model (#345): closed tasks of the window whose spend (the actual marker, `models`)
+ * includes this model version, newest first, then their closed epics — an epic's cost is the sum of its subtasks'
+ * actuals.
  */
 export function factsWithModel(rows: Row[], model: string, since: number, now: number): Row[] {
   const version = modelVersion(model);
@@ -3213,7 +3254,7 @@ interface FactArgs {
   model?: string;
 }
 
-/** Код выхода: 1 — свип с --write что-то не записал (#353). */
+/** Exit code: 1 — a sweep with --write failed to write something (#353). */
 function cmdFact(args: FactArgs): number {
   const registry = loadRegistry();
   if (args.gap < 1) throw new EstError(`--gap must be ≥ 1 minute, got ${args.gap}`);
@@ -3251,7 +3292,8 @@ function cmdFact(args: FactArgs): number {
     let total = 0.0;
     let epicsTotal = 0.0;
     const counted: { h: number; iv?: Record<string, [number, number][]> }[] = [];
-    // ошибка одной задачи — строка и дальше по списку; сеть, не вернувшаяся за повторы, — стоп: следующие ждали бы те же повторы (#353)
+    // one task's error — a line, and on down the list; a network that didn't come back over the retries — stop: the
+    // following ones would wait through the same retries (#353)
     const failed: number[] = [];
     let left: Row[] = [];
     const failure = (r: Row, what: string, e: unknown, i: number) => {
@@ -3273,7 +3315,7 @@ function cmdFact(args: FactArgs): number {
       stats[res.cov] = (stats[res.cov] ?? 0) + 1;
       const h = res.h;
       if (h !== null) {
-        if (res.epic) epicsTotal += h; // эпик — сумма подзадач, в общий итог не входит (иначе двойной счёт)
+        if (res.epic) epicsTotal += h; // an epic is the sum of its subtasks, not in the overall total (otherwise double counting)
         else {
           total += h;
           counted.push({ h, iv: res.iv });
@@ -3282,7 +3324,8 @@ function cmdFact(args: FactArgs): number {
       let extra = res.epic ? "epic" : res.prs.length ? "PR " + res.prs.map((p) => `#${p}`).join(", ") : "no PR";
       if (res.weak_links) extra += " (weak link)";
       if (res.shared?.length) extra += ` (share 1/${Math.max(...res.shared.map((s) => s.k))})`;
-      // пересчёт — весь факт по текущей логике, а не один тариф: прежние часы рядом, чтобы расхождение было видно до --write
+      // recomputing gives the whole actual by the current logic, not just one rate: the previous hours sit alongside so
+      // the difference is visible before --write
       if (args.model !== undefined) extra += `; was ${fmtH(r.fact)} h, $${fmtH(r.fact_marker?.usd ?? null)} → $${fmtH(res.usd ?? null)}`;
       console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} h  ${pad(res.cov, 7)} estimate ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
       if (args.write && res.cov !== "none") {
@@ -3293,7 +3336,8 @@ function cmdFact(args: FactArgs): number {
           if (failure(r, "error writing", e, i)) break;
           continue;
         }
-        // эпик дальше в этом же свипе складывает факты подзадач из строк проекта — им нужен записанный, а не прежний
+        // further in this same sweep an epic adds up its subtasks' actuals from the project rows — they need the
+        // written one, not the previous one
         if (h !== null) r.fact = h;
         r.fact_marker = parseMarker(body, "fact");
       }
@@ -3307,7 +3351,8 @@ function cmdFact(args: FactArgs): number {
       const missed = [...failed, ...left.map((r) => r.number)];
       console.log(`not written: ${missed.length} — ${missed.map((n) => `#${n}`).join(", ")}`);
       const opts = `--repo ${repo.full}${args.gap === 30 ? "" : ` --gap ${args.gap}`}`;
-      // обычный свип берёт только задачи без факта — записанные он пропустит; свип по модели пересчитал бы и их
+      // a regular sweep takes only tasks without an actual — it would skip the written ones; a sweep by model would
+      // recompute them too
       console.log(
         args.model === undefined
           ? `retry: est fact --sweep --since ${args.since} ${opts} --write — it skips the written ones`
@@ -3335,10 +3380,10 @@ function cmdFact(args: FactArgs): number {
 }
 
 // ----------------------------------------------------------------------------
-// Команда estimate
+// The estimate command
 // ----------------------------------------------------------------------------
 
-export const SCALE = [0.1, 0.25, 0.5, 1, 1.5, 2, 3, 5, 8, 13] as const; // ступени оценки, ч; округление к ближайшей
+export const SCALE = [0.1, 0.25, 0.5, 1, 1.5, 2, 3, 5, 8, 13] as const; // estimate steps, h; rounding to the nearest
 
 export function roundScale(h: number): number {
   let best: number = SCALE[0];
@@ -3357,18 +3402,18 @@ interface EstimateArgs {
   type: string;
   analogs: string;
   mult: number;
-  tokMult?: number; // поправка токенов и стоимости; без неё — как у часов
+  tokMult?: number; // token and cost correction; without it — the same as for hours
   tokNote?: string;
   note: string;
   write: boolean;
 }
 
-/** Ступени поправки токенов: фан-аут в пилоте давал ×2,5 к токенам при ×0,8 к часам — поэтому есть и ×3. */
+/** Token correction steps: fan-out in the pilot gave ×2.5 to tokens at ×0.8 to hours — hence there's also ×3. */
 const TOK_MULTS = [0.5, 1, 1.5, 2, 3];
 
 /**
- * Прогноз по фактам аналогов: часы — медиана × поправка часов, к ступени шкалы; токены и стоимость — медиана ×
- * поправка токенов (без неё — та же, что у часов): у фан-аута токены растут, а часы сжимаются.
+ * Forecast from the analogs' actuals: hours — median × hours correction, to a scale step; tokens and cost — median ×
+ * token correction (without it — the same as for hours): with fan-out tokens grow while hours shrink.
  */
 export function forecast(facts: number[], toks: number[], usds: number[], mult: number, tokMult = mult): { raw: number; h: number; tok: number | null; usd: number | null } {
   const raw = median(facts) * mult;
@@ -3378,8 +3423,9 @@ export function forecast(facts: number[], toks: number[], usds: number[], mult: 
 const isPublic = (full: string): boolean => ghRest(`repos/${full}`)?.visibility === "public";
 
 /**
- * Аналоги из непубличных репо, которые оценка назвала бы в публичном: комментарий «Оценка» пишет их как owner/repo#N,
- * а прошлую версию комментария GitHub хранит в истории правок — перезапись утечку не отменяет.
+ * Analogs from non-public repos that the estimate would name in a public one: the "Estimate" comment writes them as
+ * owner/repo#N, and GitHub keeps the previous version of a comment in the edit history — a rewrite doesn't undo the
+ * leak.
  */
 function hiddenAnalogs(repo: Repo, analogs: (number | string)[]): string[] {
   const other = analogs.filter((a): a is string => typeof a === "string");
@@ -3393,18 +3439,18 @@ function hiddenAnalogs(repo: Repo, analogs: (number | string)[]): string[] {
 }
 
 // ----------------------------------------------------------------------------
-// Подбор аналогов скриптом
+// Analog picking by the script
 // ----------------------------------------------------------------------------
 
-/** Метки, которые не решение: `epic` — вид задачи, метка вопросов (любого языка словаря) — её состояние. */
+/** Non-decision labels: `epic` is the kind of task, the questions label (in any dictionary language) is its state. */
 const NOT_DECISION = new Set(["epic", ...locale.every((n) => n.labels.questions)]);
-/** Служебные слова заголовка (короче трёх букв отсекаются и так): на сходство задач не указывают. */
+/** Title stop words (shorter than three letters are cut off anyway): they don't point to task similarity. */
 const STOP_WORDS = new Set(words((n) => n.est.stopWords));
-/** Основа слова — первые четыре буквы: «оценка», «оценки», «оценок» — одно слово (пять букв беглая гласная «оценок» уже
- * разводит); грубо, но без словаря, и в бэктесте #279 не хуже пяти. */
+/** Word stem — the first four letters: "estimate", "estimates", "estimated" are one word (five letters already split
+ * Russian forms with a fleeting vowel); crude, but needs no dictionary, and in backtest #279 no worse than five. */
 const STEM = 4;
 
-/** Слова заголовка по основам: основа → слово, как оно стоит в заголовке (в нижнем регистре), по порядку. */
+/** Title words by stem: stem → the word as it stands in the title (lowercase), in order. */
 export function titleWords(title: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const w of title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) {
@@ -3415,14 +3461,18 @@ export function titleWords(title: string): Map<string, string> {
   return out;
 }
 
-/** Ответ на вопрос в разделе вопросов: от «Ответ…:» (`est.answer` любого языка словаря) до следующего пункта списка или пустой строки. */
+/**
+ * An answer to a question in the questions section: from "Answer…:" (`est.answer` in any dictionary language) to the
+ * next list item or a blank line.
+ */
 const ANSWER_RE = new RegExp(String.raw`\s*(?:\*\*)?(?:${locale.every((n) => n.est.answer).map(locale.escapeRe).join("|")})[^:\n]*:(?:\*\*)?[^\n]*(?:\n(?![ \t]*(?:\d+\.|$))[^\n]*)*`, "gm");
-/** Раздел вопросов issue — `sections.questions` любого языка словаря — до следующего раздела. */
+/** The issue's questions section — `sections.questions` in any dictionary language — up to the next section. */
 const QUESTIONS_RE = new RegExp(String.raw`(?<=^|\n)(?:${locale.every((n) => n.sections.questions).map(locale.escapeRe).join("|")})\n[\s\S]*?(?=\n## |$)`);
 
 /**
- * Размер описания issue, знаков, — признак объёма задачи: в бэктесте #279 он связан с фактом теснее ручной оценки.
- * Ответы на вопросы и отметки ✅ не в счёт: их дописывают после оценки, и у закрытых задач они раздували бы размер.
+ * Issue description size, chars, — a task size feature: in backtest #279 it is tied to the actual more closely than
+ * the manual estimate. Answers to questions and ✅ marks don't count: they are added after the estimate, and for closed
+ * tasks they would inflate the size.
  */
 export function descSize(body: string): number {
   return body.replace(QUESTIONS_RE, (sec) => sec.replace(ANSWER_RE, "").replace(/✅\s*/g, "")).length;
@@ -3430,10 +3480,13 @@ export function descSize(body: string): number {
 
 const EPIC_TYPES = new Set(locale.every((n) => n.issueTypes.epic).map((t) => t.toLowerCase()));
 const isEpicRow = (r: Row): boolean => r.labels.includes("epic") || EPIC_TYPES.has((r.issueType ?? "").toLowerCase());
-/** Закрытая задача с измеренным фактом (покрытие full), не эпик (его факт — сумма подзадач): аналог и выборка бэктеста. */
+/**
+ * A closed task with a measured actual (coverage full), not an epic (its actual is the sum of its subtasks): an analog
+ * and a backtest sample.
+ */
 const factRow = (r: Row): boolean => r.state === "CLOSED" && r.fact !== null && r.fact > 0 && (r.fact_marker?.cov ?? "full") === "full" && !isEpicRow(r);
 
-/** Задача, которой подбираются аналоги, — её признаки на момент оценки. */
+/** The task analogs are picked for — its features at the time of the estimate. */
 export interface AnalogTarget {
   number: number;
   title: string;
@@ -3442,7 +3495,10 @@ export interface AnalogTarget {
   size: number;
 }
 
-/** Аналог и чем он похож: общие метки решений, тот же тип, общие слова (как в заголовке задачи), размер к размеру задачи. */
+/**
+ * An analog and how it is similar: shared decision labels, the same type, shared words (as in the task title), size
+ * relative to the task's size.
+ */
 export interface Analog {
   row: Row;
   score: number;
@@ -3452,16 +3508,17 @@ export interface Analog {
   sizeRatio: number | null;
 }
 
-/** Сколько аналогов берёт скрипт: медиана трёх устойчивее двух, а четвёртый в бэктесте точности не добавил. */
+/** Analogs the script takes: a median of three is steadier than of two, and a fourth added no backtest accuracy. */
 const ANALOG_K = 3;
 const wordsCache = new WeakMap<Row, Map<string, string>>();
 
 /**
- * Аналоги — самые похожие закрытые задачи с фактом full, закрытые до создания оцениваемой (как оценил бы скрипт в
- * день создания: бэктест не заглядывает в будущее). Сходство — сумма: общая метка решения ×3, тот же тип ×2, общее
- * слово заголовка ×1, минус 3 × |ln| отношения размеров описаний (+200 знаков — пустое описание не уходит в
- * бесконечность); при равенстве — недавно закрытые. Веса — из бэктеста #279: очередь признаков «метки → тип → слова →
- * размер» давала заметно меньше попаданий, размер описания весит не меньше меток.
+ * Analogs are the most similar closed tasks with a full actual, closed before the estimated one was created (as the
+ * script would have estimated on the creation day: the backtest doesn't look into the future). Similarity is a sum: a
+ * shared decision label ×3, the same type ×2, a shared title word ×1, minus 3 × |ln| of the description size ratio
+ * (+200 chars — an empty description doesn't go to infinity); on a tie — the recently closed ones. Weights are from
+ * backtest #279: the feature queue "labels → type → words → size" gave noticeably fewer hits, the description size
+ * weighs no less than labels.
  */
 export function pickAnalogs(target: AnalogTarget, type: string, rows: Row[], k = ANALOG_K): Analog[] {
   const tl = new Set(target.labels.filter((l) => !NOT_DECISION.has(l)));
@@ -3483,7 +3540,10 @@ export function pickAnalogs(target: AnalogTarget, type: string, rows: Row[], k =
   return out.slice(0, k);
 }
 
-/** Чем аналог похож на задачу — для комментария «Оценка» на языке проекта: «метка est · тип feat · слова «a», «b» · описание ×0.8». */
+/**
+ * How the analog is similar to the task — for the "Estimate" comment in the project language:
+ * `label est · type feat · words «a», «b» · description ×0.8`.
+ */
 function analogWhy(a: Analog, type: string, language: string): string {
   const n = locale.names(language);
   const parts: string[] = [];
@@ -3495,9 +3555,9 @@ function analogWhy(a: Analog, type: string, language: string): string {
 }
 
 /**
- * Оценка = прогноз по фактам аналогов: часы, токены и стоимость — медианы фактов × поправка. Аналоги подбирает скрипт
- * (pickAnalogs), --analogs — ручной выбор, когда агент видит отличие, которого признаки не ловят.
- * --hours — только экспертная оценка, когда аналогов с фактом нет (доверие C). k справочный.
+ * Estimate = forecast from the analogs' actuals: hours, tokens and cost — medians of actuals × correction. The script
+ * picks analogs (pickAnalogs), --analogs is a manual choice when the agent sees a difference the features don't catch.
+ * --hours — only an expert estimate, when there are no analogs with an actual (confidence C). k is for reference.
  */
 function cmdEstimate(args: EstimateArgs): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
@@ -3507,10 +3567,10 @@ function cmdEstimate(args: EstimateArgs): void {
   if (![0.5, 1, 1.5, 2].includes(args.mult)) throw new EstError("--mult allows only 0.5, 1, 1.5 or 2");
   if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult allows only 0.5, 1, 1.5, 2 or 3");
   const tokMult = args.tokMult ?? args.mult;
-  const auto = !args.analogs.trim() && args.hours === undefined; // ни --analogs, ни --hours — аналоги подбирает скрипт
+  const auto = !args.analogs.trim() && args.hours === undefined; // neither --analogs nor --hours — the script picks analogs
   const repo = new Repo(resolveRepo(args.repo), registry);
-  // аналоги: номер issue этого репо (254) или задача другого репо из реестра (owner/repo#254)
-  const analogs: (number | string)[] = []; // number — этот репо; "owner/repo#N" — другой
+  // analogs: an issue number of this repo (254) or a task of another registry repo (owner/repo#254)
+  const analogs: (number | string)[] = []; // number — this repo; "owner/repo#N" — another one
   for (let a of args.analogs.split(",")) {
     a = a.trim().replace(/^#+/, "");
     if (!a) continue;
@@ -3526,16 +3586,17 @@ function cmdEstimate(args: EstimateArgs): void {
     if (n === args.number) throw new EstError(`analog #${a} is the task being estimated`);
     if (!analogs.includes(n)) analogs.push(n);
   }
-  // поправка вниз к чужим аналогам без названного отличия занижала крупные задачи втрое (#348) — правило «без отличия ×1»
+  // a downward correction to analogs from other repos without a named difference underestimated big tasks threefold
+  // (#348) — hence the rule "no difference — ×1"
   if (args.mult < 1 && analogs.some((a) => typeof a === "string") && !args.note.trim()) {
     const msg = `downward correction against another repo's analogs (×${fmtH(args.mult)}): name the difference in --note, no difference — ×1`;
-    if (args.write) throw new EstError(msg); // до любой записи
+    if (args.write) throw new EstError(msg); // before any write
     console.error(`warning: ${msg}; with --write — refused`);
   }
   const hidden = hiddenAnalogs(repo, analogs);
   if (hidden.length) {
     const msg = `${repo.full} is a public repo, and the ${plural(hidden.length, "analog", "analogs")} ${hidden.join(", ")} — from a non-public one: the other task's name and number would stay in the «Estimate» comment and in its edit history. Take analogs from ${repo.full} or give an expert estimate (--hours)`;
-    if (args.write) throw new EstError(msg); // до любой записи
+    if (args.write) throw new EstError(msg); // before any write
     console.error(`warning: ${msg}; with --write — refused`);
   }
   const meta = repo.projectMeta();
@@ -3548,7 +3609,7 @@ function cmdEstimate(args: EstimateArgs): void {
   const otherParts = new Map<string, string[]>();
   const otherRows = new Map<string, Map<number, Row>>();
 
-  // комментарий «Оценка» — на языке проекта
+  // the "Estimate" comment is in the project language
   const language = locale.projectLanguage();
   const n = locale.names(language);
   const take = (r: Row, label: string, bucket: string[], why = "") => {
@@ -3599,7 +3660,7 @@ function cmdEstimate(args: EstimateArgs): void {
     take(r, `#${a}`, parts);
   }
   if (auto) {
-    // без --analogs и --hours аналогов в списке нет — их подбирает скрипт
+    // without --analogs and --hours there are no analogs in the list — the script picks them
     const target = { number: args.number, title: issue.title, labels: (issue.labels?.nodes ?? []).map((l: Any) => l.name), createdAt: parseTs(issue.createdAt), size: descSize(issue.body ?? "") };
     const picked = pickAnalogs(target, args.type, rows);
     if (picked.length < 2) throw new EstError(`${repo.full} has fewer than two tasks with an actual (coverage full) closed before #${args.number} was created — analogs from another repo (--analogs owner/repo#N) or an expert estimate (--hours)`);
@@ -3631,7 +3692,7 @@ function cmdEstimate(args: EstimateArgs): void {
     if (mn > 0 && mx / mn > 3) spreadTxt = locale.fill(n.est.estimate.spread, { min: fmtH(mn), max: fmtH(mx) });
     basis = n.est.estimate.forecast;
     if (expert) {
-      // экспертные часы поверх прогноза: токены и стоимость масштабируются пропорционально
+      // expert hours over the forecast: tokens and cost scale proportionally
       const ratio = raw > 0 ? args.hours! / raw : 1;
       basis = locale.fill(n.est.estimate.expertOver, { h: fmtH(h), ratio: ratio.toFixed(1) });
       h = roundScale(args.hours!);
@@ -3689,10 +3750,10 @@ function cmdEstimate(args: EstimateArgs): void {
 }
 
 // ----------------------------------------------------------------------------
-// Команда backtest
+// The backtest command
 // ----------------------------------------------------------------------------
 
-/** Точность оценок на выборке: доля факт/оценка в допуске ×0,5…×2 и k — медиана факт/оценка. */
+/** Estimate accuracy on a sample: the share of actual/estimate within ×0.5…×2, and k — the median actual/estimate. */
 export interface BacktestLine {
   n: number;
   share: number | null;
@@ -3700,15 +3761,15 @@ export interface BacktestLine {
 }
 
 export interface Backtest {
-  tasks: number; // закрытых задач с фактом full, не эпиков
-  mech: BacktestLine; // механика по всем, кому хватило аналогов
-  same: number; // из них с ручной оценкой — общая выборка трёх строк ниже
+  tasks: number; // closed tasks with a full actual, not epics
+  mech: BacktestLine; // the mechanical estimate for all tasks that had enough analogs
+  same: number; // of them with a manual estimate — the common sample of the three lines below
   mechSame: BacktestLine;
   manual: BacktestLine;
-  mechMult: BacktestLine; // механика × поправка, которую дал агент в ручной оценке
+  mechMult: BacktestLine; // the mechanical estimate × the correction the agent gave in the manual estimate
 }
 
-/** pairs — [факт, оценка]. */
+/** pairs — [actual, estimate]. */
 function backtestLine(pairs: [number, number][]): BacktestLine {
   const ratios = pairs.map(([f, e]) => f / e).sort((a, b) => a - b);
   if (!ratios.length) return { n: 0, share: null, k: null };
@@ -3716,9 +3777,9 @@ function backtestLine(pairs: [number, number][]): BacktestLine {
 }
 
 /**
- * Каждая закрытая задача с фактом оценивается механикой так, как её оценил бы `est estimate` без --analogs в день
- * создания (pickAnalogs берёт только закрытые раньше); ручная оценка — маркер est без `auto`. Сравнение — на задачах,
- * где есть обе: иначе выборки разные, и доли несравнимы.
+ * Each closed task with an actual is estimated mechanically, the way `est estimate` without --analogs would have on the
+ * creation day (pickAnalogs takes only those closed earlier); a manual estimate is an est marker without `auto`. The
+ * comparison is on tasks that have both: otherwise the samples differ, and the shares aren't comparable.
  */
 export function backtest(rows: Row[]): Backtest {
   const pool = rows.filter((r) => factRow(r) && r.createdAt !== null);
@@ -3774,13 +3835,13 @@ function cmdBacktest(args: { repo?: string; allRepos: boolean }): void {
 }
 
 // ----------------------------------------------------------------------------
-// Команда period — сводка всех сессий репо за период, без привязки к задачам
+// The period command — summary of all the repo's sessions over a period, not tied to tasks
 // ----------------------------------------------------------------------------
 
-/** Тариф модели — отдельно от флоу: смена модели меняет $ задачи в разы при том же флоу. */
+/** The model rate is separate from the flow: a model change changes a task's $ manyfold with the same flow. */
 const TARIFF_NOTE = "the $ trend mixes the flow with the model rate: compare the flow by tokens and output";
 
-/** $ по моделям из маркеров «Факт» (models: {модель: {mtok, usd}}); модель без цены — мимо. */
+/** $ by model from the "Actual" markers (models: {model: {mtok, usd}}); a model without a price is skipped. */
 export function usdByModel(markers: Any[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const fm of markers) {
@@ -3792,7 +3853,7 @@ export function usdByModel(markers: Any[]): Record<string, number> {
   return out;
 }
 
-/** Доли $ по моделям, по убыванию: [модель, доля 0…1]. */
+/** $ shares by model, descending: [model, share 0…1]. */
 export function usdShares(byModel: Record<string, number>): [string, number][] {
   const total = Object.values(byModel).reduce((a, x) => a + x, 0);
   if (!(total > 0)) return [];
@@ -3805,7 +3866,7 @@ export function usdShares(byModel: Record<string, number>): [string, number][] {
 /** «claude-opus-5 62 %, claude-fable-5-1 38 %, claude-haiku-4-5 <1 %». */
 export const sharesTxt = (shares: [string, number][]) => shares.map(([m, x]) => `${m} ${Math.round(x * 100) || "<1"} %`).join(", ");
 
-/** Момент для --since/--until: 90d / 12w / 6m / 48h назад, дата ГГГГ-ММ-ДД (полночь по местному времени) или время ISO. */
+/** A moment for --since/--until: 90d / 12w / 6m / 48h ago, a YYYY-MM-DD date (local midnight) or an ISO time. */
 export function parseWhen(s: string, now = nowTs()): number {
   const v = s.trim();
   if (/^\d+[dhwm]$/.test(v)) return now - parseSince(v);
@@ -3816,7 +3877,7 @@ export function parseWhen(s: string, now = nowTs()): number {
   return t;
 }
 
-/** Периоды [начало, конец): i-й --until закрывает i-й --since, без него — до сейчас. */
+/** Periods [start, end): the i-th --until closes the i-th --since, without it — until now. */
 export function parsePeriods(since: string[], until: string[], now = nowTs()): [number, number][] {
   if (!since.length) throw new EstError("pass --since: the start of the period (YYYY-MM-DD, an ISO time or 90d)");
   if (until.length > since.length) throw new EstError("--until without its --since: periods are pairs --since … [--until …] in order");
@@ -3828,28 +3889,29 @@ export function parsePeriods(since: string[], until: string[], now = nowTs()): [
   });
 }
 
-/** Сводка сессий репозитория за период [since, until): всё, что делал агент, без привязки к задачам. */
+/** Summary of the repository's sessions over the period [since, until): everything the agent did, not tied to tasks. */
 export interface Period {
   since: number;
   until: number;
-  sessions: number; // сессий с записями в периоде
-  prs: number; // влитых за период PR
-  h: number; // часы агента, с: активное время по сессиям, сложенное
-  machine: number; // часы машины, с: объединение активных интервалов всех сессий
-  tok: number; // токены всего
-  out: number; // из них выход
-  usd: number | null; // null — ни одной модели из прайса
-  models: Record<string, number>; // $ по моделям из прайса
-  unpriced: string[]; // модели без цены
-  steps: number; // ходы — ответы модели, по одному на message.id
-  agents: number; // субагентов с записями в периоде
-  prompts: number; // промптов человека
+  sessions: number; // sessions with records in the period
+  prs: number; // PRs merged in the period
+  h: number; // agent hours, s: active time per session, summed
+  machine: number; // machine hours, s: the union of active intervals of all sessions
+  tok: number; // total tokens
+  out: number; // of them output
+  usd: number | null; // null — no model from the price list
+  models: Record<string, number>; // $ by model from the price list
+  unpriced: string[]; // models without a price
+  steps: number; // turns — model responses, one per message.id
+  agents: number; // subagents with records in the period
+  prompts: number; // human prompts
 }
 
 /**
- * Сводка периода по всем сессиям — как факт, но без привязки: активное время — промежутки между соседними записями
- * сессии не длиннее gap, обе в периоде; токены и стоимость — раз на ответ модели (возобновлённая сессия копирует
- * историю); часы машины — объединение промежутков всех сессий, их отношение к часам агента — параллельность.
+ * Period summary over all sessions — like the actual, but without linking: active time is the gaps between neighboring
+ * records of a session no longer than gap, both in the period; tokens and cost — once per model response (a resumed
+ * session copies the history); machine hours — the union of all sessions' gaps, their ratio to agent hours is
+ * parallelism.
  */
 export function periodSummary(sessions: Session[], prs: PR[], since: number, until: number, gapMin = 30): Period {
   const gap = gapMin * 60;
@@ -3900,7 +3962,7 @@ export function periodSummary(sessions: Session[], prs: PR[], since: number, unt
   return res;
 }
 
-/** Таблица периодов: итоги и они же на влитой PR; у двух периодов — отношение «после / до»; затем доля $ по моделям. */
+/** Period table: totals, also per merged PR; for two periods the "after / before" ratio; then the $ share by model. */
 export function periodTable(ps: Period[]): string[] {
   const when = (t: number) => {
     const s = fmtLocal(t);
@@ -3999,7 +4061,7 @@ const USAGE = `est — estimates tasks from the project's history and records th
   est cloud-import <export.json>...   — cloud session events (SKILL.md, «Cloud session») into the sources of the actual
   <type> — ${EST_TYPES.join(" ")}`;
 
-/** Выгрузки облачных сессий → каталог состояния; сводка по каждой, чтобы было видно, что легло. */
+/** Cloud session exports → the state directory; a summary of each, so that it's visible what landed. */
 function cmdCloudImport(files: string[]): void {
   const hhmm = (t: number) => new Date(t * 1000).toISOString().slice(11, 16);
   for (const f of files) {
