@@ -37,8 +37,9 @@ afterEach(() => {
     try {
       process.kill(-p.pid!, "SIGKILL");
     } catch (e) {
-      // отпущенная команда уже вышла, а событие exit до теста ещё не дошло: группы нет — убирать нечего
-      if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e;
+      // отпущенная команда уже вышла, а событие exit до теста ещё не дошло: группы нет — убирать нечего; macOS на группу
+      // из одних неубранных зомби отвечает EPERM, а не ESRCH
+      if (!["ESRCH", "EPERM"].includes((e as NodeJS.ErrnoException).code!)) throw e;
     }
   }
   cleanup();
