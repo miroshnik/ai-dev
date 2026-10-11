@@ -46,7 +46,7 @@ const EN = '{ "language": "en" }\n';
 
 /** Пункты сверки: первое слово заголовка → ✅ или ❌ (после «Итог:», если он есть). */
 function marks(out: string): Record<string, string> {
-  const tail = out.includes("Итог:") ? out.slice(out.indexOf("Итог:")) : out;
+  const tail = out.includes("Summary:") ? out.slice(out.indexOf("Summary:")) : out;
   return Object.fromEntries([...tail.matchAll(/^(✅|❌) (\S+)/gmu)].map((m) => [m[2]!.replace(/:$/, ""), m[1]!]));
 }
 const ops = (fake: FakeGitHub) => fake.mutations.map((m) => m.op);
@@ -66,18 +66,18 @@ describe("check показывает каждое расхождение с ка
   it("проект ai-dev как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются", () => {
     const r = check(fake());
     expect(r.code).toBe(0);
-    expect(r.out).toStartWith(`Проект ${REPO}: ${PROJECT_URL}`);
-    expect(marks(r.out)).toEqual({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "✅", Закрытые: "✅", Открытые: "✅", Метки: "✅", Мерж: "✅", Способ: "✅" });
-    expect(r.out).toContain("➖ Priority и типы issue — в личном аккаунте их нет");
+    expect(r.out).toStartWith(`Project ${REPO}: ${PROJECT_URL}`);
+    expect(marks(r.out)).toEqual({ Project: "✅", Views: "✅", Status: "✅", Fields: "✅", Workflows: "✅", Closed: "✅", Open: "✅", Decision: "✅", Merge: "✅", PR: "✅" });
+    expect(r.out).toContain("➖ Priority and issue types — a personal account has none");
   });
 
   // ненастроенного workflow в API нет вовсе — у нового проекта в списке только «Item closed» и два про PR
   it("workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «не настроен», код 1", () => {
     const r = check(unconfigured());
     expect(r.code).toBe(1);
-    expect(marks(r.out)).toMatchObject({ Workflow: "❌", Закрытые: "✅" });
-    expect(r.out).toContain("· «Item added to project» не настроен");
-    expect(r.out).toContain("· «Auto-add to project» не настроен");
+    expect(marks(r.out)).toMatchObject({ Workflows: "❌", Closed: "✅" });
+    expect(r.out).toContain("· «Item added to project» not configured");
+    expect(r.out).toContain("· «Auto-add to project» not configured");
   });
 
   // выключенный workflow есть в списке с enabled: false — ссылка ведёт прямо на него
@@ -85,8 +85,8 @@ describe("check показывает каждое расхождение с ка
     const f = fake();
     f.workflow("Item closed").enabled = false;
     const r = check(f);
-    expect(marks(r.out).Workflow).toBe("❌");
-    expect(r.out).toMatch(/^   · «Item closed» выключен$/m);
+    expect(marks(r.out).Workflows).toBe("❌");
+    expect(r.out).toMatch(/^   · «Item closed» disabled$/m);
     expect(fix(f).out).toContain(`«Item closed»: Edit → Set value → Status: Готово → Save and turn on workflow — ${wfUrl(f, "Item closed")}`);
   });
 
@@ -98,11 +98,11 @@ describe("check показывает каждое расхождение с ка
     f.view("Роадмэп").layout = "TABLE_LAYOUT";
     f.project().views.nodes.push({ ...structuredClone(f.view("Таблица")), id: "PVTV_extra", number: 9, name: "Мои задачи" });
     const r = check(f);
-    expect(marks(r.out).Представления).toBe("❌");
-    expect(r.out).toContain("· у «Доска» фильтр «iteration:@current»");
-    expect(r.out).toContain("· колонки «Доска» не по Status");
+    expect(marks(r.out).Views).toBe("❌");
+    expect(r.out).toContain("· «Доска» has filter «iteration:@current»");
+    expect(r.out).toContain("· «Доска» columns not by Status");
     expect(r.out).toContain("· «Роадмэп» — TABLE_LAYOUT");
-    expect(r.out).toContain("· лишнее «Мои задачи»");
+    expect(r.out).toContain("· extra «Мои задачи»");
   });
 
   it("чужие варианты Status, недостающее числовое поле и своё поле сверх канона — ❌", () => {
@@ -111,10 +111,10 @@ describe("check показывает каждое расхождение с ка
     f.project().fields.nodes = f.project().fields.nodes.filter((x: { name: string }) => x.name !== "Токены, млн");
     f.project().fields.nodes.push({ __typename: "ProjectV2IterationField", id: "PVTIF_1", name: "Iteration", dataType: "ITERATION" });
     const r = check(f);
-    expect(marks(r.out)).toMatchObject({ Status: "❌", Поля: "❌" });
-    expect(r.out).toContain("· варианты: Todo, В работе, Готово");
-    expect(r.out).toContain("· нет «Токены, млн»");
-    expect(r.out).toContain("· лишнее «Iteration» (ITERATION)");
+    expect(marks(r.out)).toMatchObject({ Status: "❌", Fields: "❌" });
+    expect(r.out).toContain("· options: Todo, В работе, Готово");
+    expect(r.out).toContain("· missing «Токены, млн»");
+    expect(r.out).toContain("· extra «Iteration» (ITERATION)");
   });
 
   it("закрытая не в Готово, закрытая без выполнения в проекте, открытая вне проекта и без Status — ❌", () => {
@@ -125,11 +125,11 @@ describe("check показывает каждое расхождение с ка
     f.items().splice(f.items().indexOf(f.item(47)), 1);
     f.item(42).status = null;
     const r = check(f);
-    expect(marks(r.out)).toMatchObject({ Закрытые: "❌", Открытые: "❌" });
-    expect(r.out).toMatch(/^   · не в «Готово»: #1$/m); // закрытая без выполнения в «Готово» не нужна — её убирают
-    expect(r.out).toContain("· закрыты без выполнения, но в проекте: #3");
-    expect(r.out).toContain("· не в проекте: #47");
-    expect(r.out).toContain("· без Status: #42");
+    expect(marks(r.out)).toMatchObject({ Closed: "❌", Open: "❌" });
+    expect(r.out).toMatch(/^   · not in «Готово»: #1$/m); // закрытая без выполнения в «Готово» не нужна — её убирают
+    expect(r.out).toContain("· closed without being done, but in the project: #3");
+    expect(r.out).toContain("· not in the project: #47");
+    expect(r.out).toContain("· without Status: #42");
   });
 
   it("к репозиторию не привязан проект — из пунктов проекта только этот ❌, остальные без проекта не проверить; правило основной ветки и способ мержа сверяются", () => {
@@ -137,14 +137,14 @@ describe("check показывает каждое расхождение с ка
     f.unlinkAll();
     const r = check(f);
     expect(r.code).toBe(1);
-    expect(r.out).toStartWith(`Проект ${REPO}: нет`);
-    expect(marks(r.out)).toEqual({ Проект: "❌", Мерж: "✅", Способ: "✅" });
+    expect(r.out).toStartWith(`Project ${REPO}: none`);
+    expect(marks(r.out)).toEqual({ Project: "❌", Merge: "✅", PR: "✅" });
   });
 
   it("облачная сессия — объяснение и код 2, а не сбой gh на Projects v2", () => {
     const r = run(fake(), ["project", "check", "--repo", REPO], { CLAUDE_CODE_REMOTE: "true" });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("облачная сессия");
+    expect(r.err).toContain("cloud session");
     expect(r.out).toBe("");
   });
 });
@@ -167,8 +167,8 @@ describe("fix доводит проект до канона: через API — 
     expect(byOp(f, "DeleteItem").map((i) => i.itemId)).toEqual([REC_ITEM(3)]);
     expect(byOp(f, "AddItem").map((i) => i.contentId)).toEqual([openIssueId(47)]);
     expect(f.item(42).status).toEqual({ name: "Бэклог" });
-    expect(r.out).toContain("+ «Доска»: снять фильтр «iteration:@current»");
-    expect(r.out).not.toContain("Шаги в UI");
+    expect(r.out).toContain("+ «Доска»: remove filter «iteration:@current»");
+    expect(r.out).not.toContain("UI steps");
   });
 
   it("закрытая задача не в Готово — ставит Готово и просит проверить цель «Item closed» в UI", () => {
@@ -176,8 +176,8 @@ describe("fix доводит проект до канона: через API — 
     f.item(1).status = { name: "В работе" };
     const r = fix(f);
     expect(f.item(1).status).toEqual({ name: "Готово" });
-    expect(marks(r.out).Закрытые).toBe("✅");
-    expect(r.out).toContain(`«Item closed»: проверить Set value → Status: Готово, иначе Edit → Готово → Save — ${wfUrl(f, "Item closed")}`);
+    expect(marks(r.out).Closed).toBe("✅");
+    expect(r.out).toContain(`«Item closed»: check Set value → Status: Готово, otherwise Edit → Готово → Save — ${wfUrl(f, "Item closed")}`);
     expect(r.code).toBe(1);
   });
 
@@ -186,9 +186,9 @@ describe("fix доводит проект до канона: через API — 
     const r = fix(f);
     expect(r.code).toBe(1);
     expect(f.mutations).toEqual([]);
-    expect(r.out).toContain("Шаги в UI — браузером сессии, без браузера — пользователю; затем снова check:");
+    expect(r.out).toContain("UI steps — in the session's browser, without a browser — for the user; then check again:");
     expect(r.out).toMatch(new RegExp(`^1\\. «Item added to project»: Edit → Set value → Status: Бэклог → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
-    expect(r.out).toMatch(new RegExp(`^2\\. «Auto-add to project»: Edit → репозиторий ai-dev, фильтр is:issue is:open \\(Enter\\) → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
+    expect(r.out).toMatch(new RegExp(`^2\\. «Auto-add to project»: Edit → repository ai-dev, filter is:issue is:open \\(Enter\\) → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
   });
 
   it("доска не по Status — шаг UI со ссылкой на представление", () => {
@@ -210,8 +210,8 @@ describe("fix доводит проект до канона: через API — 
     const before = fix(f);
     expect(before.code).toBe(1);
     expect(f.mutations).toEqual([]);
-    expect(before.out).toContain("Нужно подтверждение пользователя — затем fix --confirm:");
-    for (const s of ["переименовать проект «AI dev» → «ai-dev»", "удалить представление «Мои задачи»", "удалить поле «Iteration»", "Status: Бэклог, В работе, Готово (существующие переименовать с тем же id)"]) {
+    expect(before.out).toContain("Confirmation needed from the user — then fix --confirm:");
+    for (const s of ["rename project «AI dev» → «ai-dev»", "delete view «Мои задачи»", "delete field «Iteration»", "Status: Бэклог, В работе, Готово (rename the existing ones keeping the id)"]) {
       expect(before.out).toContain(s);
     }
 
@@ -230,7 +230,7 @@ describe("fix доводит проект до канона: через API — 
     expect(byOp(f, "LinkProject")).toEqual([{ projectId: own.id, repositoryId: f.repo.id }]);
     expect(ops(f)).not.toContain("CopyProject");
     expect(ops(f)).not.toContain("CreateProject");
-    expect(r.out).toContain(`+ привязан проект «ai-dev» (${own.url})`);
+    expect(r.out).toContain(`+ linked project «ai-dev» (${own.url})`);
   });
 
   it("проекта нет — копирует эталон под владельца репозитория и привязывает; из шагов остаётся только auto-add", () => {
@@ -242,8 +242,8 @@ describe("fix доводит проект до канона: через API — 
     const copy = f.project();
     expect(copy.id).not.toBe(template.id);
     expect(byOp(f, "AddItem").map((i) => i.contentId)).toEqual(f.openIssues.map((i: { id: string }) => i.id));
-    expect(marks(r.out)).toMatchObject({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "❌", Открытые: "✅" });
-    expect(r.out).toContain(`1. «Auto-add to project»: Edit → репозиторий ai-dev, фильтр is:issue is:open (Enter) → Save and turn on workflow — ${copy.url}/workflows`);
+    expect(marks(r.out)).toMatchObject({ Project: "✅", Views: "✅", Status: "✅", Fields: "✅", Workflows: "❌", Open: "✅" });
+    expect(r.out).toContain(`1. «Auto-add to project»: Edit → repository ai-dev, filter is:issue is:open (Enter) → Save and turn on workflow — ${copy.url}/workflows`);
     expect(r.out).not.toContain("2. ");
   });
 
@@ -253,7 +253,7 @@ describe("fix доводит проект до канона: через API — 
     f.rec['TemplateProject {"login":"miroshnik","number":6}'] = { data: { repositoryOwner: { projectV2: null } }, errors: [{ message: "Could not resolve to a ProjectV2 with the number 6." }] };
     const r = fix(f);
     expect(ops(f)[0]).toBe("CreateProject");
-    expect(r.err).toContain("эталон miroshnik/6 не найден — проект создаётся с нуля");
+    expect(r.err).toContain("template miroshnik/6 not found — the project is created from scratch");
     const created = f.project();
     const status = created.fields.nodes.find((x: { name: string }) => x.name === "Status");
     expect(byOp(f, "UpdateField")[0].singleSelectOptions.map((o: { id: string; name: string }) => [o.name, o.id])).toEqual(status.options.map((o: { id: string; name: string }) => [o.name, o.id]));
@@ -261,7 +261,7 @@ describe("fix доводит проект до канона: через API — 
     expect(byOp(f, "UpdateView")).toEqual([{ viewId: created.views.nodes[0].id, name: "Таблица" }]);
     expect(byOp(f, "CreateView").map((v) => v.name)).toEqual(["Доска", "Роадмэп"]);
     expect(byOp(f, "CreateField").map((v) => v.name)).toEqual(["Оценка, ч", "Факт, ч", "Токены, млн", "Стоимость, $"]);
-    expect(marks(r.out)).toMatchObject({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Workflow: "❌", Открытые: "✅" });
+    expect(marks(r.out)).toMatchObject({ Project: "✅", Views: "✅", Status: "✅", Fields: "✅", Workflows: "❌", Open: "✅" });
   });
 });
 
@@ -273,8 +273,8 @@ describe("В организации сверяются ещё поле Priority 
   it("поле issue Priority не подключено — fix подключает; Таблица и Доска не по Priority — шаги UI", () => {
     const f = org();
     const r0 = check(f, ORG);
-    expect(marks(r0.out)).toMatchObject({ Priority: "❌", Типы: "✅" });
-    expect(r0.out).toContain("· поле issue Priority не подключено");
+    expect(marks(r0.out)).toMatchObject({ Priority: "❌", Issue: "✅" });
+    expect(r0.out).toContain("· issue field Priority not connected");
     expect(r0.out).not.toContain("➖");
     const r = fix(f, { repo: ORG });
     expect(byOp(f, "AddIssueField")).toEqual([{ projectId: f.project().id, issueFieldId: "IFSS_priority" }]);
@@ -288,14 +288,14 @@ describe("В организации сверяются ещё поле Priority 
     const f = org();
     f.project().fields.nodes.push({ __typename: "ProjectV2SingleSelectField", id: "PVTSSF_effort", name: "Effort", dataType: "SINGLE_SELECT", isIssueField: true, options: [] });
     const r = check(f, ORG);
-    expect(marks(r.out).Поля).toBe("❌");
-    expect(r.out).toContain("· лишнее «Effort» (SINGLE_SELECT, поле issue)");
+    expect(marks(r.out).Fields).toBe("❌");
+    expect(r.out).toContain("· extra «Effort» (SINGLE_SELECT, issue field)");
   });
 
   it("своё поле проекта Priority вместо поля issue — замена только с --confirm", () => {
     const f = org();
     f.project().fields.nodes.push({ __typename: "ProjectV2SingleSelectField", id: "PVTSSF_own", name: "Priority", dataType: "SINGLE_SELECT", isIssueField: false, options: [] });
-    expect(check(f, ORG).out).toContain("· своё поле проекта «Priority» вместо поля issue");
+    expect(check(f, ORG).out).toContain("· own project field «Priority» instead of the issue field");
     fix(f, { repo: ORG });
     expect(ops(f)).toEqual([]);
     fix(f, { repo: ORG, confirm: true });
@@ -307,8 +307,8 @@ describe("В организации сверяются ещё поле Priority 
     const f = org();
     f.repo.owner.issueTypes.nodes = [{ id: "IT_t", name: "Task", isEnabled: true }, { id: "IT_b", name: "Bug", isEnabled: true }, { id: "IT_f", name: "Feature", isEnabled: true }];
     const r0 = check(f, ORG);
-    expect(marks(r0.out).Типы).toBe("❌");
-    expect(r0.out).toContain("· лишний «Feature»");
+    expect(marks(r0.out).Issue).toBe("❌");
+    expect(r0.out).toContain("· extra «Feature»");
     fix(f, { repo: ORG });
     expect(ops(f).filter((o) => o.includes("IssueType"))).toEqual([]);
     const r = fix(f, { repo: ORG, confirm: true });
@@ -318,7 +318,7 @@ describe("В организации сверяются ещё поле Priority 
       { issueTypeId: "IT_f", isEnabled: false },
     ]);
     expect(byOp(f, "CreateIssueType")).toEqual([{ ownerId: f.repo.owner.id, name: "Эпик", isEnabled: true, color: "PURPLE" }]);
-    expect(marks(r.out).Типы).toBe("✅");
+    expect(marks(r.out).Issue).toBe("✅");
   });
 
   it("нет прав на настройку организации — строка «!» с ошибкой и ссылкой на UI, код 1, остальное сделано", () => {
@@ -327,7 +327,7 @@ describe("В организации сверяются ещё поле Priority 
     f.failing.UpdateIssueType = "Resource not accessible by integration";
     const r = fix(f, { repo: ORG, confirm: true });
     expect(r.code).toBe(1);
-    expect(r.out).toContain("! включить тип «Эпик»: GraphQL: Resource not accessible by integration — в UI: https://github.com/organizations/acme/settings/issue-types");
+    expect(r.out).toContain("! enable type «Эпик»: GraphQL: Resource not accessible by integration — in the UI: https://github.com/organizations/acme/settings/issue-types");
     expect(ops(f)).toContain("AddIssueField");
   });
 });
@@ -354,8 +354,8 @@ describe("Метки решений — имя решения без вида, �
     Object.assign(f.tree, { capabilities: ["billing"], standards: ["audit"], architecture: ["boundaries"], model: MODEL });
     const r = check(f);
     expect(r.code).toBe(1);
-    expect(marks(r.out).Метки).toBe("❌");
-    expect(r.out).toContain("· решения без метки: billing, audit, boundaries, domain");
+    expect(marks(r.out).Decision).toBe("❌");
+    expect(r.out).toContain("· decisions without a label: billing, audit, boundaries, domain");
     const x = fix(f);
     expect(byOp(f, "CreateLabel")).toEqual([
       { repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" },
@@ -363,7 +363,7 @@ describe("Метки решений — имя решения без вида, �
       { repositoryId: f.repo.id, name: "boundaries", color: ARCH, description: "Решение: tests/architecture — правило или модуль boundaries" },
       { repositoryId: f.repo.id, name: "domain", color: ARCH, description: "Решение: tests/architecture — правило или модуль domain" },
     ]);
-    expect(marks(x.out).Метки).toBe("✅");
+    expect(marks(x.out).Decision).toBe("✅");
   });
 
   /** Совпавшие имена — обычно одна тема (модуль billing делает capability billing): по одной метке их и ищут. */
@@ -374,7 +374,7 @@ describe("Метки решений — имя решения без вида, �
     expect(byOp(f, "CreateLabel")).toEqual([
       { repositoryId: f.repo.id, name: "domain", color: CAP, description: "Решение: tests/capabilities/domain; tests/architecture — правило или модуль domain" },
     ]);
-    expect(marks(check(f).out).Метки).toBe("✅");
+    expect(marks(check(f).out).Decision).toBe("✅");
   });
 
   it("описание длиннее 100 символов GitHub не примет — в нём только виды решения", () => {
@@ -382,14 +382,14 @@ describe("Метки решений — имя решения без вида, �
     Object.assign(f.tree, { capabilities: ["domain"], standards: ["domain"], model: MODEL });
     fix(f);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "domain", color: CAP, description: "Решение: capability, standard, architecture" }]);
-    expect(marks(check(f).out).Метки).toBe("✅");
+    expect(marks(check(f).out).Decision).toBe("✅");
   });
 
   it("у метки решения появился второй вид — fix дописывает его в описание", () => {
     const f = fake();
     Object.assign(f.tree, { capabilities: ["domain"], model: MODEL });
     const l = f.label("domain", ARCH, "Решение: tests/architecture — правило или модуль domain");
-    expect(check(f).out).toContain(`· метка «domain» цвета ${ARCH}, а не ${CAP}`);
+    expect(check(f).out).toContain(`· label «domain» is colored ${ARCH}, not ${CAP}`);
     fix(f);
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: CAP, description: "Решение: tests/capabilities/domain; tests/architecture — правило или модуль domain" }]);
   });
@@ -401,13 +401,13 @@ describe("Метки решений — имя решения без вида, �
     f.label("old", CAP, "Решение: tests/capabilities/old");
     f.label("gone", STD, "Решение: tests/standards/gone");
     f.label("вопросы", "FBCA04");
-    expect(check(f).out).toContain("· метка «old» без решения в основной ветке");
+    expect(check(f).out).toContain("· label «old» without a decision in the default branch");
     const r = fix(f);
     expect(ops(f)).not.toContain("DeleteLabel");
-    expect(r.out).toContain("удалить метку «gone»");
+    expect(r.out).toContain("delete label «gone»");
     const x = fix(f, { confirm: true });
     expect(labelNames(f)).toEqual(["billing", "вопросы"]);
-    expect(marks(x.out).Метки).toBe("✅");
+    expect(marks(x.out).Decision).toBe("✅");
   });
 
   /**
@@ -421,8 +421,8 @@ describe("Метки решений — имя решения без вида, �
     f.labelIssue(46, "quarter-format");
     const r = check(f);
     expect(r.code).toBe(0);
-    expect(marks(r.out).Метки).toBe("✅");
-    expect(r.out).toContain("○ новое решение «quarter-format»: в основной ветке ещё нет, метка на открытых задачах #49");
+    expect(marks(r.out).Decision).toBe("✅");
+    expect(r.out).toContain("○ new decision «quarter-format»: not in the default branch yet, the label is on open tasks #49");
     fix(f, { confirm: true });
     expect(ops(f)).not.toContain("DeleteLabel");
     expect(issueLabels(f, 49)).toContain("quarter-format");
@@ -435,9 +435,9 @@ describe("Метки решений — имя решения без вида, �
     f.labelIssue(46, "quarter-format");
     f.closed(49);
     const r = check(f);
-    expect(marks(r.out).Метки).toBe("❌");
-    expect(r.out).toContain("· метка «quarter-format» без решения в основной ветке, открытых задач с ней нет");
-    expect(r.out).not.toContain("новое решение");
+    expect(marks(r.out).Decision).toBe("❌");
+    expect(r.out).toContain("· label «quarter-format» without a decision in the default branch, no open tasks have it");
+    expect(r.out).not.toContain("new decision");
     fix(f, { confirm: true });
     expect(labelNames(f)).not.toContain("quarter-format");
     expect(issueLabels(f, 46)).not.toContain("quarter-format");
@@ -453,7 +453,7 @@ describe("Метки решений — имя решения без вида, �
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "audit", color: STD, description: "Решение: tests/standards/audit" }]);
     expect(ops(f)).not.toContain("UpdateLabel");
     expect(labelNames(f)).toEqual(["audit", "quarter-format"]);
-    expect(marks(r.out).Метки).toBe("✅");
+    expect(marks(r.out).Decision).toBe("✅");
   });
 
   it("папку решения переименовали — метка переименовывается с --confirm, задачи сохраняют её", () => {
@@ -464,7 +464,7 @@ describe("Метки решений — имя решения без вида, �
     f.labelIssue(46, "billing");
     const r = fix(f);
     expect(ops(f)).not.toContain("CreateLabel");
-    expect(r.out).toContain("переименовать метку «billing» → «invoicing» (задачи сохранят её)");
+    expect(r.out).toContain("rename label «billing» → «invoicing» (tasks keep it)");
     fix(f, { confirm: true });
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: old.id, name: "invoicing", color: CAP, description: "Решение: tests/capabilities/invoicing" }]);
     expect(ops(f)).not.toContain("CreateLabel");
@@ -475,7 +475,7 @@ describe("Метки решений — имя решения без вида, �
     const f = fake();
     f.tree.standards = ["audit"];
     const l = f.label("audit", "ededed", "Решение: tests/standards/audit");
-    expect(check(f).out).toContain(`· метка «audit» цвета ededed, а не ${STD}`);
+    expect(check(f).out).toContain(`· label «audit» is colored ededed, not ${STD}`);
     fix(f);
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: l.id, color: STD, description: "Решение: tests/standards/audit" }]);
   });
@@ -486,8 +486,8 @@ describe("Метки решений — имя решения без вида, �
     f.label("boundaries", ARCH, "Решение: tests/architecture — правило или модуль boundaries");
     f.label("domain", ARCH, "Решение: tests/architecture — правило или модуль domain");
     const r = check(f);
-    expect(marks(r.out).Метки).toBe("❌");
-    expect(r.out).toContain("· модель tests/architecture/model.ts не загружается — метки модулей не сверяются");
+    expect(marks(r.out).Decision).toBe("❌");
+    expect(r.out).toContain("· model tests/architecture/model.ts doesn't load — module labels aren't checked");
     fix(f, { confirm: true });
     expect(ops(f)).not.toContain("DeleteLabel");
     expect(labelNames(f)).toEqual(["boundaries", "domain"]);
@@ -499,15 +499,15 @@ describe("Метки решений — имя решения без вида, �
     const billing = f.label("capability:billing", CAP);
     const domain = f.label("architecture:domain", "FBCA04");
     f.labelIssue(49, "capability:billing");
-    expect(check(f).out).toContain("· метка «capability:billing» старого вида `вид:имя`");
+    expect(check(f).out).toContain("· label «capability:billing» of the old form `kind:name`");
     const r = fix(f);
-    expect(r.out).toContain("+ переименовать метку «capability:billing» → «billing» (задачи сохранят её)");
+    expect(r.out).toContain("+ rename label «capability:billing» → «billing» (tasks keep it)");
     expect(byOp(f, "UpdateLabel")).toEqual([
       { id: billing.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" },
       { id: domain.id, name: "domain", color: ARCH, description: "Решение: tests/architecture — правило или модуль domain" },
     ]);
     expect(issueLabels(f, 49)).toContain("billing");
-    expect(marks(r.out).Метки).toBe("✅");
+    expect(marks(r.out).Decision).toBe("✅");
   });
 
   /** Старая метка нового решения — та же старая метка: имя не зависит от того, влито ли решение. */
@@ -515,12 +515,12 @@ describe("Метки решений — имя решения без вида, �
     const f = fake();
     const old = f.label("standard:quarter-format", STD);
     f.labelIssue(49, "standard:quarter-format");
-    expect(check(f).out).toContain("· метка «standard:quarter-format» старого вида `вид:имя`");
+    expect(check(f).out).toContain("· label «standard:quarter-format» of the old form `kind:name`");
     const r = fix(f);
-    expect(r.out).toContain("+ переименовать метку «standard:quarter-format» → «quarter-format» (задачи сохранят её)");
+    expect(r.out).toContain("+ rename label «standard:quarter-format» → «quarter-format» (tasks keep it)");
     expect(byOp(f, "UpdateLabel")).toEqual([{ id: old.id, name: "quarter-format", color: STD, description: "Решение: tests/standards/quarter-format" }]);
     expect(issueLabels(f, 49)).toContain("quarter-format");
-    expect(marks(r.out).Метки).toBe("✅");
+    expect(marks(r.out).Decision).toBe("✅");
   });
 
   it("старая метка, чьё имя уже занято, — сливается с --confirm: задачи получают метку с именем, старая удаляется", () => {
@@ -531,7 +531,7 @@ describe("Метки решений — имя решения без вида, �
     f.labelIssue(49, "capability:audit");
     f.labelIssue(47, "standard:audit");
     const r = fix(f);
-    expect(r.out).toContain("слить метку «standard:audit» в «audit»: #47 получат «audit», старая удаляется");
+    expect(r.out).toContain("merge label «standard:audit» into «audit»: #47 get «audit», the old one is deleted");
     expect(ops(f)).not.toContain("DeleteLabel");
     expect(issueLabels(f, 47)).toEqual(["standard:audit"]);
     const x = fix(f, { confirm: true });
@@ -539,7 +539,7 @@ describe("Метки решений — имя решения без вида, �
     expect(f.labels[0]!.description).toBe("Решение: tests/capabilities/audit; tests/standards/audit");
     expect(issueLabels(f, 47)).toEqual(["audit"]);
     expect(issueLabels(f, 49)).toEqual(["audit"]);
-    expect(marks(x.out).Метки).toBe("✅");
+    expect(marks(x.out).Decision).toBe("✅");
   });
 
   /** Обычная метка с чужим смыслом уже стоит на задачах: стать меткой решения она может только по решению человека. */
@@ -547,7 +547,7 @@ describe("Метки решений — имя решения без вида, �
     const f = fake();
     f.tree.capabilities = ["documentation"];
     const l = f.label("documentation", "0075ca", "Improvements or additions to documentation");
-    expect(check(f).out).toContain("· метка «documentation» — не метка решения, а решение documentation есть в основной ветке");
+    expect(check(f).out).toContain("· label «documentation» isn't a decision label, but decision documentation is in the default branch");
     fix(f);
     expect(ops(f)).not.toContain("CreateLabel");
     expect(ops(f)).not.toContain("UpdateLabel");
@@ -569,8 +569,8 @@ describe("Метки решений — имя решения без вида, �
     f.label("domain", ARCH, "Решение: tests/architecture — правило или модуль domain");
     const r = check(f);
     expect(r.code).toBe(0);
-    expect(marks(r.out).Метки).toBe("✅");
-    expect(r.out).toContain("○ разрез «приложения»: метки «api», «web» — не метки решений, одноимённые решения меткой не отмечаются");
+    expect(marks(r.out).Decision).toBe("✅");
+    expect(r.out).toContain("○ slice «приложения»: labels «api», «web» aren't decision labels, decisions of the same name aren't labeled");
     fix(f, { confirm: true });
     expect(f.mutations.filter((m) => /Label/.test(m.op))).toEqual([]);
   });
@@ -582,8 +582,8 @@ describe("Метки решений — имя решения без вида, �
  * ruleset выключен, а несовместимость двух зелёных PR покажет CI следующего PR.
  */
 describe("Мерж в основную ветку — только с зелёными обязательными чеками", () => {
-  const MERGE = "Мерж в main — только с зелёными обязательными чеками";
-  const NO_RULE = "· нет правила с обязательными чеками: ветку с красным чеком можно влить";
+  const MERGE = "Merge into main — only with green required checks";
+  const NO_RULE = "· no rule with required checks: a branch with a red check can be merged";
   function bare(f: FakeGitHub = fake()): FakeGitHub {
     f.merge.rulesets = [];
     return f;
@@ -593,7 +593,7 @@ describe("Мерж в основную ветку — только с зелён
     const f = bare();
     const r = check(f);
     expect(r.code).toBe(1);
-    expect(marks(r.out).Мерж).toBe("❌");
+    expect(marks(r.out).Merge).toBe("❌");
     expect(r.out).toContain(NO_RULE);
     const x = fix(f);
     expect(x.code).toBe(0);
@@ -609,8 +609,8 @@ describe("Мерж в основную ветку — только с зелён
         bypassActors: [{ repositoryRoleDatabaseId: 5, bypassMode: "ALWAYS" }],
       },
     ]);
-    expect(x.out).toContain("+ создать ruleset «ai-dev» на main: обязательные «tests», обход — admin");
-    expect(marks(x.out).Мерж).toBe("✅");
+    expect(x.out).toContain("+ create ruleset «ai-dev» on main: required «tests», bypass — admin");
+    expect(marks(x.out).Merge).toBe("✅");
   });
 
   it("чужое правило без обязательных чеков — ❌; fix его не правит, а ставит свой ruleset", () => {
@@ -623,20 +623,20 @@ describe("Мерж в основную ветку — только с зелён
     fix(g);
     expect(ops(g)).toEqual(["CreateRuleset"]);
     expect(release).toMatchObject({ enforcement: "ACTIVE", strict: true, contexts: [] });
-    expect(marks(check(g).out).Мерж).toBe("✅");
+    expect(marks(check(g).out).Merge).toBe("✅");
   });
 
   it("чужое правило с обязательными чеками — ✅, со strict или без; свой ruleset не дублирует", () => {
     for (const strict of [true, false]) {
       const f = bare();
       f.ruleset({ name: "main-policy", org: true, strict, contexts: ["build"] });
-      expect(marks(check(f).out).Мерж).toBe("✅");
+      expect(marks(check(f).out).Merge).toBe("✅");
       fix(f);
       expect(ops(f)).toEqual([]);
       // классическая защита ветки — такое же правило
       const g = bare();
       g.merge.protection = { strict, contexts: ["tests"] };
-      expect(marks(check(g).out).Мерж).toBe("✅");
+      expect(marks(check(g).out).Merge).toBe("✅");
       fix(g);
       expect(ops(g)).toEqual([]);
     }
@@ -646,21 +646,21 @@ describe("Мерж в основную ветку — только с зелён
     const f = fake();
     Object.assign(f.merge.rulesets[0]!, { enforcement: "DISABLED", strict: true, admin: false });
     const r = check(f);
-    expect(marks(r.out).Мерж).toBe("❌");
-    expect(r.out).toContain("· ruleset «ai-dev» — DISABLED, не действует");
-    expect(r.out).toContain("· ruleset «ai-dev»: strict включён — отставшую ветку GitHub не вольёт");
-    expect(r.out).toContain("· ruleset «ai-dev»: admin не может обойти — прямой push в main невозможен");
+    expect(marks(r.out).Merge).toBe("❌");
+    expect(r.out).toContain("· ruleset «ai-dev» — DISABLED, not in effect");
+    expect(r.out).toContain("· ruleset «ai-dev»: strict is on — GitHub won't merge a branch that fell behind");
+    expect(r.out).toContain("· ruleset «ai-dev»: admin can't bypass — no direct push to main");
     const x = fix(f);
     expect(ops(f)).toEqual(["UpdateRuleset"]);
-    expect(x.out).toContain("+ ruleset «ai-dev»: основная ветка, обязательные «tests», обход — admin");
+    expect(x.out).toContain("+ ruleset «ai-dev»: default branch, required «tests», bypass — admin");
     expect(f.merge.rulesets[0]).toMatchObject({ enforcement: "ACTIVE", strict: false, admin: true, contexts: ["tests"] });
-    expect(marks(check(f).out).Мерж).toBe("✅");
+    expect(marks(check(f).out).Merge).toBe("✅");
     // ruleset, поставленный прежним fix: действует, с обходом, но со strict — единственная причина
     const g = fake();
     g.merge.rulesets[0]!.strict = true;
     const only = check(g);
     expect(only.code).toBe(1);
-    expect(only.out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · ruleset «ai-dev»: strict включён — отставшую ветку GitHub не вольёт"]);
+    expect(only.out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · ruleset «ai-dev»: strict is on — GitHub won't merge a branch that fell behind"]);
     fix(g);
     expect(byOp(g, "UpdateRuleset").map((u) => u.rules[0].parameters.requiredStatusChecks.strictRequiredStatusChecksPolicy)).toEqual([false]);
     expect(check(g).code).toBe(0);
@@ -674,7 +674,7 @@ describe("Мерж в основную ветку — только с зелён
     ];
     const r = check(f);
     expect(r.code).toBe(0);
-    expect(r.out).toContain(`➖ ${MERGE} — у последних влитых PR нет общего зелёного чека — обязательным делать нечего`);
+    expect(r.out).toContain(`➖ ${MERGE} — the last merged PRs have no common green check — nothing to make required`);
     expect(r.out).not.toContain("strict");
   });
 
@@ -689,12 +689,12 @@ describe("Мерж в основную ветку — только с зелён
       { number: 141, checks: { tests: "IN_PROGRESS" } },
     ];
     const r = check(f);
-    expect(marks(r.out).Мерж).toBe("❌");
-    expect(r.out).toContain("· обязательный «e2e» не пришёл на PR #140 — PR ждал бы его вечно");
-    expect(r.out).toContain("· не обязательны зелёные на последних 10 влитых PR: «lint»");
+    expect(marks(r.out).Merge).toBe("❌");
+    expect(r.out).toContain("· required «e2e» didn't come to PR #140 — the PR would wait for it forever");
+    expect(r.out).toContain("· green on the last 10 merged PRs, but not required: «lint»");
     fix(f);
     expect(byOp(f, "UpdateRuleset").map((u) => u.rules[0].parameters.requiredStatusChecks.requiredStatusChecks)).toEqual([[{ context: "lint" }, { context: "tests" }]]);
-    expect(marks(check(f).out).Мерж).toBe("✅");
+    expect(marks(check(f).out).Merge).toBe("✅");
   });
 
   it("приватный репозиторий на Free — ➖ с причиной от GitHub, а не ❌; fix ничего не ставит", () => {
@@ -702,7 +702,7 @@ describe("Мерж в основную ветку — только с зелён
     Object.assign(f.merge, { private: true, upgrade: true });
     const r = check(f);
     expect(r.code).toBe(0);
-    expect(r.out).toContain(`➖ ${MERGE} — правила ветки недоступны: Upgrade to GitHub Pro or make this repository public to enable this feature.`);
+    expect(r.out).toContain(`➖ ${MERGE} — branch rules are unavailable: Upgrade to GitHub Pro or make this repository public to enable this feature.`);
     fix(f);
     expect(ops(f)).toEqual([]);
   });
@@ -714,27 +714,27 @@ describe("Мерж в основную ветку — только с зелён
  * шлёт один запрос REST.
  */
 describe("Способ мержа — только rebase", () => {
-  const STEP = "оставить только rebase: выключить merge commit и squash, включить rebase";
+  const STEP = "keep only rebase: turn off merge commit and squash, turn on rebase";
 
   it("разрешены merge commit или squash, выключен rebase — ❌ по каждой причине; fix оставляет только rebase одним запросом REST", () => {
     const f = fake();
     f.merge.methods = { merge: true, squash: true, rebase: false };
     const r = check(f);
     expect(r.code).toBe(1);
-    expect(marks(r.out).Способ).toBe("❌");
-    expect(r.out).toContain("· rebase выключен — gh pr merge --rebase GitHub отклонит");
-    expect(r.out).toContain("· разрешён merge commit");
-    expect(r.out).toContain("· разрешён squash");
+    expect(marks(r.out).PR).toBe("❌");
+    expect(r.out).toContain("· rebase is off — GitHub will refuse gh pr merge --rebase");
+    expect(r.out).toContain("· merge commit is allowed");
+    expect(r.out).toContain("· squash is allowed");
     const x = fix(f);
     expect(x.code).toBe(0);
     expect(byOp(f, "UpdateRepository")).toEqual([{ allow_merge_commit: false, allow_squash_merge: false, allow_rebase_merge: true }]);
     expect(x.out).toContain(`+ ${STEP}`);
     expect(f.merge.methods).toEqual({ merge: false, squash: false, rebase: true });
-    expect(marks(x.out).Способ).toBe("✅");
+    expect(marks(x.out).PR).toBe("✅");
     // одна причина — тот же запрос
     const g = fake();
     g.merge.methods.squash = true;
-    expect(check(g).out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · разрешён squash"]);
+    expect(check(g).out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · squash is allowed"]);
     fix(g);
     expect(ops(g)).toEqual(["UpdateRepository"]);
   });
@@ -745,8 +745,8 @@ describe("Способ мержа — только rebase", () => {
     f.failing.UpdateRepository = "Must have admin rights to Repository.";
     const x = fix(f);
     expect(x.code).toBe(1);
-    expect(x.out).toContain(`! ${STEP}: PATCH repos/${REPO}: Must have admin rights to Repository. — в UI: https://github.com/${REPO}/settings`);
-    expect(marks(x.out).Способ).toBe("❌");
+    expect(x.out).toContain(`! ${STEP}: PATCH repos/${REPO}: Must have admin rights to Repository. — in the UI: https://github.com/${REPO}/settings`);
+    expect(marks(x.out).PR).toBe("❌");
     expect(f.merge.methods.merge).toBe(true);
   });
 });
@@ -777,7 +777,7 @@ describe("Канон проекта — на языке проекта из .age
     expect(byOp(f, "UpdateView")).toEqual([{ viewId: f.project().views.nodes[0].id, name: "Table" }]);
     expect(byOp(f, "CreateView").map((v) => v.name)).toEqual(["Board", "Roadmap"]);
     expect(byOp(f, "CreateField").map((v) => v.name)).toEqual(["Estimate, h", "Actual, h", "Tokens, M", "Cost, $"]);
-    expect(marks(r.out)).toMatchObject({ Проект: "✅", Представления: "✅", Status: "✅", Поля: "✅", Открытые: "✅" });
+    expect(marks(r.out)).toMatchObject({ Project: "✅", Views: "✅", Status: "✅", Fields: "✅", Open: "✅" });
   });
 
   it("доска на русском, а язык проекта en — check ❌ по представлениям, Status и полям; fix --confirm переименовывает с теми же id, задачи сохраняют статусы", () => {
@@ -787,9 +787,9 @@ describe("Канон проекта — на языке проекта из .age
     const options = f.field("Status").options.map((o: { id: string }) => o.id);
     const fields = ids(["Оценка, ч", "Факт, ч", "Токены, млн", "Стоимость, $"]);
     const before = f.items().map((it: { status: { name: string } | null }) => it.status?.name ?? null);
-    expect(marks(check(f, REPO, en).out)).toMatchObject({ Представления: "❌", Status: "❌", Поля: "❌" });
+    expect(marks(check(f, REPO, en).out)).toMatchObject({ Views: "❌", Status: "❌", Fields: "❌" });
 
-    expect(fix(f, { cwd: en }).out).toContain("Нужно подтверждение пользователя");
+    expect(fix(f, { cwd: en }).out).toContain("Confirmation needed from the user");
     const r = fix(f, { confirm: true, cwd: en });
     expect(r.code).toBe(0);
     expect(f.field("Status").options.map((o: { id: string; name: string }) => [o.id, o.name])).toEqual(options.map((id: string, i: number) => [id, ["Backlog", "In progress", "Done"][i]]));
@@ -807,6 +807,6 @@ describe("Канон проекта — на языке проекта из .age
   });
 
   it("без манифеста — язык en: проект ai-dev с русской доской не по канону", () => {
-    expect(marks(check(fake(), REPO, checkout(null)).out)).toMatchObject({ Status: "❌", Поля: "❌" });
+    expect(marks(check(fake(), REPO, checkout(null)).out)).toMatchObject({ Status: "❌", Fields: "❌" });
   });
 });

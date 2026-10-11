@@ -147,7 +147,7 @@ describe("pr premerge: main не ушёл после зелёного CI — CI 
     const proc = processes();
     const r = premerge(fakeGh(p.head).gh, p.work, proc.run);
     expect(r.code).toBe(0);
-    expect(r.out.split("\n")).toEqual([`✅ вливать: main не двигался после CI PR #${PR} (CI с ${CI}, последнее движение main — 2026-10-02T09:30:00Z) — CI проверил это слияние`]);
+    expect(r.out.split("\n")).toEqual([`✅ merge: main hasn't moved since the CI of PR #${PR} (CI since ${CI}, last movement of main — 2026-10-02T09:30:00Z) — CI checked this merge`]);
     expect(proc.calls).toEqual([]);
   });
 
@@ -155,30 +155,30 @@ describe("pr premerge: main не ушёл после зелёного CI — CI 
   it("движение main за минуту до CI считается уходом: merge-ref строится раньше check suite", () => {
     const p = project({ pr: { "uses.txt": "a\n" } });
     const r = premerge(fakeGh(p.head, { moved: "2026-10-02T09:59:30Z" }).gh, p.work);
-    expect(r.out).toContain(`main ушёл после CI PR #${PR} (CI с ${CI}, main — 2026-10-02T09:59:30Z) — проверяю слияние с origin/main`);
+    expect(r.out).toContain(`main moved after the CI of PR #${PR} (CI since ${CI}, main — 2026-10-02T09:59:30Z) — checking the merge with origin/main`);
     expect(r.out).toContain("test:spec");
   });
 
   it("чеков у головы PR нет — слияние проверяется: что проверил CI, неизвестно", () => {
     const p = project({ pr: { "uses.txt": "a\n" } });
     const r = premerge(fakeGh(p.head, { suites: [] }).gh, p.work);
-    expect(r.out).toContain(`чеков у головы PR #${PR} нет — что проверил CI, неизвестно: проверяю слияние с origin/main`);
+    expect(r.out).toContain(`the head of PR #${PR} has no checks — what CI checked is unknown: checking the merge with origin/main`);
     expect(r.code).toBe(0);
-    expect(r.last).toBe("✅ вливать: test:spec зелёный на слиянии с origin/main");
+    expect(r.last).toBe("✅ merge: test:spec is green on the merge with origin/main");
   });
 
   it("движение main не прочитано — слияние проверяется", () => {
     const p = project({ pr: { "uses.txt": "a\n" } });
     const r = premerge(fakeGh(p.head, { activity: "Not Found" }).gh, p.work);
-    expect(r.out).toContain("○ движение main не прочитано");
-    expect(r.out).toContain("проверяю слияние с origin/main");
+    expect(r.out).toContain("○ movement of main not read");
+    expect(r.out).toContain("checking the merge with origin/main");
     expect(r.code).toBe(0);
   });
 
   it("CI считается с самого раннего check suite головы PR", () => {
     const p = project({ pr: { "uses.txt": "a\n" } });
     const r = premerge(fakeGh(p.head, { suites: ["2026-10-02T10:30:00Z", CI], moved: "2026-10-02T10:10:00Z" }).gh, p.work);
-    expect(r.out).toContain(`main ушёл после CI PR #${PR} (CI с ${CI}, main — 2026-10-02T10:10:00Z)`);
+    expect(r.out).toContain(`main moved after the CI of PR #${PR} (CI since ${CI}, main — 2026-10-02T10:10:00Z)`);
   });
 });
 
@@ -198,8 +198,8 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     expect(existsSync(spec.cwd!)).toBe(false);
     expect(worktrees(p.work)).toHaveLength(1);
     expect(p.git("branch", "--show-current")).toBe("feat/7-x");
-    expect(r.out).toContain(`+ слияние ${p.head.slice(0, 7)} с origin/main ${p.git("rev-parse", "--short=7", "origin/main")} — без конфликтов`);
-    expect(r.last).toBe("✅ вливать: test:spec зелёный на слиянии с origin/main");
+    expect(r.out).toContain(`+ merge of ${p.head.slice(0, 7)} with origin/main ${p.git("rev-parse", "--short=7", "origin/main")} — no conflicts`);
+    expect(r.last).toBe("✅ merge: test:spec is green on the merge with origin/main");
   });
 
   it("зависимости ставятся по lockfile слияния до test:spec", () => {
@@ -209,7 +209,7 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     const steps = proc.calls.filter((c) => c.cmd !== "git").map((c) => [c.cmd, ...c.args].join(" "));
     expect(steps).toEqual(["bun install --frozen-lockfile", "bun run test:spec"]);
     expect(new Set(proc.calls.filter((c) => c.cmd !== "git").map((c) => c.cwd)).size).toBe(1);
-    expect(r.out).toContain("+ зависимости: bun install --frozen-lockfile");
+    expect(r.out).toContain("+ dependencies: bun install --frozen-lockfile");
   });
 
   /** Поломка из замера #211: PR зелёный против старого main ссылается на элемент, который main убрал после его CI. */
@@ -218,7 +218,7 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
     expect(r.code).toBe(1);
     expect(r.out).toContain("  (fail) реестр > ссылка b есть в реестре");
-    expect(r.last).toBe("❌ не вливать: test:spec красный на слиянии с origin/main — чинить корень в PR: rebase на origin/main, правка, push --force-with-lease, снова ci-wait");
+    expect(r.last).toBe("❌ don't merge: test:spec is red on the merge with origin/main — fix the root cause in the PR: rebase onto origin/main, edit, push --force-with-lease, ci-wait again");
     expect(worktrees(p.work)).toHaveLength(1);
   });
 
@@ -227,7 +227,7 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     const proc = processes();
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
     expect(r.code).toBe(1);
-    expect(r.last).toBe("❌ не вливать: конфликт слияния с origin/main — items.txt; rebase на origin/main, push --force-with-lease, снова ci-wait");
+    expect(r.last).toBe("❌ don't merge: a merge conflict with origin/main — items.txt; rebase onto origin/main, push --force-with-lease, ci-wait again");
     expect(proc.calls.filter((c) => c.cmd !== "git")).toEqual([]);
     expect(worktrees(p.work)).toHaveLength(1);
   });
@@ -237,8 +237,8 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     const proc = processes();
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
     expect(r.code).toBe(0);
-    expect(r.out).toContain("○ быстрых проверок нет: в package.json слияния нет скриптов typecheck и test:spec — шаг пропущен");
-    expect(r.last).toBe("✅ вливать: слияние с origin/main без конфликтов");
+    expect(r.out).toContain("○ no fast checks: the merge's package.json has no typecheck or test:spec scripts — step skipped");
+    expect(r.last).toBe("✅ merge: the merge with origin/main has no conflicts");
     expect(proc.calls.filter((c) => c.cmd !== "git")).toEqual([]);
   });
 
@@ -277,8 +277,8 @@ describe("pr premerge: typecheck на слиянии со свежим main — 
     const proc = processes();
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
     expect(r.code).toBe(1);
-    expect(r.out).toContain("bun run typecheck упал:\n  src/calls.ts(2,1): error TS2304: Cannot find name 'commentsIn'.");
-    expect(r.last).toBe("❌ не вливать: typecheck красный на слиянии с origin/main — чинить корень в PR: rebase на origin/main, правка, push --force-with-lease, снова ci-wait");
+    expect(r.out).toContain("bun run typecheck failed:\n  src/calls.ts(2,1): error TS2304: Cannot find name 'commentsIn'.");
+    expect(r.last).toBe("❌ don't merge: typecheck is red on the merge with origin/main — fix the root cause in the PR: rebase onto origin/main, edit, push --force-with-lease, ci-wait again");
     // test:spec после красного typecheck не идёт, голый main проверяется тем, что упало
     expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run typecheck", "bun install --frozen-lockfile", "bun run typecheck"]);
     expect(worktrees(p.work)).toHaveLength(1);
@@ -290,7 +290,7 @@ describe("pr premerge: typecheck на слиянии со свежим main — 
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
     expect(r.code).toBe(0);
     expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run typecheck", "bun run test:spec"]);
-    expect(r.last).toBe("✅ вливать: typecheck и test:spec зелёные на слиянии с origin/main");
+    expect(r.last).toBe("✅ merge: typecheck and test:spec are green on the merge with origin/main");
   });
 
   it("без скрипта typecheck в package.json premerge проверяет одним test:spec", () => {
@@ -299,13 +299,13 @@ describe("pr premerge: typecheck на слиянии со свежим main — 
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, proc.run);
     expect(r.code).toBe(0);
     expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run test:spec"]);
-    expect(r.last).toBe("✅ вливать: test:spec зелёный на слиянии с origin/main");
+    expect(r.last).toBe("✅ merge: test:spec is green on the merge with origin/main");
   });
 });
 
 const WAIT = path.resolve(import.meta.dir, "../../../skills/ci-wait/scripts/wait-ci.sh");
 const GITHUB = path.resolve(import.meta.dir, "../../../skills/github/scripts/github.ts");
-const MAIN_RED = "⛔ не вливать: main красный, не этот PR — в своём PR не чинить";
+const MAIN_RED = "⛔ don't merge: main is red, not this PR — don't fix it in your PR";
 
 /**
  * Красный `main` видели только следующие PR: каждая сессия чинила его в своём PR или ждала вслепую, а владелец
@@ -328,7 +328,7 @@ describe("pr premerge: main красный — не этот PR: не влива
       { "items.txt": "a\nb\n", "uses.txt": "z\n" },
       { "items.txt": "a\nb\n", "uses.txt": "z\n" },
     ]);
-    expect(r.out).toContain("main красный и сам: test:spec красный и на голом origin/main тем же");
+    expect(r.out).toContain("main is red by itself: test:spec is red on bare origin/main too, with the same failures");
     expect(r.last).toBe(MAIN_RED);
     expect(worktrees(p.work)).toHaveLength(1);
   });
@@ -339,7 +339,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
     expect(r.out).toContain("  src/calls.ts(5,1): error TS2304: Cannot find name 'missing'.");
     expect(r.code).toBe(3);
-    expect(r.out).toContain("main красный и сам: typecheck красный и на голом origin/main тем же");
+    expect(r.out).toContain("main is red by itself: typecheck is red on bare origin/main too, with the same failures");
     expect(r.out).toContain(`--title "main красный: typecheck"`);
     expect(r.last).toBe(MAIN_RED);
   });
@@ -348,16 +348,16 @@ describe("pr premerge: main красный — не этот PR: не влива
     const p = project({ files: { ...TYPED, "calls.txt": "other\nother\nother\n" }, pr: { "calls.txt": "gone\nother\nother\nother\n" }, mainAfter: { "calls.txt": "other\nother\nother\nmissing\n" } });
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
     expect(r.code).toBe(1);
-    expect(r.out).toContain("main красный и сам, PR ломает сверх него:\n  src/calls.ts(1,1): error TS2304: Cannot find name 'gone'.\n❌ не вливать: typecheck красный");
+    expect(r.out).toContain("main is red by itself, the PR breaks beyond it:\n  src/calls.ts(1,1): error TS2304: Cannot find name 'gone'.\n❌ don't merge: typecheck is red");
   });
 
   it("main красный, а PR ломает ещё своё — код 1, вывод называет тесты, которые ломает PR", () => {
     const p = project({ pr: { "uses-pr.txt": "q\n" }, mainAfter: { "uses.txt": "z\n" } });
     const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work);
     expect(r.code).toBe(1);
-    expect(r.out).toContain("main красный и сам, PR ломает сверх него:\n  (fail) реестр > ссылка q есть в реестре");
-    expect(r.out).not.toContain("сверх него:\n  (fail) реестр > ссылка z");
-    expect(r.last).toStartWith("❌ не вливать: test:spec красный на слиянии с origin/main");
+    expect(r.out).toContain("main is red by itself, the PR breaks beyond it:\n  (fail) реестр > ссылка q есть в реестре");
+    expect(r.out).not.toContain("beyond it:\n  (fail) реестр > ссылка z");
+    expect(r.last).toStartWith("❌ don't merge: test:spec is red on the merge with origin/main");
   });
 
   it("красный чек последнего коммита main — premerge не вливает и называет чек", () => {
@@ -374,7 +374,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     };
     const r = premerge(fakeGh(p.head, { main }).gh, p.work, proc.run);
     expect(r.code).toBe(3);
-    expect(r.out).toContain("main красный: чеки deploy, preview последнего коммита main (c0ffee1)");
+    expect(r.out).toContain("main is red: checks deploy, preview of the last commit of main (c0ffee1)");
     expect(r.last).toBe(MAIN_RED);
     expect(proc.calls).toEqual([]);
   });
@@ -383,11 +383,11 @@ describe("pr premerge: main красный — не этот PR: не влива
     const p = project({ pr: { "uses.txt": "a\n" } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
     const found = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чек deploy" }] }).gh, p.work);
-    expect(found.out).toContain(`баг на красный main — #41 «main красный: чек deploy»: ждать его закрытия — bash ${WAIT} issue 41 фоновой командой, затем снова pr premerge ${PR}`);
+    expect(found.out).toContain(`bug on red main — #41 «main красный: чек deploy»: wait for it to close — bash ${WAIT} issue 41 as a background command, then pr premerge ${PR} again`);
     const none = fakeGh(p.head, { main, owner: "Organization" });
     const r = premerge(none.gh, p.work);
     expect(none.calls.find((c) => c.startsWith("search/issues?"))).toBe(`search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "main красный"`)}&per_page=20`);
-    expect(r.out).toContain(`бага на красный main про чек deploy нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
+    expect(r.out).toContain(`no bug on red main about check deploy — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; wait for it to close — bash ${WAIT} issue <N> as a background command, then pr premerge ${PR} again`);
     expect(r.code).toBe(3);
   });
 
@@ -395,7 +395,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
     const found = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main is red: check deploy" }] }).gh, p.work);
-    expect(found.out).toContain(`баг на красный main — #41 «main is red: check deploy»: ждать его закрытия — bash ${WAIT} issue 41 фоновой командой`);
+    expect(found.out).toContain(`bug on red main — #41 «main is red: check deploy»: wait for it to close — bash ${WAIT} issue 41 as a background command`);
     const none = fakeGh(p.head, { main });
     const r = premerge(none.gh, p.work);
     const query = (title: string) => `search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "${title}"`)}&per_page=20`;
@@ -409,7 +409,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }] };
     const r = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чек deploy" }] }).gh, p.work);
-    expect(r.out).toContain("баг на красный main — #41 «main красный: чек deploy»: ждать его закрытия");
+    expect(r.out).toContain("bug on red main — #41 «main красный: чек deploy»: wait for it to close");
     expect(r.out).not.toContain("task new --type");
   });
 
@@ -426,10 +426,10 @@ describe("pr premerge: main красный — не этот PR: не влива
     ];
     const r = premerge(fakeGh(p.head, { main, bugs }).gh, p.work);
     expect(r.code).toBe(3);
-    expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — про другой чек: не ждать");
-    expect(r.out).toContain(`баг на красный main — #41 «main красный: чек ci / job»: ждать его закрытия — bash ${WAIT} issue 41 фоновой командой`);
+    expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — about another check: don't wait");
+    expect(r.out).toContain(`bug on red main — #41 «main красный: чек ci / job»: wait for it to close — bash ${WAIT} issue 41 as a background command`);
     expect(r.out).not.toContain("issue 40");
-    expect(r.out).not.toContain("заведи");
+    expect(r.out).not.toContain("no bug on red");
     expect(r.last).toBe(MAIN_RED);
   });
 
@@ -443,9 +443,9 @@ describe("pr premerge: main красный — не этот PR: не влива
     ];
     const r = premerge(fakeGh(p.head, { main, bugs }).gh, p.work);
     expect(r.code).toBe(3);
-    expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — про другой чек: не ждать\n○ #42 «main красный: test:spec» — про другой чек: не ждать");
-    expect(r.out).not.toContain("баг на красный main —");
-    expect(r.out).toContain(`бага на красный main про чек test нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --title "main красный: чек test"; ждать его закрытия — bash ${WAIT} issue <N> фоновой командой, затем снова pr premerge ${PR}`);
+    expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — about another check: don't wait\n○ #42 «main красный: test:spec» — about another check: don't wait");
+    expect(r.out).not.toContain("bug on red main —");
+    expect(r.out).toContain(`no bug on red main about check test — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun ${GITHUB} task new --type Баг --title "main красный: чек test"; wait for it to close — bash ${WAIT} issue <N> as a background command, then pr premerge ${PR} again`);
     expect(r.last).toBe(MAIN_RED);
   });
 
@@ -454,8 +454,8 @@ describe("pr premerge: main красный — не этот PR: не влива
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }, { name: "smoke", conclusion: "failure" }, { name: "e2e", conclusion: "failure" }] };
     const r = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чеки deploy, e2e" }] }).gh, p.work);
     expect(r.code).toBe(3);
-    expect(r.out).toContain("баг на красный main — #41 «main красный: чеки deploy, e2e»: ждать его закрытия");
-    expect(r.out).toContain(`бага на красный main про чек smoke нет — найди открытый на упавший тест или заведи (метка — решение упавшего теста) и дай чип: bun ${GITHUB} task new --type Баг --title "main красный: чек smoke"`);
+    expect(r.out).toContain("bug on red main — #41 «main красный: чеки deploy, e2e»: wait for it to close");
+    expect(r.out).toContain(`no bug on red main about check smoke — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun ${GITHUB} task new --type Баг --title "main красный: чек smoke"`);
   });
 
   it("красный test:spec и на голом main — premerge ждёт бага, чей заголовок называет test:spec", () => {
@@ -466,8 +466,8 @@ describe("pr premerge: main красный — не этот PR: не влива
     ];
     const r = premerge(fakeGh(p.head, { moved: AFTER, bugs }).gh, p.work);
     expect(r.code).toBe(3);
-    expect(r.out).toContain("○ #40 «main красный: typecheck» — про другой чек: не ждать");
-    expect(r.out).toContain("баг на красный main — #43 «main красный: test:spec — реестр > ссылка z»: ждать его закрытия");
+    expect(r.out).toContain("○ #40 «main красный: typecheck» — about another check: don't wait");
+    expect(r.out).toContain("bug on red main — #43 «main красный: test:spec — реестр > ссылка z»: wait for it to close");
   });
 
   it("PR закрывает открытый баг «main красный…» — красный main его не останавливает: это починка", () => {
@@ -479,13 +479,13 @@ describe("pr premerge: main красный — не этот PR: не влива
     const fix = project({ pr: { "uses.txt": "a\n" } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }] };
     const r = premerge(fakeGh(fix.head, { main, bugs, body: "Чиню деплой.\n\nCloses #41" }).gh, fix.work);
-    expect(r.out).toContain("○ main красный — чек deploy последнего коммита main (c0ffee1); PR закрывает баг #41 на него — проверяю PR как обычно");
+    expect(r.out).toContain("○ main is red — check deploy of the last commit of main (c0ffee1); the PR closes bug #41 about it — checking the PR as usual");
     expect(r.code).toBe(0);
     // починка, которая не чинит: красное слияние — её, код 1
     const p = project({ pr: { "other.txt": "x\n" }, mainAfter: { "uses.txt": "z\n" } });
     const red = premerge(fakeGh(p.head, { moved: AFTER, bugs, body: "Fixes #41" }).gh, p.work);
     expect(red.code).toBe(1);
-    expect(red.last).toStartWith("❌ не вливать: test:spec красный на слиянии с origin/main");
+    expect(red.last).toStartWith("❌ don't merge: test:spec is red on the merge with origin/main");
   });
 });
 
@@ -493,13 +493,13 @@ describe("pr premerge: проверить нельзя — ошибка, не «
   it("не чекаут репозитория PR — ошибка (код 2)", () => {
     const r = premerge(fakeGh("0".repeat(40), { moved: "2026-10-02T10:20:00Z" }).gh, scratch());
     expect(r.code).toBe(2);
-    expect(r.err).toContain(`ошибка: проверка слияния — из чекаута ${SLUG}`);
+    expect(r.err).toContain(`error: the merge check runs from a checkout of ${SLUG}`);
   });
 
   it("PR не открыт — ошибка (код 2)", () => {
     const p = project({ pr: { "uses.txt": "a\n" } });
     const r = premerge(fakeGh(p.head, { state: "closed" }).gh, p.work);
     expect(r.code).toBe(2);
-    expect(r.err).toContain(`ошибка: PR #${PR} не открыт — вливать нечего`);
+    expect(r.err).toContain(`error: PR #${PR} is not open — nothing to merge`);
   });
 });
