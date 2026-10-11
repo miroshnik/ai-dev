@@ -21,7 +21,9 @@
 коде скриптов нет вовсе — стандарт проверяет каждый файл кода скиллов и установщика целиком, с комментариями (словари
 `skills/github/locales` — не код), а справку — запуском `--help`. Доки флоу цитируют вывод в «ёлочках»: по
 цитате агент узнаёт исход и ищет строку. Цитата, которой скрипт не печатает, — тихий дрейф, поэтому каждая сверяется с
-кодом: литеральные куски между подстановками (`<имя>`, `…`, `N`, `#`) есть в коде скриптов или в `en.json`.
+кодом: литеральные куски между подстановками (`<имя>`, `…`, `N`, `#`) есть в коде скриптов или в `en.json`. Цитату
+из нескольких документов тест называет по первому в порядке путей, а не в порядке файловой системы: имя теста —
+утверждение спеки, на macOS и в CI оно одно.
 
 Правило языка проекта — `language` манифеста, без поля — `ru`, без манифеста — `en` — в том же модуле, и установщик
 берёт язык им же: CommonJS без типов npx запускает и из node_modules, где Node типы не стирает. Своё правило у
@@ -109,7 +111,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 163 теста</summary>
+<details><summary>✅ 164 теста</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -130,7 +132,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Actual (cloud): …» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Actual (cloud)» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Actual unavailable (cloud)» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Actual, h» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Actual, h» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Actual» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Added» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «All done, but there are questions…» из skills/dashboard/SKILL.md печатает или пишет скрипт
@@ -145,14 +147,14 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Closed by PR #M: GitHub didn't link the PR to the task» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cloud session … not imported — est cloud-import» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cost by model» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Cost, $» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Cost, $» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Epic» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Estimate and actual» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Estimate, h» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Estimate, h» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Estimate» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Exceptions» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Folder» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Harness checks» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Item closed» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Moved into the tree» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Names that aren't statements (exceptions)» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -169,9 +171,9 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Sessions» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Task #N (epic #M)» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Task #N» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Task» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Task» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Tests beyond scenarios» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Tokens, M» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Tokens, M» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Waiting for the owner» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «What it's made of» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «What the system does» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -185,7 +187,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «all knip findings are of known kinds» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «all time» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «allowed: …» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «allowed» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «allowed» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «already newer» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «analogs» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «architecture model» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -207,7 +209,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «exception: \<entry> (#N)» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «exception: \<key> (#N)» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «exceptions are \<element>.json files in the decision folder's exceptions/» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «exceptions are one file per element in exceptions/, not exceptions.ts» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «exceptions are one file per element in exceptions/, not exceptions.ts» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «exceptions in \<file>: \<rules> (#N)» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «exceptions with a rule belong to the folder's invariant rules» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «forms» из skills/spec/checks.md печатает или пишет скрипт
@@ -247,7 +249,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «no unused catalog entries» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «none» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not allowed: …» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «not allowed» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «not allowed» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not empty» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not imported» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not written: …» из skills/est/SKILL.md печатает или пишет скрипт
@@ -256,7 +258,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «outside scope: \<element>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «outside scope: \<key>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «outside scope: …» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «outside scope» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «outside scope» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «perimeter» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «questions» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «remove from scope» из skills/spec/checks.md печатает или пишет скрипт
@@ -278,6 +280,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
   > название собрано из двух ключей en.json: packageName и withAdapter
 - ✅ вне охвата: shared commit … (share 1/k)
   > строка собрана из двух ключей en.json: est.fact.shared и est.fact.commitUnit
+- ✅ имя теста цитаты не зависит от порядка, в котором файловая система отдаёт документы
 
 </details>
 

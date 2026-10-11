@@ -9038,6 +9038,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "имя теста цитаты не зависит от порядка, в котором файловая система отдаёт документы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "нарушитель не проходит: цитата вывода, которого нет"
  },
  {
@@ -9171,7 +9178,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Actual, h» из skills/github/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «Actual, h» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9276,7 +9283,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Cost, $» из skills/github/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «Cost, $» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9297,7 +9304,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Estimate, h» из skills/github/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «Estimate, h» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9325,7 +9332,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Harness checks» из skills/spec/reference.md печатает или пишет скрипт"
+  "name": "цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9444,7 +9451,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Task» из skills/github/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «Task» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9458,7 +9465,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Tokens, M» из skills/github/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «Tokens, M» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9556,7 +9563,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «allowed» из skills/spec/checks.md печатает или пишет скрипт"
+  "name": "цитату «allowed» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9710,7 +9717,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «exceptions are one file per element in exceptions/, not exceptions.ts» из skills/spec/checks.md печатает или пишет скрипт"
+  "name": "цитату «exceptions are one file per element in exceptions/, not exceptions.ts» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9990,7 +9997,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «not allowed» из skills/spec/checks.md печатает или пишет скрипт"
+  "name": "цитату «not allowed» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -10053,7 +10060,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «outside scope» из skills/spec/checks.md печатает или пишет скрипт"
+  "name": "цитату «outside scope» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
