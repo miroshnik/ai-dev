@@ -154,8 +154,9 @@ no decision claims is dead and is deleted.
   `.agents/ai-dev.json`). `describe` — a capability in the user's terms ("only
   someone with access to the entity itself sees its history"), `it` — a
   concrete example; not a function, component or file name (`spec-doc
-  --strict` names such ones; so far it recognizes a statement by Cyrillic
-  letters — English is #366). Tests of one capability from units and e2e —
+  --strict` names such ones: in `ru` a statement has Russian words, in
+  another language it is a phrase of words, not an identifier). Tests of one
+  capability from units and e2e —
   under the same `describe`. JSDoc before a `describe` or `it` — what the name
   doesn't show, one to three sentences for the spec reader; file names, issue
   numbers, how the test is set up — in `//`, that's for the code reader.

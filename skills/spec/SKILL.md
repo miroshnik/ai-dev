@@ -52,7 +52,7 @@ skill directory: that is the version pinned for CI.
 | Moment | Action |
 |---|---|
 | Before a PR | 1. a test run with a JSON report (don't run e2e: for the names `playwright test --list --reporter=json > .spec-playwright.json` is enough); 2. `spec-doc --strict` with both reports — the tree and the main files are in order (`docs/spec` is in `.gitignore`, not committed); 3. `spec-diff --scenarios <task body>` → the `## Spec (tests)` section (in the project language — `locales/<language>.json` of the `github` skill) with the scenario check, into the PR body |
-| In CI on a PR | run → `spec-doc --strict` (tests outside the tree, no main file or `<folder>.md`, a header on a test file, `rule.test.ts`, a name that isn't a statement — for now: without Cyrillic, #366 — exit code 1); `spec-diff` into the summary |
+| In CI on a PR | run → `spec-doc --strict` (tests outside the tree, no main file or `<folder>.md`, a header on a test file, `rule.test.ts`, a name that isn't a statement in the project language — exit code 1); `spec-diff` into the summary |
 | In CI after a merge | a run on `main` → `spec-doc` → `spec-publish`; without CI on `main` — `docs/spec` from the PR run's artifact and `spec-publish --source <merge SHA>` (`ci.md`). The `spec` branch = the built `docs/spec`, the script verifies it after the push |
 | Read a project's spec | `git fetch origin spec && git show origin/spec:README.md` (pages — `capabilities/<name>.md`…) or the tests themselves |
 | Asked for documentation, "what does the system do" | `spec-doc <report> --stdout` — one document, files aren't touched |
@@ -148,11 +148,14 @@ stderr, `--strict` — exit code 1. With both `<name>.test.*` and
 `<name>.e2e.ts` side by side, the main one is `.test.*`: the page opens with
 the unit statements, e2e follows, before the folder's other files. **Names**
 of `describe` and `it` are statements in the project language (`language` in
-`.agents/ai-dev.json`); for now `spec-doc --strict` recognizes a statement by
-Cyrillic letters (`isStatement`), English is #366: a name without Russian
-words (an identifier, a function or file name, an English phrase) — stderr
-with the name and file, `--strict` — exit code 1; code in backticks inside a
-statement is fine.
+`.agents/ai-dev.json` of the `--root` directory; `isStatement`): `ru` — a name
+with Russian words, another language — a phrase of words (two or more, or one
+whole word); an identifier (`parseScenarios`, `foo_bar`, `fooBar`), a function
+or file name, a path, a word with a number — not a statement: stderr with the
+name and file, `--strict` — exit code 1; code in backticks inside a statement
+is fine. The generated `docs/spec`, the PR section of `spec-diff` and the
+names of the harness's tests are in the project language too (the `spec` keys
+of `locales/<language>.json` of the `github` skill).
 Old names on an existing spec — as exceptions, one file per name in the
 `names.exceptions/` directory of their test's decision folder
 (`<test name>.json`: `{ file, name, issue, reason }`): parallel PRs each
