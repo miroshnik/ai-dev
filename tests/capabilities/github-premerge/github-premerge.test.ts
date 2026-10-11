@@ -391,7 +391,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     expect(r.code).toBe(3);
   });
 
-  it("проект на en: открытый баг «main is red: …» — premerge называет его; бага нет — заголовок «main is red: check …» и --type Bug", () => {
+  it("pr premerge в проекте на en находит баг «main is red: …» и подсказывает его заголовок", () => {
     const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
     const found = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main is red: check deploy" }] }).gh, p.work);
