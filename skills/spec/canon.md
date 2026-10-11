@@ -185,8 +185,8 @@ no decision claims is dead and is deleted.
   `docs/spec` isn't in `main`: after a merge CI publishes it to the `spec`
   branch (`spec-publish`); review goes by `spec-diff`. Product documents
   (vision, business decisions, research) aren't spec and live separately.
-- **A recurring decision is a standard:** on task close (check 5 in the
-  canon's "Epic refresh on task close" section) a repetition found becomes a
+- **A recurring decision is a standard:** on task close (check 5 of the "Epic
+  refresh on task close" section in `AGENTS.md`) a repetition found becomes a
   "Standard · …" issue; the result is a rule in `tests/standards/` and a
   refactoring.
 - **Migrating an old spec** (OpenSpec, a technical specification) into

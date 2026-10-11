@@ -1,8 +1,9 @@
 # How to test: runs, environment, e2e, UI in a browser — for "Tests and code"
 
-The rule — which test is needed and how it can fail — is "Specification —
-decisions" (`skills/spec/canon.md`) and "Tests and code" in `AGENTS.md`; own
-port and own database — `docs/parallel-checkouts.md`.
+The rule — which test is needed and how it can fail — is `AGENTS.md`,
+"Specification — decisions" (in full — `skills/spec/canon.md`), and
+`AGENTS.md`, "Tests and code"; own port and own database —
+`docs/parallel-checkouts.md`.
 Here — how to run tests, read the result, write e2e tests that don't flake,
 and check UI in the agent's browser. The rules hold for any stack, the
 examples are Playwright. Three things depend on the framework: which env files
@@ -44,8 +45,8 @@ against the Playwright, Next.js, Vite, SvelteKit and Nuxt documentation.
   summary: `passed`, `failed`, `flaky`, `skipped`, `did not run`,
   `interrupted`; Vitest — the `Test Files` and `Tests` lines; `bun test` —
   `pass` and `fail`. A run is good when the summary is there, there are no
-  failed, not-run or interrupted tests, and flakes are investigated (section
-  "Tests and code": a flake is a defect). No summary — the run didn't finish,
+  failed, not-run or interrupted tests, and flakes are investigated
+  (`AGENTS.md`, "Tests and code": a flake is a defect). No summary — the run didn't finish,
   whatever the exit code. Filtering the output by `Error:` lies: the app
   server writes harmless errors (an expected 404, a cancelled request) to the
   same stream.
@@ -170,7 +171,7 @@ against the Playwright, Next.js, Vite, SvelteKit and Nuxt documentation.
   of the login itself.
 - **A guard for a framework's dev warning** (React, Vue: hydration, list
   keys) — a unit test in dev mode (jsdom, happy-dom): the production build
-  strips the warnings, so in e2e against it the guard can't fail (section
+  strips the warnings, so in e2e against it the guard can't fail (`AGENTS.md`,
   "Tests and code").
 
 ## UI in the agent's browser
@@ -257,4 +258,4 @@ into the project's `docs/`, not into memory.
   permissions a user has) — in its JSDoc in `tests/lib`: the editor's hint
   shows it, a document doesn't.
 - A lesson repeated in two projects is a task in ai-dev for this reference
-  (section "This file and skills"), not the agent's memory.
+  (`AGENTS.md`, "This file and skills"), not the agent's memory.

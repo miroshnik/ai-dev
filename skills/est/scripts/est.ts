@@ -1462,7 +1462,7 @@ export function parseCodexFile(file: string): Session {
 }
 
 
-/** A cloud session export: what the browser snippet from SKILL.md saves (section "Cloud session"). */
+/** A cloud session export: what the browser snippet of SKILL.md, "Cloud session", saves. */
 export interface CloudExport {
   v: number;
   session: string;
