@@ -72,7 +72,7 @@ describe("check показывает каждое расхождение с ка
   });
 
   // ненастроенного workflow в API нет вовсе — у нового проекта в списке только «Item closed» и два про PR
-  it("workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «не настроен», код 1", () => {
+  it("workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «not configured», код 1", () => {
     const r = check(unconfigured());
     expect(r.code).toBe(1);
     expect(marks(r.out)).toMatchObject({ Workflows: "❌", Closed: "✅" });
@@ -81,7 +81,7 @@ describe("check показывает каждое расхождение с ка
   });
 
   // выключенный workflow есть в списке с enabled: false — ссылка ведёт прямо на него
-  it("выключенный «Item closed» — ❌ «выключен», отличается от ненастроенного", () => {
+  it("выключенный «Item closed» — ❌ «disabled», отличается от ненастроенного", () => {
     const f = fake();
     f.workflow("Item closed").enabled = false;
     const r = check(f);

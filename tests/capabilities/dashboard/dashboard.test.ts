@@ -121,7 +121,7 @@ describe("Страница — один график: часы, токены и 
     }
   });
 
-  it("панель «факт к оценке» — отношение по задачам с оценкой, линия ×1 и полоса допуска ×0,5…×2", () => {
+  it("панель «Actual to estimate» — отношение по задачам с оценкой, линия ×1 и полоса допуска ×0,5…×2", () => {
     const ratio = panel(chartSvg(points("o/r", [row(1, { fact: 0.5 }), row(2, { est_marker: null }), row(3, { fact: 0.6 })])), "ratio");
     // задача 2 без оценки est в панель не входит
     expect(count(ratio, /class="fact"/g)).toBe(2);
@@ -295,7 +295,7 @@ describe("Команда dashboard сервит страницу сама и о�
     }
   });
 
-  it("страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Обновить» — перечитывает", async () => {
+  it("страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Refresh» — перечитывает", async () => {
     const d = await start(["--repo", "o/a", "--no-open"]);
     const est = new URL("/est", d.url);
     const html = await (await fetch(est)).text();
@@ -311,7 +311,7 @@ describe("Команда dashboard сервит страницу сама и о�
     const fresh = await fetch(new URL(refresh!.replace(/&amp;/g, "&"), d.url));
     expect(await fresh.text()).toContain("#4 Возврат платежа");
     expect(itemsReads()).toBe(2);
-    // после «Обновить» адрес — без refresh: перезагрузка вкладки не перечитывает GitHub заново
+    // после «Refresh» адрес — без refresh: перезагрузка вкладки не перечитывает GitHub заново
     expect(fresh.url).not.toContain("refresh");
   });
 
@@ -346,7 +346,7 @@ describe("Команда dashboard сервит страницу сама и о�
     expect(await (await fetch(new URL("/?refresh=1", d.url))).text()).not.toContain("HTTP 502");
   });
 
-  it("вкладка «Сессии» открыта по умолчанию, «Оценка и факт» — второй вкладкой", async () => {
+  it("вкладка «Sessions» открыта по умолчанию, «Estimate and actual» — второй вкладкой", async () => {
     const d = await start(["--repo", "o/a", "--no-open"]);
     const main = await (await fetch(d.url)).text();
     expect(main).toContain('<nav class="tabs" aria-label="Tabs"><a href="/" aria-current="page">Sessions</a><a href="/est">Estimate and actual</a></nav>');
@@ -359,7 +359,7 @@ describe("Команда dashboard сервит страницу сама и о�
     expect((await fetch(new URL("/other", d.url))).status).toBe(404);
   });
 
-  it("«Сессии» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама", async () => {
+  it("«Sessions» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама", async () => {
     const now = Date.now() / 1000;
     const rec = (ago: number, text: string) => JSON.stringify({ type: "assistant", timestamp: new Date((now - ago) * 1000).toISOString(), message: { id: `m${ago}`, role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text }] } });
     const projects = path.join(dir, ".claude", "projects");

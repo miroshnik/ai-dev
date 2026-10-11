@@ -489,7 +489,7 @@ describe("pr premerge: main красный — не этот PR: не влива
   });
 });
 
-describe("pr premerge: проверить нельзя — ошибка, не «вливать»", () => {
+describe("pr premerge: проверить нельзя — ошибка, не «merge»", () => {
   it("не чекаут репозитория PR — ошибка (код 2)", () => {
     const r = premerge(fakeGh("0".repeat(40), { moved: "2026-10-02T10:20:00Z" }).gh, scratch());
     expect(r.code).toBe(2);

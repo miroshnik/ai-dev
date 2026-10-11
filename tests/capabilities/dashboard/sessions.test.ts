@@ -105,7 +105,7 @@ describe("Строка задачи «В работе» — её сессия и
     expect(rowText(html, "o/r#3")).toContain("#73 merged");
   });
 
-  it("красные чеки при фоновом ожидании — «CI красный», конфликт PR — в его ячейке", () => {
+  it("красные чеки при фоновом ожидании — «CI red», конфликт PR — в его ячейке", () => {
     const v = sessionsView(input({
       pins: { "o/r#7": ["s1"] }, transcripts: byId(session("s1", "#7 Экспорт", ...bgCommand(NOW - 5 * MIN, "b1", "Ждать чеки"))),
       live: { "o/r": live({ tasks: [task(7, "Экспорт")], prs: [pr({ checks: "failure", conflict: true })] }) },
@@ -114,7 +114,7 @@ describe("Строка задачи «В работе» — её сессия и
     expect(rowText(sessionsBody(v, NOW, false), "o/r#7")).toContain("#70 checks red · conflict");
   });
 
-  it("сессия без записей дольше порога, у которой ничего не идёт в фоне, помечена «тишина»", () => {
+  it("сессия без записей дольше порога, у которой ничего не идёт в фоне, помечена «silence»", () => {
     const one = (...recs: unknown[]) => input({ pins: { "o/r#7": ["s1"] }, transcripts: byId(session("s1", "#7", ...recs)), live: { "o/r": live({ tasks: [task(7, "Экспорт")] }) } });
     const wait = (...recs: unknown[]) => sessionsView(one(...recs), NOW).rows[0]!.wait;
     expect(wait(call(NOW - SILENCE + MIN, "Bash")).key).toBe("working");
@@ -131,7 +131,7 @@ describe("Строка задачи «В работе» — её сессия и
     expect(html).toMatch(/<span class="wait silent"/);
   });
 
-  it("задача «В работе» без закреплённой сессии — строкой «сессии нет»; облачная (трейлер Claude-Session в PR) — «облако, состояние не видно»", () => {
+  it("задача «В работе» без закреплённой сессии — строкой «no session»; облачная (трейлер Claude-Session в PR) — «cloud, state not visible»", () => {
     const v = sessionsView(input({
       live: { "o/r": live({ tasks: [task(7, "Экспорт", { number: 5, title: "Биллинг" }), task(8, "Импорт")], prs: [pr({ number: 80, branch: "feat/8-import", closes: [8], cloud: true })] }) },
     }), NOW);
@@ -185,7 +185,7 @@ describe("Ждут владельца — вопросы сессий и зад�
     expect(openQuestions(body)).toEqual(["2. Облако? Рекомендация: вне охвата.", "3. Эпик?"]);
   });
 
-  it("блок «Ждут владельца» собирает вопросы из последних ответов сессий и задачи с меткой «вопросы»", () => {
+  it("блок «Waiting for the owner» собирает вопросы из последних ответов сессий и задачи с меткой «вопросы»", () => {
     const v = sessionsView(input({
       pins: { "o/r#7": ["s7"], "o/r#8": ["s8"] },
       transcripts: byId(session("s7", "#7 Экспорт", say(NOW - 4 * MIN, "CI зелёный.\n\nОсталось: мерж — от владельца.")), session("s8", "#8 Импорт", call(NOW - MIN, "Bash"))),
