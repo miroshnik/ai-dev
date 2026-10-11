@@ -73,7 +73,7 @@ async function until(cond: () => boolean, what: string) {
 }
 
 /** Ждёт в очереди: напечатал, что ждёт. */
-const waiting = (q: Queued, name: string) => until(() => q.err().includes("жду"), `${name} ждёт в очереди; stderr: ${q.err()}`);
+const waiting = (q: Queued, name: string) => until(() => q.err().includes("slot: waiting for the machine queue"), `${name} ждёт в очереди; stderr: ${q.err()}`);
 
 /** Синхронный `slot`; таймаут — чтобы зависание в очереди упало с объяснением, а не таймаутом теста. */
 function run(args: string[], extra: Record<string, string> = {}, runtime = "bun") {
@@ -138,7 +138,7 @@ describe("Тяжёлые прогоны машины идут очередью: 
     expect(c.err()).toContain(path.basename(dir));
     for (const n of ["a", "b", "c"]) release(n);
     expect(await c.done).toBe(0);
-    expect(c.err()).toContain("дождался");
+    expect(c.err()).toContain("slot: waited ");
   });
 });
 
