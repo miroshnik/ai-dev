@@ -1,27 +1,29 @@
 #!/usr/bin/env bun
 /**
- * spec-doc — документация из отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
- * от bun test): раздел на папку tests/capabilities/<name> («Что делает система»),
- * tests/architecture/<name> («Из чего состоит») и tests/standards/<name> («Каким правилам подчиняется
- * код»). Страница — рассказ: описание <папка>.md рядом с тестами под заголовком (первый абзац — в индексе,
- * заголовки md — под заголовком папки), главный файл <name>.test.ts у всех видов (рядом <name>.e2e.ts — следом;
- * в монорепо — и <name>/<пакет>/<name>.test.ts; rule.test.ts — подсказка переименовать), describe →
- * раздел с прозой из своего JSDoc, тесты раздела свёрнуты в <details> со счётчиком. Разделы идут в
- * порядке главного файла, затем главных файлов пакетов по имени пакета, остальные файлы — следом по пути. Шапка другого файла папки в документацию
- * не идёт — скрипт называет файл, --strict даёт код 1. Исходника нет — без прозы.
- * tests/lib пропускается; тесты вне дерева попадают в раздел «Вне дерева» — это сигнал.
+ * spec-doc — documentation from runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML from bun test): a section
+ * per folder tests/capabilities/<name> ("What the system does"), tests/architecture/<name> ("What it's made of") and
+ * tests/standards/<name> ("Which rules the code obeys"). A page is a story: the description <folder>.md next to the
+ * tests under the heading (the first paragraph goes to the index, the md headings — under the folder heading), the main
+ * file <name>.test.ts for all kinds (<name>.e2e.ts next to it — right after it; in a monorepo — also
+ * <name>/<package>/<name>.test.ts; rule.test.ts — a hint to rename), a describe → a section with prose from its own
+ * JSDoc, the section's tests collapsed into <details> with a counter. Sections go in the order of the main file, then
+ * of the packages' main files by package name, the other files follow by path. The header of another file of the
+ * folder doesn't go into the documentation — the script names the file, --strict gives code 1. No source — no prose.
+ * tests/lib is skipped; tests outside the tree go to the "Outside the tree" section — that's a signal.
  *
- *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]
+ *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict]
+ *                   [--meta .spec-meta]
  *
- * Метаданные прогона харнесса (`.spec-meta/` в корне или --meta) — код примеров и причины исключений под строкой теста.
- * Модель архитектуры (`tests/architecture/model.ts`) — страница architecture.md: схемы C4 и таблица модулей (`c4.ts`);
- * метка `<!-- spec: c4-… -->` в `<папка>.md` заменяется той же схемой. Трасса сценария (`sequence` харнесса) —
- * сиквенс-схема под его тестом или там, где в `<папка>.md` стоит `<!-- spec: sequence-<id> -->`.
+ * Harness run metadata (`.spec-meta/` in the root or --meta) — the example code and exception reasons under the test
+ * line. The architecture model (`tests/architecture/model.ts`) — the architecture.md page: C4 diagrams and the module
+ * table (`c4.ts`); the `<!-- spec: c4-… -->` mark in `<folder>.md` is replaced with the same diagram. A scenario trace
+ * (the harness `sequence`) — a sequence diagram under its test or where `<!-- spec: sequence-<id> -->` stands in
+ * `<folder>.md`.
  *
- * Вывод по умолчанию — docs/spec/: README.md (индекс), architecture.md, capabilities/<name>.md, architecture/<name>.md,
- * standards/<name>.md; свои устаревшие файлы (с маркером на любом языке словаря) удаляет. Текст документации — на языке
- * проекта корня (`language` в `.agents/ai-dev.json`, словарь скилла github). Запуск — Bun или Node ≥ 22.18, без
- * зависимостей.
+ * Output by default — docs/spec/: README.md (index), architecture.md, capabilities/<name>.md, architecture/<name>.md,
+ * standards/<name>.md; it deletes its own outdated files (with the marker in any dictionary language). The
+ * documentation text is in the root's project language (`language` in `.agents/ai-dev.json`, the github skill's
+ * dictionary). Runs on Bun or Node ≥ 22.18, no dependencies.
  */
 
 import { execFileSync } from "node:child_process";
@@ -38,32 +40,32 @@ import type { Call } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Kind, Test } from "./speclib.ts";
 
-// язык проекта и его названия: всё, что попадает в docs/spec, — на нём; ставит main по корню
+// the project language and its names: everything that goes into docs/spec is in it; main sets it from the root
 let LANG = locale.DEFAULT_LANGUAGE;
 let N: Names = locale.names(LANG);
 
 const ICON: Record<string, string> = { passed: "✅", failed: "❌", skipped: "⏭️", todo: "📝" };
-// порядок разделов — вопросы читателя: что делает, из чего состоит, каким правилам подчиняется код
+// section order — the reader's questions: what it does, what it's made of, which rules the code obeys
 const KINDS: Kind[] = ["capability", "architecture", "standard"];
 const SUBDIR: Record<string, string> = { capability: "capabilities", architecture: "architecture", standard: "standards" };
 
-/** Заголовок раздела оглавления — вопрос читателя о корне дерева. */
+/** A table of contents section heading — the reader's question about the tree root. */
 function sectionTitle(kind: Kind): string {
   if (kind === "capability") return N.spec.doc.capabilities;
   if (kind === "architecture") return N.spec.doc.architecture;
   return N.spec.doc.standards;
 }
 
-// doc — абзацы прозы из JSDoc: у группы — шапка главного файла, у describe из нескольких файлов —
-// по порядку файлов (главный первым), повтор один раз
+// doc — prose paragraphs from JSDoc: for a group — the main file's header, for a describe from several files — in
+// file order (the main one first), a repeat once
 type Node = { tests: Test[]; children: Map<string, Node>; doc: string[] };
 type Group = { kind: Kind; name: string; tests: Test[]; tree: Node; doc: string[]; testDocs: Map<string, string[]> };
 
-/** Число и форма слова на языке проекта: «2 теста». */
+/** A number and the word form in the project language: "2 tests". */
 const count = (forms: Plural, n: number): string => locale.count(LANG, forms, n);
 const testsWord = (n: number): string => L.testsWord(LANG, n);
 
-/** Пропущенные и падающие — то, что стоит заметить; пусто, если всё зелёное. */
+/** Skipped and failing — what's worth noticing; empty if everything is green. */
 function problemsLine(tests: Test[]): string {
   const parts: string[] = [];
   const sk = tests.filter((t) => t.status === "skipped" || t.status === "todo").length;
@@ -77,10 +79,10 @@ function countsLine(tests: Test[]): string {
   return [testsWord(tests.length), problemsLine(tests)].filter(Boolean).join(", ");
 }
 
-/** Число и слово по-английски — для сообщений в stderr (они не на языке проекта): «1 file», «2 files». */
+/** A number and a word in English — for stderr messages (they aren't in the project language): "1 file", "2 files". */
 const enCount = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** Счётчики тестов для stderr: «12 tests, 1 skipped, 1 failing». */
+/** Test counters for stderr: "12 tests, 1 skipped, 1 failing". */
 function enCountsLine(tests: Test[]): string {
   const sk = tests.filter((t) => t.status === "skipped" || t.status === "todo").length;
   const fl = tests.filter((t) => t.status === "failed").length;
@@ -93,7 +95,7 @@ function findRoot(root?: string): string {
     const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     if (top) return top;
   } catch {
-    /* не git-репозиторий — текущий каталог */
+    /* not a git repository — the current directory */
   }
   return process.cwd();
 }
@@ -102,10 +104,11 @@ const newNode = (): Node => ({ tests: [], children: new Map(), doc: [] });
 const testKey = (t: Test): string => JSON.stringify([...t.describes, t.name]);
 
 /**
- * Главный файл папки (`<name>.test.ts`, `<name>.e2e.ts`…) — в нём рассказ, с него начинается страница. Имя —
- * имя папки у всех видов: одно правило вместо особого `rule.test.ts` у стандарта. Лежит в корне папки или в
- * подпапке пакета монорепо (`<name>/<пакет>/<name>.test.ts`: у пакета свой раннер, а решение одно); глубже — нет.
- * → пакет ("" — корень папки) и утверждения ли это юнитов (`.test.*`); не главный — null.
+ * The folder's main file (`<name>.test.ts`, `<name>.e2e.ts`…) — it holds the story, the page starts with it. Its name
+ * is the folder name for all kinds: one rule instead of a special `rule.test.ts` for a standard. It lies in the folder
+ * root or in a monorepo package subfolder (`<name>/<package>/<name>.test.ts`: a package has its own runner, but the
+ * decision is one); not deeper.
+ * → the package ("" — the folder root) and whether these are unit statements (`.test.*`); not the main one — null.
  */
 function mainOf(file: string): { pkg: string; unit: boolean } | null {
   const [kind, name] = L.classify(file);
@@ -119,29 +122,29 @@ function mainOf(file: string): { pkg: string; unit: boolean } | null {
 const isMain = (file: string): boolean => mainOf(file) !== null;
 
 /**
- * Место файла в рассказе папки — ключ сортировки: главный файл в корне папки, затем главные файлы подпапок по
- * имени пакета, затем остальные; у главного — сначала `<name>.test.*` (утверждения юнитов), затем другой `<name>.*`
- * (`.e2e.ts`): по алфавиту e2e шёл бы первым. Внутри места — по пути.
+ * A file's place in the folder's story — the sort key: the main file in the folder root, then the subfolders' main
+ * files by package name, then the rest; for the main one — first `<name>.test.*` (unit statements), then another
+ * `<name>.*` (`.e2e.ts`): alphabetically e2e would come first. Within a place — by path.
  */
 function mainRank(file: string): string {
   const m = mainOf(file);
   return (m ? "0" + m.pkg + "\0" + (m.unit ? "0" : "1") : "1") + "\0" + file;
 }
 
-/** Прежний главный файл стандарта `rule.*` прямо в папке: теперь не главный — его надо переименовать. */
+/** The former main file of a standard, `rule.*` right in the folder: no longer the main one — it must be renamed. */
 function isLegacyMain(file: string): boolean {
   const [kind, name] = L.classify(file);
   const parts = file.split("/");
   return (kind === "standard" || kind === "architecture") && name !== "rule" && parts.length === 4 && parts[3]!.split(".")[0] === "rule";
 }
 
-/** → группы по (вид, имя), тесты вне дерева по файлам, файлы tests/lib. */
+/** → groups by (kind, name), tests outside the tree by file, tests/lib files. */
 export function build(tests: Test[]): { groups: Map<string, Group>; out: Map<string, Test[]>; libFiles: Set<string> } {
   const groups = new Map<string, Group>();
   const out = new Map<string, Test[]>();
   const libFiles = new Set<string>();
-  // главный файл папки первым — порядок его describe и есть порядок рассказа; дальше главные файлы пакетов, затем
-  // файлы по пути; внутри файла — порядок отчёта (порядок объявления)
+  // the folder's main file first — the order of its describes is the order of the story; then the packages' main
+  // files, then files by path; within a file — the report order (declaration order)
   const rank = (t: Test): string => mainRank(t.path);
   const sorted = [...tests].sort((a, b) => (rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0));
   for (const t of sorted) {
@@ -174,8 +177,8 @@ const addOnce = (list: string[], text: string): void => {
 };
 
 /**
- * Главный файл папки, которого ждём, если в отчёте его нет: `<папка>.test.ts`; у папки с подпапками пакетов — или
- * `<пакет>/<папка>.test.ts`.
+ * The folder's main file we expect when the report doesn't have it: `<folder>.test.ts`; for a folder with package
+ * subfolders — or `<package>/<folder>.test.ts`.
  */
 function mainPath(g: Group): string {
   const folder = `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}`;
@@ -183,7 +186,7 @@ function mainPath(g: Group): string {
   return `${folder}/${g.name}.test.ts` + (packages ? ` or ${folder}/<package>/${g.name}.test.ts` : "");
 }
 
-/** У группы есть главный файл: в отчёте или на диске — в корне папки или в подпапке пакета. */
+/** The group has a main file: in the report or on disk — in the folder root or in a package subfolder. */
 function hasMain(g: Group, root: string): boolean {
   if (g.tests.some((t) => isMain(t.path))) return true;
   const folder = `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}`;
@@ -199,18 +202,18 @@ function hasMain(g: Group, root: string): boolean {
   );
 }
 
-// слово: буквы, заглавная — только первая или все (аббревиатура), части — через апостроф или дефис («user's»,
-// «e-mail»); буквы письма без регистра (иероглифы, кана) — слово целиком, пробелов между словами в нём нет
+// a word: letters, the capital — only the first or all (an abbreviation), parts — joined by an apostrophe or a hyphen
+// ("user's", "e-mail"); letters of a caseless script (ideographs, kana) — a whole word, it has no spaces between words
 const PART = String.raw`(?:\p{Lo}+|\p{Lu}+|\p{L}[\p{Ll}\p{M}]*)`;
 const WORD = new RegExp(String.raw`^${PART}(?:['’-]${PART})*$`, "u");
-// знаки вокруг слова в предложении: кавычки и скобки, в конце — ещё препинание
+// marks around a word in a sentence: quotes and brackets, at the end — also punctuation
 const EDGES = /^["'«“‘([{]+|["'»”’)\]}.,;:!?…]+$/gu;
 
 /**
- * Название — утверждение на языке проекта, код в бэктиках не в счёт. `ru` — в нём есть русские слова. Другой язык —
- * фраза: два слова и больше или одно слово (из двух букв и больше, без дефиса) целиком. Идентификатор (`parseScenarios`,
- * `foo_bar`, `fooBar`, `foo-bar`), имя функции или файла, путь, слово с числом (`returns 201`) — не утверждение:
- * читатель спеки не узнает из него, что система делает.
+ * A name is a statement in the project language; code in backticks doesn't count. `ru` — it has Cyrillic words. Another
+ * language — a phrase: two words or more, or one word (of two letters or more, without a hyphen) as a whole. An
+ * identifier (`parseScenarios`, `foo_bar`, `fooBar`, `foo-bar`), a function or file name, a path, a word with a number
+ * (`returns 201`) isn't a statement: the spec reader won't learn from it what the system does.
  */
 export function isStatement(name: string, lang: string): boolean {
   const text = name.replace(/`[^`]*`/g, "");
@@ -222,7 +225,7 @@ export function isStatement(name: string, lang: string): boolean {
   return tokens.length === 1 && only !== undefined && [...only].length >= 2 && !/['’-]/.test(only);
 }
 
-/** Названия describe и it, которые не утверждения, — по файлу, без повторов. */
+/** describe and it names that aren't statements — per file, without repeats. */
 function badNames(groups: Map<string, Group>): [string, string][] {
   const seen = new Set<string>();
   const out: [string, string][] = [];
@@ -239,15 +242,16 @@ function badNames(groups: Map<string, Group>): [string, string][] {
   return out;
 }
 
-/** Описание решения — `<папка>.md` рядом с тестами папки, путь от корня. */
+/** The decision's description — `<folder>.md` next to the folder's tests, the path from the root. */
 export const descriptionPath =(g: { kind: Kind; name: string }): string => `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}/${g.name}.md`;
 
 /**
- * Проза группы: вступление — `<папка>.md` (зачем, причина, отвергнутое), describe и it — их JSDoc из исходников
- * (отчёты комментариев не несут). Describe без тестов в отчёте (имя из it.each с подстановкой) прозу теряет.
- * Возвращает файлы, которых нет на диске (они без прозы), папки без описания, файлы тестов с шапкой — рассказ
- * пишется в одном месте, шапка файла в документацию не идёт, — прежние главные `rule.*`, которые надо переименовать, и
- * чью прозу не взять: файл не разобран парсером или у теста с JSDoc название не вычислить статически.
+ * The group's prose: the intro — `<folder>.md` (why, the reason, what was rejected), describe and it — their JSDoc from
+ * the sources (reports don't carry comments). A describe without tests in the report (a name from it.each with
+ * substitution) loses its prose. Returns files missing on disk (they're without prose), folders without a description,
+ * test files with a header — the story is written in one place, a file header doesn't go into the documentation —
+ * former main `rule.*` files that must be renamed, and those whose prose can't be taken: the parser didn't parse the
+ * file, or a test with JSDoc has a name that can't be computed statically.
  */
 export function attachDocs(
   groups: Map<string, Group>,
@@ -265,7 +269,7 @@ export function attachDocs(
     } catch {
       undescribed.push(descriptionPath(g));
     }
-    // порядок файлов — как в build: главный первым
+    // file order — as in build: the main one first
     for (const file of [...new Set(g.tests.map((t) => t.path))]) {
       if (isLegacyMain(file)) legacy.push(file);
       let source: string;
@@ -299,7 +303,7 @@ export function attachDocs(
   return { missing, headers, legacy, undescribed, unread };
 }
 
-/** Метаданные прогона харнесса: файл теста + название → то, чего нет в названии (код примера, причина исключения). */
+/** Harness run metadata: test file + name → what isn't in the name (example code, exception reason). */
 type Meta = {
   path?: string;
   code?: string;
@@ -310,10 +314,13 @@ type Meta = {
   sequence?: Call[];
 };
 let META = new Map<string, Meta>();
-// тесты, чья схема стоит меткой в описании папки: под тестом её не повторяем
+// tests whose diagram stands as a mark in the folder description: we don't repeat it under the test
 const PLACED = new Set<string>();
 
-/** Сиквенс-схема Mermaid из трассы: участники — в порядке появления; имя, которое не идентификатор, — через `as`. */
+/**
+ * A Mermaid sequence diagram from a trace: participants — in order of appearance; a name that isn't an identifier —
+ * via `as`.
+ */
 export function sequenceLines(calls: Call[]): string[] {
   const ids = new Map<string, string>();
   for (const c of calls) for (const n of [c.from, c.to]) if (!ids.has(n)) ids.set(n, n.replace(/[^A-Za-z0-9_]/g, "_"));
@@ -321,7 +328,7 @@ export function sequenceLines(calls: Call[]): string[] {
     "```mermaid",
     "sequenceDiagram",
     ...[...ids].map(([n, id]) => `  participant ${id}${id === n ? "" : ` as ${n}`}`),
-    // «;» и «#» Mermaid читает как разделитель и код символа
+    // Mermaid reads ";" and "#" as a separator and a character code
     ...calls.map((c) => `  ${ids.get(c.from)}->>${ids.get(c.to)}: ${c.message.replace(/[;#]/g, ",")}`),
     "```",
   ];
@@ -345,13 +352,16 @@ export function loadMeta(dir: string): Map<string, Meta> {
   return out;
 }
 
-// язык блока кода примера по расширению его файла
+// the language of the example's code block by its file's extension
 const FENCE_LANG: Record<string, string> = { ts: "ts", mts: "ts", cts: "ts", tsx: "tsx", js: "js", mjs: "js", cjs: "js", jsx: "jsx" };
 
-/** Файл отключений линта — из названия теста `lintExceptions` харнесса на любом языке словаря: «exceptions in <файл>: …». */
+/**
+ * The lint disables file — from the name of the harness `lintExceptions` test in any dictionary language:
+ * "exceptions in <file>: …".
+ */
 const LINT_FILE = new RegExp(`^(?:${locale.every((n) => n.spec.harness.lintExceptions).map((t) => locale.escapeRe(t.split("{file}")[0]!)).join("|")})(.+?): `);
 
-/** Под строкой теста: путь и код примера, задача и причина исключения, отключения правил в файле. */
+/** Under the test line: the example's path and code, the exception's task and reason, rule disables in the file. */
 function metaLines(t: Test): string[] {
   const m = META.get(t.path + "\0" + t.name);
   if (!m) return [];
@@ -361,7 +371,7 @@ function metaLines(t: Test): string[] {
     out.push("  ```" + (FENCE_LANG[(m.path ?? "").split(".").pop() ?? ""] ?? ""), ...m.code.split("\n").map((l) => (l ? "  " + l : "")), "  ```");
   }
   if (m.issue !== undefined) out.push(`  > #${m.issue} — ${m.reason ?? ""}`);
-  else if (m.reason) out.push(`  > ${m.reason}`); // вне охвата — причина без задачи: это решение, а не долг
+  else if (m.reason) out.push(`  > ${m.reason}`); // out of scope — a reason without a task: it's a decision, not a debt
   const codeFile = LINT_FILE.exec(t.name)?.[1] ?? "";
   for (const d of m.disables ?? []) out.push(`  > \`${codeFile}:${d.line}\` ${d.rules.join(", ") || N.spec.lint.allRules} — ${d.description || N.spec.lint.noReason}`);
   if (m.sequence?.length && !PLACED.has(t.path + "\0" + t.name)) out.push(...sequenceLines(m.sequence).map((l) => "  " + l));
@@ -379,15 +389,15 @@ function testLine(t: Test): string {
 
 const heading = (level: number, text: string) => "#".repeat(Math.min(level, 6)) + " " + text;
 
-/** Абзацы прозы под заголовком; пусто — ничего. */
+/** Prose paragraphs under a heading; empty — nothing. */
 function pushDoc(lines: string[], doc: string[]): void {
   if (doc.length) lines.push(doc.join("\n\n"), "");
 }
 
 /**
- * Тесты раздела — свёрнутым блоком со счётчиком: рассказ читается заголовками и прозой, проверку
- * открывают по клику. Есть пропущенные или падающие — они в строке-заголовке, блок раскрыт.
- * Проза теста — цитатой внутри пункта списка: список остаётся плотным, строка теста — строкой.
+ * The section's tests — a collapsed block with a counter: the story is read through headings and prose, a check is
+ * opened by a click. There are skipped or failing ones — they're in the summary line, the block is open.
+ * A test's prose — a quote inside the list item: the list stays dense, the test line stays one line.
  */
 function renderTests(g: Group, tests: Test[], lines: string[]): void {
   if (!tests.length) return;
@@ -412,7 +422,10 @@ function renderNode(g: Group, node: Node, level: number, lines: string[]): void 
   }
 }
 
-/** Markdown описания под заголовком папки уровня level: его заголовки сдвигаются на level − 1 (кроме блоков кода). */
+/**
+ * The description's markdown under a folder heading of level `level`: its headings shift by level − 1 (except code
+ * blocks).
+ */
 function shiftHeadings(text: string, level: number): string {
   let fence = false;
   return text
@@ -425,8 +438,8 @@ function shiftHeadings(text: string, level: number): string {
 }
 
 /**
- * Заголовок группы на уровне level, под ним описание, describe — глубже. Строки «раздел · путь ·
- * счётчик» нет: раздел и путь следуют из конвенции, статус виден у каждого теста.
+ * The group heading at level `level`, the description under it, describes — deeper. There's no "section · path ·
+ * counter" line: the section and the path follow from the convention, the status is visible at each test.
  */
 function renderGroup(g: Group, level: number): string {
   const lines = [heading(level, g.name), ""];
@@ -435,7 +448,10 @@ function renderGroup(g: Group, level: number): string {
   return lines.join("\n").trimEnd() + "\n";
 }
 
-/** Первый абзац описания группы (не заголовок, не схема и не таблица) одной строкой — описание в индексе. */
+/**
+ * The first paragraph of the group's description (not a heading, a diagram or a table) as one line — the description
+ * in the index.
+ */
 function summaryOf(g: Group): string {
   const first = (g.doc[0] ?? "").split("\n\n").find((p) => p.trim() && !/^(#{1,6}\s|```|~~~|\|)/.test(p.trim())) ?? "";
   return first.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
@@ -461,9 +477,12 @@ function outSection(out: Map<string, Test[]>): string[] {
   return lines;
 }
 
-/** Исключение для старого названия, которое ещё не утверждение (`src` — его файл): `--strict` его пропускает, пока файл есть. */
+/**
+ * An exception for an old name that isn't a statement yet (`src` — its file): `--strict` skips it while the file
+ * exists.
+ */
 type NameException = L.NameException & { src: string };
-// исключения, которые сейчас действуют (название всё ещё не утверждение): долг, видный в оглавлении
+// exceptions in force now (the name still isn't a statement): a debt visible in the table of contents
 let NAME_DEBT: NameException[] = [];
 
 function debtSection(): string[] {
@@ -473,7 +492,7 @@ function debtSection(): string[] {
   return lines;
 }
 
-/** Страница архитектуры — рядом с README, первая строка раздела «Из чего состоит». */
+/** The architecture page — next to README, the first line of the "What it's made of" section. */
 const ARCH_PAGE = "architecture.md";
 
 function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model: Model | null): string {
@@ -481,7 +500,7 @@ function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model
   for (const kind of KINDS) {
     const names = groupNames(groups, kind);
     const page = kind === "architecture" && model;
-    // ни модели, ни правил архитектуры в проекте может не быть вовсе — тогда раздела нет, а не «— нет.»
+    // a project may have neither a model nor architecture rules at all — then there's no section, not "— none."
     if (!names.length && !page && kind === "architecture") continue;
     lines.push("", `## ${sectionTitle(kind)}`, "");
     if (page) lines.push(`- [${N.spec.c4.title}](${ARCH_PAGE}) — ${C4.modelSummary(model, LANG)}`);
@@ -492,7 +511,7 @@ function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model
   return lines.join("\n") + "\n";
 }
 
-/** Страница архитектуры: схемы и таблица из модели, затем правила, которые сверяют модель с кодом. */
+/** The architecture page: diagrams and the table from the model, then the rules checking the model against the code. */
 function renderArchitecture(groups: Map<string, Group>, model: Model): string {
   const lines = [N.spec.doc.mark, ...C4.architecturePage(model, 1, LANG), `## ${N.spec.doc.rules}`, ""];
   const names = groupNames(groups, "architecture");
@@ -517,8 +536,8 @@ function renderStdout(groups: Map<string, Group>, out: Map<string, Test[]>, mode
 }
 
 /**
- * Свой сгенерированный файл (маркер в первой строке) — его можно удалить; чужой — нет. Маркер — на любом языке
- * словаря: проект сменил язык — файлы прежнего языка тоже свои.
+ * Its own generated file (the marker in the first line) can be deleted; someone else's can't. The marker is in any
+ * dictionary language: the project changed its language — the files of the former language are its own too.
  */
 const isOwn = (file: string): boolean => locale.every((n) => n.spec.doc.mark).includes(readFileSync(file, "utf8").split("\n", 1)[0]!);
 
@@ -536,7 +555,7 @@ function writeFiles(
     writeFileSync(arch, renderArchitecture(groups, model));
     generated.add(ARCH_PAGE);
   } else if (existsSync(arch) && isOwn(arch)) {
-    // модель убрали — её страница устарела
+    // the model was removed — its page is outdated
     unlinkSync(arch);
     removed.push(ARCH_PAGE);
   }
@@ -548,7 +567,8 @@ function writeFiles(
     generated.add(rel);
   }
   writeFileSync(path.join(outDir, "README.md"), renderIndex(groups, out, model));
-  // все тесты дерева по отчёту — база для spec-diff: тестов харнесса в исходниках не видно, в отчёте — видно
+  // all the tree's tests from the report — the base for spec-diff: harness tests aren't visible in the sources, in the
+  // report they are
   const seen = new Set<string>();
   const list = [...groups.values()]
     .flatMap((g) => g.tests.map((t) => ({ path: t.path, describes: t.describes, name: t.name })))
@@ -565,7 +585,7 @@ function writeFiles(
       const rel = path.join(sub, fn);
       if (!fn.endsWith(".md") || generated.has(rel)) continue;
       if (isOwn(path.join(d, fn))) {
-        // свой устаревший файл; чужой не трогаем
+        // its own outdated file; someone else's we don't touch
         unlinkSync(path.join(d, fn));
         removed.push(rel);
       }
@@ -574,10 +594,13 @@ function writeFiles(
   return { generated, removed };
 }
 
-/** Модель архитектуры проекта — одна, на этом месте. */
+/** The project's architecture model — one, at this place. */
 const MODEL = `${L.TESTS}/architecture/model.ts`;
 
-/** Модель из `tests/architecture/model.ts` (export default); файла нет — null, не загружается — ошибка с причиной. */
+/**
+ * The model from `tests/architecture/model.ts` (export default); no file — null, doesn't load — an error with the
+ * reason.
+ */
 async function loadModel(root: string): Promise<Model | null> {
   const file = path.join(root, MODEL);
   if (!existsSync(file)) return null;
@@ -592,7 +615,10 @@ async function loadModel(root: string): Promise<Model | null> {
   return m;
 }
 
-/** Метки `<!-- spec: … -->` в описаниях групп → схемы из модели; возвращает непонятые метки с файлом. */
+/**
+ * `<!-- spec: … -->` marks in group descriptions → diagrams from the model; returns the unrecognized marks with the
+ * file.
+ */
 const SEQUENCE_MARK = /^[ \t]*<!--\s*spec:\s*sequence-([\w-]+)\s*-->[ \t]*$/gm;
 
 function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
@@ -600,7 +626,7 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
   for (const g of groups.values()) {
     const files = new Set(g.tests.map((t) => t.path));
     g.doc = g.doc.map((d) => {
-      // сценарий — по id среди тестов этой папки: схема в рассказе, под тестом её уже нет
+      // a scenario — by id among this folder's tests: the diagram is in the story, it's no longer under the test
       const withSequences = d.replace(SEQUENCE_MARK, (line, id: string) => {
         const hit = [...META].find(([k, m]) => m.id === id && m.sequence && files.has(k.split("\0")[0]!));
         if (!hit) {
@@ -625,15 +651,18 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
   return problems;
 }
 
-/** Прежний формат исключений названий — общий файл (папки — по правилу exceptionFile); не читается, переносит spec-exceptions. */
+/**
+ * The former name exceptions format — a shared file (folders — by the exceptionFile rule); not read, spec-exceptions
+ * moves it.
+ */
 const SHARED_NAMES = `${L.TESTS}/standards/spec-names/exceptions.ts`;
 const MIGRATE = "migrate with spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
-// формат исключений названий — как его цитирует SKILL.md скилла
+// the name exceptions format — as the skill's SKILL.md quotes it
 const NAME_FILES = "name exceptions — a file per name in names.exceptions/ of the decision folder";
 
 /**
- * Исключения названий — файлы каталогов `names.exceptions/` папок решений по правилу `exceptionFile` (speclib);
- * `legacy` — файлы прежнего формата; файл не на месте или не JSON — ошибка с путём.
+ * Name exceptions — files of the `names.exceptions/` directories of decision folders by the `exceptionFile` rule
+ * (speclib); `legacy` — files of the former format; a misplaced or non-JSON file — an error with the path.
  */
 function findNameExceptions(root: string): { list: NameException[]; legacy: string[] } {
   const list: NameException[] = [];
@@ -662,7 +691,10 @@ function findNameExceptions(root: string): { list: NameException[]; legacy: stri
   return { list: list.sort((a, b) => a.src.localeCompare(b.src)), legacy: legacy.sort() };
 }
 
-/** Файл каталога `names.exceptions/` — JSON `{ file, name, issue, reason }`, иное — ошибка с путём. */
+/**
+ * A file of the `names.exceptions/` directory — JSON `{ file, name, issue, reason }`, anything else — an error with the
+ * path.
+ */
 function readNameException(root: string, src: string): NameException {
   let x: Partial<L.NameException> | null;
   try {
@@ -705,7 +737,7 @@ export async function main(argv: string[]): Promise<number> {
     console.error(USAGE);
     return values.help ? 0 : 2;
   }
-  // флаг прежнего общего файла: молча пропустить его — значит потерять исключения
+  // the flag of the former shared file: silently skipping it would mean losing the exceptions
   if (values["names-exceptions"] !== undefined) {
     console.error(`spec-doc: --names-exceptions is gone: ${NAME_FILES} — ${MIGRATE}`);
     return 2;
@@ -715,7 +747,7 @@ export async function main(argv: string[]): Promise<number> {
   LANG = locale.projectLanguage(root);
   N = locale.names(LANG);
   let tests: Test[] = [];
-  // CI задан — отчёт обязан быть: прогон, который его не написал, иначе молча выкинет свои тесты из спеки
+  // CI is set — the report must exist: otherwise a run that didn't write it silently drops its tests from the spec
   const inCi = !!process.env.CI && !["0", "false"].includes(process.env.CI);
   for (const r of positionals) {
     if (!existsSync(r)) {
@@ -742,8 +774,8 @@ export async function main(argv: string[]): Promise<number> {
   const { groups, out, libFiles } = build(tests);
   const { missing, headers, legacy, undescribed, unread } = attachDocs(groups, root);
   const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);
-  // названия: старые — исключениями с задачей (файл на название в папке решения), новые нарушения и ненужные
-  // исключения — ошибки
+  // names: old ones — exceptions with a task (a file per name in the decision folder), new violations and unneeded
+  // exceptions — errors
   let found;
   try {
     found = findNameExceptions(root);
@@ -762,12 +794,12 @@ export async function main(argv: string[]): Promise<number> {
       console.error(`spec-doc: --names-baseline is the number of the rewrite issue, not «${values["names-baseline"]}»\n${USAGE}`);
       return 2;
     }
-    // исключения прежнего файла не прочитаны: baseline записал бы их заново с новой задачей
+    // exceptions of the former file weren't read: baseline would write them again with a new task
     if (legacyNames.length) {
       for (const m of legacyNames) console.error(`spec-doc: ${m}`);
       return 2;
     }
-    // ненужные — файл долой (опустевший каталог тоже), новые — файлом в папку решения своего теста
+    // unneeded ones — the file goes (an emptied directory too), new ones — a file in the decision folder of their test
     const stale = nameExceptions.filter((x) => !badKeys.has(nameKey(x.file, x.name)));
     for (const x of stale) unlinkSync(path.resolve(root, x.src));
     for (const d of new Set(stale.map((x) => path.posix.dirname(x.src)))) if (!readdirSync(path.resolve(root, d)).length) rmdirSync(path.resolve(root, d));
@@ -790,7 +822,7 @@ export async function main(argv: string[]): Promise<number> {
     ...nameExceptions
       .filter((x) => !badKeys.has(nameKey(x.file, x.name)))
       .map((x) => `name exception «${x.name}» (${x.file}) isn't needed — ${allNames.has(nameKey(x.file, x.name)) ? "already a statement" : "the test is gone"}, delete ${x.src}`),
-    // исключение папки — только для её тестов: иначе владелец папки снимает чужой долг
+    // a folder's exception — only for its tests: otherwise the folder's owner clears someone else's debt
     ...nameExceptions
       .filter((x) => home(x) !== null && home(x) !== path.posix.dirname(path.posix.dirname(x.src)))
       .map((x) => `name exception «${x.name}» (${x.file}) isn't in its test's folder: move ${x.src} to ${home(x)}/${L.NAMES_DIR}/`),

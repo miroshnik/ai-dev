@@ -1,21 +1,22 @@
 /**
- * knip-hints — репортер knip для `deadCode` харнесса: подсказки конфигурации (лишний `ignore`, `entry` без совпадений,
- * лишний воркспейс) строкой JSON `{ "configurationHints": [{ type, identifier, workspace, file? }] }`. Репортер `json`
- * knip их не выводит, а `--treat-config-hints-as-errors` даёт только код выхода — не видно, какие подсказки.
+ * knip-hints — a knip reporter for the harness's `deadCode`: configuration hints (a redundant `ignore`, an `entry`
+ * without matches, a redundant workspace) as a JSON line
+ * `{ "configurationHints": [{ type, identifier, workspace, file? }] }`. knip's `json` reporter doesn't print them,
+ * and `--treat-config-hints-as-errors` gives only an exit code — the hints themselves aren't visible.
  *
  *   knip --reporter json --reporter .agents/skills/spec/scripts/knip-hints.cjs
  *
- * Вторая строка вывода — его: `deadCode` склеивает обе. CommonJS, а не TypeScript: харнесс берёт путь файла
- * (`report.file`) статическим импортом — `import.meta` в модуле, который Playwright и Jest грузят как CommonJS, —
- * синтаксическая ошибка (tests/standards/harness-load); knip грузит его и под Node, и под Bun. Типы — `knip-hints.d.cts`.
+ * The second output line is its own: `deadCode` joins both. CommonJS, not TypeScript: the harness takes the file
+ * path (`report.file`) with a static import — `import.meta` in a module that Playwright and Jest load as CommonJS is
+ * a syntax error (tests/standards/harness-load); knip loads it under both Node and Bun. Types — `knip-hints.d.cts`.
  */
 "use strict";
 
 const path = require("node:path");
 
 /**
- * Подсказки, как их собрал knip (`ReporterOptions.configurationHints`): идентификатор бывает регуляркой (шаблон
- * `ignore`), путь файла — абсолютный; `--no-config-hints` — проект сам отказался от подсказок.
+ * Hints as knip collected them (`ReporterOptions.configurationHints`): an identifier may be a regex (an `ignore`
+ * pattern), a file path is absolute; `--no-config-hints` — the project itself opted out of hints.
  */
 function report(options) {
   const hints = options.isDisableConfigHints

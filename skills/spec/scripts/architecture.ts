@@ -1,14 +1,14 @@
 /**
- * architecture — модель архитектуры проекта и её проверки. Модель одна, в `tests/architecture/model.ts`: модули (путь,
- * назначение), от каких модулей и внешних пакетов каждый зависит. Из неё:
+ * architecture — the project's architecture model and its checks. There is one model, in `tests/architecture/model.ts`:
+ * modules (path, purpose), which modules and external packages each one depends on. From it:
  *
- * - `boundariesConfig` — правила границ ESLint (eslint-plugin-boundaries проекта): импорт модуля, от которого нельзя
- *   зависеть, — ошибка `lint` и в редакторе; фрагмент `eslint.ts` в `tests/architecture/<name>/`;
- * - `architecture` — тесты: каждый каталог кода принадлежит модулю, внешний пакет импортирует только модуль, которому
- *   он разрешён, и каждый разрешённый пакет реально используется — модель не расходится с кодом ни в одну сторону.
+ * - `boundariesConfig` — ESLint boundary rules (the project's eslint-plugin-boundaries): importing a module one may not
+ *   depend on is an error in `lint` and in the editor; the `eslint.ts` fragment in `tests/architecture/<name>/`;
+ * - `architecture` — tests: each code directory belongs to a module, an external package is imported only by a module
+ *   it's allowed for, and each allowed package is actually used — the model doesn't diverge from the code either way.
  *
- * Импорты — статическим разбором исходников (без сборки и резолвера): относительные пути, псевдонимы модели и
- * встроенные модули Node — не пакеты. Только `node:`-API и стираемый TypeScript: Node ≥ 22.18 и Bun.
+ * Imports — by static parsing of the sources (no build, no resolver): relative paths, the model's aliases and Node
+ * built-in modules aren't packages. Only `node:` APIs and erasable TypeScript: Node ≥ 22.18 and Bun.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -22,73 +22,74 @@ import { codeOnly, envNamesInCode, invariant } from "./harness.ts";
 import type { EnvReader, Exception, Invariant, It } from "./harness.ts";
 
 export interface Module {
-  /** Каталог модуля от корня проекта (или несколько). */
+  /** The module's directory from the project root (or several). */
   path: string | string[];
-  /** Назначение — одна фраза: зачем модуль и чего в нём нет. */
+  /** Purpose — one phrase: why the module exists and what isn't in it. */
   purpose: string;
-  /** Публичный API модуля (файл-вход), если модуль закрыт за ним. */
+  /** The module's public API (the entry file), if the module is closed behind it. */
   api?: string;
-  /** Модули, от которых этот может зависеть (свои файлы — всегда). */
+  /** Modules this one may depend on (its own files — always). */
   dependsOn?: string[];
-  /** Внешние пакеты, которые этот модуль может импортировать. */
+  /** External packages this module may import. */
   packages?: string[];
   /**
-   * Библиотека — общий пакет, который собирается в несколько контейнеров (пакет монорепо в бандле каждого
-   * приложения): её контейнеры — контейнеры модулей, которые от неё зависят, и те, где она названа в `modules`.
+   * Library — a shared package built into several containers (a monorepo package in each app's bundle): its containers
+   * are the containers of the modules that depend on it, and those where it's named in `modules`.
    */
   library?: boolean;
 }
 
-/** Внешняя система (C1): кто она, какие модули с ней говорят и чем — хосты, пакеты, ключи окружения, заголовки. */
+/** External system (C1): who it is, which modules talk to it and how — hosts, packages, environment keys, headers. */
 export interface External {
   purpose: string;
   /**
-   * Модуль-адаптер или несколько: только они говорят с внешней системой. Нет — периметр (CDN, WAF перед системой):
-   * с ним не говорит ни один модуль, его хостов, пакетов, ключей и заголовков в коде нет.
+   * Adapter module, or several: only they talk to the external system. None — a perimeter (a CDN, a WAF in front of the
+   * system): no module talks to it, its hosts, packages, keys and headers aren't in the code.
    */
   adapter?: string | string[];
   hosts?: string[];
   packages?: string[];
   env?: string[];
-  /** Заголовки HTTP, через которые внешняя система интегрируется (`CF-IPCountry` от CDN): читает только адаптер. */
+  /** HTTP headers the external system integrates through (`CF-IPCountry` from a CDN): only the adapter reads them. */
   headers?: string[];
 }
 
-/** Контейнер (C2): развёртываемая единица — приложение, функция, cron, воркер, база, хранилище. */
+/** Container (C2): a deployable unit — an app, a function, a cron, a worker, a database, a storage. */
 export interface Container {
   purpose: string;
-  /** Модули кода, которые разворачиваются в этом контейнере. */
+  /** Code modules deployed in this container. */
   modules?: string[];
-  /** Развёртываемые единицы из конфигов: `compose:<сервис>`, `supabase-function:<имя>`, `vercel-cron:<путь>`. */
+  /** Deployable units from configs: `compose:<service>`, `supabase-function:<name>`, `vercel-cron:<path>`. */
   deploy?: string[];
-  /** Контейнеры, с которыми этот связан (запрос, очередь, база): связь — не импорт. */
+  /** Containers this one is linked to (a request, a queue, a database): a relation, not an import. */
   uses?: string[];
-  /** У хранилища: пакеты-клиенты, через которые с ним говорят (`pg`, `@supabase/supabase-js`). */
+  /** For a storage: the client packages used to talk to it (`pg`, `@supabase/supabase-js`). */
   clients?: string[];
 }
 
 export interface Model {
-  /** Название системы на схемах C1 и C2 документации (по умолчанию — «Система»). */
+  /** The system's name on the C1 and C2 diagrams of the docs (default — "System"). */
   name?: string;
-  /** Каталоги кода от корня (по умолчанию `src`): каждый каталог с кодом в них принадлежит модулю. */
+  /** Code directories from the root (default `src`): each directory with code in them belongs to a module. */
   roots?: string[];
   /**
-   * Псевдонимы импорта → путь от корня (`{ "@/": "src/" }`) или список путей — в монорепо у каждого приложения свой
-   * `@/`: такой импорт локальный, а не пакет.
+   * Import aliases → a path from the root (`{ "@/": "src/" }`) or a list of paths — in a monorepo each app has its own
+   * `@/`: such an import is local, not a package.
    */
   aliases?: Record<string, string | string[]>;
   modules: Record<string, Module>;
-  /** Внешние системы (C1): платёжный провайдер, почта, геокодер… */
+  /** External systems (C1): a payment provider, mail, a geocoder… */
   externals?: Record<string, External>;
-  /** Контейнеры (C2): развёртываемые единицы и связи между ними. */
+  /** Containers (C2): deployable units and the relations between them. */
   containers?: Record<string, Container>;
 }
 
 /**
- * Развёртываемые единицы из конфигов деплоя в репозитории: сервисы `docker-compose.yml` / `compose.yml`, функции
- * `supabase/functions/<имя>`, crons в `vercel.json`, вычислительные ресурсы Terraform в `*.tf` (`terraform:<тип>.<имя>`:
- * сервис ECS, функция Lambda, Cloud Run…). Разбор без зависимостей: сервис compose — ключ с отступом в два пробела
- * под верхним `services:`, ресурс Terraform — строка `resource "<тип>" "<имя>"`.
+ * Deployable units from the repository's deploy configs: `docker-compose.yml` / `compose.yml` services,
+ * `supabase/functions/<name>` functions, crons in `vercel.json`, Terraform compute resources in `*.tf`
+ * (`terraform:<type>.<name>`: an ECS service, a Lambda function, Cloud Run…). Parsing without dependencies: a compose
+ * service is a key indented by two spaces under the top-level `services:`, a Terraform resource is the line
+ * `resource "<type>" "<name>"`.
  */
 export function deployUnits(root: string): string[] {
   const out = new Set<string>();
@@ -114,13 +115,13 @@ export function deployUnits(root: string): string[] {
       if (e.isDirectory() && !e.name.startsWith("_")) out.add(`supabase-function:${e.name}`);
     }
   } catch {
-    /* нет функций Supabase */
+    /* no Supabase functions */
   }
   try {
     const v = JSON.parse(readFileSync(path.join(root, "vercel.json"), "utf8")) as { crons?: { path: string }[] };
     for (const c of v.crons ?? []) out.add(`vercel-cron:${c.path}`);
   } catch {
-    /* нет vercel.json или crons */
+    /* no vercel.json or crons */
   }
   walkDirs(root, (rel, entries) => {
     for (const e of entries) {
@@ -133,7 +134,7 @@ export function deployUnits(root: string): string[] {
   return sorted([...out]);
 }
 
-// ресурсы Terraform, которые разворачивают код: сервис, функция, задание; кластер, сеть, база — не единица кода
+// Terraform resources that deploy code: a service, a function, a job; a cluster, network, database isn't a code unit
 const TERRAFORM_UNITS = new Set([
   "aws_ecs_service",
   "aws_lambda_function",
@@ -152,9 +153,9 @@ const TERRAFORM_UNITS = new Set([
 const TF_RESOURCE = /^[ \t]*resource\s+"([\w-]+)"\s+"([\w-]+)"/gm;
 
 /**
- * Пакеты workspace монорепо — каталоги с `package.json` по шаблонам `workspaces` из `package.json` (список или
- * `{ packages }`) и `packages:` из `pnpm-workspace.yaml`; `!шаблон` исключает. `*` — один уровень каталога, `**` —
- * любая глубина.
+ * Monorepo workspace packages — directories with `package.json` by the `workspaces` patterns from `package.json` (a
+ * list or `{ packages }`) and `packages:` from `pnpm-workspace.yaml`; `!pattern` excludes. `*` — one directory level,
+ * `**` — any depth.
  */
 export function workspacePackages(root: string): string[] {
   const patterns: string[] = [];
@@ -162,7 +163,7 @@ export function workspacePackages(root: string): string[] {
     const ws = (JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { workspaces?: string[] | { packages?: string[] } }).workspaces;
     patterns.push(...(Array.isArray(ws) ? ws : (ws?.packages ?? [])));
   } catch {
-    /* нет package.json или workspaces */
+    /* no package.json or workspaces */
   }
   try {
     let inPackages = false;
@@ -175,7 +176,7 @@ export function workspacePackages(root: string): string[] {
       }
     }
   } catch {
-    /* нет pnpm-workspace.yaml */
+    /* no pnpm-workspace.yaml */
   }
   if (!patterns.length) return [];
   const include = patterns.filter((p) => !p.startsWith("!")).map(glob);
@@ -188,7 +189,7 @@ export function workspacePackages(root: string): string[] {
   return sorted(out);
 }
 
-/** Шаблон каталога workspace → RegExp: `*` и `?` — внутри одного уровня, `**` — любая глубина, и нулевая. */
+/** Workspace directory pattern → RegExp: `*` and `?` stay within one level, `**` — any depth, including zero. */
 function glob(pattern: string): RegExp {
   const segs = pattern.replace(/^\.\//, "").replace(/\/+$/, "").split("/");
   const body = segs
@@ -200,7 +201,10 @@ function glob(pattern: string): RegExp {
   return new RegExp(`^${body}$`);
 }
 
-/** Обход каталогов репозитория (без `node_modules`, сборок и скрытых): visit получает путь от корня и записи каталога. */
+/**
+ * Walks the repository's directories (without `node_modules`, builds and hidden ones): visit gets the path from the
+ * root and the directory's entries.
+ */
 function walkDirs(root: string, visit: (rel: string, entries: Dirent[]) => void, rel = ""): void {
   let entries: Dirent[];
   try {
@@ -214,7 +218,7 @@ function walkDirs(root: string, visit: (rel: string, entries: Dirent[]) => void,
   }
 }
 
-/** Есть ли в каталоге файл кода (объявления `.d.ts` — не код). */
+/** Whether the directory has a code file (`.d.ts` declarations aren't code). */
 function hasCode(dir: string): boolean {
   let entries: Dirent[];
   try {
@@ -236,9 +240,9 @@ const names = (model: Model): string[] => Object.keys(model.modules).sort();
 const sorted = <T>(xs: T[]): T[] => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
 /**
- * Правила границ ESLint из модели: элемент на модуль, импорт модуля не из `dependsOn` — ошибка
- * `boundaries/dependencies`. Внешние пакеты и встроенные модули правило пропускает — их проверяет `architecture`.
- * `boundaries` — плагин из зависимостей проекта; `settings` — например, резолвер TypeScript для псевдонимов.
+ * ESLint boundary rules from the model: an element per module, importing a module not in `dependsOn` is a
+ * `boundaries/dependencies` error. The rule skips external packages and built-in modules — `architecture` checks them.
+ * `boundaries` — the plugin from the project's dependencies; `settings` — e.g. the TypeScript resolver for aliases.
  */
 export function boundariesConfig(model: Model, boundaries: object, opts: { files?: string[]; settings?: object } = {}): object[] {
   const all = names(model);
@@ -260,7 +264,7 @@ export function boundariesConfig(model: Model, boundaries: object, opts: { files
       files: opts.files ?? roots.map((r) => `${r}/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}`),
       plugins: { boundaries },
       settings: {
-        // первым — самый длинный путь: плагин берёт первый подходящий элемент, а src/lib вложен в src
+        // the longest path first: the plugin takes the first matching element, and src/lib is nested in src
         "boundaries/elements": all
           .flatMap((name) => paths(model.modules[name]!).map((p) => ({ type: name, pattern: p })))
           .sort((a, b) => b.pattern.length - a.pattern.length),
@@ -272,10 +276,10 @@ export function boundariesConfig(model: Model, boundaries: object, opts: { files
   ];
 }
 
-// import … from "x", export … from "x", import "x", import("x"), require("x"); `import type` — не зависимость кода
+// import … from "x", export … from "x", import "x", import("x"), require("x"); `import type` isn't a code dependency
 const IMPORT = /^\s*(import|export)\s+(type\s+)?[^;'"]*?\s*from\s*["']([^"']+)["']|^\s*import\s*["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)|\brequire\s*\(\s*["']([^"']+)["']\s*\)/gm;
 
-/** Внешние пакеты, которые импортирует исходник: имя пакета (`@scope/lib`, `lodash`), по порядку появления, без повторов. */
+/** External packages a source imports: package name (`@scope/lib`, `lodash`), in order of appearance, no repeats. */
 export function importsIn(text: string, aliases: Record<string, string | string[]> = {}): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(IMPORT)) {
@@ -297,37 +301,39 @@ interface Source {
   packages: string[];
   hosts: string[];
   env: string[];
-  /** Заголовки внешних систем модели, которые исходник называет строкой, — в нижнем регистре. */
+  /** Headers of the model's external systems that the source names as a string — in lower case. */
   headers: string[];
 }
 
-// литерал URL в коде: "https://api.example.com/…" — хост; локальные адреса и IP — не внешние системы
+// a URL literal in code: "https://api.example.com/…" — a host; local addresses and IPs aren't external systems
 const URL_HOST = /["'`]https?:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?::\d+)?(?=[\/"'`?#])/gi;
-// локальные адреса — loopback и «этот хост» 0.0.0.0, из машины они не уходят: не внешние системы, сеть до них в тестах
-// разрешена (networkGuard); IPv6 — в скобках, как его отдаёт URL.hostname. Любой другой IP — адрес внешней системы
+// local addresses — loopback and "this host" 0.0.0.0 never leave the machine: not external systems, tests may reach
+// them over the network (networkGuard); IPv6 is in brackets, as URL.hostname returns it. Any other IP is an external
+// system's address
 const isLocal = (h: string) => h === "localhost" || h.endsWith(".localhost") || /^127(\.\d+){3}$/.test(h) || h === "0.0.0.0" || h === "[::1]";
-// домены для примеров, документации и тестов (RFC 2606, RFC 6761) — в коде это не внешняя система; но запрос к ним в
-// тестах — забытый мок или настоящая сеть, поэтому networkGuard их не пропускает (там — isLocal)
+// domains for examples, docs and tests (RFC 2606, RFC 6761) — in code they aren't an external system; but a request to
+// them in tests is a forgotten mock or the real network, so networkGuard doesn't let them through (it uses isLocal)
 const isReserved = (h: string) => /(^|\.)(example|invalid|test)$|(^|\.)example\.(com|net|org)$/.test(h);
-// URI пространства имён XML — не адрес сервиса: атрибут xmlns и пространства W3C (createElementNS)
+// XML namespace URIs aren't service addresses: the xmlns attribute and the W3C namespaces (createElementNS)
 const XMLNS = /xmlns(?::[\w-]+)?\s*=\s*$/;
 const NAMESPACE_HOSTS = new Set(["www.w3.org"]);
-// значение href — ссылка, которую открывает браузер посетителя (`<a href>`, `<Link href={…}>`, `{ href: … }`): система с
-// этим хостом не говорит. `<link href>` браузер грузит сам, `location.href =` — переход кодом (оплата, вход): хосты
+// an href value is a link the visitor's browser opens (`<a href>`, `<Link href={…}>`, `{ href: … }`): the system
+// doesn't talk to that host. `<link href>` is loaded by the browser itself, `location.href =` is navigation by code
+// (payment, sign-in): those are hosts
 const HREF = /(?<![.\w$])["']?href["']?\s*(?:=\s*\{?|:)\s*$/;
 const OPEN_TAG = /<([A-Za-z][\w.:-]*)[^<>]*$/;
 const isLink = (text: string, at: number): boolean =>
   HREF.test(text.slice(Math.max(0, at - 40), at)) && OPEN_TAG.exec(text.slice(Math.max(0, at - 2000), at))?.[1] !== "link";
 
 /**
- * Хосты внешних систем в литералах URL исходника; комментарии, пространства имён, зарезервированные домены и ссылки
- * навигации (`href`) — нет.
+ * Hosts of external systems in the source's URL literals; comments, namespaces, reserved domains and navigation links
+ * (`href`) aren't.
  */
 export function hostsIn(source: string, file?: string): string[] {
   return hostsInCode(codeOnly(source, file));
 }
 
-/** То же по коду без комментариев: исходник разбирается один раз на хосты, ключи окружения и заголовки. */
+/** The same over code without comments: a source is parsed once for hosts, environment keys and headers. */
 function hostsInCode(text: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(URL_HOST)) {
@@ -339,10 +345,10 @@ function hostsInCode(text: string): string[] {
   return [...out];
 }
 
-// строка-литерал, похожая на имя заголовка HTTP: `h.get("cf-ipcountry")`, `req.headers["CF-Connecting-IP"]`
+// a string literal that looks like an HTTP header name: `h.get("cf-ipcountry")`, `req.headers["CF-Connecting-IP"]`
 const HEADER_LITERAL = /(["'`])([A-Za-z][A-Za-z0-9-]*)\1/g;
 
-/** Заголовки из `declared` (в нижнем регистре), которые код называет строкой, без учёта регистра. */
+/** Headers from `declared` (in lower case) that the code names as a string, case-insensitively. */
 function headersInCode(text: string, declared: Set<string>): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(HEADER_LITERAL)) {
@@ -353,8 +359,8 @@ function headersInCode(text: string, declared: Set<string>): string[] {
 }
 
 /**
- * Исходники корней модели: пакеты, хосты, ключи окружения и заголовки — по коду без комментариев, ключи — и способами
- * `readers`.
+ * Sources of the model's roots: packages, hosts, environment keys and headers — from code without comments, keys — also
+ * via `readers`.
  */
 function sources(root: string, model: Model, readers?: readonly EnvReader[]): Source[] {
   const out: Source[] = [];
@@ -389,8 +395,9 @@ function sources(root: string, model: Model, readers?: readonly EnvReader[]): So
 }
 
 /**
- * Модули, чьему каталогу принадлежит путь: самый длинный подходящий путь модуля (`src/lib` вложен в `src` — каталог
- * `src/lib/x` у модуля `src/lib`); несколько — один и тот же путь у нескольких модулей, это конфликт модели.
+ * Modules whose directory the path belongs to: the module with the longest matching path (`src/lib` is nested in
+ * `src` — directory `src/lib/x` belongs to module `src/lib`); several — the same path in several modules, a model
+ * conflict.
  */
 function owners(model: Model, dir: string): string[] {
   let best = -1;
@@ -406,24 +413,26 @@ function owners(model: Model, dir: string): string[] {
 }
 
 /**
- * Тесты модели: «каталог <каталог> — в модуле <модуль>» на каждый каталог с кодом (модуль — с самым длинным
- * подходящим путём; вне модулей или один путь у нескольких — красный),
- * «пакет workspace <путь> — в корнях кода» на каждый пакет монорепо с кодом (вне `roots` — красный),
- * «<модуль> импортирует <пакет>» на каждый внешний пакет, который модуль импортирует (не разрешён — красный),
- * «<модуль> использует разрешённый пакет <пакет>» на каждый пакет модели (не импортируется — красный: убери из модели).
- * Каждое — «реестр + инвариант»: не пуст, заведомый нарушитель, исключения из `exceptions/` папки решения.
- * `outside` — элементы вне модели намеренно, с причиной (инструменты разработки: общий конфиг ESLint, хелперы тестов):
- * решение, а не долг с задачей; пакет workspace — и отметкой `spec-outside(<решение>)` в своём `package.json`.
- * `readers` — свои способы чтения окружения проекта, те же, что у `envVars` (`configGet`): для ключей внешних систем.
+ * Model tests: "directory <directory> is in module <module>" for each directory with code (the module with the longest
+ * matching path; outside the modules or one path in several modules — red),
+ * "workspace package <path> is in the code roots" for each monorepo package with code (outside `roots` — red),
+ * "<module> imports <package>" for each external package the module imports (not allowed — red),
+ * "<module> uses allowed package <package>" for each model package (not imported — red: remove it from the model).
+ * Each is "registry + invariant": not empty, a known violator, exceptions from the decision folder's `exceptions/`.
+ * `outside` — elements outside the model on purpose, with a reason (dev tools: the shared ESLint config, test helpers):
+ * a decision, not a debt with a task; a workspace package — also with the mark `spec-outside(<decision>)` in its
+ * `package.json`.
+ * `readers` — the project's own ways of reading the environment, the same as for `envVars` (`configGet`): for
+ * external system keys.
  */
 export function architecture(
   it: It,
   opts: { root: string; model: Model; exceptions?: readonly Exception[]; outside?: readonly Outside[]; readers?: readonly EnvReader[] },
 ): void {
   const { model } = opts;
-  // реестры и названия тестов — на языке проекта (каталог, из которого идёт раннер), при регистрации
+  // registries and test names are in the project language (the directory the runner runs from), at registration
   const N = locale.names(locale.projectLanguage());
-  // реестры собираются целиком, потом регистрируются: исключение уходит только в реестр, где есть его элемент
+  // registries are collected in full, then registered: an exception goes only to the registry that has its element
   const specs: Invariant<unknown>[] = [];
   const add: Add = (spec) => void specs.push(spec as Invariant<unknown>);
   const src = sources(opts.root, model, opts.readers);
@@ -443,7 +452,7 @@ export function architecture(
     violator: { name: N.spec.architecture.dirViolator, item: "__outside_model__" },
   });
 
-  // корни модели — руками: новый пакет workspace вне них проверка не видела бы целиком
+  // the model's roots are set by hand: the check wouldn't see a new workspace package outside them at all
   const roots = (model.roots ?? ["src"]).map((r) => r.replace(/^\.\//, "").replace(/\/+$/, ""));
   const inRoots = (p: string) => roots.some((r) => r === p || r.startsWith(p + "/") || p.startsWith(r + "/"));
   const packages = roots.some((r) => r === "" || r === ".") ? [] : workspacePackages(opts.root).filter((p) => hasCode(path.join(opts.root, p)));
@@ -453,7 +462,7 @@ export function architecture(
       items: packages,
       name: (p) => locale.fill(N.spec.architecture.workspaceName, { path: p }),
       key: (p) => p,
-      // «вне охвата» и исключение пакета — отметкой в его package.json: удалили пакет — ушла и отметка
+      // "outside scope" and a package exception — a mark in its package.json: a deleted package takes its mark with it
       fileOf: (p) => path.join(opts.root, p, "package.json"),
       check: (p) => {
         if (!inRoots(p)) throw new Error(`${p}: a workspace package with code outside the model's roots — add it to roots in tests/architecture/model.ts`);
@@ -462,11 +471,11 @@ export function architecture(
     });
   }
 
-  // пакеты, которые модуль импортирует на деле: модуль → пакет → файлы
+  // packages a module actually imports: module → package → files
   const used = new Map<string, Map<string, string[]>>();
   for (const s of src) {
     const own = moduleOf(s.dir);
-    if (own.length !== 1) continue; // вне модулей — уже красный тест каталога
+    if (own.length !== 1) continue; // outside the modules — the directory test is already red
     const byPkg = used.get(own[0]!) ?? new Map<string, string[]>();
     for (const p of s.packages) byPkg.set(p, [...(byPkg.get(p) ?? []), s.file]);
     used.set(own[0]!, byPkg);
@@ -505,14 +514,17 @@ export function architecture(
 
 type Add = <T>(spec: Invariant<T>) => void;
 
-/** «Вне охвата» элемента модели: ключ, причина и, когда элемент есть в нескольких реестрах, имя реестра. */
+/** "Outside scope" for a model element: key, reason and the registry name when the element is in several registries. */
 export interface Outside {
   item: string;
   reason: string;
   rule?: string;
 }
 
-/** Реестры модели: `rule` исключения называет реестр на любом языке словаря — проект мог сменить язык. */
+/**
+ * The model's registries: an exception's `rule` names a registry in any dictionary language — the project could have
+ * changed its language.
+ */
 const REGISTRIES: ((n: Names) => string)[] = [
   (n) => n.spec.architecture.dirsRegistry,
   (n) => n.spec.architecture.workspaceRegistry,
@@ -527,12 +539,13 @@ const REGISTRIES: ((n: Names) => string)[] = [
   (n) => n.spec.architecture.envRegistry,
   (n) => n.spec.architecture.headersRegistry,
 ];
-/** Название реестра на языке проекта для `rule` на любом языке словаря; не реестр модели — как есть. */
+/** The registry name in the project language for a `rule` in any dictionary language; not a model registry — as is. */
 const registryOf = (rule: string, n: Names): string => REGISTRIES.find((pick) => locale.every(pick).includes(rule))?.(n) ?? rule;
 
 /**
- * Исключения и «вне охвата» по реестрам: с `rule` — реестру с этим именем, без — реестрам, в которых есть его элемент;
- * элемента нет нигде — первому реестру, чтобы храповик сказал «убери исключение» («убери из охвата»), а не молчал.
+ * Exceptions and "outside scope" by registry: with `rule` — to the registry with that name, without — to the registries
+ * that have its element; the element is nowhere — to the first registry, so the ratchet says "remove the exception"
+ * ("remove from scope") instead of staying silent.
  */
 function route<X extends { item: string; rule?: string }>(xs: readonly X[], specs: Invariant<unknown>[]): Omit<X, "rule">[][] {
   const keys = specs.map((sp) => new Set(sp.items.map((x) => String((sp.key ?? sp.name)(x)))));
@@ -548,8 +561,8 @@ function route<X extends { item: string; rule?: string }>(xs: readonly X[], spec
 }
 
 /**
- * Контейнеры каждого модуля: из `modules` контейнеров, у библиотеки — ещё контейнеры модулей, которые от неё зависят
- * (транзитивно: библиотека библиотеки собирается туда же). Списки отсортированы.
+ * Each module's containers: from the containers' `modules`, for a library — also the containers of the modules that
+ * depend on it (transitively: a library's library is built into the same ones). The lists are sorted.
  */
 export function moduleContainers(model: Model): Map<string, string[]> {
   const cont = model.containers ?? {};
@@ -572,9 +585,9 @@ export function moduleContainers(model: Model): Map<string, string[]> {
 }
 
 /**
- * C2: модуль — ровно в одном контейнере, библиотека — хотя бы в одном; зависимость модулей — внутри контейнера:
- * цель есть в каждом контейнере источника (между контейнерами — только `uses`); развёртываемые единицы конфигов и
- * модели совпадают в обе стороны; клиент хранилища — только в контейнере со связью `uses` с этим хранилищем.
+ * C2: a module is in exactly one container, a library — in at least one; module dependencies stay inside a container:
+ * the target is in every container of the source (across containers — only `uses`); the deployable units of the configs
+ * and of the model match both ways; a storage client is only in a container with a `uses` relation to that storage.
  */
 function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void {
   const cont = model.containers!;
@@ -611,7 +624,7 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
       check: (e) => {
         const a = containerOf(e.m);
         const b = containerOf(e.d);
-        // модуль вне контейнеров — тоже не «внутри контейнера»: иначе нарушитель прошёл бы на пустом списке
+        // a module outside containers isn't "inside a container" either: else a violator would pass on an empty list
         if (!a.length || a.some((c) => !b.includes(c))) {
           throw new Error(`${e.m} (${a.join(", ") || "?"}) depends on ${e.d} (${b.join(", ") || "?"}) — across containers only a uses link`);
         }
@@ -635,7 +648,7 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
     violator: { name: N.spec.architecture.unitViolator, item: "__outside_model__" },
   });
 
-  // клиенты хранилищ: какой контейнер их импортирует на деле (библиотека — каждый свой контейнер)
+  // storage clients: which container actually imports them (a library — each of its containers)
   const storages = Object.entries(cont).flatMap(([s, x]) => (x.clients ?? []).map((pkg) => ({ s, pkg })));
   if (storages.length) {
     const uses = new Map<string, { s: string; pkg: string; c: string; files: string[] }>();
@@ -667,17 +680,17 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
   }
 }
 
-/** Модули-адаптеры внешней системы: ни одного — периметр. */
+/** The external system's adapter modules: none — a perimeter. */
 export const adaptersOf = (e: External): string[] => (e.adapter === undefined ? [] : Array.isArray(e.adapter) ? e.adapter : [e.adapter]);
 
-/** «адаптере a» / «адаптерах a, b» — форма по числу адаптеров. */
+/** "adapter a" / "adapters a, b" — the form by the number of adapters. */
 const adapterWord = (a: string[], one: string, many: string): string => `${a.length === 1 ? one : many} ${a.join(", ")}`;
 
 /**
- * C1: хост внешней системы — только в её адаптерах (хост вне модели — красный), пакет внешней системы — только у
- * адаптеров (модель без противоречий), ключ окружения и заголовок внешней системы читают только адаптеры; у периметра
- * (адаптера нет) ничего из этого в коде нет. Реестры — из модели и кода; реестр, которого модель не объявляет (у внешних
- * систем нет пакетов), не регистрируется.
+ * C1: an external system's host is only in its adapters (a host outside the model — red), an external system's package
+ * is only with the adapters (a model without contradictions), only adapters read an external system's environment key
+ * and header; a perimeter (no adapter) has none of these in the code. Registries come from the model and the code; a
+ * registry the model doesn't declare (the external systems have no packages) isn't registered.
  */
 function c1(add: Add, N: Names, model: Model, src: Source[]): void {
   const ext = model.externals!;
@@ -739,7 +752,8 @@ function c1(add: Add, N: Names, model: Model, src: Source[]): void {
     });
   }
 
-  // ключ окружения и заголовок — одно соглашение: читает только адаптер; нарушителю — свой исходник, читающий вне адаптера
+  // an environment key and a header are one convention: only the adapter reads them; the violator gets its own source
+  // that reads outside the adapter
   type Read = { x: string; k: string; a: string[]; src?: Source[] };
   const readOnlyByAdapters = (registry: string, noun: string, word: string, list: (e: External) => string[] | undefined, reads: (s: Source, k: string) => boolean, fake: Partial<Source>) => {
     const items: Read[] = Object.entries(ext).flatMap(([x, e]) => (list(e) ?? []).map((k) => ({ x, k, a: adaptersOf(e) })));
@@ -770,20 +784,21 @@ function c1(add: Add, N: Names, model: Model, src: Source[]): void {
 
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-/** `fetch` под сторожем сети: отвергнутые запросы копятся до проверки после теста. */
+/** `fetch` under the network guard: rejected requests accumulate until the check after the test. */
 export interface GuardedFetch extends Fetch {
-  /** Хосты отвергнутых запросов с прошлой проверки, по порядку. */
+  /** Hosts of rejected requests since the last check, in order. */
   rejected: string[];
-  /** Проверка после теста (`afterEach`): были отвергнутые — бросает со списком хостов; список очищается. */
+  /** The check after a test (`afterEach`): rejected requests — throws with the list of hosts; the list is cleared. */
   check(): void;
 }
 
 /**
- * `fetch` для тестов — сеть под моками: что дошло до сторожа, никто не замокал. В `fetchImpl` пропускаются только
- * локальные адреса (loopback) и хосты `allow` (интеграционный тест с песочницей); запрос к объявленной внешней системе
- * падает с именем хоста и системы — забытый мок не уходит в сеть, к хосту вне модели — «объяви внешнюю систему».
- * Код под тестом может поймать исключение `fetch` — поэтому отвергнутое копится в `rejected`, и `check()` после теста
- * роняет его. Установка — в настройке тестов, раньше моков (`vi.spyOn`, MSW `server.listen()` — поверх):
+ * `fetch` for tests — the network under mocks: whatever reached the guard, nobody mocked. Only local addresses
+ * (loopback) and the `allow` hosts (an integration test with a sandbox) pass through to `fetchImpl`; a request to a
+ * declared external system fails with the host and system name — a forgotten mock doesn't go to the network; to a host
+ * outside the model — "declare the external system". The code under test may catch the `fetch` exception — so
+ * rejections accumulate in `rejected`, and `check()` after the test throws them. Setup — in the test setup, before the
+ * mocks (`vi.spyOn`, MSW `server.listen()` — on top of it):
  * `const guard = networkGuard(model, globalThis.fetch); globalThis.fetch = guard; afterEach(() => guard.check())`.
  */
 export function networkGuard(model: Model, fetchImpl: Fetch = globalThis.fetch, opts: { allow?: string[] } = {}): GuardedFetch {
@@ -812,7 +827,10 @@ export function networkGuard(model: Model, fetchImpl: Fetch = globalThis.fetch, 
   return Object.assign(guard, { rejected, check });
 }
 
-/** CSP `connect-src` браузера из хостов внешних систем модели: заголовок проекта сверяется с ним тестом. */
+/**
+ * The browser's CSP `connect-src` from the hosts of the model's external systems: a test checks the project's header
+ * against it.
+ */
 export function cspConnectSrc(model: Model, self: string[] = ["'self'"]): string {
   const hosts = sorted([...new Set(Object.values(model.externals ?? {}).flatMap((e) => (e.hosts ?? []).map((h) => h.toLowerCase())))]);
   return ["connect-src", ...self, ...hosts.map((h) => `https://${h}`)].join(" ");

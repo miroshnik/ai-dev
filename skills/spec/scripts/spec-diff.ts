@@ -1,20 +1,20 @@
 #!/usr/bin/env bun
 /**
- * spec-diff — дифф спеки: названия тестов (путь папки + describe + it) между базовой веткой
- * и HEAD по статическому разбору файлов на двух ревизиях (git cat-file, без прогонов и
- * чекаутов). Печатает markdown-раздел для тела PR: удалены (первыми), изменены (переименованы
- * в том же файле), добавлены, перенесены в дерево (тест исчез из файла вне tests/ и появился в
- * дереве под тем же именем — сводкой по папкам); плюс файлы тестов, изменённые вне дерева tests/.
+ * spec-diff — the spec diff: test names (folder path + describe + it) between the base branch and HEAD, by static
+ * parsing of the files at the two revisions (git cat-file, no runs and no checkouts). Prints a markdown section for the
+ * PR body: removed (first), changed (renamed in the same file), added, moved into the tree (a test vanished from a file
+ * outside tests/ and appeared in the tree under the same name — a summary by folders); plus test files changed outside
+ * the tests/ tree.
  *
  *   bun spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json]
  *                    [--scenarios issue.md | -]
  *
- * --scenarios — тело задачи (markdown, `-` — stdin): раздел сценариев («## Scenarios», «## Сценарии» — на любом языке
- * словаря) сверяется с добавленными и изменёнными тестами и с describe новых проверок харнесса — сценарий, ставший
- * тестом или проверкой, несделанный сценарий и тесты сверх сценариев.
+ * --scenarios — the task body (markdown, `-` — stdin): the scenarios section ("## Scenarios" or its heading in any
+ * dictionary language) is matched against added and changed tests and against the describes of new harness checks — a
+ * scenario that became a test or a check, an undone scenario and tests beyond the scenarios.
  *
- * Раздел — на языке проекта корня (`language` в `.agents/ai-dev.json`, словарь скилла github). База по умолчанию —
- * merge-base базовой ветки и HEAD (как дифф PR на GitHub). Запуск — Bun; нужен git.
+ * The section is in the root's project language (`language` in `.agents/ai-dev.json`, the github skill's dictionary).
+ * The default base is the merge-base of the base branch and HEAD (like a PR diff on GitHub). Runs on Bun; needs git.
  */
 
 import { spawnSync } from "node:child_process";
@@ -30,11 +30,11 @@ import { disablesIn } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Test } from "./speclib.ts";
 
-// язык проекта и его названия: раздел для PR — на нём; ставит main по корню
+// the project language and its names: the PR section is in it; main sets it from the root
 let LANG = locale.DEFAULT_LANGUAGE;
 let N: Names = locale.names(LANG);
 
-/** Ниже этой похожести — не переименование, а снятое и новое требование: пусть будет видно. */
+/** Below this similarity it's not a rename but a removed and a new requirement: let it be visible. */
 export const RENAME_RATIO = 0.6;
 
 function git(args: string[], cwd: string, input?: string): Buffer {
@@ -56,15 +56,16 @@ function findRoot(root?: string): { top: string; root: string; prefix: string } 
 const wanted = (rel: string) => L.isTestFile(rel) && L.classify(rel)[0] !== "lib";
 
 /**
- * Копия флоу ai-dev (`.agents/`, `.claude/` от корня) — не код проекта: её ставит `install`, руками не правят,
- * линтеры проекта её не видят. Её тесты и отключения линта — не решения проекта, в дифф спеки не идут.
+ * A copy of the ai-dev flow (`.agents/`, `.claude/` from the root) isn't project code: `install` puts it there, nobody
+ * edits it by hand, the project's linters don't see it. Its tests and lint disables aren't project decisions and don't
+ * go into the spec diff.
  */
 const FLOW_COPY = /^\.(?:agents|claude)\//;
 
 /**
- * {путь относительно корня: исходник} для файлов тестов дерева tests/ на ревизии (без lib).
- * Содержимое — одним `git cat-file --batch`, а не `git show` на каждый файл: в репозитории
- * с сотнями файлов тестов это два процесса вместо сотен.
+ * {path relative to the root: source} for the test files of the tests/ tree at a revision (without lib).
+ * The contents come from one `git cat-file --batch`, not `git show` per file: in a repository with hundreds of test
+ * files that's two processes instead of hundreds.
  */
 function testsAtRev(rev: string, top: string, prefix: string): Map<string, string> {
   const list = gitText(["ls-tree", "-r", "--name-only", "-z", rev, "--", prefix + L.TESTS], top);
@@ -72,12 +73,12 @@ function testsAtRev(rev: string, top: string, prefix: string): Map<string, strin
   return filesAtRev(rev, top, prefix, paths);
 }
 
-/** {путь относительно корня: исходник} для путей от корня git на ревизии; нет файла — нет и ключа. */
+/** {path relative to the root: source} for paths from the git root at a revision; no file — no key either. */
 function filesAtRev(rev: string, top: string, prefix: string, paths: string[]): Map<string, string> {
   const files = new Map<string, string>();
   if (!paths.length) return files;
   const buf = git(["cat-file", "--batch"], top, paths.map((p) => `${rev}:${p}\n`).join(""));
-  // ответ на объект: `<sha> <type> <size>\n<содержимое>\n`; нет объекта — `<rev>:<path> missing\n`
+  // the reply per object: `<sha> <type> <size>\n<contents>\n`; no object — `<rev>:<path> missing\n`
   let pos = 0;
   for (const p of paths) {
     const nl = buf.indexOf(0x0a, pos);
@@ -115,13 +116,16 @@ function testsInWorktree(root: string): Map<string, string> {
   return files;
 }
 
-// невычислимое название — строкой в stderr один раз: тот же тест есть и в базе, и в голове
+// a name that can't be computed — a stderr line once: the same test is both in the base and in the head
 const unnamedSeen = new Set<string>();
 
-/** Проверка харнесса в файле теста: вызов по разбору и путь файла. */
+/** A harness check in a test file: the call from parsing and the file path. */
 export type Check = L.HarnessCall & { path: string };
 
-/** Тесты и проверки харнесса файлов; файл, который не разобрать, и тест, чьё название не вычислить статически, — строкой в stderr. */
+/**
+ * Tests and harness checks of files; a file that can't be parsed and a test whose name can't be computed statically —
+ * a line in stderr.
+ */
 function parseFiles(files: Map<string, string>, label: string): { tests: Test[]; checks: Check[] } {
   const tests: Test[] = [];
   const checks: Check[] = [];
@@ -143,7 +147,7 @@ function parseFiles(files: Map<string, string>, label: string): { tests: Test[];
   return { tests, checks };
 }
 
-/** Файлы тестов, изменённые вне tests/ (в том числе неотслеживаемые при --worktree), кроме копии флоу. */
+/** Test files changed outside tests/ (including untracked ones with --worktree), except the flow copy. */
 function outOfTreeFiles(base: string, head: string, top: string, prefix: string, worktree: boolean): string[] {
   const spec = ["--", ".", `:(exclude)${prefix}${L.TESTS}`];
   const changed = worktree
@@ -157,16 +161,16 @@ function outOfTreeFiles(base: string, head: string, top: string, prefix: string,
   return [...out].sort();
 }
 
-/** Тест вне дерева на базе, исчезнувший из своего файла: кандидат в перенесённые. */
+/** A test outside the tree at the base that vanished from its file: a candidate for moved. */
 export interface Moved {
-  test: Test; // тест в дереве, путь — новый
-  from: string; // файл вне дерева на базе
+  test: Test; // the test in the tree, the path is new
+  from: string; // the file outside the tree at the base
 }
 
 /**
- * Тесты файлов вне дерева, изменённых в PR: на базе были, в том же файле на HEAD их нет (файл удалён
- * или тест из него убран). Только они могут считаться перенесёнными: тест, оставшийся на месте, —
- * источник копии, а не переноса. `count` — сколько тестов было в файле на базе.
+ * Tests of files outside the tree changed in the PR: they were there at the base, at HEAD they're gone from the same
+ * file (the file was deleted or the test was removed from it). Only they can count as moved: a test that stayed in
+ * place is the source of a copy, not of a move. `count` — how many tests the file had at the base.
  */
 function outOfTreePool(
   base: string,
@@ -211,7 +215,7 @@ function outOfTreePool(
   return { pool, count, gone };
 }
 
-/** Похожесть строк по Ratcliff/Obershelp (как difflib.SequenceMatcher.ratio без эвристик). */
+/** String similarity by Ratcliff/Obershelp (like difflib.SequenceMatcher.ratio without heuristics). */
 export function ratio(a: string, b: string): number {
   if (!a.length && !b.length) return 1;
   return (2 * matching(a, b)) / (a.length + b.length);
@@ -241,7 +245,7 @@ function matching(a: string, b: string): number {
   return best + matching(a.slice(0, bi), b.slice(0, bj)) + matching(a.slice(bi + best), b.slice(bj + best));
 }
 
-/** Жадное сопоставление по убыванию похожести; детерминировано (при равенстве — по порядку). */
+/** Greedy matching by descending similarity; deterministic (ties are broken by order). */
 function pair(
   removed: Test[],
   added: Test[],
@@ -272,13 +276,13 @@ function pair(
   return pairs;
 }
 
-/** Тело без проверки: `() => {}`, `async () => {}`, `function () {}` — без пробелов, как в `Test.body`. */
+/** A body with no check: `() => {}`, `async () => {}`, `function () {}` — without spaces, as in `Test.body`. */
 const EMPTY_BODY = /^,(?:async)?(?:\([^)]*\)=>|function\w*\([^)]*\))\{\}$/;
 
 /**
- * Тело для сопоставления — без завершающих запятых перед `)`, `]`, `}` и после последнего аргумента: их ставит
- * prettier, когда переносит вызов с длинным названием, и в теле, которое перенос сдвинул вправо (#324). Проверка
- * от них не меняется, а точное тело развело бы переименование на «удалён» и «добавлен».
+ * The body for matching — without trailing commas before `)`, `]`, `}` and after the last argument: prettier adds them
+ * when it wraps a call with a long name, and in a body the wrap shifted to the right (#324). The check doesn't change
+ * because of them, while the exact body would split a rename into "removed" and "added".
  */
 const plainBody = (body: string) => body.replace(/,(?=[)\]}]|$)/g, "");
 
@@ -295,15 +299,15 @@ export function diff(
   for (const t of headTests) if (!h.has(L.keyOf(t))) h.set(L.keyOf(t), t);
   const removed = [...b.entries()].filter(([k]) => !h.has(k)).map(([, t]) => t);
   let added = [...h.entries()].filter(([k]) => !b.has(k)).map(([, t]) => t);
-  // 0) то же имя и describe, что у теста, исчезнувшего вне дерева, — перенесён в дерево, а не новый.
-  // Точное совпадение, без похожести: переименованный при переносе тест честно «добавлен».
+  // 0) the same name and describe as a test that vanished outside the tree — moved into the tree, not new.
+  // An exact match, no similarity: a test renamed during the move is honestly "added".
   const from = new Map<string, Test[]>();
   for (const t of pool) {
     const k = JSON.stringify([t.describes, t.name]);
     from.set(k, [...(from.get(k) ?? []), t]);
   }
-  // Идут все тесты HEAD, а не по одному на ключ: одинаковые тесты двух файлов, перенесённых в одну
-  // папку, там — одно требование, но перенесены оба, и файлы-источники перенесены целиком.
+  // All HEAD tests go, not one per key: identical tests of two files moved into one folder are one requirement
+  // there, but both are moved, and the source files are moved whole.
   const moved: Moved[] = [];
   const movedKeys = new Set<string>();
   for (const t of headTests) {
@@ -314,8 +318,9 @@ export function diff(
     movedKeys.add(L.keyOf(t));
   }
   added = added.filter((a) => !movedKeys.has(L.keyOf(a)));
-  // 1) тот же файл и то же тело, единственное в файле среди снятых и среди новых, — переименован тест, даже если
-  // сменились и describe, и имя (перевод названий в утверждения). Пустое тело — не признак: проверки в нём нет
+  // 1) the same file and the same body, unique in the file among the removed and among the new — the test is renamed,
+  // even if both the describe and the name changed (turning names into statements). An empty body isn't a sign: it
+  // has no check
   const bodyKey = (t: Test) => {
     const body = t.body && plainBody(t.body);
     return body && !EMPTY_BODY.test(body) ? JSON.stringify([t.path, body]) : "";
@@ -328,10 +333,10 @@ export function diff(
   const [inRemoved, inAdded] = [once(removed), once(added)];
   const unique = (t: Test) => !!bodyKey(t) && inRemoved.get(bodyKey(t)) === 1 && inAdded.get(bodyKey(t)) === 1;
   const changed = pair(removed, added, (r, a) => unique(r) && bodyKey(r) === bodyKey(a), () => 1, 1);
-  // 2) тот же файл и describe, похожее имя — переименован тест
+  // 2) the same file and describe, a similar name — the test is renamed
   changed.push(...pair(removed, added, (r, a) => r.path === a.path && sameDescribes(r, a), (r, a) => ratio(r.name, a.name), RENAME_RATIO));
-  // 3) та же папка и имя, другой describe — переименован describe или тест переложен в другой раздел,
-  // в том числе из другого файла папки: текст требования тот же, сменился раздел
+  // 3) the same folder and name, a different describe — the describe is renamed or the test moved to another section,
+  // including from another file of the folder: the requirement text is the same, the section changed
   changed.push(
     ...pair(
       removed,
@@ -345,9 +350,9 @@ export function diff(
 }
 
 /**
- * Файлы вне дерева без переноса целиком: перенесённый целиком (удалён, все его тесты нашли пару в
- * дереве) — только число в сводке; остальные — по имени: часть тестов не нашла пары, значит при
- * переносе что-то переименовано или потеряно.
+ * Files outside the tree not moved whole: one moved whole (deleted, all its tests found a pair in the tree) is only a
+ * number in the summary; the rest are named: some of their tests found no pair, so something was renamed or lost in
+ * the move.
  */
 export function unmovedFiles(outFiles: string[], moved: Moved[], count: Map<string, number>, gone: Set<string>): string[] {
   const n = new Map<string, number>();
@@ -364,12 +369,12 @@ function changedEntry([o, n]: [Test, Test]): string {
     const prefix = n.describes.length ? md(n.describes) + " › " : "";
     return `- \`${L.folderOf(n)}\` · ${prefix}~~${L.mdText(o.name)}~~ → ${L.mdText(n.name)}${outMark(n)}`;
   }
-  // сменились и describe, и имя (или describe не было) — зачёркнуто старое название целиком
+  // both the describe and the name changed (or there was no describe) — the old name is struck through whole
   if (o.name !== n.name || !o.describes.length) return `- \`${L.folderOf(n)}\` · ~~${L.titleOf(o)}~~ → ${L.titleOf(n)}${outMark(n)}`;
   return `- \`${L.folderOf(n)}\` · ~~${md(o.describes)}~~ → ${md(n.describes)} › ${L.mdText(n.name)}${outMark(n)}`;
 }
 
-/** Сводка переноса: по папке — сколько тестов и из скольких файлов вне дерева; по тесту — только в --json. */
+/** Move summary: per folder — how many tests and from how many files outside the tree; per test — only in --json. */
 function movedLines(moved: Moved[]): string[] {
   const byFolder = new Map<string, { tests: number; files: Set<string> }>();
   for (const m of moved) {
@@ -387,16 +392,16 @@ function movedLines(moved: Moved[]): string[] {
   return [locale.fill(N.spec.diff.moved, { n: moved.length, tests: L.TESTS, files: fileWord(files) }), "", ...[...byFolder.keys()].sort().map(folderLine), ""];
 }
 
-// ---------- решения вне названий тестов: модель, исключения, проверки харнесса ----------
+// ---------- decisions outside test names: the model, exceptions, harness checks ----------
 
-/** Решения одного вида на ревизии — строки для списка; снятые и добавленные — разница строк. */
+/** Decisions of one kind at a revision — lines for a list; removed and added are the difference of lines. */
 export interface Decisions {
   model: string[];
   exceptions: string[];
   checks: string[];
 }
 
-/** Модуль данных проекта (модель, исключения) из текста: .json — разбор, TS/JS — импорт временного файла. */
+/** A project data module (model, exceptions) from text: .json — parsed, TS/JS — imported from a temporary file. */
 async function loadData(text: string, file: string): Promise<unknown> {
   if (file.endsWith(".json")) return JSON.parse(text);
   const dir = mkdtempSync(path.join(os.tmpdir(), "spec-diff-"));
@@ -405,7 +410,7 @@ async function loadData(text: string, file: string): Promise<unknown> {
     writeFileSync(f, text);
     return ((await import(pathToFileURL(f).href)) as { default?: unknown }).default;
   } catch {
-    return undefined; // модель с импортами за пределы файла статически не прочесть — решения модели не показываются
+    return undefined; // a model with imports beyond the file can't be read statically — the model's decisions aren't shown
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -413,7 +418,7 @@ async function loadData(text: string, file: string): Promise<unknown> {
 
 type ModelData = { modules?: Record<string, { dependsOn?: string[]; packages?: string[] }> };
 
-/** Модель → «модуль X», «зависимость X → Y», «пакет P модуля X»: по видам, внутри — по имени. */
+/** Model → "module X", "dependency X → Y", "package P of module X": by kind, by name within a kind. */
 export function modelFacts(m: ModelData | undefined): string[] {
   const mods = Object.keys(m?.modules ?? {}).sort();
   const at = (n: string) => m!.modules![n]!;
@@ -425,8 +430,8 @@ export function modelFacts(m: ModelData | undefined): string[] {
 }
 
 /**
- * Что проверяет вызов харнесса: «реестр «мутации»», «правило no-console», «код без потребителя (production)», «модель
- * архитектуры»; реестр или правило не вычислить без прогона — только вид.
+ * What a harness call checks: `registry "mutations"`, `rule no-console`, `code without a consumer (production)`,
+ * `architecture model`; a registry or a rule that can't be computed without a run — only the kind.
  */
 const checkLabel = (call: string, value: string | null): string => {
   const named = (template: string) => locale.fill(template, { value: value! });
@@ -436,10 +441,10 @@ const checkLabel = (call: string, value: string | null): string => {
   return N.spec.diff.architecture;
 };
 
-// проверка, которую называет опция вызова: без вычислимого реестра или правила её в списке решений не назвать
+// a check named by a call option: without a computable registry or rule it can't be named in the decisions list
 const NAMED_BY_OPTION = new Set(["invariant", "examples"]);
 
-/** Проверки харнесса в исходниках тестов (разбор файлов — `parseFiles`): реестры, правила, запуски deadCode, модель. */
+/** Harness checks in test sources (file parsing — `parseFiles`): registries, rules, deadCode runs, the model. */
 export function checkFacts(checks: Check[]): string[] {
   const out = new Set<string>();
   for (const c of checks) {
@@ -449,7 +454,10 @@ export function checkFacts(checks: Check[]): string[] {
   return [...out].sort();
 }
 
-/** describe с проверками харнесса — сценарий стандарта «реестр + инвариант»: папка, цепочка describe и что проверяют. */
+/**
+ * A describe with harness checks — a scenario of the "registry + invariant" standard: the folder, the describe chain
+ * and what they check.
+ */
 export interface HarnessDescribe {
   folder: string;
   describes: string[];
@@ -457,8 +465,9 @@ export interface HarnessDescribe {
 }
 
 /**
- * describe с проверкой харнесса, которой на базе в нём не было (describe новый или переименован, сменился реестр или
- * правило): как новые и переименованные тесты, только он закрывает сценарий. Вызов вне describe назвать нечем — мимо.
+ * A describe with a harness check it didn't have at the base (the describe is new or renamed, the registry or the rule
+ * changed): like new and renamed tests, only it closes a scenario. A call outside a describe has nothing to name it
+ * by — it's skipped.
  */
 export function freshChecks(base: Check[], head: Check[]): HarnessDescribe[] {
   const group = (checks: Check[]) => {
@@ -478,9 +487,10 @@ export function freshChecks(base: Check[], head: Check[]): HarnessDescribe[] {
 }
 
 /**
- * describe новых тестов из отчёта, где в исходниках нет вызова харнесса: тесты пишет не раннер, а скрипт после прогона
- * (отчёт spec-claims), — проверка видна только по отчёту, и сценарий с её названием закрывают эти тесты. describe с
- * вызовом харнесса в исходниках — дело `freshChecks`: новый элемент реестра в старой проверке сценария не закрывает.
+ * Describes of new tests from the report with no harness call in the sources: the tests are written not by the runner
+ * but by a script after the run (the spec-claims report) — the check is visible only in the report, and these tests
+ * close the scenario with its name. A describe with a harness call in the sources is `freshChecks`' job: a new registry
+ * item in an old check doesn't close a scenario.
  */
 export function reportedChecks(fresh: Test[], generated: Set<Test>, sourced: Check[]): HarnessDescribe[] {
   const key = (folder: string, describes: string[]) => JSON.stringify([folder, describes]);
@@ -494,25 +504,26 @@ export function reportedChecks(fresh: Test[], generated: Set<Test>, sourced: Che
   return [...out.values()];
 }
 
-// файл исключений — по правилу exceptionFile (speclib), как его читают харнесс и spec-doc: exceptions/<элемент>.json —
-// исключение харнесса, names.exceptions/<название>.json — названия; прежние exceptions.* и names.exceptions.* —
-// массивом (базовая ревизия переноса ещё на них); файл не на месте исключением не читается — его и не показываем
+// the exceptions file — by the exceptionFile rule (speclib), as the harness and spec-doc read it:
+// exceptions/<item>.json — a harness exception, names.exceptions/<name>.json — names; the former exceptions.* and
+// names.exceptions.* — an array (the base revision of the move is still on them); a misplaced file isn't read as an
+// exception — we don't show it either
 const readable = (rel: string) => {
   const x = L.exceptionFile(rel);
   return x && !x.error ? x : null;
 };
 
-/** Пункт exceptions.*: элемент реестра харнесса (`rule` — соглашение) или название теста (spec-names: `file`, `name`). */
+/** exceptions.* entry: a harness registry item (`rule` — a convention) or a test name (spec-names: `file`, `name`). */
 type ExceptionEntry = { item?: string; rule?: string; file?: string; name?: string; issue: number; reason: string };
 
-/** Строка исключения: что исключено, задача и причина — у каждого пункта своя, одинаковые не схлопываются. */
+/** Exception line: what's excepted, the task and the reason — each entry has its own, identical ones aren't merged. */
 function exceptionLine(folder: string, e: ExceptionEntry): string {
   const what = e.item !== undefined ? e.item : locale.fill(N.spec.diff.nameException, { name: e.name ?? "", file: e.file ?? "" });
   return `\`${folder}\` · ${what} (${e.rule ? `${e.rule}, ` : ""}#${e.issue}) — ${e.reason}`;
 }
 const CODE = /\.[cm]?[jt]sx?$/;
 
-/** Файлы на ревизии (null — рабочее дерево) по путям от корня git: путь без префикса → текст. */
+/** Files at a revision (null — the working tree) by paths from the git root: path without the prefix → text. */
 function readFiles(rev: string | null, top: string, prefix: string, paths: string[]): Map<string, string> {
   if (rev !== null) return filesAtRev(rev, top, prefix, paths);
   const out = new Map<string, string>();
@@ -520,13 +531,16 @@ function readFiles(rev: string | null, top: string, prefix: string, paths: strin
     try {
       out.set(p.slice(prefix.length), readFileSync(path.join(top, p), "utf8"));
     } catch {
-      /* файла нет в рабочем дереве */
+      /* the file isn't in the working tree */
     }
   }
   return out;
 }
 
-/** Решения на ревизии: модель, исключения (exceptions/ и exceptions.* в tests/, отключения линта в изменённых файлах), проверки. */
+/**
+ * Decisions at a revision: the model, exceptions (exceptions/ and exceptions.* in tests/, lint disables in changed
+ * files), checks.
+ */
 async function decisionsAt(rev: string | null, top: string, prefix: string, changedCode: string[], checks: Check[]): Promise<Decisions> {
   const listed = rev !== null ? gitText(["ls-tree", "-r", "--name-only", "-z", rev, "--", prefix + L.TESTS], top).split("\0") : [];
   const excPaths =
@@ -572,7 +586,10 @@ function walkTests(dir: string, rel = L.TESTS): string[] {
   return out;
 }
 
-/** Разность с повторами: одинаковые строки — разные пункты (два одинаковых отключения линта), снят один — в разнице один. */
+/**
+ * Difference with repeats: identical lines are separate entries (two identical lint disables); one removed — one in
+ * the difference.
+ */
 function minus(a: string[], b: string[]): string[] {
   const left = new Map<string, number>();
   for (const x of b) left.set(x, (left.get(x) ?? 0) + 1);
@@ -583,7 +600,10 @@ function minus(a: string[], b: string[]): string[] {
   });
 }
 
-/** Строки решения выше порога — число на папку или файл (первый code span строки), у модели — на вид («модуль», «пакет»). */
+/**
+ * Decision lines above the threshold — a count per folder or file (the line's first code span), for the model — per
+ * kind ("module", "package").
+ */
 function grouped(items: string[]): string[] {
   const n = new Map<string, number>();
   for (const x of items) {
@@ -593,7 +613,10 @@ function grouped(items: string[]): string[] {
   return [...n.keys()].sort().map((k) => `- ${k} — ${n.get(k)}`);
 }
 
-/** Снятые и добавленные решения по видам — разделы для тела PR; нет изменений вида — нет раздела; выше порога — сводкой. */
+/**
+ * Removed and added decisions by kind — sections for the PR body; no changes of a kind — no section; above the
+ * threshold — a summary.
+ */
 export function decisionLines(base: Decisions, head: Decisions, limit = Infinity): string[] {
   const lines: string[] = [];
   const kinds: [string, keyof Decisions][] = [
@@ -613,10 +636,13 @@ export function decisionLines(base: Decisions, head: Decisions, limit = Infinity
   return lines;
 }
 
-/** Порог сводки по умолчанию: тестов в списках (удалены, изменены, добавлены) больше — в теле PR сводка по папкам. */
+/**
+ * Default summary threshold: with more tests in the lists (removed, changed, added) the PR body gets a summary by
+ * folders.
+ */
 export const SUMMARY_LIMIT = 100;
 
-/** Сводка по папкам: число удалённых, изменённых и добавленных; с отчётом раннера — сколько из них порождено харнессом. */
+/** Summary by folders: the number removed, changed and added; with a runner report — how many the harness generated. */
 function summaryLines(removed: Test[], changed: [Test, Test][], added: Test[], limit: number, harness?: Set<Test>): string[] {
   type Row = { removed: number; changed: number; added: number; harness: number };
   const rows = new Map<string, Row>();
@@ -649,16 +675,16 @@ function summaryLines(removed: Test[], changed: [Test, Test][], added: Test[], l
   ];
 }
 
-/** Тестов в списках больше порога — вместо списков сводка по папкам. */
+/** More tests in the lists than the threshold — a summary by folders instead of the lists. */
 const summarized = (removed: Test[], changed: [Test, Test][], added: Test[], limit: number) => removed.length + changed.length + added.length > limit;
 
-/** Строка о файлах тестов, изменённых вне дерева `tests/`. */
+/** The line about test files changed outside the `tests/` tree. */
 const outsideFilesLine = (outFiles: string[]): string =>
   locale.fill(N.spec.diff.outsideFiles, { tests: L.TESTS, files: outFiles.map((p) => `\`${p}\``).join(", ") });
 
 /**
- * Раздел для тела PR; `note` — строка под базой (откуда тесты харнесса). Тест, которого нет среди сценариев задачи
- * (`extra`), — пометкой в списке: сам тест уже в нём, второй раз его не печатаем.
+ * The section for the PR body; `note` — a line under the base (where the harness tests come from). A test not among the
+ * task's scenarios (`extra`) is a mark in the list: the test itself is already there, we don't print it a second time.
  */
 export function render(
   baseLabel: string,
@@ -677,7 +703,8 @@ export function render(
   }
   const limit = opts.limit ?? SUMMARY_LIMIT;
   if (summarized(removed, changed, added, limit)) {
-    // удалённый тест — снятое требование: в теле PR поимённо, пока их самих не больше порога
+    // a removed test is a removed requirement: named one by one in the PR body while there aren't more of them than
+    // the threshold
     if (removed.length && removed.length <= limit) lines.push(`**${N.spec.diff.removed} (${removed.length}):**`, "", ...removed.map(entry), "");
     lines.push(...summaryLines(removed, changed, added, limit, opts.harness));
     if (moved.length) lines.push(...movedLines(moved));
@@ -718,8 +745,9 @@ function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], add
 }
 
 /**
- * Сценарии задачи — пункты списка раздела сценариев (до следующего заголовка); чекбоксы сняты; нет раздела — null.
- * Заголовок — на любом языке словаря (`## Scenarios`, `## Сценарии`): задачу могли написать до смены языка проекта.
+ * Task scenarios — the list items of the scenarios section (up to the next heading); checkboxes stripped; no section —
+ * null. The heading is in any dictionary language (`## Scenarios` or its translation): the task could have been written
+ * before the project language changed.
  */
 export function parseScenarios(md: string): string[] | null {
   const lines = md.split(/\r?\n/);
@@ -735,22 +763,25 @@ export function parseScenarios(md: string): string[] | null {
   return out;
 }
 
-/** Кавычки, которыми сценарий цитируют целиком: `«…»;` в задаче — то же название, что у теста. */
+/** Quotes that quote a scenario whole: `«…»;` in a task is the same name as the test's. */
 const QUOTES: [string, string][] = [["«", "»"], ['"', '"'], ["“", "”"], ["`", "`"]];
 const TAIL = /[.。;,]+$/;
 
-/** Название для сверки: пробелы схлопнуты, без регистра, без внешних кавычек и знака в конце — до и после кавычек. */
+/**
+ * A name for matching: whitespace collapsed, case-insensitive, without outer quotes and a trailing mark — both before
+ * and after the quotes.
+ */
 const norm = (s: string): string => {
   let t = s.replace(/\s+/g, " ").trim().replace(TAIL, "");
   for (const [open, close] of QUOTES) {
     const inner = t.slice(open.length, -close.length);
-    // «a» и «b» — не цитата целиком: внутри своя закрывающая кавычка
+    // "a" and "b" isn't a whole quote: its own closing quote is inside
     if (t.length > open.length + close.length && t.startsWith(open) && t.endsWith(close) && !inner.includes(close)) t = inner.trim().replace(TAIL, "");
   }
   return t.toLowerCase();
 };
 
-/** Сценарий и чем он стал: новыми тестами, describe проверки харнесса или ничем. */
+/** A scenario and what it became: new tests, a harness check's describe, or nothing. */
 export interface Found {
   scenario: string;
   tests: Test[];
@@ -758,10 +789,10 @@ export interface Found {
 }
 
 /**
- * Сценарий ↔ новые тесты: каждый, чьё название it или цепочка «describe › it» совпадает с ним (без регистра, внешних
- * кавычек и знака в конце), — один сценарий проверяют и на сервере, и в интерфейсе; теста нет — describe новой
- * проверки харнесса, его название или цепочка. Тесты, которые эта проверка породила (`generated` — только из отчёта),
- * — тесты её сценария, а не сверх сценариев.
+ * Scenario ↔ new tests: each one whose it name or "describe › it" chain matches it (case-insensitive, without outer
+ * quotes and a trailing mark) — one scenario is checked both on the server and in the UI; no test — the describe of a
+ * new harness check, its name or chain. Tests that check generated (`generated` — only from the report) are tests of
+ * its scenario, not beyond the scenarios.
  */
 export function matchScenarios(
   scenarios: string[],
@@ -791,9 +822,10 @@ const harnessEntry = (c: HarnessDescribe) =>
   `\`${c.folder}\` · ${c.describes.map(L.mdText).join(" › ")} — ${N.spec.diff.harnessCheck}: ${c.checks.map(L.mdText).join(", ")}`;
 
 /**
- * Сверка сценариев без повторов: сценарий, ставший тестом, назван так же, как тест, — пока тесты в списках выше
- * (`listed`), он только в счёте, а тест сверх сценариев — пометкой там же; в сводке по папкам списков нет — тогда
- * строкой теста. Сценарий проверки харнесса — строкой проверки, несделанный — своим текстом.
+ * Scenario matching without repeats: a scenario that became a test is named the same as the test — while the tests are
+ * in the lists above (`listed`), it's only in the count, and a test beyond the scenarios is a mark there too; the
+ * folder summary has no lists — then it's the test's line. A harness check scenario is the check's line, an undone
+ * one — its own text.
  */
 function scenarioLines(scenarios: string[] | null, match: { found: Found[]; extra: Test[] }, listed: boolean, limit = Infinity): string[] {
   if (scenarios === null) return [`### ${N.spec.diff.scenarios}`, "", locale.fill(N.spec.diff.noScenarios, { section: N.sections.scenarios }), ""];
@@ -820,7 +852,10 @@ function scenarioLines(scenarios: string[] | null, match: { found: Found[]; extr
 const USAGE =
   "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -] [--report report … --spec-branch origin/spec] [--limit 100 | --full]";
 
-/** Тесты без повторов: первым — из исходников, из отчёта — только те, которых там нет (порождённые харнессом, в `harness`). */
+/**
+ * Tests without repeats: from the sources first, from the report — only those not there (generated by the harness, in
+ * `harness`).
+ */
 function union(a: Test[], b: Test[], harness: Set<Test>): Test[] {
   const keys = new Set(a.map((t) => t.path + "\0" + L.keyOf(t)));
   const extra = b.filter((t) => !keys.has(t.path + "\0" + L.keyOf(t)));
@@ -829,8 +864,8 @@ function union(a: Test[], b: Test[], harness: Set<Test>): Test[] {
 }
 
 /**
- * Тесты базы из ветки spec: `tests.json` коммита, чей `Source:` (SHA исходника, его пишет spec-publish) — merge-base
- * или ближайший предок; ветки или файла нет — null.
+ * Base tests from the spec branch: `tests.json` of the commit whose `Source:` (the source SHA, spec-publish writes it)
+ * is the merge-base or the nearest ancestor; no branch or file — null.
  */
 function specTestsAt(branch: string, base: string, top: string): { tests: Test[]; source: string } | null {
   let log: string;
@@ -888,7 +923,7 @@ export async function main(argv: string[]): Promise<number> {
     console.error(`spec-diff: --limit is a whole number of tests greater than zero, not «${v.limit}»\n${USAGE}`);
     return 2;
   }
-  // язык проекта корня — до разбора: строки решений (модель, проверки харнесса) базы и головы сравниваются на нём
+  // the root's project language, before parsing: base and head decision lines (model, harness checks) are compared in it
   LANG = locale.projectLanguage(path.resolve(v.root ?? process.cwd()));
   N = locale.names(LANG);
 
@@ -896,9 +931,9 @@ export async function main(argv: string[]): Promise<number> {
   let decisions: string[];
   let decisionData: { base: Decisions; head: Decisions };
   let harnessNote = "";
-  const harness = new Set<Test>(); // тесты только из отчёта — порождены харнессом, в исходниках их нет
+  const harness = new Set<Test>(); // tests only from the report — generated by the harness, not in the sources
   let checks: HarnessDescribe[];
-  let sourced: Check[]; // вызовы харнесса в исходниках головы: их describe — не «только по отчёту»
+  let sourced: Check[]; // harness calls in the head's sources: their describes aren't "report only"
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
@@ -908,20 +943,22 @@ export async function main(argv: string[]): Promise<number> {
     const headFiles = v.worktree ? testsInWorktree(root) : testsAtRev(v.head, top, prefix);
     const headScan = parseFiles(headFiles, v.worktree ? "working tree" : v.head);
     let headTests = headScan.tests;
-    // сценарий стандарта — describe проверки харнесса: по исходникам, без отчёта и ветки spec
+    // a standard scenario is a harness check's describe: from the sources, without the report and the spec branch
     checks = freshChecks(baseScan.checks, headScan.checks);
     sourced = headScan.checks;
-    // тесты харнесса (реестры, примеры) в исходниках не названы: голова — по отчёту раннера, база — tests.json ветки spec
+    // harness tests (registries, examples) aren't named in the sources: the head — from the runner report, the base —
+    // tests.json of the spec branch
     if (v.report?.length) {
       const branch = v["spec-branch"]!;
       const specBase = specTestsAt(branch, base, top);
       if (specBase) {
-        // как исходники (wanted): tests/lib не спека — его тесты (setup-проекты e2e) в tests.json не попадают
+        // like the sources (wanted): tests/lib isn't spec — its tests (e2e setup projects) don't get into tests.json
         const inTree = (t: Test) => t.path.startsWith(L.TESTS + "/") && L.classify(t.path)[0] !== "lib";
         const reported = L.mergeTests(v.report.flatMap((r) => L.loadReport(r, root))).filter(inTree);
         baseTests = union(baseTests, specBase.tests, harness);
         headTests = union(headTests, reported, harness);
-        // пропущенная публикация (spec-run: дерево main не проверено целиком) — tests.json старше базы диффа: о разрыве сказать
+        // a skipped publish (spec-run: main's tree wasn't checked as a whole) — tests.json is older than the diff base:
+        // report the gap
         const baseSha = gitText(["rev-parse", `${base}^{commit}`], top).trim();
         const gap = specBase.source === baseSha ? "" : locale.fill(N.spec.diff.harnessGap, { sha: baseSha.slice(0, 12) });
         harnessNote = locale.fill(N.spec.diff.harnessNote, { branch, source: specBase.source.slice(0, 12), gap });
@@ -933,7 +970,7 @@ export async function main(argv: string[]): Promise<number> {
     const { pool, count, gone } = outOfTreePool(base, v.head, top, root, prefix, changedOut, v.worktree);
     ({ removed, changed, added, moved } = diff(baseTests, headTests, pool));
     outFiles = unmovedFiles(changedOut, moved, count, gone);
-    // отключения линта — только в изменённых файлах кода: снятое или добавленное исключение всегда в диффе PR
+    // lint disables — only in changed code files: a removed or added exception is always in the PR diff
     const changedAll = (
       v.worktree
         ? gitText(["diff", "--name-only", "-z", base, "--", "."], top) + gitText(["ls-files", "--others", "--exclude-standard", "-z", "--", "."], top)
@@ -955,7 +992,7 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
 
-  // сценарии — до списков: тест сверх сценариев помечается прямо в них
+  // scenarios before the lists: a test beyond the scenarios is marked right in them
   let scenarios: string[] | null = null;
   if (v.scenarios !== undefined) {
     try {

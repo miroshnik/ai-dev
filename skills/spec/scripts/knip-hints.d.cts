@@ -1,6 +1,6 @@
-// Типы репортера `knip-hints.cjs`: без них TypeScript проекта с `checkJs` проверял бы сам файл.
+// Types of the `knip-hints.cjs` reporter: without them a project's TypeScript with `checkJs` would check the file.
 
-/** Подсказка конфигурации, как её собрал knip. */
+/** A configuration hint as knip collected it. */
 interface Hint {
   type: string;
   identifier: string | RegExp;
@@ -8,10 +8,10 @@ interface Hint {
   filePath?: string;
 }
 
-/** Репортер knip: подсказки конфигурации строкой JSON в stdout. */
+/** knip reporter: configuration hints as a JSON line on stdout. */
 declare function report(options: { cwd: string; configurationHints: Hint[]; isDisableConfigHints?: boolean }): void;
 declare namespace report {
-  /** Путь файла репортера — для `knip --reporter`. */
+  /** Path of the reporter file — for `knip --reporter`. */
   const file: string;
 }
 export = report;
