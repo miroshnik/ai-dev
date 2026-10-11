@@ -16,8 +16,10 @@
 
 Сообщения установщика и скриптов скиллов — справка, подсказки, ошибки, вывод `check` и хука — часть флоу, а не
 артефакт проекта: их читает агент любого проекта, поэтому они по-английски при любом языке проекта. Названия на языке
-проекта скрипты берут из словаря, значит кириллицы в коде скриптов вне комментариев нет вовсе — стандарт проверяет
-каждый файл кода скиллов и установщика, а справку — запуском `--help`. Доки флоу цитируют вывод в «ёлочках»: по
+проекта скрипты берут из словаря, а комментарии в коде флоу — по-английски, как его документы: их читает тот, кто правит
+скилл, а язык самого ai-dev — `ru`, и без проверки новый код снова получал бы русские комментарии. Значит, кириллицы в
+коде скриптов нет вовсе — стандарт проверяет каждый файл кода скиллов и установщика целиком, с комментариями (словари
+`skills/github/locales` — не код), а справку — запуском `--help`. Доки флоу цитируют вывод в «ёлочках»: по
 цитате агент узнаёт исход и ищет строку. Цитата, которой скрипт не печатает, — тихий дрейф, поэтому каждая сверяется с
 кодом: литеральные куски между подстановками (`<имя>`, `…`, `N`, `#`) есть в коде скриптов или в `en.json`.
 
@@ -61,41 +63,42 @@
 
 </details>
 
-## Сообщения установщика и скриптов скиллов — по-английски
+## Код установщика и скриптов скиллов — сообщения и комментарии — по-английски
 
 Сообщения установщика и скриптов скиллов — справка, подсказки, ошибки, вывод `check` и хука — часть флоу, а не
 артефакт проекта: они по-английски при любом языке проекта. Названия на языке проекта скрипты берут из словаря
-(`skills/github/locales`), поэтому кириллицы в коде скриптов вне комментариев нет вовсе.
+(`skills/github/locales`), а комментарии — по-английски, как документы флоу, поэтому кириллицы в коде скриптов нет
+вовсе: файл сверяется целиком, с комментариями.
 
 <details><summary>✅ 28 тестов</summary>
 
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» не пуст
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.mjs, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts
-- ✅ нарушитель не проходит: подсказка по-русски
-- ✅ в bin/ai-dev.mjs вне комментариев нет кириллицы
-- ✅ в skills/dashboard/scripts/dashboard.ts вне комментариев нет кириллицы
-- ✅ в skills/dashboard/scripts/sessions.ts вне комментариев нет кириллицы
-- ✅ в skills/est/scripts/est.ts вне комментариев нет кириллицы
-- ✅ в skills/github/scripts/github.ts вне комментариев нет кириллицы
-- ✅ в skills/github/scripts/locale.cjs вне комментариев нет кириллицы
-- ✅ в skills/github/scripts/locale.d.cts вне комментариев нет кириллицы
-- ✅ в skills/slot/scripts/slot.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/architecture.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/c4.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/eslint-config.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/harness.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/knip-hints.cjs вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/knip-hints.d.cts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-break.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-claims.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-diff.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-doc.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-exceptions.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-publish.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/spec-run.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/speclib.ts вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/vendor/babel-parser.cjs вне комментариев нет кириллицы
-- ✅ в skills/spec/scripts/vendor/babel-parser.d.cts вне комментариев нет кириллицы
+- ✅ нарушитель не проходит: комментарий по-русски
+- ✅ в bin/ai-dev.mjs нет кириллицы
+- ✅ в skills/dashboard/scripts/dashboard.ts нет кириллицы
+- ✅ в skills/dashboard/scripts/sessions.ts нет кириллицы
+- ✅ в skills/est/scripts/est.ts нет кириллицы
+- ✅ в skills/github/scripts/github.ts нет кириллицы
+- ✅ в skills/github/scripts/locale.cjs нет кириллицы
+- ✅ в skills/github/scripts/locale.d.cts нет кириллицы
+- ✅ в skills/slot/scripts/slot.ts нет кириллицы
+- ✅ в skills/spec/scripts/architecture.ts нет кириллицы
+- ✅ в skills/spec/scripts/c4.ts нет кириллицы
+- ✅ в skills/spec/scripts/eslint-config.ts нет кириллицы
+- ✅ в skills/spec/scripts/harness.ts нет кириллицы
+- ✅ в skills/spec/scripts/knip-hints.cjs нет кириллицы
+- ✅ в skills/spec/scripts/knip-hints.d.cts нет кириллицы
+- ✅ в skills/spec/scripts/spec-break.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-claims.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-diff.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-doc.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-exceptions.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-publish.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-run.ts нет кириллицы
+- ✅ в skills/spec/scripts/speclib.ts нет кириллицы
+- ✅ в skills/spec/scripts/vendor/babel-parser.cjs нет кириллицы
+- ✅ в skills/spec/scripts/vendor/babel-parser.d.cts нет кириллицы
 - ✅ справка установщика и скриптов скиллов — на английском
 
 </details>
