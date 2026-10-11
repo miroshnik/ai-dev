@@ -111,7 +111,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 164 теста</summary>
+<details><summary>✅ 165 тестов</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -193,6 +193,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «architecture model» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «beyond scenarios» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «can be closed» из skills/dashboard/SKILL.md печатает или пишет скрипт
+- ✅ цитату «can't listen on 127.0.0.1 …» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «client \<pkg> of storage \<s> is in container \<c>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «closed in 90 days without an actual: N» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «cloud, state not visible» из skills/dashboard/SKILL.md печатает или пишет скрипт

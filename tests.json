@@ -382,6 +382,13 @@
   "describes": [
    "Команда dashboard сервит страницу сама и открывает её в браузере"
   ],
+  "name": "--port N, когда и свободный порт не взять, — тот же запрет, а не «port N is busy»"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
   "name": "«Sessions» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама"
  },
  {
@@ -411,6 +418,13 @@
    "Команда dashboard сервит страницу сама и открывает её в браузере"
   ],
   "name": "запрос с чужим Host — отказ: сайт, навёдший своё имя на 127.0.0.1, страницу не прочтёт"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "локальный порт не открыть (песочница агента) — ошибка, что слушать порт на 127.0.0.1 здесь запрещено, с подсказкой запустить вне песочницы, а не «port 0 is busy»"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
@@ -9599,6 +9613,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «can be closed» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «can't listen on 127.0.0.1 …» из skills/dashboard/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
