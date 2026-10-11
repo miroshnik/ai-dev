@@ -9262,7 +9262,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «Harness checks» из skills/spec/reference.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -10753,6 +10753,498 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "заголовок — название, за ним конец или знак препинания: «Task» не находит `## Task tracking`"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "пример формы в `…` документа — не ссылка; имя файла в `…` перед названием — ссылка"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "раздел того же документа — `section \"…\"` в документе; в коде и в «…» — не ссылка"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "раздел — и жирное начало пункта списка; ссылка на скилл по имени ведёт в его SKILL.md"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "ссылка на SKILL.md без имени скилла ищет раздел в SKILL.md того же скилла"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "ссылка на переименованный раздел роняет проверку"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "ссылка скрипта на раздел AGENTS.md по названию ведёт на существующий заголовок"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "строки путей в коде и заголовок в блоке кода — не ссылка и не раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок",
+   "примеры"
+  ],
+  "name": "формы ссылки: файл и раздел через запятую, «section» в скобках, раздел перед файлом; перенос строки комментария — не помеха"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "AGENTS.md: AGENTS.md, «Project knowledge and handoff» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "AGENTS.md: README.md, «Installation» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "AGENTS.md: README.md, «Repository layout» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "AGENTS.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "bin/ai-dev.mjs: AGENTS.md, «First step of a session» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "bin/ai-dev.mjs: AGENTS.md, «Language» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "bin/ai-dev.mjs: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "claude/CLAUDE.md: AGENTS.md, «First step of a session» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/ci-concurrency.md: AGENTS.md, «CI: parallel tasks» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/ci-concurrency.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/cloud-sessions.md: README.md, «Installation» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/cloud-sessions.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/judgment.md: AGENTS.md, «Production and debugging» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/judgment.md: AGENTS.md, «Tests and code» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: AGENTS.md, «Subagents and worktrees» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: docs/parallel-checkouts.md, «Shared `.git/config`» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: docs/testing.md, «Framework: three questions» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/pr-checks.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/pr-checks.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/testing.md: AGENTS.md, «Specification — decisions» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/testing.md: AGENTS.md, «Tests and code» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/testing.md: AGENTS.md, «This file and skills» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/testing.md: docs/testing.md, «Framework: three questions» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/testing.md: docs/testing.md, «UI in the agent's browser» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/dashboard/scripts/sessions.ts: AGENTS.md, «Epic refresh on task close» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/est/SKILL.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/est/SKILL.md: skills/est/SKILL.md, «Period summary» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/est/SKILL.md: skills/est/SKILL.md, «The estimate of a new task» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/est/scripts/est.ts: skills/est/SKILL.md, «Cloud session» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: AGENTS.md, «Language» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: AGENTS.md, «Task tracking» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: skills/github/reference.md, «Manual commands» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: AGENTS.md, «Estimate and actual — the `est` skill» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: AGENTS.md, «Task tracking» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: skills/github/SKILL.md, «What is checked» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: skills/github/reference.md, «Manual commands» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: skills/github/reference.md, «Milestones — sets of tasks» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/reference.md: skills/github/reference.md, «Project (GitHub Projects)» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/scripts/github.ts: AGENTS.md, «Task tracking» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/scripts/github.ts: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/SKILL.md: skills/spec/SKILL.md, «Checks» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/SKILL.md: skills/spec/SKILL.md, «Reports for spec-doc» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/SKILL.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/SKILL.md: skills/spec/SKILL.md, «spec-doc» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/SKILL.md: skills/spec/SKILL.md, «spec-exceptions» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/SKILL.md: skills/spec/canon.md, «A decision is the unit of the spec, a folder is its home» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/canon.md: AGENTS.md, «Epic refresh on task close» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/canon.md: AGENTS.md, «Task tracking» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/canon.md: AGENTS.md, «Tests and code» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/checks.md: skills/spec/SKILL.md, «Checks» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/ci.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/migration.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "tests/standards/task-branch/task-branch.md: AGENTS.md, «Session and branch» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "нарушитель не проходит: ссылка на переименованный раздел AGENTS.md"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.mjs → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст"
  },
  {
   "path": "tests/standards/spawn-no-jit/spawn-no-jit.test.ts",

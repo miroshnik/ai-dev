@@ -152,7 +152,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Estimate» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Exceptions» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Folder» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Harness checks» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Item closed» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Moved into the tree» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Names that aren't statements (exceptions)» из skills/spec/SKILL.md печатает или пишет скрипт
