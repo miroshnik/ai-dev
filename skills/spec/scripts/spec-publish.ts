@@ -89,7 +89,7 @@ function reason(e: unknown): string {
 
 function count(name: string, value: string, min: number): number {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < min) throw new Fail(`--${name}: ожидается целое ≥ ${min}, получено «${value}»`, 2);
+  if (!Number.isInteger(n) || n < min) throw new Fail(`--${name}: expected an integer ≥ ${min}, got «${value}»`, 2);
   return n;
 }
 
@@ -129,7 +129,7 @@ export async function main(argv: string[]): Promise<number> {
     const root = v.root ? path.resolve(v.root) : git(process.cwd(), ["rev-parse", "--show-toplevel"]);
     const dir = path.resolve(root, v.dir);
     if (!existsSync(dir) || !statSync(dir).isDirectory()) {
-      throw new Fail(`нет каталога ${v.dir} — сначала собрать документацию: spec-doc <отчёт> --out ${v.dir}`, 2);
+      throw new Fail(`no directory ${v.dir} — build the documentation first: spec-doc <report> --out ${v.dir}`, 2);
     }
     const attempts = count("attempts", v.attempts, 1);
     const interval = count("interval", v.interval, 0);
@@ -137,10 +137,10 @@ export async function main(argv: string[]): Promise<number> {
 
     if (v.check) {
       const head = remoteHead(root, v.remote, v.branch);
-      if (!head) throw new Fail(`ветки ${v.branch} на ${v.remote} нет — документация не опубликована`, 1);
+      if (!head) throw new Fail(`no branch ${v.branch} on ${v.remote} — the documentation isn't published`, 1);
       const published = git(root, ["rev-parse", `${head}^{tree}`]);
-      if (published !== tree) throw new Fail(`${v.remote}/${v.branch} отличается: ${diffPaths(root, published, tree).join(", ")}`, 1);
-      console.error(`spec-publish: ${v.remote}/${v.branch} совпадает с ${v.dir}`);
+      if (published !== tree) throw new Fail(`${v.remote}/${v.branch} differs: ${diffPaths(root, published, tree).join(", ")}`, 1);
+      console.error(`spec-publish: ${v.remote}/${v.branch} matches ${v.dir}`);
       return 0;
     }
 
@@ -158,12 +158,12 @@ export async function main(argv: string[]): Promise<number> {
       // from a descendant. Comparing needs history: in a shallow clone the published source is unknown — it is published
       const was = head ? sourceOf(git(root, ["log", "-1", "--format=%B", head])) : undefined;
       if (was && sha && sha !== was && tryGit(root, ["merge-base", "--is-ancestor", sha, was]) !== null) {
-        console.error(`spec-publish: пропуск — ${v.remote}/${v.branch} уже новее: опубликовано из ${was.slice(0, 12)}`);
+        console.error(`spec-publish: skipped — ${v.remote}/${v.branch} already newer: published from ${was.slice(0, 12)}`);
         return 0;
       }
       same = published === tree;
       if (same && (sha ?? source) === was) {
-        console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} уже совпадает с ${v.dir}`);
+        console.error(`spec-publish: no changes — ${v.remote}/${v.branch} already matches ${v.dir}`);
         return 0;
       }
       // the same tree from a new source is a commit too: `Source:` names the last checked main, and spec-diff sees a gap
@@ -173,17 +173,17 @@ export async function main(argv: string[]): Promise<number> {
         git(root, ["push", "-q", v.remote, `${commit}:refs/heads/${v.branch}`]);
         break;
       } catch (e) {
-        const rejected = `пуш в ${v.remote}/${v.branch} отклонён (попытка ${attempt} из ${attempts}): ${reason(e)}`;
+        const rejected = `push to ${v.remote}/${v.branch} rejected (attempt ${attempt} of ${attempts}): ${reason(e)}`;
         if (attempt >= attempts) throw new Fail(rejected, 1);
-        console.error(`spec-publish: ${rejected} — перечитываю ветку, повтор через ${interval * attempt} с`);
+        console.error(`spec-publish: ${rejected} — re-reading the branch, retrying in ${interval * attempt} s`);
         await new Promise((resolve) => setTimeout(resolve, interval * attempt * 1000));
       }
     }
     // check what reached the reader: the branch on the remote, not our own commit
     const after = remoteHead(root, v.remote, v.branch);
-    if (!after || git(root, ["rev-parse", `${after}^{tree}`]) !== tree) throw new Fail(`после пуша ${v.remote}/${v.branch} не совпадает с ${v.dir}`, 1);
-    if (same) console.error(`spec-publish: без изменений — ${v.remote}/${v.branch} подтверждена для ${source.slice(0, 12)}`);
-    else console.error(`spec-publish: опубликовано ${v.dir} → ${v.remote}/${v.branch} ${commit.slice(0, 12)} (из ${source.slice(0, 12)})`);
+    if (!after || git(root, ["rev-parse", `${after}^{tree}`]) !== tree) throw new Fail(`after the push ${v.remote}/${v.branch} doesn't match ${v.dir}`, 1);
+    if (same) console.error(`spec-publish: no changes — ${v.remote}/${v.branch} confirmed for ${source.slice(0, 12)}`);
+    else console.error(`spec-publish: published ${v.dir} → ${v.remote}/${v.branch} ${commit.slice(0, 12)} (from ${source.slice(0, 12)})`);
     return 0;
   } catch (e) {
     if (e instanceof Fail) {

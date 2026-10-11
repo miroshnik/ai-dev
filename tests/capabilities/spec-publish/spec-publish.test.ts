@@ -47,7 +47,7 @@ describe("Документация публикуется в ветку spec, а
     expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${main}`);
     expect(git(work, "rev-parse", "HEAD")).toBe(main);
     expect(git(work, "status", "--porcelain")).toBe("");
-    expect(r.stderr).toContain("опубликовано");
+    expect(r.stderr).toContain("published");
   });
 
   it("повтор из того же коммита — без нового коммита", () => {
@@ -55,7 +55,7 @@ describe("Документация публикуется в ветку spec, а
     expect(publish().code).toBe(0);
     const again = publish();
     expect(again.code).toBe(0);
-    expect(again.stderr).toBe("spec-publish: без изменений — origin/spec уже совпадает с docs/spec\n");
+    expect(again.stderr).toBe("spec-publish: no changes — origin/spec already matches docs/spec\n");
     git(work, "fetch", "-q", "origin", "spec");
     expect(remoteLog().split("\n")).toHaveLength(1);
   });
@@ -80,7 +80,7 @@ describe("Документация публикуется в ветку spec, а
     const next = repo.commit({ "src.ts": "x\n" }, "next");
     const r = publish();
     expect(r.code).toBe(0);
-    expect(r.stderr).toBe(`spec-publish: без изменений — origin/spec подтверждена для ${next.slice(0, 12)}\n`);
+    expect(r.stderr).toBe(`spec-publish: no changes — origin/spec confirmed for ${next.slice(0, 12)}\n`);
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "rev-parse", "origin/spec^")).toBe(first);
     expect(git(work, "rev-parse", "origin/spec^{tree}")).toBe(git(work, "rev-parse", `${first}^{tree}`));
@@ -97,7 +97,7 @@ describe("Документация публикуется в ветку spec, а
   });
 
   // публикации на мерж PR приходят не по порядку мержей: job раннего PR может дождаться своего прогона позже
-  it("в ветке spec публикация из более нового коммита — старая поверх не публикуется: код 0, «уже новее», ветка не меняется", () => {
+  it("в ветке spec публикация из более нового коммита — старая поверх не публикуется: код 0, «already newer», ветка не меняется", () => {
     const old = git(work, "rev-parse", "HEAD");
     const fresh = repo.commit({ "src.ts": "x\n" }, "next");
     docs({ "README.md": "# v2\n" });
@@ -107,14 +107,14 @@ describe("Документация публикуется в ветку spec, а
     docs({ "README.md": "# v1\n" });
     const r = publish("--source", old);
     expect(r.code).toBe(0);
-    expect(r.stderr).toBe(`spec-publish: пропуск — origin/spec уже новее: опубликовано из ${fresh.slice(0, 12)}\n`);
+    expect(r.stderr).toBe(`spec-publish: skipped — origin/spec already newer: published from ${fresh.slice(0, 12)}\n`);
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "rev-parse", "origin/spec")).toBe(published);
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
   });
 
   // сторож от перекоррекции: подтверждение того же содержимого не уводит `Source:` назад
-  it("то же содержимое из коммита старше опубликованного — «уже новее», Source: назад не уходит", () => {
+  it("то же содержимое из коммита старше опубликованного — «already newer», Source: назад не уходит", () => {
     const old = git(work, "rev-parse", "HEAD");
     const fresh = repo.commit({ "src.ts": "x\n" }, "next");
     docs({ "README.md": "# v1\n" });
@@ -123,7 +123,7 @@ describe("Документация публикуется в ветку spec, а
     const published = git(work, "rev-parse", "origin/spec");
     const r = publish("--source", old);
     expect(r.code).toBe(0);
-    expect(r.stderr).toBe(`spec-publish: пропуск — origin/spec уже новее: опубликовано из ${fresh.slice(0, 12)}\n`);
+    expect(r.stderr).toBe(`spec-publish: skipped — origin/spec already newer: published from ${fresh.slice(0, 12)}\n`);
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "rev-parse", "origin/spec")).toBe(published);
   });
@@ -140,7 +140,7 @@ describe("Документация публикуется в ветку spec, а
     writeTree(shallow, { "docs/spec/README.md": "# v2\n" });
     const r = runScript("spec-publish", [], shallow);
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("опубликовано");
+    expect(r.stderr).toContain("published");
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
     expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${next}`);
@@ -156,7 +156,7 @@ describe("Документация публикуется в ветку spec, а
     writeTree(shallow, { "docs/spec/README.md": "# v1\n" });
     const r = runScript("spec-publish", [], shallow);
     expect(r.code).toBe(0);
-    expect(r.stderr).toBe(`spec-publish: без изменений — origin/spec подтверждена для ${next.slice(0, 12)}\n`);
+    expect(r.stderr).toBe(`spec-publish: no changes — origin/spec confirmed for ${next.slice(0, 12)}\n`);
     git(work, "fetch", "-q", "origin", "spec");
     expect(remoteLog().split("\n")).toHaveLength(2);
     expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${next}`);
@@ -218,22 +218,22 @@ describe("Отклонённый пуш — повтор поверх новой
     docs({ "README.md": "# v2\n" });
     const r = publishAmid([race(other)], "--source", second);
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("spec-publish: пуш в origin/spec отклонён (попытка 1 из 3): ");
+    expect(r.stderr).toContain("spec-publish: push to origin/spec rejected (attempt 1 of 3): ");
     expect(r.stderr).toContain("[rejected]");
-    expect(r.stderr).toContain("опубликовано docs/spec → origin/spec");
+    expect(r.stderr).toContain("published docs/spec → origin/spec");
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
     expect(git(work, "rev-parse", "origin/spec^")).toBe(other);
     expect(git(work, "log", "-1", "--format=%B", "origin/spec")).toContain(`Source: ${second}`);
   });
 
-  it("после перечитывания ветка уже собрана из потомка — пропуск «уже новее», код 0, ветка не меняется", () => {
+  it("после перечитывания ветка уже собрана из потомка — пропуск «already newer», код 0, ветка не меняется", () => {
     const other = parallel(second, { "README.md": "# v2\n" });
     docs({ "README.md": "# v1\n" });
     const r = publishAmid([race(other)], "--source", first);
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("spec-publish: пуш в origin/spec отклонён (попытка 1 из 3): ");
-    expect(r.stderr).toEndWith(`spec-publish: пропуск — origin/spec уже новее: опубликовано из ${second.slice(0, 12)}\n`);
+    expect(r.stderr).toContain("spec-publish: push to origin/spec rejected (attempt 1 of 3): ");
+    expect(r.stderr).toEndWith(`spec-publish: skipped — origin/spec already newer: published from ${second.slice(0, 12)}\n`);
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "rev-parse", "origin/spec")).toBe(other);
   });
@@ -243,7 +243,7 @@ describe("Отклонённый пуш — повтор поверх новой
     const r = publishAmid([OUTAGE]);
     expect(r.code).toBe(0);
     expect(r.stderr).toContain(
-      "spec-publish: пуш в origin/spec отклонён (попытка 1 из 3): remote: Internal Server Error; fatal: the remote end hung up unexpectedly — перечитываю ветку, повтор через 0 с\n",
+      "spec-publish: push to origin/spec rejected (attempt 1 of 3): remote: Internal Server Error; fatal: the remote end hung up unexpectedly — re-reading the branch, retrying in 0 s\n",
     );
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "show", "origin/spec:README.md")).toBe("# v1");
@@ -257,7 +257,7 @@ describe("Отклонённый пуш — повтор поверх новой
     const r = publishAmid([OUTAGE, OUTAGE], "--attempts", "2");
     expect(r.code).toBe(1);
     expect(r.stderr).toEndWith(
-      "spec-publish: пуш в origin/spec отклонён (попытка 2 из 2): remote: Internal Server Error; fatal: the remote end hung up unexpectedly\n",
+      "spec-publish: push to origin/spec rejected (attempt 2 of 2): remote: Internal Server Error; fatal: the remote end hung up unexpectedly\n",
     );
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "rev-parse", "origin/spec")).toBe(published);
@@ -270,13 +270,13 @@ describe("--check сверяет опубликованное с собранн�
     docs({ "README.md": "# v1\n" });
     const none = publish("--check");
     expect(none.code).toBe(1);
-    expect(none.stderr).toContain("ветки spec на origin нет");
+    expect(none.stderr).toContain("no branch spec on origin");
     publish();
     expect(publish("--check").code).toBe(0);
     docs({ "README.md": "# v2\n" });
     const stale = publish("--check");
     expect(stale.code).toBe(1);
-    expect(stale.stderr).toContain("отличается: README.md");
+    expect(stale.stderr).toContain("differs: README.md");
   });
 
   it("нет каталога docs/spec — код 2 и подсказка собрать его spec-doc", () => {
@@ -343,7 +343,7 @@ function findRun(github: { artifacts: Artifact[]; runs?: Record<number, Workflow
  */
 describe("Без CI на main публикуется только дерево, которое целиком проверил зелёный прогон", () => {
   const ARTIFACTS = `api repos/{owner}/{repo}/actions/artifacts?name=docs-spec-${TREE}`;
-  const SKIPPED = `spec-run: дерево main ${TREE.slice(0, 12)} не проверено целиком — публикация пропущена: `;
+  const SKIPPED = `spec-run: main tree ${TREE.slice(0, 12)} not fully checked — publishing skipped: `;
 
   it("артефакт дерева мержа выложил зелёный прогон этого репозитория — id прогона в stdout", () => {
     const r = findRun({ artifacts: [artifact(41)], runs: { 41: [done(41)] } }, "--timeout", "0");
@@ -352,11 +352,11 @@ describe("Без CI на main публикуется только дерево, 
     expect(r.stderr).toContain("https://github.test/runs/41");
   });
 
-  it("артефакта с деревом мержа нет или он истёк — код 0, stdout пуст, «дерево main не проверено целиком — публикация пропущена»", () => {
+  it("артефакта с деревом мержа нет или он истёк — код 0, stdout пуст, «main tree … not fully checked — publishing skipped»", () => {
     for (const artifacts of [[], [artifact(40, { tree: OTHER_TREE })], [artifact(41, { expired: true })]]) {
       const r = findRun({ artifacts, runs: { 40: [done(40)], 41: [done(41)] } }, "--timeout", "60");
       expect([r.code, r.stdout]).toEqual([0, ""]);
-      expect(r.stderr).toBe(`${SKIPPED}артефакта docs-spec-${TREE} нет\n`);
+      expect(r.stderr).toBe(`${SKIPPED}no artifact docs-spec-${TREE}\n`);
       expect(r.calls).toEqual([ARTIFACTS]);
     }
   });
@@ -365,7 +365,7 @@ describe("Без CI на main публикуется только дерево, 
   it("артефакт выложил прогон форка — не считается, публикация пропущена", () => {
     const r = findRun({ artifacts: [artifact(41, { from: FORK })], runs: { 41: [done(41)] } }, "--timeout", "60");
     expect([r.code, r.stdout]).toEqual([0, ""]);
-    expect(r.stderr).toBe(`${SKIPPED}артефакта docs-spec-${TREE} нет\n`);
+    expect(r.stderr).toBe(`${SKIPPED}no artifact docs-spec-${TREE}\n`);
     expect(r.calls).toEqual([ARTIFACTS]);
   });
 
@@ -387,12 +387,12 @@ describe("Без CI на main публикуется только дерево, 
     const r = findRun({ artifacts: [artifact(41)], runs: { 41: [workflowRun(41, "queued"), workflowRun(41, "in_progress"), done(41)] } }, "--timeout", "60");
     expect([r.code, r.stdout]).toEqual([0, "41\n"]);
     expect(r.calls.filter((c) => c.endsWith("/runs/41"))).toHaveLength(3);
-    expect(r.stderr).toContain(`дерево main ${TREE.slice(0, 12)}: прогон 41 in_progress — ждём`);
+    expect(r.stderr).toContain(`main tree ${TREE.slice(0, 12)}: run 41 in_progress — waiting`);
   });
 
   it("прогон с артефактом не завершился к потолку ожидания — ошибка, код 1", () => {
     const r = findRun({ artifacts: [artifact(41)], runs: { 41: [workflowRun(41, "in_progress")] } }, "--timeout", "0");
     expect([r.code, r.stdout]).toEqual([1, ""]);
-    expect(r.stderr).toContain(`дерево main ${TREE.slice(0, 12)}: прогон 41 не завершился за 0 с`);
+    expect(r.stderr).toContain(`main tree ${TREE.slice(0, 12)}: run 41 didn't finish in 0 s`);
   });
 });

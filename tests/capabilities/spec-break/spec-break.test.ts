@@ -66,7 +66,7 @@ describe("Поломка всегда откатывается: файл воз�
     expect(read(SUM)).toContain("a - b");
     const r = breakRun("--restore");
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain(`вернул ${SUM}`);
+    expect(r.stdout).toContain(`restored ${SUM}`);
     expect(read(SUM)).toBe(ORIGINAL);
     expect(existsSync(journal())).toBe(false);
   });
@@ -76,7 +76,7 @@ describe("Поломка всегда откатывается: файл воз�
     writeFileSync(path.join(dir, SUM), "// правка руками\n");
     const r = breakRun("--restore");
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain(`${SUM} изменён после поломки`);
+    expect(r.stderr).toContain(`${SUM} changed after the breakage`);
     expect(read(SUM)).toBe("// правка руками\n");
   });
 });
@@ -89,7 +89,7 @@ describe("Отчёт — умеет ли проверка упасть от ка
   it("тест, который от неё не падает, — ❌ с названием поломки", () => {
     const r = breakRun("--file", OTHER, "--find", "= 1", "--replace", "= 2", "--name", "b стал двойкой", "--", ...CHECK);
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain(`❌ не упал: b стал двойкой (${OTHER})`);
+    expect(r.stdout).toContain(`❌ didn't fail: b стал двойкой (${OTHER})`);
     expect(read(OTHER)).toBe("export const b = 1;\n");
   });
 
@@ -104,10 +104,10 @@ describe("Отчёт — умеет ли проверка упасть от ка
     const count = `n=0; grep -q "a + b;" ${SUM} || n=$((n+1)); grep -q "= 1" ${OTHER} || n=$((n+1)); echo $n >> runs.log; grep -q "a + b;" ${SUM}`;
     const r = breakRun("--plan", "plan.json", "--", "sh", "-c", count);
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain(`✅ упал: вычитание вместо сложения (${SUM})`);
-    expect(r.stdout).toContain(`✅ упал: сложение с единицей (${SUM})`);
-    expect(r.stdout).toContain(`❌ не упал: b стал двойкой (${OTHER})`);
-    expect(r.stdout).toContain("итог: 2 из 3 поломок уронили проверку");
+    expect(r.stdout).toContain(`✅ failed: вычитание вместо сложения (${SUM})`);
+    expect(r.stdout).toContain(`✅ failed: сложение с единицей (${SUM})`);
+    expect(r.stdout).toContain(`❌ didn't fail: b стал двойкой (${OTHER})`);
+    expect(r.stdout).toContain("total: 2 of 3 breakages made the check fail");
     expect(read("runs.log")).toBe("0\n1\n1\n1\n");
     expect([read(SUM), read(OTHER)]).toEqual([ORIGINAL, "export const b = 1;\n"]);
   });
@@ -115,7 +115,7 @@ describe("Отчёт — умеет ли проверка упасть от ка
   it("прогон красный и без поломки — ошибка, поломки не применяются", () => {
     const r = breakRun("--file", SUM, "--find", "a + b", "--replace", "a - b", "--", "sh", "-c", `echo run >> runs.log; exit 1`);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("прогон красный и без поломки");
+    expect(r.stderr).toContain("red even without a breakage");
     expect(read("runs.log")).toBe("run\n");
     expect(read(SUM)).toBe(ORIGINAL);
   });
@@ -124,10 +124,10 @@ describe("Отчёт — умеет ли проверка упасть от ка
     writeTree(dir, { [OTHER]: "export const b = 1;\nexport const c = 1;\n" });
     const missing = breakRun("--file", SUM, "--find", "a * b", "--replace", "a / b", "--", "sh", "-c", "echo run >> runs.log");
     expect(missing.code).toBe(2);
-    expect(missing.stderr).toContain(`«a * b» в ${SUM} не найден`);
+    expect(missing.stderr).toContain(`«a * b» not found in ${SUM}`);
     const twice = breakRun("--file", OTHER, "--find", "= 1", "--replace", "= 2", "--", "sh", "-c", "echo run >> runs.log");
     expect(twice.code).toBe(2);
-    expect(twice.stderr).toContain(`«= 1» в ${OTHER} встречается 2 раза`);
+    expect(twice.stderr).toContain(`«= 1» occurs 2 times in ${OTHER}`);
     expect(existsSync(path.join(dir, "runs.log"))).toBe(false);
   });
 });

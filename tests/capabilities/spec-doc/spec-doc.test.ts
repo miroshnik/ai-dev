@@ -188,7 +188,7 @@ describe("Счета", () => {
     const report = vitestReport(dir, { "tests/standards/audit/rule.test.ts": [[[], "правило"]] });
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("главный файл папки — audit.test.ts, а не rule.test.ts — переименуй: tests/standards/audit/rule.test.ts");
+    expect(r.stderr).toContain("the folder's main file is audit.test.ts, not rule.test.ts — rename: tests/standards/audit/rule.test.ts");
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
   });
 });
@@ -216,7 +216,7 @@ describe("В монорепо подпапка пакета — часть па�
       "--stdout",
       "--strict",
     );
-    expect(r.stderr).not.toContain("нет главного файла");
+    expect(r.stderr).not.toContain("no main file");
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("### export\n\nЭкспорт отчётов.\n\n#### Кнопка\n\n");
     expect(at(r.stdout)("#### Кнопка")).toBeLessThan(at(r.stdout)("#### Формат"));
@@ -277,8 +277,8 @@ describe("В документацию идёт только проза для ч
     expect(r.stdout).toContain("### billing\n\nБиллинг: счета клиентам.\n\n<details>");
     expect(r.stdout).not.toContain("Заметка разработчику");
     expect(r.stdout).not.toContain("Старая шапка");
-    expect(r.stderr).toContain("шапка файла в документацию не идёт — перенеси в tests/capabilities/billing/billing.md: tests/capabilities/billing/a.test.ts");
-    expect(r.stderr).toContain(`перенеси в tests/capabilities/billing/billing.md: ${MAIN}`);
+    expect(r.stderr).toContain("a file header doesn't go into the documentation — move it to tests/capabilities/billing/billing.md: tests/capabilities/billing/a.test.ts");
+    expect(r.stderr).toContain(`move it to tests/capabilities/billing/billing.md: ${MAIN}`);
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
   });
 
@@ -287,7 +287,7 @@ describe("В документацию идёт только проза для ч
     const r = doc("r.json", billing(), "--stdout");
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("### billing\n\n#### Счета");
-    expect(r.stderr).toContain("нет описания tests/capabilities/billing/billing.md — зачем, причина, отвергнутое");
+    expect(r.stderr).toContain("no description tests/capabilities/billing/billing.md — why, the reason, the rejected options");
     expect(doc("r.json", billing(), "--stdout", "--strict").code).toBe(1);
   });
 
@@ -347,8 +347,8 @@ describe("Счета", () => {
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("- ✅ после регулярки\n  > Проза после регулярки.");
-    expect(r.stderr.split("\n").filter((l) => l.includes("не вычислить"))).toEqual([
-      `spec-doc: ${DYNAMIC}:4: название it не вычислить статически (\`счёт \${n}\`) — проза JSDoc не взята`,
+    expect(r.stderr.split("\n").filter((l) => l.includes("can't be computed statically"))).toEqual([
+      `spec-doc: ${DYNAMIC}:4: the it name can't be computed statically (\`счёт \${n}\`) — JSDoc prose not taken`,
     ]);
   });
 
@@ -401,11 +401,11 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
       spawnSync("bun", [path.join(SCRIPTS, "spec-doc.ts"), "r.json", ".spec-claims.xml", "--root", dir, "--stdout"], { cwd: dir, encoding: "utf8", env: { ...process.env, CI: ci } });
     const local = run("");
     expect(local.status).toBe(0);
-    expect(local.stderr).toContain("отчёта .spec-claims.xml нет");
+    expect(local.stderr).toContain("no report .spec-claims.xml");
     expect(local.stdout).toContain("выставляется за месяц");
     const ci = run("true");
     expect(ci.status).toBe(2);
-    expect(ci.stderr).toContain("отчёта .spec-claims.xml нет");
+    expect(ci.stderr).toContain("no report .spec-claims.xml");
   });
 
   it("Vitest: абсолютный путь с другой машины приводится по сегменту /tests/", () => {
@@ -427,7 +427,7 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
     const report = { config: { rootDir: path.join(dir, "tests") }, suites: [{ title: e2e.file, file: e2e.file, specs: [], suites: [e2e] }] };
     const r = doc(".spec-playwright.json", JSON.stringify(report), "r.json", "--stdout", "--strict");
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("название — не утверждение по-русски: «loginForm» (tests/capabilities/billing/billing.e2e.ts)");
+    expect(r.stderr).toContain("the name isn't a statement in the project language (ru): «loginForm» (tests/capabilities/billing/billing.e2e.ts)");
     expect(r.stdout).toContain("#### Вход");
     expect(r.stdout).toContain("- ⏭️ через форму — пропущен (2 варианта)");
     expect(r.stdout.indexOf("выставляется за месяц")).toBeLessThan(r.stdout.indexOf("через форму"));
@@ -516,7 +516,7 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
   it("неизвестный формат — код 2 и сообщение", () => {
     const r = doc("r.json", JSON.stringify({ foo: 1 }), "--stdout");
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("неизвестный формат");
+    expect(r.stderr).toContain("unknown report format");
   });
 
   it("без отчётов — код 2 и подсказка", () => {
@@ -591,7 +591,7 @@ describe("Нарушение структуры спеки видно при с�
     const report = vitestReport(dir, { "tests/capabilities/billing/vat.test.ts": [[[], "НДС считается"]] });
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("нет главного файла tests/capabilities/billing/billing.test.ts — его describe открывают страницу");
+    expect(r.stderr).toContain("no main file tests/capabilities/billing/billing.test.ts — its describe blocks open the page");
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
   });
 
@@ -610,7 +610,7 @@ describe("Нарушение структуры спеки видно при с�
     const r = doc("r.json", report, "--stdout");
     expect(r.code).toBe(0);
     expect(r.stderr).toContain(
-      `нет главного файла ${EXPORT}/export.test.ts или ${EXPORT}/<пакет>/export.test.ts — его describe открывают страницу`,
+      `no main file ${EXPORT}/export.test.ts or ${EXPORT}/<package>/export.test.ts — its describe blocks open the page`,
     );
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
     // главный файл другого пакета — на диске, его тестов в этом отчёте нет: главный файл у папки есть
@@ -629,9 +629,9 @@ describe("Нарушение структуры спеки видно при с�
       ],
     });
     const r = doc("r.json", report, "--stdout");
-    expect(r.stderr).toContain(`название — не утверждение по-русски: «createInvoice» (${MAIN})`);
-    expect(r.stderr).toContain(`название — не утверждение по-русски: «returns 201» (${MAIN})`);
-    expect(r.stderr).toContain(`название — не утверждение по-русски: «snake_case_name» (${MAIN})`);
+    expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «createInvoice» (${MAIN})`);
+    expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «returns 201» (${MAIN})`);
+    expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «snake_case_name» (${MAIN})`);
     expect(r.stderr).not.toContain("«счёт");
     expect(r.stderr).not.toContain("«Счета»");
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
@@ -674,7 +674,7 @@ describe("Оглавление: что делает система, из чег�
     expect(r.stdout).toContain("- `src/utils/sum.test.ts` — 1 тест");
     expect(r.stdout).toContain("- `tests/capabilities/stray.test.ts` — 1 тест");
     expect(r.stdout).toContain("- `tests/architecture/overview.test.ts` — 1 тест");
-    expect(r.stderr).toContain("вне дерева: 3 в 3 файлах");
+    expect(r.stderr).toContain("outside the tree: 3 in 3 files");
   });
 
   it("--strict возвращает 1 при тестах вне дерева, без него — 0", () => {
@@ -740,7 +740,7 @@ describe("docs/spec обновляется сам и не трогает рук�
     expect(r.code).toBe(0);
     expect(existsSync(path.join(dir, "docs/spec/capabilities/old.md"))).toBe(false);
     expect(existsSync(path.join(dir, "docs/spec/capabilities/manual.md"))).toBe(true);
-    expect(r.stderr).toContain("удалён устаревший");
+    expect(r.stderr).toContain("deleted stale");
   });
 
   it("--out задаёт каталог", () => {

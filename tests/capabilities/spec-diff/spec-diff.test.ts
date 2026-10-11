@@ -278,15 +278,15 @@ describe("Тест, которого не видно статически, на�
     const r = diffFrom(base);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("**Добавлены (1):**\n\n- `tests/capabilities/billing` · y");
-    expect(r.stderr.split("\n").filter((l) => l.includes("не вычислить"))).toEqual([
-      `spec-diff: ${base}: ${BILLING}:2: название it не вычислить статически (\`ставка \${rate}%\`) — теста нет в списке`,
+    expect(r.stderr.split("\n").filter((l) => l.includes("can't be computed statically"))).toEqual([
+      `spec-diff: ${base}: ${BILLING}:2: the it name can't be computed statically (\`ставка \${rate}%\`) — the test isn't in the lists`,
     ]);
   });
 
   it("файл теста, который не разобрать, spec-diff называет в stderr с местом ошибки", () => {
     const base = repo.commit({ [BILLING]: ts(`it("x", () => {});`) });
     repo.commit({ [BILLING]: ts(`it("x", () => {`) });
-    expect(diffFrom(base).stderr).toContain(`spec-diff: HEAD: ${BILLING}: не разобран: Unexpected token (3:0)`);
+    expect(diffFrom(base).stderr).toContain(`spec-diff: HEAD: ${BILLING}: can't parse: Unexpected token (3:0)`);
   });
 });
 

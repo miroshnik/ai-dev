@@ -26,8 +26,8 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 
 const USAGE = [
-  "spec-break.ts --file <файл> --find <фрагмент> --replace <замена> [--name <название>] [--no-baseline] -- <команда теста…>",
-  "spec-break.ts --plan breaks.json [--no-baseline] [-- <команда теста…>]",
+  "spec-break.ts --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>",
+  "spec-break.ts --plan breaks.json [--no-baseline] [-- <test command…>]",
   "spec-break.ts --restore",
 ].join("\n");
 
@@ -68,19 +68,19 @@ function restoreJournal(journal: string): void {
     return;
   }
   if (now !== j.broken) {
-    throw new Failure(`${rel} изменён после поломки «${j.name}» — журнал ${journal} не применён: сверь файл руками и удали журнал`);
+    throw new Failure(`${rel} changed after the breakage «${j.name}» — journal ${journal} not applied: compare the file by hand and delete the journal`);
   }
   writeFileSync(j.file, j.original);
   rmSync(journal);
-  console.log(`spec-break: вернул ${rel} после оборванного прогона (поломка «${j.name}»)`);
+  console.log(`spec-break: restored ${rel} after an interrupted run (breakage «${j.name}»)`);
 }
 
 /** The break is applicable: the file exists, the fragment occurs in it exactly once. */
 function check(b: Break): void {
-  if (!existsSync(b.file)) throw new Failure(`поломка «${b.name}»: файла ${b.file} нет`);
+  if (!existsSync(b.file)) throw new Failure(`breakage «${b.name}»: no file ${b.file}`);
   const n = readFileSync(b.file, "utf8").split(b.find).length - 1;
-  if (n === 0) throw new Failure(`поломка «${b.name}»: «${b.find}» в ${b.file} не найден`);
-  if (n > 1) throw new Failure(`поломка «${b.name}»: «${b.find}» в ${b.file} встречается ${n} раза — сделай фрагмент длиннее`);
+  if (n === 0) throw new Failure(`breakage «${b.name}»: «${b.find}» not found in ${b.file}`);
+  if (n > 1) throw new Failure(`breakage «${b.name}»: «${b.find}» occurs ${n} times in ${b.file} — make the fragment longer`);
 }
 
 let child: ReturnType<typeof spawn> | null = null;
@@ -108,7 +108,7 @@ function run(cmd: Command): Promise<{ code: number; tail: string }> {
     p.stderr!.on("data", keep);
     p.on("error", (e) => {
       child = null;
-      reject(new Failure(`команда теста не запустилась: ${cmd.join(" ")}: ${e.message}`));
+      reject(new Failure(`the test command didn't start: ${cmd.join(" ")}: ${e.message}`));
     });
     p.on("close", (code, signal) => {
       child = null;
@@ -127,7 +127,7 @@ function onSignal(signal: NodeJS.Signals): void {
   }
   const file = applied && path.relative(process.cwd(), applied.j.file);
   undo();
-  console.error(`spec-break: прервано (${signal})${file ? ` — ${file} возвращён` : ""}`);
+  console.error(`spec-break: interrupted (${signal})${file ? ` — ${file} restored` : ""}`);
   process.exit(signal === "SIGINT" ? 130 : signal === "SIGHUP" ? 129 : 143);
 }
 
@@ -168,15 +168,15 @@ export async function main(argv: string[]): Promise<number> {
     let breaks: Break[];
     if (v.plan) {
       breaks = JSON.parse(readFileSync(v.plan, "utf8")) as Break[];
-      if (!Array.isArray(breaks) || !breaks.length) throw new Failure(`план ${v.plan} — непустой массив [{ name, file, find, replace, cmd? }]`);
+      if (!Array.isArray(breaks) || !breaks.length) throw new Failure(`plan ${v.plan} must be a non-empty array [{ name, file, find, replace, cmd? }]`);
     } else if (v.file && v.find !== undefined && v.replace !== undefined) {
       breaks = [{ name: v.name ?? `${v.find} → ${v.replace}`, file: v.file, find: v.find, replace: v.replace }];
     } else {
-      throw new Failure(`нужна поломка: --file, --find и --replace или --plan\n${USAGE}`);
+      throw new Failure(`a breakage is needed: --file, --find and --replace, or --plan\n${USAGE}`);
     }
     const cmdOf = (b: Break): Command => (b.cmd ? ["sh", "-c", b.cmd] : fallback);
     for (const b of breaks) {
-      if (!cmdOf(b).length) throw new Failure(`поломка «${b.name}»: нет команды теста — после -- или в cmd плана`);
+      if (!cmdOf(b).length) throw new Failure(`breakage «${b.name}»: no test command — after -- or in the plan's cmd`);
       check(b);
     }
 
@@ -186,7 +186,7 @@ export async function main(argv: string[]): Promise<number> {
       const cmds = new Map(breaks.map((b) => [JSON.stringify(cmdOf(b)), cmdOf(b)]));
       for (const cmd of cmds.values()) {
         const r = await run(cmd);
-        if (r.code !== 0) throw new Failure(`прогон красный и без поломки — поломки не применены: ${label(cmd)} (код ${r.code})\n${r.tail}`);
+        if (r.code !== 0) throw new Failure(`the run is red even without a breakage — breakages not applied: ${label(cmd)} (code ${r.code})\n${r.tail}`);
       }
     }
 
@@ -206,12 +206,12 @@ export async function main(argv: string[]): Promise<number> {
       }
       if (r.code !== 0) {
         caught++;
-        console.log(`✅ упал: ${b.name} (${b.file})`);
+        console.log(`✅ failed: ${b.name} (${b.file})`);
       } else {
-        console.log(`❌ не упал: ${b.name} (${b.file}) — проверка эту поломку не ловит`);
+        console.log(`❌ didn't fail: ${b.name} (${b.file}) — the check doesn't catch this breakage`);
       }
     }
-    console.log(`итог: ${caught} из ${breaks.length} поломок уронили проверку; файлы в исходном виде`);
+    console.log(`total: ${caught} of ${breaks.length} breakages made the check fail; files are in their original state`);
     return caught === breaks.length ? 0 : 1;
   } catch (e) {
     if (!(e instanceof Failure)) throw e;

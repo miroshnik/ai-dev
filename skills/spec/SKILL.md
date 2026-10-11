@@ -88,7 +88,7 @@ the reports.
 bun <skill dir>/scripts/spec-doc.ts .spec-report.json [more reports] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
 ```
 
-What ends up in `docs/spec/` (the generated text is in Russian for now):
+What ends up in `docs/spec/` (the generated text is in the project language):
 
 - `README.md` — the index: «What the system does» (per
   capability), «What it's made of» (the architecture page
@@ -241,9 +241,9 @@ describe("A paid invoice is closed without the accountant", () => { … });
 bun <skill dir>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -] [--report report … [--spec-branch origin/spec]] [--limit 100 | --full]
 ```
 
-Decisions outside test names — as separate sections, only if they changed:
-«Architecture model — removed / added» (modules, dependencies,
-packages from `tests/architecture/model.ts`),
+Decisions outside test names — as separate sections «<title> — removed» and
+«<title> — added», only if they changed: «Architecture model» (modules,
+dependencies, packages from `tests/architecture/model.ts`),
 «Exceptions» (the files of the decision folders' `exceptions/`
 and `names.exceptions/` — not in a subfolder and `.json`, as the harness and
 spec-doc read them, — entries of the former `exceptions.ts` and
@@ -350,8 +350,8 @@ disables are in the spec diff. `--json` — the same, machine-readable.
 
 **A big PR.** More tests in the lists (removed, changed, added) than the
 `--limit` threshold (default 100) — a per-folder summary instead of the lists:
-a table «Removed | Changed | Added», with `--report` also «Of them,
-from the harness». The removed ones go above the table
+a table with the columns «Folder», «Removed», «Changed», «Added», with
+`--report` also «Of them, from the harness». The removed ones go above the table
 as a list (a removed requirement is visible by name) as long as there are no
 more of them than the threshold; the decision
 sections and «Tests beyond scenarios» above the
