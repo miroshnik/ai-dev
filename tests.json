@@ -382,7 +382,7 @@
   "describes": [
    "Команда dashboard сервит страницу сама и открывает её в браузере"
   ],
-  "name": "«Сессии» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама"
+  "name": "«Sessions» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
@@ -396,7 +396,7 @@
   "describes": [
    "Команда dashboard сервит страницу сама и открывает её в браузере"
   ],
-  "name": "вкладка «Сессии» открыта по умолчанию, «Оценка и факт» — второй вкладкой"
+  "name": "вкладка «Sessions» открыта по умолчанию, «Estimate and actual» — второй вкладкой"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
@@ -438,7 +438,7 @@
   "describes": [
    "Команда dashboard сервит страницу сама и открывает её в браузере"
   ],
-  "name": "страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Обновить» — перечитывает"
+  "name": "страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Refresh» — перечитывает"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
@@ -494,7 +494,7 @@
   "describes": [
    "Страница — один график: часы, токены и стоимость на общей оси времени"
   ],
-  "name": "панель «факт к оценке» — отношение по задачам с оценкой, линия ×1 и полоса допуска ×0,5…×2"
+  "name": "панель «Actual to estimate» — отношение по задачам с оценкой, линия ×1 и полоса допуска ×0,5…×2"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
@@ -522,7 +522,7 @@
   "describes": [
    "Ждут владельца — вопросы сессий и задач"
   ],
-  "name": "блок «Ждут владельца» собирает вопросы из последних ответов сессий и задачи с меткой «вопросы»"
+  "name": "блок «Waiting for the owner» собирает вопросы из последних ответов сессий и задачи с меткой «вопросы»"
  },
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
@@ -564,7 +564,7 @@
   "describes": [
    "Строка задачи «В работе» — её сессия и чего она ждёт"
   ],
-  "name": "задача «В работе» без закреплённой сессии — строкой «сессии нет»; облачная (трейлер Claude-Session в PR) — «облако, состояние не видно»"
+  "name": "задача «В работе» без закреплённой сессии — строкой «no session»; облачная (трейлер Claude-Session в PR) — «cloud, state not visible»"
  },
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
@@ -585,14 +585,14 @@
   "describes": [
    "Строка задачи «В работе» — её сессия и чего она ждёт"
   ],
-  "name": "красные чеки при фоновом ожидании — «CI красный», конфликт PR — в его ячейке"
+  "name": "красные чеки при фоновом ожидании — «CI red», конфликт PR — в его ячейке"
  },
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
   "describes": [
    "Строка задачи «В работе» — её сессия и чего она ждёт"
   ],
-  "name": "сессия без записей дольше порога, у которой ничего не идёт в фоне, помечена «тишина»"
+  "name": "сессия без записей дольше порога, у которой ничего не идёт в фоне, помечена «silence»"
  },
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
@@ -1087,7 +1087,7 @@
   "describes": [
    "Сбой сети gh повторяется, ошибка запроса — нет, ошибка задачи не обрывает свип"
   ],
-  "name": "ошибка записи одной задачи в свипе не обрывает свип — задача в итоге «не записано»"
+  "name": "ошибка записи одной задачи в свипе не обрывает свип — задача в итоге «not written»"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -1115,14 +1115,14 @@
   "describes": [
    "Сбой сети gh повторяется, ошибка запроса — нет, ошибка задачи не обрывает свип"
   ],
-  "name": "сеть, не вернувшаяся за повторы, останавливает свип — непройденные тоже в «не записано»"
+  "name": "сеть, не вернувшаяся за повторы, останавливает свип — непройденные тоже в «not written»"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
   "describes": [
    "Сбой сети gh повторяется, ошибка запроса — нет, ошибка задачи не обрывает свип"
   ],
-  "name": "сеть, не вернувшаяся за повторы, — ошибка «сбой сети» с числом повторов"
+  "name": "сеть, не вернувшаяся за повторы, — ошибка «network failure» с числом повторов"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -1694,14 +1694,14 @@
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
   "describes": [
-   "pr premerge: проверить нельзя — ошибка, не «вливать»"
+   "pr premerge: проверить нельзя — ошибка, не «merge»"
   ],
   "name": "PR не открыт — ошибка (код 2)"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
   "describes": [
-   "pr premerge: проверить нельзя — ошибка, не «вливать»"
+   "pr premerge: проверить нельзя — ошибка, не «merge»"
   ],
   "name": "не чекаут репозитория PR — ошибка (код 2)"
  },
@@ -1710,14 +1710,14 @@
   "describes": [
    "check показывает каждое расхождение с каноном отдельным пунктом"
   ],
-  "name": "workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «не настроен», код 1"
+  "name": "workflow «Item added to project» и «Auto-add to project» не настраивали — ❌ «not configured», код 1"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
    "check показывает каждое расхождение с каноном отдельным пунктом"
   ],
-  "name": "выключенный «Item closed» — ❌ «выключен», отличается от ненастроенного"
+  "name": "выключенный «Item closed» — ❌ «disabled», отличается от ненастроенного"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -2200,7 +2200,7 @@
   "describes": [
    "task close закрывает задачу одной командой"
   ],
-  "name": "est не установлен рядом — «факт недоступен: est не установлен», остальное сделано"
+  "name": "est не установлен рядом — «actual unavailable: est is not installed», остальное сделано"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -2438,7 +2438,7 @@
   "describes": [
    "task new заводит задачу со всем сразу"
   ],
-  "name": "в сессии с закреплённой задачей «Дальше:» называет новую сессию и первый промпт #M"
+  "name": "в сессии с закреплённой задачей «Next:» называет новую сессию и первый промпт #M"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -2529,7 +2529,7 @@
   "describes": [
    "task status берёт в работу одну задачу на сессию"
   ],
-  "name": "CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «сессия не опознана», файла нет"
+  "name": "CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «session not recognized», файла нет"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -2746,6 +2746,13 @@
   "describes": [
    "В проект — копия, которую видят облачная сессия и CI"
   ],
+  "name": "блок прошлой версии по-русски в AGENTS.md проекта установка заменяет английским, а не ставит второй"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
   "name": "в .agents/ai-dev.json — SHA ai-dev, из которого поставлено: у клона — его HEAD"
  },
  {
@@ -2849,6 +2856,13 @@
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
+   "Мерж своего PR в Claude Code — правило разрешений владельца: install с auto подсказывает, а не ставит"
+  ],
+  "name": "подсказка цитирует последнюю строку сессии на языке проекта: en — «Remaining: …», ru — «Осталось: …»"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
   "name": "--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json"
@@ -2901,6 +2915,13 @@
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
   "name": "старый симлинк install.sh ~/.claude/CLAUDE.md → claude/CLAUDE.md убирается — правила не грузятся дважды"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
+  ],
+  "name": "хук прошлой версии с запасным текстом по-русски install -g заменяет, а не ставит второй"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -2971,6 +2992,13 @@
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
   "name": "установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
+  ],
+  "name": "блок исключений прошлой версии с шапкой по-русски установка заменяет английским, а не ставит второй"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3096,7 +3124,7 @@
   "describes": [
    "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
   ],
-  "name": "первый релиз — без списка изменений, с пометкой «Первый релиз»"
+  "name": "первый релиз — без списка изменений, с пометкой «First release»"
  },
  {
   "path": "tests/capabilities/release/release.test.ts",
@@ -3292,6 +3320,13 @@
   "describes": [
    "Сверка попадает в спеку как стандарт"
   ],
+  "name": "названия тестов сверки — на языке проекта: в проекте на en — по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
+  "describes": [
+   "Сверка попадает в спеку как стандарт"
+  ],
   "name": "нет журнала — код 2 и подсказка, откуда он берётся"
  },
  {
@@ -3306,7 +3341,7 @@
   "describes": [
    "Точка входа без теста — исключение с задачей, пока тест не появился"
   ],
-  "name": "исключение на точку без теста — зелёное; точка, у которой тест появился, — «убери исключение»"
+  "name": "исключение на точку без теста — зелёное; точка, у которой тест появился, — «remove the exception»"
  },
  {
   "path": "tests/capabilities/spec-claims/spec-claims.test.ts",
@@ -5560,7 +5595,7 @@
   "describes": [
    "Без CI на main публикуется только дерево, которое целиком проверил зелёный прогон"
   ],
-  "name": "артефакта с деревом мержа нет или он истёк — код 0, stdout пуст, «дерево main не проверено целиком — публикация пропущена»"
+  "name": "артефакта с деревом мержа нет или он истёк — код 0, stdout пуст, «main tree … not fully checked — publishing skipped»"
  },
  {
   "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
@@ -5595,7 +5630,7 @@
   "describes": [
    "Документация публикуется в ветку spec, а не коммитится в main"
   ],
-  "name": "в ветке spec публикация из более нового коммита — старая поверх не публикуется: код 0, «уже новее», ветка не меняется"
+  "name": "в ветке spec публикация из более нового коммита — старая поверх не публикуется: код 0, «already newer», ветка не меняется"
  },
  {
   "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
@@ -5630,7 +5665,7 @@
   "describes": [
    "Документация публикуется в ветку spec, а не коммитится в main"
   ],
-  "name": "то же содержимое из коммита старше опубликованного — «уже новее», Source: назад не уходит"
+  "name": "то же содержимое из коммита старше опубликованного — «already newer», Source: назад не уходит"
  },
  {
   "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
@@ -5679,7 +5714,7 @@
   "describes": [
    "Отклонённый пуш — повтор поверх новой головы, а не падение"
   ],
-  "name": "после перечитывания ветка уже собрана из потомка — пропуск «уже новее», код 0, ветка не меняется"
+  "name": "после перечитывания ветка уже собрана из потомка — пропуск «already newer», код 0, ветка не меняется"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5687,6 +5722,13 @@
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
   "name": "check --hook: проверка недоступна — объяснение в stdout, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "check и хук называют язык и режим проекта по-английски"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5770,14 +5812,14 @@
   "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
-  "name": "в main после последнего релиза изменения флоу — строка «не в релизе» с тегом, числом и командой релиза; код 0"
+  "name": "в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
-  "name": "всё в релизе — строки «не в релизе» нет; релизов ещё нет — так и сказано"
+  "name": "всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5819,7 +5861,7 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
-  "name": "check называет режим проекта: auto true — «задачи: целиком сам», иначе — «задачи: по разрешению»; поле, правленное руками, и установка без поля отставанием не считаются"
+  "name": "check называет режим проекта: auto true — «tasks: entirely by itself», иначе — «tasks: with permission»; поле, правленное руками, и установка без поля отставанием не считаются"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5854,7 +5896,7 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
-  "name": "в клоне ai-dev check и хук называют режим, клон остаётся «не установлен»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит"
+  "name": "в клоне ai-dev check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5868,14 +5910,14 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
-  "name": "старая установка без SHA — check сравнивает содержимое: совпадает — актуально, нет — отстаёт «без SHA»; update записывает SHA"
+  "name": "старая установка без SHA — check сравнивает содержимое: совпадает — актуально, нет — отстаёт «without SHA»; update записывает SHA"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
-  "name": "флоу в проекте не стоит — «не установлен», код 0, ничего не создаётся"
+  "name": "флоу в проекте не стоит — «not installed», код 0, ничего не создаётся"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5904,6 +5946,13 @@
    "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
   ],
   "name": "старая установка без SHA и без хука SessionStart — отстаёт; update -g ставит хук и пишет SHA"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
+  ],
+  "name": "хук прошлой версии с запасным текстом по-русски — отстаёт; update -g заменяет его, а не ставит второй; после него check — актуально"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5987,7 +6036,7 @@
   "describes": [
    "Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением"
   ],
-  "name": "каталог флоу исключён правилом вне проекта — check: ❌ с правилом и «поправь правило», без команды update: её исключение не поможет"
+  "name": "каталог флоу исключён правилом вне проекта — check: ❌ с правилом и «fix the rule», без команды update: её исключение не поможет"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6749,6 +6798,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название est.closingWords скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название est.cloud.actual скрипты читают из словаря"
  },
  {
@@ -7163,6 +7219,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название est.reason скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.stopWords скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -7751,6 +7814,41 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название spec.c4.viaModules скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.claims.called скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.claims.describe скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.claims.known скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.claims.registry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.claims.unique скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -8577,6 +8675,1350 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "у каждого языка те же ключи, что у en, и ни одного пустого названия"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в bin/ai-dev.mjs вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/dashboard/scripts/dashboard.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/dashboard/scripts/sessions.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/est/scripts/est.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/github/scripts/github.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/github/scripts/locale.cjs вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/github/scripts/locale.d.cts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/slot/scripts/slot.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/architecture.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/c4.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/eslint-config.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/harness.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/knip-hints.cjs вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/knip-hints.d.cts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-break.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-claims.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-diff.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-doc.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-exceptions.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-publish.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-run.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/speclib.ts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/vendor/babel-parser.cjs вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "в skills/spec/scripts/vendor/babel-parser.d.cts вне комментариев нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "нарушитель не проходит: подсказка по-русски"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.mjs, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» не пуст"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Сообщения установщика и скриптов скиллов — по-английски"
+  ],
+  "name": "справка установщика и скриптов скиллов — на английском"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "вне охвата: api/DATABASE_URL is declared"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "вне охвата: host <h> is only in adapter <a>"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "вне охвата: package <p> of external system <x> is only with adapter <a>"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "вне охвата: shared commit … (share 1/k)"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "нарушитель не проходит: цитата вывода, которого нет"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "реестр «цитаты «…» в документах флоу» не пуст"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «## Questions» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «### Task scenarios» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «$ per 1M tokens» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «+ manually: N h» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «30 days» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «90 days» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<VAR> is declared» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<VAR> is read in the code» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<entry> is called by a capability test» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<module> imports <package>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<module> uses allowed package <package>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<title> — added» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «<title> — removed» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Actual (cloud): …» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Actual (cloud)» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Actual unavailable (cloud)» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Actual, h» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Actual» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Added» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «All done, but there are questions…» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «All done. The session can be closed.» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Architecture model» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Base» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Became tests» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Bug» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «CI red» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «CI running» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Changed» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Closed by PR #M: GitHub didn't link the PR to the task» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Cloud session … not imported — est cloud-import» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Cost by model» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Cost, $» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Epic» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Estimate and actual» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Estimate, h» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Estimate» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Exceptions» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Folder» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Item closed» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Moved into the tree» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Names that aren't statements (exceptions)» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Next:» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Not counted again: N h already in the actual of #M» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Of them, from the harness» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Outside the tree» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Overlap with the actual of #M … — recompute #M» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Refresh» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Remaining: …» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Removed» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Sessions» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Task #N (epic #M)» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Task #N» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Task» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Tests beyond scenarios» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Tokens, M» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Waiting for the owner» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «What it's made of» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «What the system does» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Which rules the code obeys» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «`<base>` is red: <check | typecheck | test:spec>» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «`<base>` is red…» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «`main` is red…» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «a mark belongs in one element's file» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «actual unavailable» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «after / before» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «agents» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «all knip findings are of known kinds» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «all time» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «allowed: …» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «allowed» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «already newer» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «analogs» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «architecture model» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «beyond scenarios» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «can be closed» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «client <pkg> of storage <s> is in container <c>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «closed in 90 days without an actual: N» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «cloud, state not visible» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «code without a consumer» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «declare the external system» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «dependency <a> → <b> is within a container» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «deployable unit <id> is container <c>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «deploy» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «directory <dir> is in module <module>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «entry points» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «entry-point ids do not repeat in the registry» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «epic» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «estimate» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «exception: <entry> (#N)» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «exception: <key> (#N)» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «exceptions are <element>.json files in the decision folder's exceptions/» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «exceptions are one file per element in exceptions/, not exceptions.ts» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «exceptions in <file>: <rules> (#N)» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «exceptions with a rule belong to the folder's invariant rules» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «forms» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «from project …» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «from the report» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «header <H> … is read only by adapter <a>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «human reply» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «ids from the log are in the registry» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «is declared» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «is read» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «key <K> of external system <x> is read only by adapter <a>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «library <m> is in containers <c1, c2>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «main tree … not fully checked — publishing skipped» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «marks with a rule belong to the folder's invariant rules» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «merge» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «module <m> is in container <c>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «move it to outside» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «mutations» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «name exceptions — a file per name in names.exceptions/» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «new decision» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no calls to unlisted binaries» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no changes — … confirmed for …» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no changes» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no dependencies without an import» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no duplicate exports» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no enum members without a consumer» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no exports without a consumer» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no files without a consumer» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no imports of unlisted packages» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no knip configuration hints» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no namespace members without a consumer» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no price» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no references to missing catalog entries» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no session» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no types without a consumer» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no unresolved imports» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «no unused catalog entries» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «none» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «not allowed: …» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «not allowed» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «not counted» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «not empty» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «not imported» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «not written: …» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «one record per element» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «outside scope: <VAR>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «outside scope: <element>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «outside scope: <key>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «outside scope: …» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «outside scope» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «perimeter» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «questions» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «remove from scope» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «remove the exception: delete <file>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «remove the exception» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «remove the mark in <file>:<line>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «repo» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «turns» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «unsplit: N h» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «working» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «workspace package <path> is in the code roots» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «…» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9469,6 +10911,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/update/update.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/flow-english/flow-english.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",

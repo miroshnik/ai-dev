@@ -116,7 +116,7 @@ typecheck. Поэтому на слиянии — быстрые проверк�
 
 </details>
 
-## pr premerge: проверить нельзя — ошибка, не «вливать»
+## pr premerge: проверить нельзя — ошибка, не «merge»
 
 <details><summary>✅ 2 теста</summary>
 
