@@ -71,21 +71,22 @@ function leaves(names: Names, prefix = "", plural = false): [string, string][] {
 /**
  * Сообщения установщика и скриптов скиллов — справка, подсказки, ошибки, вывод `check` и хука — часть флоу, а не
  * артефакт проекта: они по-английски при любом языке проекта. Названия на языке проекта скрипты берут из словаря
- * (`skills/github/locales`), поэтому кириллицы в коде скриптов вне комментариев нет вовсе.
+ * (`skills/github/locales`), а комментарии — по-английски, как документы флоу, поэтому кириллицы в коде скриптов нет
+ * вовсе: файл сверяется целиком, с комментариями.
  */
-describe("Сообщения установщика и скриптов скиллов — по-английски", () => {
+describe("Код установщика и скриптов скиллов — сообщения и комментарии — по-английски", () => {
   invariant(it, {
     registry: "код скриптов скиллов и установщика — skills/*/scripts и bin",
     items: sources(ROOT, ["skills", "bin"]).map((f) => ({ file: f.file, text: f.text })),
     key: (f) => f.file,
-    name: (f) => `в ${f.file} вне комментариев нет кириллицы`,
+    name: (f) => `в ${f.file} нет кириллицы`,
     check: (f) => {
-      const lines = cyrillicLines(codeOnly(f.text, f.file));
+      const lines = cyrillicLines(f.text);
       if (lines.length) {
-        throw new Error(`${f.file}: кириллица вне комментариев — сообщения скриптов по-английски, названия на языке проекта — из skills/github/locales (tests/standards/flow-english):\n${lines.join("\n")}`);
+        throw new Error(`${f.file}: кириллица — сообщения и комментарии в коде флоу по-английски, названия на языке проекта — из skills/github/locales (tests/standards/flow-english):\n${lines.join("\n")}`);
       }
     },
-    violator: { name: "подсказка по-русски", item: { file: "skills/x/scripts/x.ts", text: 'console.log("Дальше: task close");\n' } },
+    violator: { name: "комментарий по-русски", item: { file: "skills/x/scripts/x.ts", text: '// подсказка агенту\nconsole.log("Next: task close");\n' } },
     includes: ["bin/ai-dev.mjs", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
   });
 
