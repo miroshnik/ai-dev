@@ -273,7 +273,8 @@ function linkText(target, dst, root) {
 /**
  * Symlink dst → target: inside root — relative (it is committed in a project), outside — absolute (a relative one
  * breaks if the path to root goes through a symlink: macOS /var → /private/var). Replaces a symlink and an empty file;
- * someone else's file or directory — a warning.
+ * someone else's file or directory — a warning. A symlink that already points there stays untouched: an agent's
+ * sandbox refuses writes to `.claude/skills`, and an update without a new skill mustn't fail on it.
  * @param {string} target @param {string} dst @param {string} root
  */
 function link(target, dst, root) {
@@ -282,10 +283,12 @@ function link(target, dst, root) {
     return warn(`${path.relative(root, dst)} already exists and isn't a symlink — left as is`), false;
   }
   const text = linkText(target, dst, root);
+  const same = Boolean(st?.isSymbolicLink()) && readlinkSync(dst) === text;
   if (dry) {
-    if (!st?.isSymbolicLink() || readlinkSync(dst) !== text) change(st ? "~" : "+", dst);
+    if (!same) change(st ? "~" : "+", dst);
     return true;
   }
+  if (same) return true;
   if (st) rmSync(dst);
   mkdirSync(path.dirname(dst), { recursive: true });
   symlinkSync(text, dst);
@@ -397,6 +400,9 @@ function readManifest(root) {
  * only the installer doesn't touch projects). auto and language — the project settings "a task entirely without
  * asking" and the language the agent works in, always written; the machine doesn't have them (undefined). A dry run
  * doesn't compare them either: editing a field by hand doesn't make the install "behind".
+ * The order survives a run cut off midway (an agent's sandbox refuses writes to `.claude/skills`): skills ai-dev no
+ * longer has go while the old manifest still lists them, and the new manifest is written before the copies — a repeat
+ * run takes them for ai-dev's and finishes the install instead of leaving them as someone else's.
  * @param {string} src @param {string} root @param {boolean} linkMode @param {boolean} claude @param {boolean} [auto]
  * @param {string} [language]
  * @returns {string[]} installed skills
@@ -405,20 +411,13 @@ function installSkills(src, root, linkMode, claude, auto, language) {
   const manifestPath = path.join(root, ".agents/ai-dev.json");
   const before = readManifest(root).skills ?? [];
   const names = sourceSkills(src);
-  /** @type {string[]} */
-  const installed = [];
-  for (const name of names) {
+  const installed = names.filter((name) => {
     const dst = path.join(root, ".agents/skills", name);
     const st = lstat(dst);
-    if (st && !st.isSymbolicLink() && !before.includes(name)) {
-      warn(`${path.relative(root, dst)} already exists and isn't an ai-dev skill — left; remove it to install the ai-dev skill`);
-      continue;
-    }
-    placeDir(path.join(src, "skills", name), dst, root, linkMode);
-    installed.push(name);
-  }
-  if (!linkMode) note(`.agents/skills/ ← ${installed.join(", ")}`);
-  if (claude) for (const name of installed) link(path.join(root, ".agents/skills", name), path.join(root, ".claude/skills", name), root);
+    if (!st || st.isSymbolicLink() || before.includes(name)) return true;
+    warn(`${path.relative(root, dst)} already exists and isn't an ai-dev skill — left; remove it to install the ai-dev skill`);
+    return false;
+  });
   for (const name of before.filter((n) => !names.includes(n))) {
     const dst = path.join(root, ".agents/skills", name);
     if (dry) {
@@ -433,11 +432,15 @@ function installSkills(src, root, linkMode, claude, auto, language) {
   if (dry) {
     const m = readManifest(root);
     if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
-    return installed;
+  } else {
+    const sha = sourceSha(src);
+    const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }), ...(language === undefined ? {} : { language }) };
+    mkdirSync(path.dirname(manifestPath), { recursive: true });
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   }
-  const sha = sourceSha(src);
-  const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }), ...(language === undefined ? {} : { language }) };
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  for (const name of installed) placeDir(path.join(src, "skills", name), path.join(root, ".agents/skills", name), root, linkMode);
+  if (!linkMode) note(`.agents/skills/ ← ${installed.join(", ")}`);
+  if (claude) for (const name of installed) link(path.join(root, ".agents/skills", name), path.join(root, ".claude/skills", name), root);
   return installed;
 }
 
@@ -1322,6 +1325,22 @@ const MERGE_HINT = (/** @type {string} */ language) =>
     `  without the rule the app rejects a merge without human review — the session ends with «${locale.names(language).lastLine.remaining} …», the merge is left to the owner`,
   ].join("\n");
 
+/**
+ * No permission to write — usually an agent's sandbox: Claude Code's refuses writes to `.claude/skills` of a project
+ * and to `~/.agents`. Instead of a stack — what was refused and the same command for the owner's terminal: the install
+ * order (installSkills) lets a repeat run finish it. Not a permission error — false, the caller handles it.
+ * @param {unknown} e @param {string[]} argv @param {boolean} global @returns {boolean} the error was reported
+ */
+function denied(e, argv, global) {
+  const err = /** @type {{ code?: unknown, path?: unknown, dest?: unknown }} */ (e);
+  if (err?.code !== "EPERM" && err?.code !== "EACCES") return false;
+  const file = String(err.dest ?? err.path ?? "");
+  const home = os.homedir();
+  const shown = global && file.startsWith(home + path.sep) ? `~${file.slice(home.length)}` : path.relative(projectRoot(), file);
+  warn(`${argv[0]}: no permission to write ${shown} (${err.code}) — an agent's sandbox? Run the same command in your own terminal, a repeat run finishes it: npx -y github:${SOURCE} ${argv.join(" ")}`);
+  return true;
+}
+
 /** @type {Record<string, string[]>} */
 const FLAGS = { install: ["-g", "--global", "--link", "--auto", "--no-auto"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"] };
 
@@ -1370,7 +1389,7 @@ function main(/** @type {string[]} */ argv) {
     try {
       return update(global);
     } catch (e) {
-      return warn(`update: ${reason(e)}`), 2;
+      return denied(e, argv, global) || warn(`update: ${reason(e)}`), 2;
     }
   }
   const linkMode = flags.includes("--link");
@@ -1383,18 +1402,23 @@ function main(/** @type {string[]} */ argv) {
     warn("--auto and --no-auto — the project setting «a task entirely without asking»: without -g and only one of the two");
     return 2;
   }
-  if (global) return installGlobal(SRC, linkMode), 0;
-  const root = projectRoot();
-  // questions — only here and only in a terminal: `update` and `check` (the hook at session start) go through
-  // installProject without them
-  const tty = isatty(0) && isatty(1);
-  const language = lang ?? (tty ? askLanguage(languageOf(root)) : languageOf(root));
-  const before = autoOf(root);
-  const auto = on ? true : off ? false : tty ? ask(AUTO_QUESTION, before) : before;
-  if (isAiDevClone(root)) installClone(root, auto, language);
-  else installProject(SRC, root, auto, language);
-  if (auto) note(MERGE_HINT(language));
-  return 0;
+  try {
+    if (global) return installGlobal(SRC, linkMode), 0;
+    const root = projectRoot();
+    // questions — only here and only in a terminal: `update` and `check` (the hook at session start) go through
+    // installProject without them
+    const tty = isatty(0) && isatty(1);
+    const language = lang ?? (tty ? askLanguage(languageOf(root)) : languageOf(root));
+    const before = autoOf(root);
+    const auto = on ? true : off ? false : tty ? ask(AUTO_QUESTION, before) : before;
+    if (isAiDevClone(root)) installClone(root, auto, language);
+    else installProject(SRC, root, auto, language);
+    if (auto) note(MERGE_HINT(language));
+    return 0;
+  } catch (e) {
+    if (denied(e, argv, global)) return 2;
+    throw e;
+  }
 }
 
 process.exitCode = main(process.argv.slice(2));

@@ -138,6 +138,8 @@ npx -y github:miroshnik/ai-dev update -g   # bring it to the latest release
 
 Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session.
 
+An agent's sandbox (Claude Code's Bash) doesn't let npx write its cache `~/.npm` nor the install write `.claude/skills`: then run the command in your own terminal — the refusal names it, and a repeat run finishes a cut-off install.
+
 `install` in a project asks in the terminal whether the agent should do tasks entirely by itself — answer the task's questions by recommendation, commit, push, fix CI and merge its own PR on green checks (default — no); without a terminal — `install --auto` or `--no-auto`, without the flag the previous answer stays. `check` names the mode. With auto, `install` prints a hint for Claude Code: the app rejects a merge without human review in this mode too, and the session merges its own PR by itself only with the `Bash(gh pr merge *)` rule in `permissions.allow` of `~/.claude/settings.json` — the owner adds it, `install` doesn't change the machine's permission settings.
 
 `install` also asks for the **project language** the agent works in: dialog, tasks, prompts, documents; the flow itself is written in English. It is stored in `.agents/ai-dev.json` as `language` — a BCP 47 code (`ru`, `en`, `pt-BR`), `en` by default; an install of a previous version without the field counts as `ru`. Without a terminal — `install --lang <code>`, without the flag the previous language stays; `update` keeps it, `check` and the hook name it. The flow isn't installed into an ai-dev clone — `install` writes only these two settings there.
