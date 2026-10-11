@@ -20,10 +20,12 @@ const REPO = "miroshnik/ai-dev";
 const ORG = "acme/ai-dev";
 
 let pauses = 0;
+// est — подпроцесс bun (внешний край): по умолчанию молчит и ничего не пишет, git — настоящий; тесты est подменяют его сами
+const silentEst = (cmd: string, args: string[], cwd?: string) => (cmd === "bun" ? { status: 0, stdout: "", stderr: "" } : realRun(cmd, args, cwd));
 function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, sleep: () => void pauses++, ...io });
+  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, sleep: () => void pauses++, run: silentEst, ...io });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const byOp = (f: FakeGitHub, op: string) => f.mutations.filter((m) => m.op === op).map((m) => m.input);
@@ -46,9 +48,9 @@ const pinFile = (config: string, id = SESSION) => path.join(config, "sessions", 
 const pinned = (config: string, id = SESSION) => readFileSync(pinFile(config, id), "utf8").trim();
 
 describe("task new заводит задачу со всем сразу", () => {
-  it("подзадача эпика: заголовок с префиксом эпика, в проекте в Бэклог, sub-issue, blocked by, следующий шаг — оценка", () => {
+  it("подзадача эпика: заголовок с префиксом эпика, в проекте в Бэклог, sub-issue, blocked by, следующий шаг — сумма оценок эпика", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["new", "--title", "Экспорт задач", "--body", "Что сделать", "--epic", "45", "--blocked-by", "#49"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт задач", "--body", "Что сделать", "--epic", "45", "--blocked-by", "#49"]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateIssue")).toEqual([{ repositoryId: f.repo.id, title: "GitHub · Экспорт задач", body: "Что сделать", projectV2Ids: [f.project().id], parentIssueId: f.issue(45).id }]);
     expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
@@ -58,19 +60,19 @@ describe("task new заводит задачу со всем сразу", () => 
       "+ project «ai-dev»: Status «Бэклог»",
       "+ subtask of epic #45",
       "+ blocked by #49",
-      "Next: the estimate — one call of the est skill: est estimate 50 --type <branch type> --write (the script picks the analogs); «Оценка, ч» of epic #45 — recompute as the sum of its subtasks.",
+      "Next: «Оценка, ч» of epic #45 — recompute as the sum of its subtasks' estimates.",
     ]);
   });
 
   it("заголовок уже с префиксом эпика — префикс не удваивается", () => {
     const f = new FakeGitHub(REC);
-    task(f, ["new", "--title", "GitHub · Экспорт задач", "--epic", "45"]);
+    task(f, ["new", "--branch-type", "feat", "--title", "GitHub · Экспорт задач", "--epic", "45"]);
     expect(byOp(f, "CreateIssue")[0].title).toBe("GitHub · Экспорт задач");
   });
 
   it("закрытый блокер пропускается — он уже не блокирует", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["new", "--title", "Экспорт", "--blocked-by", "46,49"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--blocked-by", "46,49"]);
     expect(byOp(f, "AddBlockedBy").map((m) => m.blockingIssueId)).toEqual([f.issue(49).id]);
     expect(r.out).toContain("+ #46 is closed — doesn't block, skipped");
   });
@@ -78,7 +80,7 @@ describe("task new заводит задачу со всем сразу", () => 
   it("тело задачи — из файла --body-file", () => {
     const f = new FakeGitHub(REC);
     const file = new URL("../../lib/github-ai-dev.json", import.meta.url).pathname;
-    task(f, ["new", "--title", "Экспорт", "--body-file", file]);
+    task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body-file", file]);
     expect(byOp(f, "CreateIssue")[0].body).toBe(readFileSync(file, "utf8"));
   });
 
@@ -109,7 +111,7 @@ describe("task new заводит задачу со всем сразу", () => 
   it("milestone — по названию среди открытых", () => {
     const f = new FakeGitHub(REC);
     const m = f.milestone("GitHub · 1 · Проект");
-    const r = task(f, ["new", "--title", "Экспорт", "--milestone", "GitHub · 1 · Проект"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--milestone", "GitHub · 1 · Проект"]);
     expect(byOp(f, "CreateIssue")[0].milestoneId).toBe(m.id);
     expect(r.out).toContain("+ milestone «GitHub · 1 · Проект»");
   });
@@ -118,19 +120,16 @@ describe("task new заводит задачу со всем сразу", () => 
   it("в сессии с закреплённой задачей «Next:» называет новую сессию и первый промпт #M", () => {
     const f = new FakeGitHub(REC);
     const io = inSession(scratch());
-    expect(task(f, ["new", "--title", "Импорт"], REPO, io).out).not.toContain("the session runs");
+    expect(task(f, ["new", "--branch-type", "feat", "--title", "Импорт"], REPO, io).out).not.toContain("the session runs");
     task(f, ["status", "49", "В работе"], REPO, io);
-    const r = task(f, ["new", "--title", "Экспорт"], REPO, io);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт"], REPO, io);
     expect(r.code).toBe(0);
-    expect(r.out.split("\n").slice(-2)).toEqual([
-      "Next: the estimate — one call of the est skill: est estimate 51 --type <branch type> --write (the script picks the analogs).",
-      "Next: the session runs miroshnik/ai-dev#49 — #51 in a new session, first prompt: #51.",
-    ]);
+    expect(r.out.split("\n").at(-1)).toBe("Next: the session runs miroshnik/ai-dev#49 — #51 in a new session, first prompt: #51.");
   });
 
   describe("ошибка до создания — задача не заводится наполовину", () => {
     const refused = (f: FakeGitHub, args: string[], message: string, repo = REPO) => {
-      const r = task(f, ["new", ...args], repo);
+      const r = task(f, ["new", "--branch-type", "feat", ...args], repo); // тип ветки верный — отказ из-за другого аргумента
       expect(r.code).toBe(2);
       expect(r.err).toContain(message);
       expect(f.mutations).toEqual([]);
@@ -157,6 +156,92 @@ describe("task new заводит задачу со всем сразу", () => 
   });
 });
 
+/**
+ * Оценку ставит сам `task new` — как `task close` пишет факт: агент скилл est для оценки не открывает и ничего не
+ * выбирает. Ручной подбор аналогов и поправки шли до 10 минут (#381), а точнее механики не были: аналоги подбирает
+ * скрипт, а по мере закрытия задач их факты сами становятся аналогами следующих оценок.
+ */
+describe("task new ставит оценку сам — по аналогам, которые подбирает скрипт", () => {
+  const ESTIMATE = "Оценка: 0.5 ч, ≈ 20 млн токенов, ≈ $8 (тип feat, доверие A; прогноз по фактам аналогов). Аналоги (подбор скриптом): #12 (факт 0.4 ч); #14 (факт 0.5 ч); #20 (факт 1 ч). Поправка: ×1.";
+  const STDOUT = `== miroshnik/ai-dev#50: Экспорт\ncurrent «Оценка, ч»: —; status: Бэклог\ncomment:\n${ESTIMATE}\n<!-- est {"v": 2, "h": 0.5} -->\n«Estimate» comment created, field «Оценка, ч» = 0.5\n`;
+  const est =
+    (calls: string[][], r: { status: number; stdout?: string; stderr?: string } = { status: 0, stdout: STDOUT }) =>
+    (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
+
+  it("задача с --branch-type — сразу est estimate <N> --type <тип ветки> --write; вывод est — в выводе task new, без маркера", () => {
+    const f = new FakeGitHub(REC);
+    const calls: string[][] = [];
+    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est(calls) });
+    expect(r.code).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.slice(2)).toEqual(["estimate", "50", "--repo", REPO, "--type", "feat", "--write"]);
+    expect(calls[0]![0]).toBe("bun");
+    expect(calls[0]![1]).toMatch(/skills\/est\/scripts\/est\.ts$/);
+    expect(r.out).toContain(ESTIMATE);
+    expect(r.out).toContain("«Estimate» comment created, field «Оценка, ч» = 0.5");
+    expect(r.out).not.toContain("<!--");
+    expect(r.out).not.toContain("est estimate");
+  });
+
+  it("баг без --branch-type — оценка с типом fix: ветка бага — fix/<N>-…", () => {
+    const f = new FakeGitHub(REC);
+    const calls: string[][] = [];
+    expect(task(f, ["new", "--title", "Экспорт падает", "--type", "Баг"], REPO, { run: est(calls) }).code).toBe(0);
+    expect(calls[0]!.slice(2)).toEqual(["estimate", "50", "--repo", REPO, "--type", "fix", "--write"]);
+  });
+
+  it("эпик не оценивается: est не зовётся, «Next:» — оценка эпика есть сумма оценок подзадач", () => {
+    const f = new FakeGitHub(REC);
+    const calls: string[][] = [];
+    const r = task(f, ["new", "--title", "Импорт · Импорт задач из CSV", "--type", "Эпик"], REPO, { run: est(calls) });
+    expect(r.code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(r.out).toContain("Next: an epic isn't estimated — its «Оценка, ч» is the sum of its subtasks' estimates.");
+  });
+
+  it("задача без --branch-type — ошибка до создания: тип ветки нужен оценке", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Экспорт"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("--branch-type is required for a task: feat, fix, docs, refactor, perf, test, chore, ci, build, research — the type of its branch and of its estimate");
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("тип ветки не из списка — ошибка до создания", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feature"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("--branch-type: feat, fix, docs, refactor, perf, test, chore, ci, build, research");
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("эпик с --branch-type — ошибка до создания: у эпика нет ветки и своей оценки", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Импорт · Импорт задач из CSV", "--type", "Эпик", "--branch-type", "feat"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("an epic has no branch and isn't estimated — --branch-type is for a task or a bug");
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("est не установлен рядом — задача заведена, «○ no estimate: est is not installed», код 0", () => {
+    const f = new FakeGitHub(REC);
+    const calls: string[][] = [];
+    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est(calls), env: { AI_DEV_EST: "/nowhere/est.ts" } });
+    expect(r.code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(r.out).toContain("○ no estimate: est is not installed (/nowhere/est.ts)");
+    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
+  });
+
+  it("est упал — задача заведена, его ошибка строкой «! est estimate», код 0", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est([], { status: 1, stderr: "warning: x\nerror: GitHub is unavailable\n" }) });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("! est estimate: error: GitHub is unavailable");
+    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
+  });
+});
+
 const issueLabels = (f: FakeGitHub, n: number) => f.issue(n).labels.nodes.map((l: { name: string }) => l.name);
 
 const CAP = "0E8A16";
@@ -167,7 +252,7 @@ describe("task new ставит метки решений — по имени р
     const f = new FakeGitHub(REC);
     Object.assign(f.tree, { capabilities: ["billing"], standards: ["audit"] });
     const audit = f.label("audit", "1D76DB", "Решение: tests/standards/audit");
-    const r = task(f, ["new", "--title", "Экспорт", "--labels", "billing,audit"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--labels", "billing,audit"]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" }]);
     const billing = f.labels.find((l) => l.name === "billing")!;
@@ -179,7 +264,7 @@ describe("task new ставит метки решений — по имени р
 
   it("новое решение — `вид:имя`: метка с именем, строка называет решение новым", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--labels", "capability:export"]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "export", color: CAP, description: "Решение: tests/capabilities/export" }]);
     expect(issueLabels(f, 50)).toEqual(["export"]);
@@ -188,7 +273,7 @@ describe("task new ставит метки решений — по имени р
 
   it("метка не решения, которой нет в репозитории, — ошибка до создания задачи", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export,срочно"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--labels", "capability:export,срочно"]);
     expect(r.code).toBe(2);
     expect(r.err).toContain("no label «срочно» in the repository");
     expect(r.err).toContain("a new decision — kind:name");
@@ -200,7 +285,7 @@ describe("task new ставит метки решений — по имени р
     const f = new FakeGitHub(REC);
     f.tree.capabilities = ["billing"];
     f.label("срочно", "B60205");
-    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "billing,срочно"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--epic", "45", "--labels", "billing,срочно"]);
     expect(r.code).toBe(0);
     expect(issueLabels(f, 45)).toEqual(["epic", "billing"]);
     expect(r.out).toContain("+ epic #45: billing");
@@ -211,11 +296,11 @@ describe("task new ставит метки решений — по имени р
     const f = new FakeGitHub(REC);
     f.tree.model = `export default { modules: { api: { path: "apps/api" } } };\n`;
     const api = f.label("api", "C5DEF5", "Разрез: приложения — API-сервер");
-    const refused = task(f, ["new", "--title", "Экспорт", "--labels", "architecture:api"]);
+    const refused = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--labels", "architecture:api"]);
     expect(refused.code).toBe(2);
     expect(refused.err).toContain("label «api» is slice «приложения», not a decision label: decision api isn't labeled; the slice label — --labels api");
     expect(f.mutations).toEqual([]);
-    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "api"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--epic", "45", "--labels", "api"]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([api.id]);
     expect(issueLabels(f, 45)).toEqual(["epic"]);
@@ -411,7 +496,7 @@ describe("В организации задача получает тип issue �
 
   it("тип issue организации и Priority Medium по умолчанию — в той же мутации, что и задача", () => {
     const f = org();
-    const r = task(f, ["new", "--title", "Экспорт"], ORG);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт"], ORG);
     expect(byOp(f, "CreateIssue")[0]).toMatchObject({ issueTypeId: "IT_1", issueFields: [{ fieldId: "IFSS_priority", singleSelectOptionId: "IFO_medium" }] });
     expect(r.out).toContain("+ type «Задача»");
     expect(r.out).toContain("+ Priority «Medium»");
@@ -420,10 +505,10 @@ describe("В организации задача получает тип issue �
   it("подзадача срочнее эпика — Priority эпика поднимается до неё; не срочнее — эпик не трогается", () => {
     const f = org();
     f.setPriority(45, "Low");
-    const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--priority", "High"], ORG);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--epic", "45", "--priority", "High"], ORG);
     expect(byOp(f, "SetIssueField")).toEqual([{ issueId: f.issue(45).id, issueFields: [{ fieldId: "IFSS_priority", singleSelectOptionId: "IFO_high" }] }]);
     expect(r.out).toContain("+ Priority of epic #45: Low → High");
-    task(f, ["new", "--title", "Импорт", "--epic", "45", "--priority", "Medium"], ORG);
+    task(f, ["new", "--branch-type", "feat", "--title", "Импорт", "--epic", "45", "--priority", "Medium"], ORG);
     expect(byOp(f, "SetIssueField")).toHaveLength(1);
   });
 
@@ -431,7 +516,7 @@ describe("В организации задача получает тип issue �
     const f = org();
     f.repo.owner.issueTypes.nodes.find((t: { name: string }) => t.name === "Баг").isEnabled = false;
     expect(task(f, ["new", "--title", "Экспорт", "--type", "Баг"], ORG).err).toContain("the organization has no enabled type «Баг» — github project fix");
-    expect(task(f, ["new", "--title", "Экспорт", "--priority", "P1"], ORG).err).toContain("--priority: Urgent, High, Medium, Low");
+    expect(task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--priority", "P1"], ORG).err).toContain("--priority: Urgent, High, Medium, Low");
     expect(f.mutations).toEqual([]);
   });
 });
@@ -664,7 +749,7 @@ describe("Статус ставится, даже если проект ещё �
   it("createIssue ещё не показывает элемент, добавление — «уже есть»: task new всё равно ставит Бэклог", () => {
     const f = new FakeGitHub(REC);
     f.createIssueHidesItems = true;
-    const r = task(f, ["new", "--title", "Экспорт"]);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт"]);
     expect(r.code).toBe(0);
     expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
     expect(r.out).toContain("+ project «ai-dev»: Status «Бэклог»");
@@ -737,7 +822,7 @@ describe("task actualize печатает задание субагенту ак
 
   it("новая открытая подзадача эпика попадает в задание", () => {
     const f = new FakeGitHub(REC);
-    task(f, ["new", "--title", "Экспорт счетов", "--epic", "45"]);
+    task(f, ["new", "--branch-type", "feat", "--title", "Экспорт счетов", "--epic", "45"]);
     const r = task(f, ["actualize", "47"]);
     expect(r.out).toContain("- #50 «GitHub · Экспорт счетов»");
     expect(r.out).not.toContain("- #47 ");
@@ -1091,7 +1176,7 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
 
   it("проект на en: task new пишет раздел ## Questions, est его читает", () => {
     const f = englishBoard(new FakeGitHub(REC));
-    const r = task(f, ["new", "--title", "Export"], REPO, { cwd: checkoutWith(EN) });
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Export"], REPO, { cwd: checkoutWith(EN) });
     expect(r.code).toBe(0);
     const body: string = byOp(f, "CreateIssue")[0].body;
     expect(body).toBe("## Scenarios\n\n## Questions\n");
@@ -1109,13 +1194,13 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
 
   it("манифест без поля language — каркас на русском, как раньше", () => {
     const f = new FakeGitHub(REC);
-    task(f, ["new", "--title", "Экспорт"], REPO, { cwd: checkoutWith('{ "auto": true }\n') });
+    task(f, ["new", "--branch-type", "feat", "--title", "Экспорт"], REPO, { cwd: checkoutWith('{ "auto": true }\n') });
     expect(byOp(f, "CreateIssue")[0].body).toBe("## Сценарии\n\n## Вопросы\n");
   });
 
   it("тело дано — пишется как есть, без каркаса", () => {
     const f = new FakeGitHub(REC);
-    task(f, ["new", "--title", "Экспорт", "--body", "Что сделать"]);
+    task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body", "Что сделать"]);
     expect(byOp(f, "CreateIssue")[0].body).toBe("Что сделать");
   });
 

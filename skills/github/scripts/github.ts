@@ -7,7 +7,7 @@
  *   github project check — a check against the canon, item by item ✅/❌
  *   github project fix   — bring it to the canon: API, UI steps with links, deleting and renaming — with --confirm
  *   github task new      — a task in one command: type or label, project and Backlog, Priority, epic, blocked by,
- *                          milestone, decision labels (the decision's name, the kind by color)
+ *                          milestone, decision labels (the decision's name, the kind by color) and the estimate (est)
  *   github task status   — Status in the project (and the epic's "In progress" once its first subtask is taken);
  *                          "In progress" pins the task to the session — another task in the same session is refused
  *   github task drop     — close without doing it and remove from the project
@@ -1461,6 +1461,8 @@ export interface NewTask {
    * ones — existing.
    */
   labels?: string[];
+  /** The branch type (feat, fix, …) — also the estimate's type; a bug without it is fix, an epic has none. */
+  branchType?: string;
 }
 
 /**
@@ -1478,6 +1480,12 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   // All checks come before creating: a task mustn't appear half-made. The type — a name in any dictionary language.
   const type = typeAliases()[task.type.toLowerCase()];
   if (!type) throw new GhError(`--type: ${issueTypes().join(", ")}`);
+  // the estimate needs the branch type: a bug's branch is fix/<N>-…, an epic has no branch and no estimate of its own
+  const branchType = task.branchType?.trim().toLowerCase() || (type === N.issueTypes.bug ? "fix" : "");
+  if (type === N.issueTypes.epic) {
+    if (branchType) throw new GhError("an epic has no branch and isn't estimated — --branch-type is for a task or a bug");
+  } else if (!branchType) throw new GhError(`--branch-type is required for a task: ${TASK_TYPES.join(", ")} — the type of its branch and of its estimate`);
+  else if (!TASK_TYPES.includes(branchType)) throw new GhError(`--branch-type: ${TASK_TYPES.join(", ")}`);
   const o = { ...task, type, body: task.body.trim() ? task.body : taskTemplate(type) };
   const issueType = org ? ctx.repo.owner.issueTypes.find((t) => t.name === o.type && t.isEnabled) : undefined;
   if (org && !issueType) throw new GhError(`the organization has no enabled type ${q(o.type)} — github project fix`);
@@ -1595,7 +1603,10 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   io.out(`Created #${created.number} ${created.title} — ${created.url}`);
   for (const d of done) io.out(`+ ${d}`);
   if (o.type === N.issueTypes.epic) io.out(`Next: an epic isn't estimated — its ${q(N.fields.estimate)} is the sum of its subtasks' estimates.`);
-  else io.out(`Next: the estimate — one call of the est skill: est estimate ${created.number} --type <branch type> --write (the script picks the analogs)${epic ? `; ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks` : ""}.`);
+  else {
+    runEstimate(io, slug, created.number, branchType);
+    if (epic) io.out(`Next: ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks' estimates.`);
+  }
   // a session with a pinned task won't take a new one into work (pinTask)
   const held = pinnedTask(io);
   if (held) io.out(`Next: the session runs ${held} — #${created.number} in a new session, first prompt: #${created.number}.`);
@@ -1797,15 +1808,33 @@ function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs:
 }
 
 /**
- * The actual — the est script next to the skill (`../est/scripts/est.ts`: the project copy, `~/.agents/skills` and the
- * clone are laid out this way).
+ * The est script next to the skill (`../est/scripts/est.ts`: the project copy, `~/.agents/skills` and the clone are
+ * laid out this way).
  */
-function runFact(io: Io, slug: string, number: number): void {
-  const est = io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
-  if (!existsSync(est)) return io.out(`○ actual unavailable: est is not installed (${est}) — est fact ${number} --write after installing it`);
-  const r = (io.run ?? realRun)("bun", [est, "fact", String(number), "--repo", slug, "--write"], io.cwd);
+const estScript = (io: Io) => io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
+
+/** est with arguments: its output without the marker is printed as is, a failure — its last error line as a `!` line. */
+function runEst(io: Io, est: string, args: string[]): void {
+  const r = (io.run ?? realRun)("bun", [est, ...args], io.cwd);
   for (const line of r.stdout.split("\n")) if (line.trim() && !line.startsWith("<!--")) io.out(line);
-  if (r.status !== 0) io.out(`! est fact: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
+  if (r.status !== 0) io.out(`! est ${args[0]}: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
+}
+
+/** The actual — `task close`. */
+function runFact(io: Io, slug: string, number: number): void {
+  const est = estScript(io);
+  if (!existsSync(est)) return io.out(`○ actual unavailable: est is not installed (${est}) — est fact ${number} --write after installing it`);
+  runEst(io, est, ["fact", String(number), "--repo", slug, "--write"]);
+}
+
+/**
+ * The estimate — `task new`, like the actual in `task close`: the script picks the analogs, the agent has no step of
+ * its own. Fewer than two analogs in the repository — est prints "No estimate" and the task stays without one.
+ */
+function runEstimate(io: Io, slug: string, number: number, type: string): void {
+  const est = estScript(io);
+  if (!existsSync(est)) return io.out(`○ no estimate: est is not installed (${est})`);
+  runEst(io, est, ["estimate", String(number), "--repo", slug, "--type", type, "--write"]);
 }
 
 /** GraphQL has no milestone mutation — REST. wasOpen — the task was open when read: the open count includes it. */
@@ -2317,7 +2346,7 @@ const USAGE = `github — the repository's GitHub project and tasks by the AGENT
 
   github project check [--repo owner/repo]
   github project fix   [--repo owner/repo] [--confirm] [--template owner/N | none]
-  github task new      --title "…" [--body "…" | --body-file F] [--type Task|Bug|Epic] [--epic N]
+  github task new      --title "…" --branch-type <type> [--body "…" | --body-file F] [--type Task|Bug|Epic] [--epic N]
                        [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
                        [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
   github task status   <N> <Backlog|In progress|Done> [--repo owner/repo]
@@ -2332,7 +2361,8 @@ check — items ✅/❌, code 0 — everything per the canon, 1 — there are �
 fix   — fixes via the API; prints UI steps with links; deleting and renaming in a project with tasks
         and organization settings — only with --confirm (after the user's "yes").
         No project — links the one of the same name, otherwise copies the template (${DEFAULT_TEMPLATE}), otherwise creates one.
-task  — a task by the canon; new prints what was created and the next step (the estimate via est).
+task  — a task by the canon; new sets the estimate itself (est estimate --write with --branch-type: feat, fix, …;
+        a bug without it is fix, an epic isn't estimated) and prints what was created and the next step.
 task status — In progress pins the task to the session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev):
         another task in the same session — a refusal (code 2), it needs a new session; a human removes the pin.
 task actualize — right after the merge, in parallel with the deploy: prints the assignment for the epic-refresh subagent
@@ -2410,6 +2440,7 @@ export function main(argv: string[], io: Io): number {
           priority: { type: "string" },
           "duplicate-of": { type: "string" },
           labels: { type: "string" },
+          "branch-type": { type: "string" },
           "no-git": { type: "boolean", default: false },
         },
       });
@@ -2422,7 +2453,7 @@ export function main(argv: string[], io: Io): number {
         const blockedBy = (values["blocked-by"] ?? "").split(",").filter((x) => x.trim()).map((x) => issueNumber(x, "--blocked-by"));
         const epic = values.epic === undefined ? undefined : issueNumber(values.epic, "--epic");
         const labels = (values.labels ?? "").split(",").map((x) => x.trim()).filter(Boolean);
-        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type ?? N.issueTypes.task, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels });
+        return cmdTaskNew(io, slug, { title: values.title, body, type: values.type ?? N.issueTypes.task, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels, branchType: values["branch-type"] });
       }
       const number = issueNumber(positionals[0], `task ${cmd}`);
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));

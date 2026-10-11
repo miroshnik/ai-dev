@@ -55,7 +55,7 @@
     "epic": "Epic #{epic} «{title}». The epic's open tasks:",
     "openTask": "- #{number} «{title}»",
     "checks": "Five checks (canon — reference.md of the github skill, «Epic refresh on task close»):",
-    "scope": "You change only GitHub tasks — description, «{questions}», links, status; the github skill script — `{script}`: not done — `task drop <N>`, a new one — `task new … --epic {epic}` and an estimate with the est skill. Don't touch code, branches or git; don't close #{number}, epic #{epic} or their milestones — task close does that after you.",
+    "scope": "You change only GitHub tasks — description, «{questions}», links, status; the github skill script — `{script}`: not done — `task drop <N>`, a new one — `task new … --branch-type <type> --epic {epic}` (it sets the estimate itself). Don't touch code, branches or git; don't close #{number}, epic #{epic} or their milestones — task close does that after you.",
     "comment": "What you fixed — one line in a comment on epic #{epic} (`gh issue comment {epic} --repo {repo}`); nothing to fix — no comment.",
     "answer": "Answer — fixes one per line with task numbers and questions to the owner, if any; otherwise «The block is current»."
   },
