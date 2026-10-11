@@ -7,7 +7,7 @@ import type { Model } from "../../../skills/spec/scripts/architecture.ts";
 import { configGet, eslintLinter, examples } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
+import { SCRIPTS, setLanguage, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -630,3 +630,39 @@ describe("Контейнеры модели (C2) сверяются с кодо�
   });
 });
 
+/**
+ * Тесты модели стоят в спеке проекта рядом с его собственными — на языке проекта (`language` в `.agents/ai-dev.json`
+ * каталога, из которого идёт раннер). `rule` исключения называет реестр на любом языке словаря: проект мог сменить язык.
+ */
+describe("Проверки модели архитектуры — на языке проекта", () => {
+  /** Исходы тестов модели, зарегистрированных из каталога `cwd` (раннер идёт из него). */
+  async function outcomesIn(cwd: string, register: (it: It) => void): Promise<Record<string, string>> {
+    const back = process.cwd();
+    process.chdir(cwd);
+    try {
+      return await outcomes(register);
+    } finally {
+      process.chdir(back);
+    }
+  }
+
+  it("в проекте на en реестры и названия тестов модели — по-английски", async () => {
+    setLanguage(dir, "en");
+    writeTree(dir, code);
+    const r = await outcomesIn(dir, (it) => architecture(it, { root: dir, model }));
+    expect(r["registry «code directories» is not empty"]).toBe("✓");
+    expect(r["directory src/domain is in module domain"]).toBe("✓");
+    expect(r["infra imports pg"]).toBe("✓");
+    expect(r["ui uses allowed package react"]).toBe("✓");
+    expect(r["violator does not pass: a directory outside the modules"]).toBe("✓");
+  });
+
+  it("исключение с rule — названием реестра на другом языке словаря — попадает в свой реестр", async () => {
+    setLanguage(dir, "en");
+    writeTree(dir, { ...code, "src/domain/legacy.js": 'import _ from "lodash";\nexport const l = _;\n' });
+    // реестр не первый: без сопоставления названий исключение ушло бы в первый реестр и упало бы там
+    const exceptions = [{ item: "domain:lodash", issue: 7, reason: "убрать lodash в #7", rule: "внешние пакеты модулей" }];
+    const r = await outcomesIn(dir, (it) => architecture(it, { root: dir, model, exceptions }));
+    expect(r["exception: domain:lodash (#7)"]).toBe("✓");
+  });
+});

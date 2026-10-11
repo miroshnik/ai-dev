@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { codeFiles, invariant, source, sources } from "../../../skills/spec/scripts/harness.ts";
+import { codeFiles, deadCode, envVars, examples, invariant, lintExceptions, source, sources } from "../../../skills/spec/scripts/harness.ts";
 import type { It } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
+import { SCRIPTS, setLanguage, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -206,7 +206,11 @@ describe("Реестр + инвариант на реальном коде: не
 
 let dir: string;
 let cleanup: () => void;
-beforeEach(() => ({ dir, cleanup } = tmpDir()));
+// проект на ru: тесты файла ждут русские названия, без манифеста проект — en
+beforeEach(() => {
+  ({ dir, cleanup } = tmpDir());
+  setLanguage(dir, "ru");
+});
 afterEach(() => cleanup());
 
 // Файл теста проекта: реестр из файлов каталога, соглашение — «экспортирует default»
@@ -255,5 +259,102 @@ describe("Тесты проверки — в отчёте любого ранн�
     expect(r.stdout).toContain("ok 2 - нарушитель не проходит: обработчик без export default");
     expect(r.stdout).toContain("ok 3 - a.ts экспортирует default");
     expect(r.stdout).toContain("not ok 4 - b.ts экспортирует default");
+  });
+});
+
+/** Названия тестов, которые харнесс регистрирует в каталоге проекта `cwd` (раннер идёт из него). */
+function namesIn(cwd: string, register: (it: It) => void): string[] {
+  const back = process.cwd();
+  process.chdir(cwd);
+  try {
+    return collect(register).map((t) => t.name);
+  } finally {
+    process.chdir(back);
+  }
+}
+
+/**
+ * Тесты, которые порождает харнесс, стоят в спеке проекта рядом с его собственными — они на языке проекта
+ * (`language` в `.agents/ai-dev.json` каталога, из которого идёт раннер). Язык читается при регистрации тестов, а не
+ * при загрузке харнесса: один процесс гоняет тесты разных проектов.
+ */
+describe("Харнесс называет свои тесты на языке проекта", () => {
+  it("харнесс в проекте на en называет свои тесты по-английски", () => {
+    setLanguage(dir, "en");
+    const items = [
+      { name: "createInvoice", audits: true },
+      { name: "importLegacy", audits: false },
+    ];
+    const names = namesIn(dir, (it) =>
+      invariant(it, {
+        registry: "mutations",
+        items,
+        name: (m) => `${m.name} writes an audit record`,
+        key: (m) => m.name,
+        check: mustAudit,
+        violator: { name: "a mutation without an audit record", item: { name: "fake", audits: false } },
+        includes: ["createInvoice"],
+        outside: [{ item: "login", reason: "no user yet" }],
+        exceptions: [{ item: "importLegacy", issue: 12, reason: "audit in #12" }],
+      }),
+    );
+    expect(names).toEqual([
+      "registry «mutations» is not empty",
+      "registry «mutations» finds createInvoice",
+      "violator does not pass: a mutation without an audit record",
+      "createInvoice writes an audit record",
+      "outside scope: login",
+      "exception: importLegacy (#12)",
+    ]);
+  });
+
+  it("примеры правила, отключения линта, код без потребителя и переменные окружения в проекте на en — по-английски", () => {
+    setLanguage(dir, "en");
+    writeTree(dir, {
+      "src/a.ts": "// eslint-disable-next-line -- #12 a legacy log\nconsole.log(process.env.API_KEY);\n",
+      "knip.json": JSON.stringify({ issues: [], configurationHints: [] }),
+    });
+    const linter = { lint: async () => [] };
+    const names = namesIn(dir, (it) => {
+      examples(it, {
+        linter,
+        rule: "no-console",
+        bad: [],
+        good: [{ name: "a logger in the domain", path: "src/b.ts", code: "log(1);" }],
+        outside: [{ name: "console in a build script", path: "scripts/build.ts", code: "console.log(1);" }],
+      });
+      lintExceptions(it, { root: dir });
+      deadCode(it, { root: dir, report: "knip.json", production: true });
+      envVars(it, { root: dir, declared: ["API_KEY", "OLD_KEY"], ignore: ["DEBUG"] });
+    });
+    expect(names).toEqual([
+      "rule no-console has a «not allowed» example",
+      "allowed: a logger in the domain",
+      "outside scope: console in a build script",
+      "there are code files in src",
+      "exceptions in src/a.ts: all rules (#12)",
+      "no files without a consumer (production)",
+      "no exports without a consumer (production)",
+      "no types without a consumer (production)",
+      "no dependencies without an import (production)",
+      "no imports of unlisted packages (production)",
+      "no unresolved imports (production)",
+      "no enum members without a consumer (production)",
+      "no namespace members without a consumer (production)",
+      "no duplicate exports (production)",
+      "no calls to unlisted binaries (production)",
+      "no unused catalog entries (production)",
+      "no references to missing catalog entries (production)",
+      "all knip findings are of known kinds (production)",
+      "no knip configuration hints (production)",
+      "outside scope without a reason: DEBUG",
+      "registry «environment variables in the code» is not empty",
+      "violator does not pass: a variable without a declaration",
+      "API_KEY is declared",
+      "registry «declared environment variables» is not empty",
+      "violator does not pass: declared and not read",
+      "API_KEY is read in the code",
+      "OLD_KEY is read in the code",
+    ]);
   });
 });
