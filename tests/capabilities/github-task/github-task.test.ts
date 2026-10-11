@@ -54,11 +54,11 @@ describe("task new заводит задачу со всем сразу", () => 
     expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
     expect(byOp(f, "AddBlockedBy")).toEqual([{ issueId: f.issue(50).id, blockingIssueId: f.issue(49).id }]);
     expect(r.out.split("\n")).toEqual([
-      "Создана #50 GitHub · Экспорт задач — https://github.com/miroshnik/ai-dev/issues/50",
-      "+ проект «ai-dev»: Status «Бэклог»",
-      "+ подзадача эпика #45",
+      "Created #50 GitHub · Экспорт задач — https://github.com/miroshnik/ai-dev/issues/50",
+      "+ project «ai-dev»: Status «Бэклог»",
+      "+ subtask of epic #45",
       "+ blocked by #49",
-      "Дальше: оценка — одним вызовом скилла est: est estimate 50 --type <тип ветки> --write (аналоги подбирает скрипт); «Оценка, ч» эпика #45 — пересчитать суммой подзадач.",
+      "Next: the estimate — one call of the est skill: est estimate 50 --type <branch type> --write (the script picks the analogs); «Оценка, ч» of epic #45 — recompute as the sum of its subtasks.",
     ]);
   });
 
@@ -72,7 +72,7 @@ describe("task new заводит задачу со всем сразу", () => 
     const f = new FakeGitHub(REC);
     const r = task(f, ["new", "--title", "Экспорт", "--blocked-by", "46,49"]);
     expect(byOp(f, "AddBlockedBy").map((m) => m.blockingIssueId)).toEqual([f.issue(49).id]);
-    expect(r.out).toContain("+ #46 закрыта — не блокирует, пропущена");
+    expect(r.out).toContain("+ #46 is closed — doesn't block, skipped");
   });
 
   it("тело задачи — из файла --body-file", () => {
@@ -88,8 +88,8 @@ describe("task new заводит задачу со всем сразу", () => 
     const r = task(f, ["new", "--title", "Импорт · Импорт задач из CSV", "--type", "Эпик"]);
     expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([f.taskContext.label.id]);
     expect(byOp(f, "CreateIssue")[0]).not.toHaveProperty("issueTypeId");
-    expect(r.out).toContain("+ метка «epic» — тип в личном аккаунте");
-    expect(r.out).toContain("Дальше: эпик не оценивается — его «Оценка, ч» = сумма оценок подзадач.");
+    expect(r.out).toContain("+ label «epic» — the type in a personal account");
+    expect(r.out).toContain("Next: an epic isn't estimated — its «Оценка, ч» is the sum of its subtasks' estimates.");
   });
 
   it("метки epic в репозитории нет — создаёт её и ставит", () => {
@@ -118,13 +118,13 @@ describe("task new заводит задачу со всем сразу", () => 
   it("в сессии с закреплённой задачей «Дальше:» называет новую сессию и первый промпт #M", () => {
     const f = new FakeGitHub(REC);
     const io = inSession(scratch());
-    expect(task(f, ["new", "--title", "Импорт"], REPO, io).out).not.toContain("сессия ведёт");
+    expect(task(f, ["new", "--title", "Импорт"], REPO, io).out).not.toContain("the session runs");
     task(f, ["status", "49", "В работе"], REPO, io);
     const r = task(f, ["new", "--title", "Экспорт"], REPO, io);
     expect(r.code).toBe(0);
     expect(r.out.split("\n").slice(-2)).toEqual([
-      "Дальше: оценка — одним вызовом скилла est: est estimate 51 --type <тип ветки> --write (аналоги подбирает скрипт).",
-      "Дальше: сессия ведёт miroshnik/ai-dev#49 — #51 в новой сессии, первый промпт: #51.",
+      "Next: the estimate — one call of the est skill: est estimate 51 --type <branch type> --write (the script picks the analogs).",
+      "Next: the session runs miroshnik/ai-dev#49 — #51 in a new session, first prompt: #51.",
     ]);
   });
 
@@ -136,23 +136,23 @@ describe("task new заводит задачу со всем сразу", () => 
       expect(f.mutations).toEqual([]);
     };
 
-    it("--epic указывает не на эпик", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--epic", "47"], "#47 — не эпик (нет метки epic)"));
+    it("--epic указывает не на эпик", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--epic", "47"], "#47 is not an epic (no epic label)"));
     it("эпик закрыт", () => {
       const f = new FakeGitHub(REC);
       f.closed(45);
-      refused(f, ["--title", "Экспорт", "--epic", "45"], "эпик #45 закрыт");
+      refused(f, ["--title", "Экспорт", "--epic", "45"], "epic #45 is closed");
     });
-    it("открытого milestone с таким названием нет", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--milestone", "Нет такого"], "открытого milestone «Нет такого» нет"));
+    it("открытого milestone с таким названием нет", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--milestone", "Нет такого"], "no open milestone «Нет такого»"));
     it("открытая задача с тем же заголовком уже есть — дубль не заводится", () => {
       const f = new FakeGitHub(REC);
-      refused(f, ["--title", f.issue(49).title], "открытая задача с таким заголовком уже есть: #49");
+      refused(f, ["--title", f.issue(49).title], "an open task with this title already exists: #49");
     });
-    it("в личном аккаунте --priority — приоритет там не ведём", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--priority", "High"], "в личном аккаунте полей issue нет"));
-    it("блокера нет в репозитории", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--blocked-by", "999"], "задачи #999 в miroshnik/ai-dev нет"));
+    it("в личном аккаунте --priority — приоритет там не ведём", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--priority", "High"], "a personal account has no issue fields"));
+    it("блокера нет в репозитории", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--blocked-by", "999"], "no issue #999 in miroshnik/ai-dev"));
     it("проекта нет — сначала project fix", () => {
       const f = new FakeGitHub(REC);
       f.unlinkAll();
-      refused(f, ["--title", "Экспорт"], "не привязан проект — сначала github project fix");
+      refused(f, ["--title", "Экспорт"], "no project is linked to miroshnik/ai-dev — github project fix first");
     });
   });
 });
@@ -173,8 +173,8 @@ describe("task new ставит метки решений — по имени р
     const billing = f.labels.find((l) => l.name === "billing")!;
     expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([billing.id, audit.id]);
     expect(issueLabels(f, 50)).toEqual(["billing", "audit"]);
-    expect(r.out).toContain("+ создана метка «billing»");
-    expect(r.out).toContain("+ метки: billing, audit");
+    expect(r.out).toContain("+ created label «billing»");
+    expect(r.out).toContain("+ labels: billing, audit");
   });
 
   it("новое решение — `вид:имя`: метка с именем, строка называет решение новым", () => {
@@ -183,15 +183,15 @@ describe("task new ставит метки решений — по имени р
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "export", color: CAP, description: "Решение: tests/capabilities/export" }]);
     expect(issueLabels(f, 50)).toEqual(["export"]);
-    expect(r.out).toContain("+ export — новое решение: tests/capabilities/export в основной ветке ещё нет");
+    expect(r.out).toContain("+ export — new decision: tests/capabilities/export is not in the default branch yet");
   });
 
   it("метка не решения, которой нет в репозитории, — ошибка до создания задачи", () => {
     const f = new FakeGitHub(REC);
     const r = task(f, ["new", "--title", "Экспорт", "--labels", "capability:export,срочно"]);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("метки «срочно» в репозитории нет");
-    expect(r.err).toContain("новое решение — вид:имя");
+    expect(r.err).toContain("no label «срочно» in the repository");
+    expect(r.err).toContain("a new decision — kind:name");
     expect(byOp(f, "CreateIssue")).toEqual([]);
     expect(byOp(f, "CreateLabel")).toEqual([]);
   });
@@ -203,7 +203,7 @@ describe("task new ставит метки решений — по имени р
     const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "billing,срочно"]);
     expect(r.code).toBe(0);
     expect(issueLabels(f, 45)).toEqual(["epic", "billing"]);
-    expect(r.out).toContain("+ эпик #45: billing");
+    expect(r.out).toContain("+ epic #45: billing");
   });
 
   // метка-разрез (описание «Разрез: …») — разрез задач проекта, а не метка решения, хотя имя у них одно (#343)
@@ -213,7 +213,7 @@ describe("task new ставит метки решений — по имени р
     const api = f.label("api", "C5DEF5", "Разрез: приложения — API-сервер");
     const refused = task(f, ["new", "--title", "Экспорт", "--labels", "architecture:api"]);
     expect(refused.code).toBe(2);
-    expect(refused.err).toContain("метка «api» — разрез «приложения», не метка решения: решение api меткой не отмечается; метка разреза — --labels api");
+    expect(refused.err).toContain("label «api» is slice «приложения», not a decision label: decision api isn't labeled; the slice label — --labels api");
     expect(f.mutations).toEqual([]);
     const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--labels", "api"]);
     expect(r.code).toBe(0);
@@ -265,7 +265,7 @@ describe("pr labels ставит задаче метки решений по д�
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [49], head: HEAD, model: null };
     const r = prLabels(f, 120);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" }]);
-    expect(r.out).toContain("+ создана метка «billing»");
+    expect(r.out).toContain("+ created label «billing»");
   });
 
   it("прежняя метка решения, которого нет в диффе, — не снимается, строка в выводе", () => {
@@ -277,7 +277,7 @@ describe("pr labels ставит задаче метки решений по д�
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [49], head: HEAD, model: null };
     const r = prLabels(f, 120);
     expect(issueLabels(f, 49)).toEqual(["old", "срочно", "billing"]);
-    expect(r.out).toContain("= #49: old — решения нет в диффе PR, метка не снята");
+    expect(r.out).toContain("= #49: old — the decision is not in the PR diff, the label stays");
     expect(r.out).not.toContain("= #49: срочно");
   });
 
@@ -293,7 +293,7 @@ describe("pr labels ставит задаче метки решений по д�
     expect(r.code).toBe(0);
     expect(issueLabels(f, 49)).toEqual(["export"]);
     expect(r.out).toContain("PR #120 → #49: export");
-    expect(r.out).toContain("○ billing — только механическая правка");
+    expect(r.out).toContain("○ billing — only a mechanical edit");
   });
 
   it("правка только `exceptions.ts` не даёт метку решения", () => {
@@ -303,8 +303,8 @@ describe("pr labels ставит задаче метки решений по д�
     const r = prLabels(f, 120);
     expect(r.code).toBe(0);
     expect(f.mutations).toEqual([]);
-    expect(r.out).toContain("PR #120 → #49: решений в диффе нет");
-    expect(r.out).toContain("○ audit — только механическая правка");
+    expect(r.out).toContain("PR #120 → #49: no decisions in the diff");
+    expect(r.out).toContain("○ audit — only a mechanical edit");
   });
 
   it("правка только файлов `exceptions/` не даёт метку решения", () => {
@@ -318,7 +318,7 @@ describe("pr labels ставит задаче метки решений по д�
     const r = prLabels(f, 120);
     expect(r.code).toBe(0);
     expect(f.mutations).toEqual([]);
-    expect(r.out).toContain("○ audit — только механическая правка");
+    expect(r.out).toContain("○ audit — only a mechanical edit");
   });
 
   // baseline исключений названий кладёт файл в папку каждого решения с долгом — метки всем им были бы шумом
@@ -330,7 +330,7 @@ describe("pr labels ставит задаче метки решений по д�
     const r = prLabels(f, 120);
     expect(r.code).toBe(0);
     expect(f.mutations).toEqual([]);
-    expect(r.out).toContain("○ billing — только механическая правка");
+    expect(r.out).toContain("○ billing — only a mechanical edit");
   });
 
   it("удалённые файлы не дают метку ни решению, ни модулю модели", () => {
@@ -343,8 +343,8 @@ describe("pr labels ставит задаче метки решений по д�
     f.prs[120] = { files, closes: [49], head: HEAD, model: MODEL };
     const r = prLabels(f, 120);
     expect(issueLabels(f, 49)).toEqual(["web"]);
-    expect(r.out).toContain("○ domain — только механическая правка");
-    expect(r.out).toContain("○ legacy — только механическая правка");
+    expect(r.out).toContain("○ domain — only a mechanical edit");
+    expect(r.out).toContain("○ legacy — only a mechanical edit");
   });
 
   // сторож от перекоррекции: механический файл не отменяет содержательную правку решения
@@ -368,7 +368,7 @@ describe("pr labels ставит задаче метки решений по д�
     const r = prLabels(f, 120);
     expect(issueLabels(f, 47)).toEqual(["billing", "est"]);
     expect(issueLabels(f, 45)).toEqual(["epic", "est", "billing"]);
-    expect(r.out).toContain("+ эпик #45: billing");
+    expect(r.out).toContain("+ epic #45: billing");
   });
 
   // модуль web модели и метка-разрез web команды — одно имя, разный смысл: метка решения модулю не нужна (#343)
@@ -381,7 +381,7 @@ describe("pr labels ставит задаче метки решений по д�
     expect(issueLabels(f, 47)).toEqual(["domain"]);
     expect(issueLabels(f, 45)).toEqual(["epic", "domain"]);
     expect(r.out).toContain("PR #120 → #47: domain");
-    expect(r.out).toContain("○ web — метка «web» — разрез «приложения», не метка решения: не ставится");
+    expect(r.out).toContain("○ web — label «web» is slice «приложения», not a decision label: not set");
   });
 
   // GitHub связывает PR с задачей не сразу после создания: pr labels зовут как раз тогда (#164)
@@ -401,7 +401,7 @@ describe("pr labels ставит задаче метки решений по д�
     f.prs[120] = { files: ["tests/capabilities/billing/billing.test.ts"], closes: [], head: HEAD, model: null };
     const r = prLabels(f, 120);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("в PR #120 нет «Closes #N»");
+    expect(r.err).toContain("PR #120 has no «Closes #N»");
     expect(f.mutations).toEqual([]);
   });
 });
@@ -413,7 +413,7 @@ describe("В организации задача получает тип issue �
     const f = org();
     const r = task(f, ["new", "--title", "Экспорт"], ORG);
     expect(byOp(f, "CreateIssue")[0]).toMatchObject({ issueTypeId: "IT_1", issueFields: [{ fieldId: "IFSS_priority", singleSelectOptionId: "IFO_medium" }] });
-    expect(r.out).toContain("+ тип «Задача»");
+    expect(r.out).toContain("+ type «Задача»");
     expect(r.out).toContain("+ Priority «Medium»");
   });
 
@@ -422,7 +422,7 @@ describe("В организации задача получает тип issue �
     f.setPriority(45, "Low");
     const r = task(f, ["new", "--title", "Экспорт", "--epic", "45", "--priority", "High"], ORG);
     expect(byOp(f, "SetIssueField")).toEqual([{ issueId: f.issue(45).id, issueFields: [{ fieldId: "IFSS_priority", singleSelectOptionId: "IFO_high" }] }]);
-    expect(r.out).toContain("+ Priority эпика #45: Low → High");
+    expect(r.out).toContain("+ Priority of epic #45: Low → High");
     task(f, ["new", "--title", "Импорт", "--epic", "45", "--priority", "Medium"], ORG);
     expect(byOp(f, "SetIssueField")).toHaveLength(1);
   });
@@ -430,7 +430,7 @@ describe("В организации задача получает тип issue �
   it("выключенный тип или чужое значение Priority — ошибка до создания", () => {
     const f = org();
     f.repo.owner.issueTypes.nodes.find((t: { name: string }) => t.name === "Баг").isEnabled = false;
-    expect(task(f, ["new", "--title", "Экспорт", "--type", "Баг"], ORG).err).toContain("в организации нет включённого типа «Баг» — github project fix");
+    expect(task(f, ["new", "--title", "Экспорт", "--type", "Баг"], ORG).err).toContain("the organization has no enabled type «Баг» — github project fix");
     expect(task(f, ["new", "--title", "Экспорт", "--priority", "P1"], ORG).err).toContain("--priority: Urgent, High, Medium, Low");
     expect(f.mutations).toEqual([]);
   });
@@ -443,7 +443,7 @@ describe("task status двигает задачу по доске, эпик — 
     const r = task(f, ["status", "47", "В работе"]);
     expect(r.code).toBe(0);
     expect(statusSet(f)).toEqual([[47, "В работе"], [45, "В работе"]]);
-    expect(r.out).toContain("+ эпик #45: Status «В работе» — взята первая подзадача");
+    expect(r.out).toContain("+ epic #45: Status «В работе» — the first subtask is taken");
   });
 
   it("эпик уже в работе — не трогается", () => {
@@ -458,21 +458,21 @@ describe("task status двигает задачу по доске, эпик — 
     f.items().splice(f.items().indexOf(f.item(49)), 1);
     const r = task(f, ["status", "#49", "Бэклог"]);
     expect(byOp(f, "AddItem")).toEqual([{ projectId: f.project().id, contentId: f.issue(49).id }]);
-    expect(r.out).toContain("+ #49: Status «Бэклог» (добавлена в проект)");
+    expect(r.out).toContain("+ #49: Status «Бэклог» (added to the project)");
   });
 
   it("последняя подзадача закрыта и в Готово — подсказка закрыть эпик", () => {
     const f = new FakeGitHub(REC);
     f.closed(47);
     const r = task(f, ["status", "47", "Готово"]);
-    expect(r.out).toContain("Дальше: все подзадачи эпика #45 закрыты — закрыть эпик и поставить ему «Готово».");
+    expect(r.out).toContain("Next: all subtasks of epic #45 are closed — close the epic and set it to «Готово».");
   });
 
   it("статус не из канона — ошибка, ничего не меняется", () => {
     const f = new FakeGitHub(REC);
     const r = task(f, ["status", "47", "Сделано"]);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("статус: Бэклог, В работе, Готово");
+    expect(r.err).toContain("status: Бэклог, В работе, Готово");
     expect(f.mutations).toEqual([]);
   });
 });
@@ -499,7 +499,7 @@ describe("task status берёт в работу одну задачу на се
     task(f, ["status", "49", "В работе"], REPO, inSession(config));
     const r = task(f, ["status", "42", "В работе"], REPO, inSession(config));
     expect(r.code).toBe(2);
-    expect(r.err).toBe(`ошибка: сессия ведёт miroshnik/ai-dev#49; #42 — в новой сессии, первый промпт: #42 (закрепление: ${pinFile(config)} — ошибочное снимает человек)`);
+    expect(r.err).toBe(`error: the session runs miroshnik/ai-dev#49; #42 — in a new session, first prompt: #42 (pin: ${pinFile(config)} — a mistaken one is removed by a human)`);
     expect(r.out).toBe("");
     expect(statusSet(f)).toEqual([[49, "В работе"]]);
     expect(f.mutations).toHaveLength(1);
@@ -521,7 +521,7 @@ describe("task status берёт в работу одну задачу на се
     const other = new FakeGitHub(asOrg(REC));
     const r = task(other, ["status", "49", "В работе"], ORG, inSession(config));
     expect(r.code).toBe(2);
-    expect(r.err).toContain("сессия ведёт miroshnik/ai-dev#49; #49 — в новой сессии, первый промпт: #49");
+    expect(r.err).toContain("the session runs miroshnik/ai-dev#49; #49 — in a new session, first prompt: #49");
     expect(other.mutations).toEqual([]);
   });
 
@@ -576,7 +576,7 @@ describe("task status берёт в работу одну задачу на се
     const io = { env: { AI_DEV_CONFIG_DIR: config } };
     const r = task(f, ["status", "49", "В работе"], REPO, io);
     expect(r.code).toBe(0);
-    expect(r.out).toContain("○ сессия не опознана (нет CLAUDE_CODE_SESSION_ID) — задача не закреплена");
+    expect(r.out).toContain("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — the task isn't pinned");
     expect(task(f, ["status", "42", "В работе"], REPO, io).code).toBe(0);
     expect(statusSet(f)).toEqual([[49, "В работе"], [42, "В работе"]]);
     expect(existsSync(path.join(config, "sessions"))).toBe(false);
@@ -599,7 +599,7 @@ describe("task status берёт в работу одну задачу на се
     expect(pinned(legacy)).toBe("miroshnik/ai-dev#49");
     const r = task(f, ["status", "42", "В работе"], REPO, io);
     expect(r.code).toBe(2);
-    expect(r.err).toContain(`закрепление: ${pinFile(legacy)}`);
+    expect(r.err).toContain(`pin: ${pinFile(legacy)}`);
   });
 
   // каталог конфигурации бывает симлинком на личный чекаут (AI_DEV_PRIVATE при install -g)
@@ -630,12 +630,12 @@ describe("task drop закрывает без выполнения и убира
     const f = new FakeGitHub(REC);
     const r = task(f, ["drop", "49", "--duplicate-of", "42"]);
     expect(byOp(f, "CloseIssue")).toEqual([{ issueId: f.issue(49).id, stateReason: "DUPLICATE", duplicateIssueId: f.issue(42).id }]);
-    expect(r.out).toContain("+ #49 закрыта: дубль #42");
+    expect(r.out).toContain("+ #49 closed: duplicate of #42");
   });
 
   it("подзадача эпика — подсказка пересчитать оценку эпика", () => {
     const f = new FakeGitHub(REC);
-    expect(task(f, ["drop", "47"]).out).toContain("Дальше: «Оценка, ч» эпика #45 — пересчитать суммой оставшихся подзадач.");
+    expect(task(f, ["drop", "47"]).out).toContain("Next: «Оценка, ч» of epic #45 — recompute as the sum of the remaining subtasks.");
   });
 
   it("уже закрыта без выполнения, но в проекте — только убирает из проекта", () => {
@@ -650,7 +650,7 @@ describe("task drop закрывает без выполнения и убира
     const f = new FakeGitHub(REC);
     const r = task(f, ["drop", "46"]);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("#46 закрыта как выполненная — drop только для невыполненных");
+    expect(r.err).toContain("#46 is closed as completed — drop is only for tasks not done");
     expect(f.mutations).toEqual([]);
   });
 });
@@ -667,7 +667,7 @@ describe("Статус ставится, даже если проект ещё �
     const r = task(f, ["new", "--title", "Экспорт"]);
     expect(r.code).toBe(0);
     expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
-    expect(r.out).toContain("+ проект «ai-dev»: Status «Бэклог»");
+    expect(r.out).toContain("+ project «ai-dev»: Status «Бэклог»");
   });
 
   it("задачу проект уже добавил, а чтение её ещё не показывает: task status перечитывает с паузой и ставит статус", () => {
@@ -679,7 +679,7 @@ describe("Статус ставится, даже если проект ещё �
     expect(statusSet(f)).toEqual([[49, "В работе"]]);
     expect(pauses).toBe(2);
     expect(r.out).toContain("+ #49: Status «В работе»");
-    expect(r.out).not.toContain("добавлена в проект");
+    expect(r.out).not.toContain("added to the project");
   });
 
   it("элемент так и не виден — понятная ошибка с тем, что повторить, а не падение", () => {
@@ -687,7 +687,7 @@ describe("Статус ставится, даже если проект ещё �
     f.issueRefLag[49] = 100;
     const r = task(f, ["status", "49", "В работе"]);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("#49 уже в проекте, но элемент не виден — повторить: github task status 49");
+    expect(r.err).toContain("#49 is already in the project, but its item isn't visible — retry: github task status 49");
   });
 });
 
@@ -725,14 +725,14 @@ describe("task actualize печатает задание субагенту ак
     const f = new FakeGitHub(REC);
     const r = task(f, ["actualize", "49"]);
     expect(r.code).toBe(0);
-    expect(r.out).toBe("○ актуализация не нужна: у #49 нет эпика. Дальше: task close 49 — после деплоя, где мерж выкатывает.");
+    expect(r.out).toBe("○ refresh not needed: #49 has no epic. Next: task close 49 — after the deploy, where the merge deploys.");
   });
 
   it("в эпике нет открытых задач, кроме этой, — скрипт пишет, что актуализация не нужна", () => {
     const f = new FakeGitHub(REC);
     const r = task(f, ["actualize", "47"]);
     expect(r.code).toBe(0);
-    expect(r.out).toBe("○ актуализация не нужна: в эпике #45 открытых задач, кроме #47, нет. Дальше: task close 47 — после деплоя, где мерж выкатывает.");
+    expect(r.out).toBe("○ refresh not needed: epic #45 has no open tasks besides #47. Next: task close 47 — after the deploy, where the merge deploys.");
   });
 
   it("новая открытая подзадача эпика попадает в задание", () => {
@@ -767,11 +767,11 @@ describe("task close закрывает задачу одной командой
     expect(calls[0]!.slice(-5)).toEqual(["fact", "49", "--repo", REPO, "--write"]);
     expect(calls[0]![1]).toMatch(/skills\/est\/scripts\/est\.ts$/);
     expect(statusSet(f)).toEqual([[49, "Готово"]]);
-    expect(r.out).toContain("+ #49 закрыта: PR #77 влит");
+    expect(r.out).toContain("+ #49 closed: PR #77 merged");
     expect(r.out).toContain(FACT);
     expect(r.out).toContain("+ #49: Status «Готово»");
     // у задачи нет эпика — актуализировать нечего, следующий шаг — конец сессии
-    expect(r.out.split("\n").at(-1)).toStartWith("Дальше: последней строкой ответа одна из трёх");
+    expect(r.out.split("\n").at(-1)).toStartWith("Next: the last line of the answer is one of three");
   });
 
   /**
@@ -782,7 +782,7 @@ describe("task close закрывает задачу одной командой
     const f = new FakeGitHub(REC);
     mergedPr(f, 46);
     const last = task(f, ["close", "46", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
-    expect(last).toStartWith("Дальше: актуализация блока, если её не было до close, — субагент с заданием task actualize 46; затем последней строкой ответа одна из трёх");
+    expect(last).toStartWith("Next: the epic refresh, if it didn't happen before close — a subagent with the task actualize 46 assignment; then the last line of the answer is one of three");
   });
 
   /**
@@ -795,9 +795,9 @@ describe("task close закрывает задачу одной командой
     mergedPr(f, 47);
     const last = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
     expect(last).toContain(
-      "Дальше: последней строкой ответа одна из трёх: «Всё сделано. Сессию можно закрывать.»; " +
-        "владельцу есть что решать — «Всё сделано, но есть вопросы: …» с самими вопросами, без «Всё сделано. Сессию можно закрывать.»; " +
-        "что-то осталось — «Осталось: …».",
+      "Next: the last line of the answer is one of three: «Всё сделано. Сессию можно закрывать.»; " +
+        "the owner has something to decide — «Всё сделано, но есть вопросы: …» with the questions themselves, without «Всё сделано. Сессию можно закрывать.»; " +
+        "something remains — «Осталось: …».",
     );
   });
 
@@ -811,7 +811,7 @@ describe("task close закрывает задачу одной командой
     const f = new FakeGitHub(REC);
     mergedPr(f, 47);
     const last = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
-    expect(last).toContain("В режиме auto после «Всё сделано. Сессию можно закрывать.» — архивация сессии, где у агента есть инструмент; после двух других строк — нет.");
+    expect(last).toContain("In auto mode after «Всё сделано. Сессию можно закрывать.» — archive the session where the agent has the tool; after the other two lines — don't.");
   });
 
   /**
@@ -822,7 +822,7 @@ describe("task close закрывает задачу одной командой
     const f = new FakeGitHub(REC);
     mergedPr(f, 47);
     const last = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
-    expect(last).toContain("Информация без решения (наблюдение, срок, предупреждение) — не вопрос: строка и архивация — как у «Всё сделано. Сессию можно закрывать.»");
+    expect(last).toContain("Information without a decision (an observation, a deadline, a warning) isn't a question: the line and archiving are as with «Всё сделано. Сессию можно закрывать.»");
   });
 
   it("PR открыт или закрыт без мержа — ошибка до изменений, ничего не тронуто", () => {
@@ -831,7 +831,7 @@ describe("task close закрывает задачу одной командой
     const calls: string[][] = [];
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("PR #78 открыт");
+    expect(r.err).toContain("PR #78 open");
     expect(f.mutations).toEqual([]);
     expect(calls).toEqual([]);
   });
@@ -853,7 +853,7 @@ describe("task close закрывает задачу одной командой
     expect(byOp(f, "CloseIssue")).toEqual([{ issueId: f.issue(49).id, stateReason: "COMPLETED" }]);
     expect(calls).toHaveLength(1);
     expect(statusSet(f)).toEqual([[49, "Готово"]]);
-    expect(r.out).toContain("+ #49 закрыта по PR #77 (ветка fix/49-x): GitHub не связал PR с задачей");
+    expect(r.out).toContain("+ #49 closed by PR #77 (branch fix/49-x): GitHub didn't link the PR to the task");
   });
 
   it("связи нет, влитый PR с «Closes #N» в теле — задача закрыта по нему", () => {
@@ -862,7 +862,7 @@ describe("task close закрывает задачу одной командой
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
     expect(r.code).toBe(0);
     expect(byOp(f, "AddComment").map((c) => c.body)).toEqual(["Закрыта по PR #77: GitHub не связал PR с задачей"]);
-    expect(r.out).toContain("+ #49 закрыта по PR #77 («Closes #49» в теле): GitHub не связал PR с задачей");
+    expect(r.out).toContain("+ #49 closed by PR #77 («Closes #49» in the body): GitHub didn't link the PR to the task");
   });
 
   it("связи нет и влитого PR задачи нет — отказ с перечнем проверенного", () => {
@@ -874,8 +874,8 @@ describe("task close закрывает задачу одной командой
     const calls: string[][] = [];
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls) });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("#49 закрывать рано: задача открыта, влитого PR нет");
-    expect(r.err).toContain("проверены связь PR с задачей, ветка <type>/49-<slug> и «Closes #49» в теле последних 50 PR в main");
+    expect(r.err).toContain("#49 is too early to close: the task is open, no merged PR");
+    expect(r.err).toContain("checked: the PR–task link, the branch <type>/49-<slug> and «Closes #49» in the body of the last 50 PRs into main");
     expect(f.mutations).toEqual([]);
     expect(calls).toEqual([]);
   });
@@ -885,7 +885,7 @@ describe("task close закрывает задачу одной командой
     unlinkedPr(f, { merged: false, state: "OPEN" });
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("#49 закрывать рано: PR #77 открыт");
+    expect(r.err).toContain("#49 is too early to close: PR #77 open");
     expect(f.mutations).toEqual([]);
   });
 
@@ -907,16 +907,16 @@ describe("task close закрывает задачу одной командой
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls), env: { AI_DEV_EST: "/nowhere/est.ts" } });
     expect(r.code).toBe(0);
     expect(calls).toEqual([]);
-    expect(r.out).toContain("○ факт недоступен: est не установлен");
+    expect(r.out).toContain("○ actual unavailable: est is not installed");
     expect(statusSet(f)).toEqual([[49, "Готово"]]);
   });
 
   it("est упал — его ошибка строкой «!», остальное сделано", () => {
     const f = new FakeGitHub(REC);
     mergedPr(f, 49);
-    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([], { status: 1, stderr: "EstError: у репозитория нет paths в реестре\n" }) });
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([], { status: 1, stderr: "EstError: the repository has no paths in the registry\n" }) });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("! est fact: EstError: у репозитория нет paths в реестре");
+    expect(r.out).toContain("! est fact: EstError: the repository has no paths in the registry");
     expect(statusSet(f)).toEqual([[49, "Готово"]]);
   });
 
@@ -926,7 +926,7 @@ describe("task close закрывает задачу одной командой
     const r = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) });
     expect(byOp(f, "CloseIssue").map((m) => m.issueId)).toEqual([f.issue(47).id, f.issue(45).id]);
     expect(statusSet(f)).toEqual([[47, "Готово"], [45, "Готово"]]);
-    expect(r.out).toContain("+ эпик #45 закрыт и в «Готово»: все подзадачи закрыты");
+    expect(r.out).toContain("+ epic #45 closed and in «Готово»: all subtasks are closed");
   });
 
   it("есть открытые подзадачи — эпик не трогается", () => {
@@ -935,7 +935,7 @@ describe("task close закрывает задачу одной командой
     const r = task(f, ["close", "46", "--no-git"], REPO, { run: est([]) });
     expect(byOp(f, "CloseIssue")).toEqual([]);
     expect(statusSet(f)).toEqual([[46, "Готово"]]);
-    expect(r.out).toContain("○ эпик #45: открытых подзадач 1");
+    expect(r.out).toContain("○ epic #45: open subtasks 1");
   });
 
   it("последняя открытая задача milestone — milestone закрыт", () => {
@@ -945,7 +945,7 @@ describe("task close закрывает задачу одной командой
     mergedPr(f, 49);
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
     expect(f.closedMilestones).toEqual([m.number]);
-    expect(r.out).toContain("+ milestone «Релиз 2026-10» закрыт: открытых задач не осталось");
+    expect(r.out).toContain("+ milestone «Релиз 2026-10» closed: no open tasks left");
   });
 
   it("в milestone остались открытые задачи — не закрыт", () => {
@@ -956,7 +956,7 @@ describe("task close закрывает задачу одной командой
     mergedPr(f, 49);
     const r = task(f, ["close", "49", "--no-git"], REPO, { run: est([]) });
     expect(f.closedMilestones).toEqual([]);
-    expect(r.out).toContain("○ milestone «Релиз 2026-10»: открытых задач 1");
+    expect(r.out).toContain("○ milestone «Релиз 2026-10»: open tasks 1");
   });
 
   it("облачная сессия — объяснение со ссылкой на docs/cloud-sessions.md, код 2, без мутаций", () => {
@@ -1011,9 +1011,9 @@ describe("task close убирает влитое", () => {
       expect(git(work, "rev-parse", "HEAD")).toBe(git(work, "rev-parse", "origin/main"));
       expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
       expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
-      expect(r.out).toContain("+ чекаут — на origin/main (detached)");
-      expect(r.out).toContain("+ локальная ветка fix/49-x удалена");
-      expect(r.out).toContain("+ удалённая ветка fix/49-x удалена");
+      expect(r.out).toContain("+ checkout — on origin/main (detached)");
+      expect(r.out).toContain("+ local branch fix/49-x deleted");
+      expect(r.out).toContain("+ remote branch fix/49-x deleted");
     } finally {
       cleanup();
     }
@@ -1028,7 +1028,7 @@ describe("task close убирает влитое", () => {
       expect(r.code).toBe(0);
       expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
       expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
-      expect(r.out).toContain("+ удалённая ветка fix/49-x удалена");
+      expect(r.out).toContain("+ remote branch fix/49-x deleted");
     } finally {
       cleanup();
     }
@@ -1041,7 +1041,7 @@ describe("task close убирает влитое", () => {
       f.closed(49);
       const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
       expect(r.code).toBe(0);
-      expect(r.out).toContain("○ ветка fix/49-x не влита в origin/main — не тронута");
+      expect(r.out).toContain("○ branch fix/49-x is not merged into origin/main — left alone");
       expect(git(work, "branch", "--show-current")).toBe("fix/49-x");
       expect(git(origin, "branch", "--list", "fix/49-x")).toContain("fix/49-x");
     } finally {
@@ -1056,7 +1056,7 @@ describe("task close убирает влитое", () => {
       f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
       const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: dir });
       expect(r.code).toBe(0);
-      expect(r.out).toContain("○ ветки не трогаю: текущий каталог — не чекаут miroshnik/ai-dev");
+      expect(r.out).toContain("○ branches left alone: the current directory is not a checkout of miroshnik/ai-dev");
     } finally {
       cleanup();
     }
@@ -1096,7 +1096,7 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
     const body: string = byOp(f, "CreateIssue")[0].body;
     expect(body).toBe("## Scenarios\n\n## Questions\n");
     expect(statusSet(f)).toEqual([[50, "Backlog"]]);
-    expect(r.out).toContain("+ проект «ai-dev»: Status «Backlog»");
+    expect(r.out).toContain("+ project «ai-dev»: Status «Backlog»");
     // est находит раздел: ответ, дописанный в нём после оценки, в размер описания не идёт
     expect(descSize(`${body}1. ✅ Format? **Answer:** PDF.\n`)).toBe(descSize(`${body}1. Format?\n`));
   });
@@ -1121,7 +1121,7 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
 
   it("тип и статус — название любого языка словаря: --type Epic и task status Done в проекте на русском", () => {
     const f = new FakeGitHub(REC);
-    expect(task(f, ["new", "--title", "Экспорт", "--type", "Epic"]).out).toContain("+ метка «epic» — тип в личном аккаунте");
+    expect(task(f, ["new", "--title", "Экспорт", "--type", "Epic"]).out).toContain("+ label «epic» — the type in a personal account");
     task(f, ["status", "47", "Done"]);
     expect(statusSet(f).at(-1)).toEqual([47, "Готово"]);
   });
