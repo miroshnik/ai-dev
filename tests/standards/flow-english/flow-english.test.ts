@@ -1,17 +1,24 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import localeModule from "../../../skills/github/scripts/locale.cjs";
 import type { Names as LocaleNames } from "../../../skills/github/scripts/locale.cjs";
 import en from "../../../skills/github/locales/en.json" with { type: "json" };
 import { codeOnly, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
 const CYRILLIC = /\p{Script=Cyrillic}/u;
+const LOCALES = "skills/github/locales";
+/** Код скриптов скиллов и установщика без комментариев: названия словаря они читают по пути ключа. */
+const CODE = sources(ROOT, ["skills", "bin"]).map((f) => codeOnly(f.text, f.file)).join("\n");
 
 /** Документ флоу: путь от корня и текст. */
 interface Doc {
@@ -61,11 +68,97 @@ function leaves(names: Names, prefix = "", plural = false): [string, string][] {
   );
 }
 
-const LOCALES = "skills/github/locales";
+/**
+ * Сообщения установщика и скриптов скиллов — справка, подсказки, ошибки, вывод `check` и хука — часть флоу, а не
+ * артефакт проекта: они по-английски при любом языке проекта. Названия на языке проекта скрипты берут из словаря
+ * (`skills/github/locales`), поэтому кириллицы в коде скриптов вне комментариев нет вовсе.
+ */
+describe("Сообщения установщика и скриптов скиллов — по-английски", () => {
+  invariant(it, {
+    registry: "код скриптов скиллов и установщика — skills/*/scripts и bin",
+    items: sources(ROOT, ["skills", "bin"]).map((f) => ({ file: f.file, text: f.text })),
+    key: (f) => f.file,
+    name: (f) => `в ${f.file} вне комментариев нет кириллицы`,
+    check: (f) => {
+      const lines = cyrillicLines(codeOnly(f.text, f.file));
+      if (lines.length) {
+        throw new Error(`${f.file}: кириллица вне комментариев — сообщения скриптов по-английски, названия на языке проекта — из skills/github/locales (tests/standards/flow-english):\n${lines.join("\n")}`);
+      }
+    },
+    violator: { name: "подсказка по-русски", item: { file: "skills/x/scripts/x.ts", text: 'console.log("Дальше: task close");\n' } },
+    includes: ["bin/ai-dev.mjs", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
+  });
+
+  it("справка установщика и скриптов скиллов — на английском", () => {
+    const scripts = sources(ROOT, ["skills", "bin"]).filter((f) => /^const USAGE\b/m.test(f.text)).map((f) => f.file);
+    expect(scripts).toEqual(expect.arrayContaining(["bin/ai-dev.mjs", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
+    const help = scripts.map((file) => {
+      const r = spawnSync(process.execPath, [path.join(ROOT, file), "--help"], { cwd: ROOT, encoding: "utf8" });
+      const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+      return { file, printed: text.trim().length > 0, cyrillic: cyrillicLines(text) };
+    });
+    expect(help).toEqual(scripts.map((file) => ({ file, printed: true, cyrillic: [] })));
+  });
+});
+
+/** Цитата в «ёлочках» из документа флоу: где и текст. */
+interface Quote {
+  file: string;
+  text: string;
+}
+
+/** Цитаты «…» документов флоу (внутренние — у вложенных), без повторов; переносы строк — пробелом. */
+function quotes(): Quote[] {
+  const seen = new Map<string, Quote>();
+  for (const d of flowDocs()) {
+    for (const m of d.text.matchAll(/«([^«»]+)»/g)) {
+      const text = m[1]!.replace(/\s+/g, " ").trim();
+      if (!seen.has(text)) seen.set(text, { file: d.file, text });
+    }
+  }
+  return [...seen.values()];
+}
+
+/** Подстановки в цитате: `<имя>`, `…`, `N`/`M`/`K`/`k`, `#`, обратные кавычки — между ними литеральные куски. */
+const PLACEHOLDER = /<[^<>]*>|…|\.\.\.|`|#|\b[NMKk]\b/;
+/** Литеральный кусок цитаты без пунктуации по краям: двоеточие или скобку рядом с подстановкой код ставит сам. */
+const literal = (s: string) => s.replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, "");
+/**
+ * Где цитата может быть дословно: код скриптов без комментариев и названия словаря en — без подстановок (`${…}`,
+ * `{имя}`): `outside scope{tag}: {item}` печатается как «outside scope: …»; пробелы — одним.
+ */
+const PRINTED = `${CODE}\n${read(`${LOCALES}/en.json`)}`
+  .replace(/\$\{[^{}]*\}|\{\w+\}/g, "")
+  .replace(/\s+/g, " ");
+
+/**
+ * Доки флоу цитируют вывод скриптов — строки, по которым агент узнаёт исход, — и названия, которые скрипты пишут в
+ * GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
+ * сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
+ */
+describe("Строки вывода, которые цитируют доки флоу, скрипты печатают дословно", () => {
+  invariant(it, {
+    registry: "цитаты «…» в документах флоу",
+    items: quotes(),
+    key: (q) => q.text,
+    name: (q) => `цитату «${q.text}» из ${q.file} печатает или пишет скрипт`,
+    check: (q) => {
+      const missing = q.text.split(PLACEHOLDER).map(literal).filter((s) => /\p{L}{2,}/u.test(s) && !PRINTED.includes(s));
+      if (missing.length) throw new Error(`${q.file}: «${q.text}» — в коде скриптов и в en.json нет: ${missing.map((s) => `«${s}»`).join(", ")} — поправь вывод скрипта или цитату (tests/standards/flow-english)`);
+    },
+    violator: { name: "цитата вывода, которого нет", item: { file: "skills/x/SKILL.md", text: "nothing to refresh, all quiet" } },
+    outside: [
+      { item: "api/DATABASE_URL is declared", reason: "пример названия с подставленным элементом: шаблон «{name} is declared» — в en.json" },
+      { item: "host <h> is only in adapter <a>", reason: "название собрано из двух ключей en.json: hostName и inAdapter" },
+      { item: "package <p> of external system <x> is only with adapter <a>", reason: "название собрано из двух ключей en.json: packageName и withAdapter" },
+      { item: "shared commit … (share 1/k)", reason: "строка собрана из двух ключей en.json: est.fact.shared и est.fact.commitUnit" },
+    ],
+    includes: ["already newer", "Actual (cloud)", "closed in 90 days without an actual: N"],
+  });
+});
+
 const dictionary = (lang: string) => JSON.parse(read(`${LOCALES}/${lang}.json`)) as Names;
 const locale = (lang: string) => leaves(dictionary(lang));
-/** Код скриптов скиллов и установщика без комментариев: названия словаря они читают по пути ключа. */
-const CODE = sources(ROOT, ["skills", "bin"]).map((f) => codeOnly(f.text, f.file)).join("\n");
 
 describe("Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи", () => {
   it("у каждого языка те же ключи, что у en, и ни одного пустого названия", () => {
