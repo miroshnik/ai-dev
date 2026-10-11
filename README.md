@@ -263,7 +263,7 @@ git show origin/spec:capabilities/est.md       # a decision page: why, what hold
 ```bash
 bun install
 bun test              # script tests and ai-dev standards
-bun run typecheck
+bun run typecheck     # bun check — Bun's own type checker, Bun 1.4.3 from packageManager
 bun run spec:doc      # docs/spec from test names, --strict
 ```
 
