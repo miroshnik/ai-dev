@@ -1416,6 +1416,24 @@ describe("Оценка — один вызов: est estimate без --analogs", 
     expect(r.comment).toContain("Analogs (picked by the script): #1 (actual 0.5 h: label est · type feat · words «est», «оценка» · description ×0.8); #2 (actual 1 h: label est · type feat · word «est» · description ×1); #3 (actual 4 h: description ×1). Correction: ×1.");
     expect(parseMarker(r.comment, "est")).toMatchObject({ h: 1, analogs: [1, 2, 3], auto: true });
   });
+
+  /**
+   * Холодный старт — в репо меньше двух закрытых задач с фактом: задача остаётся без оценки (решение владельца, #381).
+   * Аналоги из чужих репо агент раньше подбирал руками — минуты на задачу; теперь оценка появляется сама у задач,
+   * заведённых после двух закрытых. `task new` зовёт est на каждую задачу — отказ сломал бы её вывод, поэтому код 0.
+   */
+  it("в репо меньше двух аналогов с фактом — задача без оценки: строка «No estimate», ничего не пишет, код 0, чужие репо не читает", () => {
+    const world = {
+      "o/new": { visibility: "private", project: 1, issues: [closed(1, "est · первая задача", ["est"], "feat", 0.5, 2), { number: 10, title: "est · оценка", labels: ["est"], state: "OPEN", createdAt: day(10) }] },
+      "o/old": { visibility: "private", project: 2, issues: [closed(1, "est · старая", ["est"], "feat", 1, 2), closed(2, "est · ещё старая", ["est"], "feat", 2, 3), closed(3, "est · и ещё", ["est"], "feat", 3, 4)] },
+    };
+    const r = withFakeGh(world, ["estimate", "10", "--repo", "o/new", "--type", "feat", "--write"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("No estimate: o/new has fewer than two tasks with an actual (coverage full) closed before #10 was created — the task stays without an estimate");
+    expect(r.writes).toEqual([]);
+    const vars = r.calls.filter((c) => c.args[1] === "graphql").map((c) => JSON.parse(c.stdin).variables ?? {});
+    expect(vars.filter((v) => v.r === "old" || v.id === "P2")).toEqual([]);
+  });
 });
 
 /**
