@@ -8,10 +8,12 @@
 
 ## Под Node без Bun скрипты spec пишут то же, что под Bun
 
-<details><summary>✅ 8 тестов</summary>
+<details><summary>✅ 10 тестов</summary>
 
 - ✅ spec-doc пишет тот же docs/spec, что под Bun
+- ✅ spec-doc в проекте на en пишет под Node тот же docs/spec, что под Bun
 - ✅ spec-diff печатает тот же раздел для PR, что под Bun
+- ✅ spec-diff в проекте на en печатает под Node тот же раздел для PR, что под Bun
 - ✅ spec-publish публикует под Node то же дерево, что под Bun
 - ✅ spec-run находит под Node тот же прогон, что под Bun
 - ✅ spec-claims пишет под Node тот же отчёт, что под Bun

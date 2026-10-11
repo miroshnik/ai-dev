@@ -555,6 +555,13 @@
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
   "describes": [
+   "Ждут владельца — вопросы сессий и задач"
+  ],
+  "name": "строки конца сессии и раздел вопросов — на любом языке словаря: дашборд общий на репозитории разных языков"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
    "Строка задачи «В работе» — её сессия и чего она ждёт"
   ],
   "name": "задача «В работе» без закреплённой сессии — строкой «сессии нет»; облачная (трейлер Claude-Session в PR) — «облако, состояние не видно»"
@@ -662,6 +669,13 @@
   "describes": [
    "Аналоги подбирает скрипт — по меткам решений, типу, словам заголовка и размеру описания"
   ],
+  "name": "раздел вопросов на en (## Questions, «Answer:») — ответы так же не в счёт размера"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Аналоги подбирает скрипт — по меткам решений, типу, словам заголовка и размеру описания"
+  ],
   "name": "размер описания — без ответов на вопросы: ответ, дописанный после оценки, размер не меняет"
  },
  {
@@ -684,6 +698,13 @@
    "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
   ],
   "name": "est fact печатает комментарий «Факт недоступен (облако)» со ссылкой на сессию и маркером факта — в GitHub не ходит"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
+  ],
+  "name": "в проекте на en комментарий облачной сессии — «Actual (cloud): …» по-английски, маркер тот же"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -823,7 +844,21 @@
   "describes": [
    "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
   ],
+  "name": "в проекте на en — комментарий «Actual: …» по-английски, маркер тот же"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
+  ],
   "name": "маркер <!-- est {…} --> читается, битый JSON — как отсутствие"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Комментарии «Оценка» и «Факт» обновляются на месте, строки человека сохраняются"
+  ],
+  "name": "строки человека «+ manually: N h» и «Reason: …» — на любом языке словаря: язык проекта мог смениться"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -983,6 +1018,13 @@
    "Оценка — один вызов: est estimate без --analogs"
   ],
   "name": "без --analogs скрипт выбирает аналоги по меткам решений, типу и словам заголовка и называет их в комментарии «Оценка»"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Оценка — один вызов: est estimate без --analogs"
+  ],
+  "name": "в проекте на en комментарий «Оценка» — по-английски: «Estimate: …», аналоги и их сходство, маркер тот же"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -1304,6 +1346,13 @@
   "describes": [
    "Транскрипт Claude Code даёт привязки к задаче и расход токенов"
   ],
+  "name": "задание субагенту «Task #N» привязывает его работу к задаче"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Транскрипт Claude Code даёт привязки к задаче и расход токенов"
+  ],
   "name": "задание субагенту «Задача #42 (эпик #40). …» даёт подсказку 42: номер после «эпик» — не задача"
  },
  {
@@ -1479,6 +1528,13 @@
   "describes": [
    "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
   ],
+  "name": "pr premerge в проекте на en находит баг «main is red: …» и подсказывает его заголовок"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
   "name": "premerge при красном main ждёт бага, чей заголовок называет упавший чек"
  },
  {
@@ -1487,6 +1543,13 @@
    "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
   ],
   "name": "premerge при красном main и открытом баге про другой чек просит завести баг на упавший"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "баг на красную ветку на другом языке словаря тоже найден: проект на en, баг «main красный: чек deploy»"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
@@ -1788,6 +1851,34 @@
    "В организации сверяются ещё поле Priority и типы issue"
   ],
   "name": "типы Task, Bug, Feature — переименовать, создать Эпик, выключить лишний; всё — только с --confirm"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "project fix в проекте на en создаёт статусы Backlog, In progress, Done"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "без манифеста — язык en: проект ai-dev с русской доской не по канону"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "доска на русском, а язык проекта en — check ❌ по представлениям, Status и полям; fix --confirm переименовывает с теми же id, задачи сохраняют статусы"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "проект без поля language в манифесте работает с русскими названиями, как раньше"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -2565,6 +2656,62 @@
    "В организации задача получает тип issue и Priority, эпик — не ниже подзадачи"
   ],
   "name": "тип issue организации и Priority Medium по умолчанию — в той же мутации, что и задача"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "доска на русском, а скрипт позван из каталога без манифеста (en) — задача ведётся на языке доски"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "задание субагенту в проекте на en начинается с «Task #N (epic #M)» — по нему est привязывает работу к задаче"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "манифест без поля language — каркас на русском, как раньше"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "проект на en: task new пишет раздел ## Questions, est его читает"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "проект на en: комментарий о PR, с которым GitHub не связал задачу, — по-английски"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "тело дано — пишется как есть, без каркаса"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "тип и статус — название любого языка словаря: --type Epic и task status Done в проекте на русском"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "эпик без --body — каркас только с разделом вопросов: эпик без кода, сценариев у него нет"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3493,6 +3640,27 @@
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
   "describes": [
+   "Раздел PR — на языке проекта"
+  ],
+  "name": "spec-diff в проекте на en сверяет сценарии из ## Scenarios"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Раздел PR — на языке проекта"
+  ],
+  "name": "в проекте на en перенос в дерево, сводка по папкам и решения вне названий — по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Раздел PR — на языке проекта"
+  ],
+  "name": "в проекте на ru раздел сценариев задачи на английском тоже сверяется"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
   "name": "`rule` инварианта (соглашение папки) правилом линтера не считается"
@@ -3908,6 +4076,13 @@
   "describes": [
    "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
   ],
+  "name": "в проекте на en подписи схем, таблица модулей и строка оглавления — по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/architecture.test.ts",
+  "describes": [
+   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
+  ],
   "name": "модель изменилась — страница тоже; модель убрали — устаревшая страница удаляется"
  },
  {
@@ -3944,6 +4119,27 @@
    "Схема из модели встраивается меткой в `<папка>.md`"
   ],
   "name": "метка без модели или неизвестная — spec-doc называет файл и метку, --strict — код 1"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Название — утверждение на языке проекта"
+  ],
+  "name": "spec-doc в проекте на en принимает английское утверждение и отвергает идентификатор"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Название — утверждение на языке проекта"
+  ],
+  "name": "в проекте на en долг названий в оглавлении и причина от --names-baseline — по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/names.test.ts",
+  "describes": [
+   "Название — утверждение на языке проекта"
+  ],
+  "name": "утверждение не на ru — фраза из слов; идентификатор, путь и слово с числом — нет"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
@@ -4126,6 +4322,27 @@
    "В монорепо подпапка пакета — часть папки решения"
   ],
   "name": "главный файл в подпапке пакета открывает страницу решения"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Документация — на языке проекта"
+  ],
+  "name": "манифест без поля language — установка прошлой версии: документация по-русски, как раньше"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Документация — на языке проекта"
+  ],
+  "name": "проект без манифеста — на en: оглавление, разделы, счётчики и пометки тестов по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Документация — на языке проекта"
+  ],
+  "name": "свой файл прошлого языка spec-doc узнаёт по шапке и удаляет, чужой не трогает"
  },
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
@@ -4637,6 +4854,20 @@
    "Модель архитектуры проверяется кодом: модули, их зависимости и пакеты"
   ],
   "name": "разрешённый модулю пакет, который им не используется, — упавший тест: модель разошлась с кодом"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Проверки модели архитектуры — на языке проекта"
+  ],
+  "name": "в проекте на en реестры и названия тестов модели — по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/architecture.test.ts",
+  "describes": [
+   "Проверки модели архитектуры — на языке проекта"
+  ],
+  "name": "исключение с rule — названием реестра на другом языке словаря — попадает в свой реестр"
  },
  {
   "path": "tests/capabilities/spec-harness/claimed-code.test.ts",
@@ -5283,6 +5514,20 @@
   "name": "node:test под Node без Bun: те же тесты, нарушающий обработчик падает"
  },
  {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Харнесс называет свои тесты на языке проекта"
+  ],
+  "name": "примеры правила, отключения линта, код без потребителя и переменные окружения в проекте на en — по-английски"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/spec-harness.test.ts",
+  "describes": [
+   "Харнесс называет свои тесты на языке проекта"
+  ],
+  "name": "харнесс в проекте на en называет свои тесты по-английски"
+ },
+ {
   "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
   "describes": [
    "--check сверяет опубликованное с собранным"
@@ -5602,7 +5847,7 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
-  "name": "update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents); после него check — актуально"
+  "name": "update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6399,6 +6644,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "вне охвата: comments.state"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "вне охвата: standardIssue"
  },
  {
@@ -6406,203 +6658,1918 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название comments.actual из ru.json есть в скриптах скиллов"
+  "name": "название actualize.answer скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название comments.state из ru.json есть в скриптах скиллов"
+  "name": "название actualize.checks скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название fields.actual из ru.json есть в скриптах скиллов"
+  "name": "название actualize.comment скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название fields.cost из ru.json есть в скриптах скиллов"
+  "name": "название actualize.epic скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название fields.estimate из ru.json есть в скриптах скиллов"
+  "name": "название actualize.lead скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название fields.tokens из ru.json есть в скриптах скиллов"
+  "name": "название actualize.noPr скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название issueTypes.bug из ru.json есть в скриптах скиллов"
+  "name": "название actualize.openTask скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название issueTypes.epic из ru.json есть в скриптах скиллов"
+  "name": "название actualize.prs скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название issueTypes.task из ru.json есть в скриптах скиллов"
+  "name": "название actualize.scope скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название labelMarkers.decision из ru.json есть в скриптах скиллов"
+  "name": "название actualize.shipped скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название labelMarkers.slice из ru.json есть в скриптах скиллов"
+  "name": "название comments.actual скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название labels.questions из ru.json есть в скриптах скиллов"
+  "name": "название comments.closedByPr скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название lastLine.done из ru.json есть в скриптах скиллов"
+  "name": "название est.answer скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название lastLine.questions из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.actual скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название lastLine.remaining из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.body скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название prSpecSection из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.cost скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название sections.questions из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.fields скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название sections.scenarios из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.session скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название status.backlog из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.tokens скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название status.done из ru.json есть в скриптах скиллов"
+  "name": "название est.cloud.unavailable скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название status.inProgress из ru.json есть в скриптах скиллов"
+  "name": "название est.estimate.analog скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название subagentPrompt.epic из ru.json есть в скриптах скиллов"
+  "name": "название est.estimate.auto скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название subagentPrompt.task из ru.json есть в скриптах скиллов"
+  "name": "название est.estimate.body скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название views.board из ru.json есть в скриптах скиллов"
+  "name": "название est.estimate.correction скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название views.roadmap из ru.json есть в скриптах скиллов"
+  "name": "название est.estimate.expert скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название views.table из ru.json есть в скриптах скиллов"
+  "name": "название est.estimate.expertOver скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "нарушитель не проходит: название, которого скрипты не пишут"
+  "name": "название est.estimate.forecast скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "реестр «русские названия skills/github/locales/ru.json» находит status.backlog, sections.questions, subagentPrompt.task, lastLine.done"
+  "name": "название est.estimate.headline скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "реестр «русские названия skills/github/locales/ru.json» не пуст"
+  "name": "название est.estimate.k скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.labels скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.levelAll скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.levelRepo скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.noK скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.none скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.notInProject скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.otherProject скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.partial скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.partialCoverage скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.size скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.spread скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.tokCorrection скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.tokens скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.type скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.unknown скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.estimate.words скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.and скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.body скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.cloudAgent скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.cloudMissing скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.commitUnit скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.commits скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.cost скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.diff скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.diffLines скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.diffNa скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.estimate скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.noEstimate скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.noPr скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.overlap скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.prompts скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.prs скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.sessions скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.shared скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.steps скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.subagents скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.taken скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.tokens скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.tokensSplit скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.unavailable скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.unpriced скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.hours скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.manual скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.reason скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.actual скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.cost скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.estimate скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название fields.tokens скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название issueTypes.bug скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название issueTypes.epic скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название issueTypes.task скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labelMarkers.architecturePath скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labelMarkers.decision скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labelMarkers.slice скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labels.epicDescription скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labels.questions скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название lastLine.done скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название lastLine.questions скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название lastLine.remaining скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название mainRed.check скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название mainRed.checks скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название mainRed.title скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название prSpecSection скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название sections.questions скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название sections.scenarios скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.allowedName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.allowedRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.allowedViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.clientName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.clientViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.clientsRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.containersRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.containersViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.dirName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.dirViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.dirsRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.edgeName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.edgeViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.edgesRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.envNoun скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.envRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.headerNoun скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.headersRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.hostName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.hostPerimeter скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.hostViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.hostsRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.importsName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.importsRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.importsViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.inAdapter скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.inAdapters скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.libraryName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.moduleName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.packageName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.packagePerimeter скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.packageViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.packagesRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.readName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.readNameMany скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.readPerimeter скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.readViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.unitName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.unitViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.unitsRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.withAdapter скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.withAdapters скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.workspaceName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.workspaceRegistry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.architecture.workspaceViolator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.calls скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.components скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.containerCount скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.containers скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.context скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.dependsOn скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.externalCount скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.intro скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.library скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.moduleCount скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.perimeter скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.summary скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.system скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.table скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.title скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.uses скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.viaModule скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.c4.viaModules скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.added скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.addedKind скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.architecture скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.base скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.becameTests скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.changed скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.checksTitle скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.deadCode скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.deadCodeNamed скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.empty скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.exceptionsTitle скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.extraFull скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.extraListed скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.extraMark скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.extraTitle скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.files скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.folder скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.fromReport скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.harnessCheck скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.harnessColumn скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.harnessGap скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.harnessNote скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.modelDependency скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.modelModule скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.modelPackage скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.modelTitle скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.moved скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.movedFolder скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.nameException скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.noScenarios скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.noSpecBase скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.noTest скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.outsideFiles скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.outsideMark скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.registry скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.registryNamed скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.removed скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.removedKind скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.rule скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.ruleNamed скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.scenarios скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.summarized скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.summary скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.total скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.unchanged скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.architecture скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.capabilities скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.failing скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.failingCount скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.intro скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.mark скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.nameDebt скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.nameReason скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.none скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.outside скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.outsideIntro скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.rules скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.skipped скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.skippedCount скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.standards скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.title скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.todo скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.doc.variants скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.bad скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.badExample скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.codeFiles скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.env.declared скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.env.declaredName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.env.inCode скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.env.readName скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.env.undeclared скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.env.unread скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.exception скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.exceptionFiles скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.exceptionJson скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.exceptionRules скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.good скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.ignoreNoReason скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.binaries скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.catalog скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.catalogReferences скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.dependencies скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.duplicates скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.enumMembers скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.exports скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.files скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.hints скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.known скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.nsMembers скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.types скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.unlisted скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.knip.unresolved скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.lintExceptions скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.markOneElement скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.markRules скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.oneRecord скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.outside скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.outsideExample скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.registryFinds скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.registryNotEmpty скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.harness.violator скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.lint.allRules скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.lint.noReason скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.tests скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название status.backlog скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название status.done скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название status.inProgress скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название subagentPrompt.epic скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название subagentPrompt.task скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название updateCommit скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название views.board скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название views.roadmap скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название views.table скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "нарушитель не проходит: название, которого скрипты не читают"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "реестр «названия словаря skills/github/locales/en.json» находит status.backlog, sections.questions, subagentPrompt.task, lastLine.done"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "реестр «названия словаря skills/github/locales/en.json» не пуст"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "словарь en соответствует типам модуля locale (Names в locale.d.cts)"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -6787,6 +8754,20 @@
   "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст"
  },
  {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Язык проекта у скриптов скиллов и у установщика — один модуль"
+  ],
+  "name": "манифест с языком — его язык, без поля — ru, битый — ru, без манифеста — en"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Язык проекта у скриптов скиллов и у установщика — один модуль"
+  ],
+  "name": "установщик берёт язык и код языка модулем locale скилла github, своего правила у него нет"
+ },
+ {
   "path": "tests/standards/harness-load/harness-load.test.ts",
   "describes": [
    "Тест проекта импортирует харнесс и модель любым раннером"
@@ -6819,7 +8800,21 @@
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
   ],
+  "name": "spec-diff в проекте на en печатает под Node тот же раздел для PR, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
   "name": "spec-diff печатает тот же раздел для PR, что под Bun"
+ },
+ {
+  "path": "tests/standards/node-runtime/node-runtime.test.ts",
+  "describes": [
+   "Под Node без Bun скрипты spec пишут то же, что под Bun"
+  ],
+  "name": "spec-doc в проекте на en пишет под Node тот же docs/spec, что под Bun"
  },
  {
   "path": "tests/standards/node-runtime/node-runtime.test.ts",
@@ -7320,6 +9315,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/github-premerge/github-premerge.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/github-project/github-project.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
