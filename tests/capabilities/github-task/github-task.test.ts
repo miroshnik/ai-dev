@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { descSize } from "../../../skills/est/scripts/est.ts";
 import { main, realRun } from "../../../skills/github/scripts/github.ts";
 import type { Io } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
@@ -1088,13 +1089,16 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
     return f;
   }
 
-  it("проект на en: task new без --body пишет каркас с разделами ## Scenarios и ## Questions, статус Backlog", () => {
+  it("проект на en: task new пишет раздел ## Questions, est его читает", () => {
     const f = englishBoard(new FakeGitHub(REC));
     const r = task(f, ["new", "--title", "Export"], REPO, { cwd: checkoutWith(EN) });
     expect(r.code).toBe(0);
-    expect(byOp(f, "CreateIssue")[0].body).toBe("## Scenarios\n\n## Questions\n");
+    const body: string = byOp(f, "CreateIssue")[0].body;
+    expect(body).toBe("## Scenarios\n\n## Questions\n");
     expect(statusSet(f)).toEqual([[50, "Backlog"]]);
     expect(r.out).toContain("+ проект «ai-dev»: Status «Backlog»");
+    // est находит раздел: ответ, дописанный в нём после оценки, в размер описания не идёт
+    expect(descSize(`${body}1. ✅ Format? **Answer:** PDF.\n`)).toBe(descSize(`${body}1. Format?\n`));
   });
 
   it("эпик без --body — каркас только с разделом вопросов: эпик без кода, сценариев у него нет", () => {

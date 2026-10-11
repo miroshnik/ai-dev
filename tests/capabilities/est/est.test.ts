@@ -734,7 +734,7 @@ describe("Транскрипт Claude Code даёт привязки к зада
     expect(subHints("Задача #42 (эпик #40). Перенеси спеку в тесты")).toEqual(["42", "42"]);
   });
 
-  it("задание субагенту в проекте на en «Task #42 (epic #40). …» даёт подсказку 42: слово задачи — любого языка словаря", () => {
+  it("задание субагенту «Task #N» привязывает его работу к задаче", () => {
     expect(subHints("Task #42 (epic #40). Move the spec into tests")).toEqual(["42", "42"]);
     expect(subHints("Task #40 (epic #42): other")).toEqual(["40", "40"]);
   });

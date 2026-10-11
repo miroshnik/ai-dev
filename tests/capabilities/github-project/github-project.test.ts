@@ -767,7 +767,7 @@ function openIssueId(n: number): string {
  * «Item closed» сохраняются (#366, вопрос 1).
  */
 describe("Канон проекта — на языке проекта из .agents/ai-dev.json чекаута", () => {
-  it("эталон недоступен, проект на en — fix создаёт статусы Backlog, In progress, Done, представления и поля по-английски", () => {
+  it("project fix в проекте на en создаёт статусы Backlog, In progress, Done", () => {
     const f = fake();
     f.unlinkAll();
     f.rec['TemplateProject {"login":"miroshnik","number":6}'] = { data: { repositoryOwner: { projectV2: null } }, errors: [{ message: "Could not resolve to a ProjectV2 with the number 6." }] };
@@ -800,7 +800,7 @@ describe("Канон проекта — на языке проекта из .age
     expect(check(f, REPO, en).code).toBe(0);
   });
 
-  it("манифест без поля language — названия русские, как раньше: проект ai-dev по канону", () => {
+  it("проект без поля language в манифесте работает с русскими названиями, как раньше", () => {
     const r = check(fake(), REPO, checkout('{ "auto": true }\n'));
     expect(r.code).toBe(0);
     expect(r.out).toContain("✅ Status: Бэклог → В работе → Готово");
