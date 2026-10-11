@@ -1689,6 +1689,13 @@
   "describes": [
    "pr premerge: typecheck на слиянии со свежим main — до test:spec, как в CI"
   ],
+  "name": "ошибку bun check под агентом — XML-блок — premerge называет строкой tsc"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: typecheck на слиянии со свежим main — до test:spec, как в CI"
+  ],
   "name": "слияние с красным typecheck premerge не вливает и называет ошибку компилятора"
  },
  {
