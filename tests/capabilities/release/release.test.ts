@@ -61,7 +61,7 @@ describe("Релиз — тег по дате на origin/main и список �
     const { r, tag, days } = dated(() => o.release());
     expect(r.code).toBe(0);
     expect(days).toContain(tag);
-    expect(r.stdout).toContain(`Изменения флоу с ${PREV}:`);
+    expect(r.stdout).toContain(`Flow changes since ${PREV}:`);
     expect(r.stdout).toContain("- docs(agents): новое правило");
     expect(r.stdout).toContain("- fix(install): правка установщика");
     expect(r.stdout).toContain("- feat(est): новый шаг");
@@ -114,19 +114,19 @@ describe("Релиз — тег по дате на origin/main и список �
     o.tag(PREV);
     const same = o.release();
     expect(same.code).toBe(1);
-    expect(same.stderr).toContain(`уже в релизе ${PREV}`);
+    expect(same.stderr).toContain(`already in release ${PREV}`);
     o.up.repo.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
     const r = o.release();
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain(`с ${PREV} флоу не менялся`);
+    expect(r.stderr).toContain(`flow hasn't changed since ${PREV}`);
   });
 
-  it("первый релиз — без списка изменений, с пометкой «Первый релиз»", () => {
+  it("первый релиз — без списка изменений, с пометкой «First release»", () => {
     const o = owner();
     const { r, tag, days } = dated(() => o.release());
     expect(r.code).toBe(0);
     expect(days).toContain(tag);
-    expect(r.stdout).toContain("Первый релиз");
+    expect(r.stdout).toContain("First release");
   });
 
   it("release — GitHub Release командой gh: тег, коммит origin/main, заголовок и список изменений", () => {
@@ -151,6 +151,6 @@ describe("Релиз — тег по дате на origin/main и список �
     const bin = npxPackage(path.join(sb.tmp, "npx"), base.dir, base.sha);
     const r = aiDev(sb, ["release", "--dry-run"], { bin });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("только из клона ai-dev");
+    expect(r.stderr).toContain("only from an ai-dev clone");
   });
 });
