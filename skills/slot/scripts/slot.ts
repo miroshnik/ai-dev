@@ -19,11 +19,12 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 
-const USAGE = `Использование: slot '<команда>' [аргументы…]
+const USAGE = `Usage: slot '<command>' [arguments…]
 
-  slot '<команда>' [аргументы…]   команда — через sh, аргументы — в её конец, как у npm run; ждёт, пока идут два
-                                  тяжёлых прогона машины, затем идёт с AI_DEV_SLOT_CPUS — четвертью ядер
-Без очереди — в CI и внутри слота. Код выхода — код команды.
+  slot '<command>' [arguments…]   runs the command through sh, the arguments appended to its end, as with npm run;
+                                  waits while two heavy runs are going on the machine, then runs with
+                                  AI_DEV_SLOT_CPUS — a quarter of the cores
+No queue in CI and inside a slot. The exit code is the command's.
 `;
 
 /** Heavy runs on the machine at once. */
@@ -82,7 +83,7 @@ function queue(dir: string): Ticket[] {
   return out;
 }
 
-const duration = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)} с` : `${Math.floor(ms / 60_000)} мин ${Math.round((ms % 60_000) / 1000)} с`);
+const duration = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
 
 /** Who holds the slot: the directory, the command and how long it has been running. */
 function holder(t: Ticket) {
@@ -150,13 +151,13 @@ async function main(argv: string[]): Promise<number> {
     const who = holders.map((t) => t.name).join(" ");
     if (who !== told || Date.now() - toldAt >= REMIND) {
       const ahead = i - SLOTS;
-      process.stderr.write(`slot: жду очередь машины — идут ${holders.map(holder).join("; ")}${ahead ? `; впереди ещё ${ahead}` : ""}\n`);
+      process.stderr.write(`slot: waiting for the machine queue — running ${holders.map(holder).join("; ")}${ahead ? `; ${ahead} more ahead` : ""}\n`);
       [told, toldAt] = [who, Date.now()];
     }
     await new Promise((r) => setTimeout(r, POLL));
   }
   for (const s of SIGNALS) process.off(s, quit);
-  if (told) process.stderr.write(`slot: дождался за ${duration(Date.now() - t0)}\n`);
+  if (told) process.stderr.write(`slot: waited ${duration(Date.now() - t0)}\n`);
   const code = await run(command, { AI_DEV_SLOT: name, AI_DEV_SLOT_CPUS: String(CPUS) });
   drop();
   return code;
