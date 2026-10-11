@@ -253,7 +253,7 @@ describe("Архитектура — страница из модели `tests/a
     const r = doc(rules());
     expect(r.code).toBe(0);
     expect(existsSync(path.join(dir, "docs/spec/architecture.md"))).toBe(false);
-    expect(r.stderr).toContain("удалён устаревший docs/spec/architecture.md");
+    expect(r.stderr).toContain("deleted stale docs/spec/architecture.md");
     expect(read("docs/spec/README.md")).not.toContain("architecture.md)");
   });
 
@@ -261,12 +261,12 @@ describe("Архитектура — страница из модели `tests/a
     writeTree(dir, { [MODEL]: "export default {\n" });
     const broken = doc(rules());
     expect(broken.code).toBe(2);
-    expect(broken.stderr).toContain(`spec-doc: модель ${MODEL} не загружается`);
+    expect(broken.stderr).toContain(`spec-doc: model ${MODEL} doesn't load`);
 
     writeTree(dir, { [MODEL]: 'export default { name: "Счета" };\n' });
     const empty = doc(rules());
     expect(empty.code).toBe(2);
-    expect(empty.stderr).toContain(`spec-doc: модель ${MODEL} — нет export default с modules`);
+    expect(empty.stderr).toContain(`spec-doc: model ${MODEL} has no export default with modules`);
   });
 
   it("в проекте на en подписи схем, таблица модулей и строка оглавления — по-английски", () => {
@@ -331,7 +331,7 @@ describe("Архитектура — страница из модели `tests/a
     const bun = read("docs/spec/architecture.md");
     rmSync(path.join(dir, "docs"), { recursive: true });
     const r = runScript("spec-doc", ["r.json", "--root", dir], dir, "node");
-    expect(r.stderr).not.toContain("не загружается");
+    expect(r.stderr).not.toContain("doesn't load");
     expect(r.code).toBe(0);
     expect(read("docs/spec/architecture.md")).toBe(bun);
   });
@@ -360,12 +360,12 @@ describe("Схема из модели встраивается меткой в 
     writeTree(dir, { [DESCRIBED]: "Счета.\n\n<!-- spec: c4-container -->\n" });
     const noModel = doc(billing(), "--strict");
     expect(noModel.code).toBe(1);
-    expect(noModel.stderr).toContain(`spec-doc: метка <!-- spec: c4-container --> в ${DESCRIBED}: нет модели ${MODEL}`);
+    expect(noModel.stderr).toContain(`spec-doc: mark <!-- spec: c4-container --> in ${DESCRIBED}: no model ${MODEL}`);
     expect(doc(billing()).code).toBe(0);
 
     writeTree(dir, { [MODEL]: model(FULL), [DESCRIBED]: "Счета.\n\n<!-- spec: c4-deploy -->\n" });
     const unknown = doc(billing(), "--strict");
     expect(unknown.code).toBe(1);
-    expect(unknown.stderr).toContain(`spec-doc: неизвестная метка <!-- spec: c4-deploy --> в ${DESCRIBED}`);
+    expect(unknown.stderr).toContain(`spec-doc: unknown mark <!-- spec: c4-deploy --> in ${DESCRIBED}`);
   });
 });

@@ -67,7 +67,7 @@ function runs(artifact: string): Run[] {
 
 const seconds = (name: string, value: string): number => {
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) throw new Fail(`--${name}: нужно число секунд, а не «${value}»\n${USAGE}`, 2);
+  if (!Number.isFinite(n) || n < 0) throw new Fail(`--${name}: a number of seconds is needed, not «${value}»\n${USAGE}`, 2);
   return n;
 };
 
@@ -92,12 +92,12 @@ export async function main(argv: string[]): Promise<number> {
       console.error(USAGE);
       return 0;
     }
-    if (!v.tree) throw new Fail(`нужен --tree <hash>\n${USAGE}`, 2);
-    if (!/^[0-9a-f]{40,64}$/.test(v.tree)) throw new Fail(`--tree: нужен полный хеш дерева (git rev-parse 'HEAD^{tree}'), а не «${v.tree}»\n${USAGE}`, 2);
+    if (!v.tree) throw new Fail(`--tree <hash> is required\n${USAGE}`, 2);
+    if (!/^[0-9a-f]{40,64}$/.test(v.tree)) throw new Fail(`--tree: a full tree hash is needed (git rev-parse 'HEAD^{tree}'), not «${v.tree}»\n${USAGE}`, 2);
     const timeout = seconds("timeout", v.timeout);
     const interval = seconds("interval", v.interval);
     const artifact = `docs-spec-${v.tree}`;
-    const at = `дерево main ${v.tree.slice(0, 12)}`;
+    const at = `main tree ${v.tree.slice(0, 12)}`;
     const deadline = Date.now() + timeout * 1000;
     let said = "";
     for (;;) {
@@ -105,19 +105,19 @@ export async function main(argv: string[]): Promise<number> {
       // the listing is newest first: of several green runs the latest is taken
       const ok = all.find((r) => r.status === "completed" && r.conclusion === "success");
       if (ok) {
-        console.error(`spec-run: ${at}: прогон ${ok.id} успешен — ${ok.html_url}`);
+        console.error(`spec-run: ${at}: run ${ok.id} succeeded — ${ok.html_url}`);
         process.stdout.write(`${ok.id}\n`);
         return 0;
       }
       const going = all.filter((r) => r.status !== "completed");
       if (!going.length) {
         // not an error: a PR that fell behind was merged — no run checked such a main, the spec branch waits for the next merge
-        const why = all.length ? all.map((r) => `${r.id} ${r.conclusion} ${r.html_url}`).join(", ") : `артефакта ${artifact} нет`;
-        console.error(`spec-run: ${at} не проверено целиком — публикация пропущена: ${why}`);
+        const why = all.length ? all.map((r) => `${r.id} ${r.conclusion} ${r.html_url}`).join(", ") : `no artifact ${artifact}`;
+        console.error(`spec-run: ${at} not fully checked — publishing skipped: ${why}`);
         return 0;
       }
-      if (Date.now() >= deadline) throw new Fail(`${at}: прогон ${going.map((r) => r.id).join(", ")} не завершился за ${timeout} с`, 1);
-      const now = `${at}: прогон ${going.map((r) => `${r.id} ${r.status}`).join(", ")} — ждём`;
+      if (Date.now() >= deadline) throw new Fail(`${at}: run ${going.map((r) => r.id).join(", ")} didn't finish in ${timeout} s`, 1);
+      const now = `${at}: run ${going.map((r) => `${r.id} ${r.status}`).join(", ")} — waiting`;
       // only a change of state goes to the log, not a line on every poll
       if (now !== said) console.error(`spec-run: ${(said = now)}`);
       await new Promise((resolve) => setTimeout(resolve, Math.min(interval * 1000, Math.max(0, deadline - Date.now()))));

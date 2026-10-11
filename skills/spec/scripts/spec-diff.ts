@@ -134,7 +134,7 @@ function parseFiles(files: Map<string, string>, label: string): { tests: Test[];
         const key = JSON.stringify([file, u.kind, u.name]);
         if (unnamedSeen.has(key)) continue;
         unnamedSeen.add(key);
-        console.error(`spec-diff: ${label}: ${file}:${u.line}: название ${u.kind} не вычислить статически (${u.name}) — теста нет в списке`);
+        console.error(`spec-diff: ${label}: ${file}:${u.line}: the ${u.kind} name can't be computed statically (${u.name}) — the test isn't in the lists`);
       }
     } catch (e) {
       console.error(`spec-diff: ${label}: ${file}: ${(e as Error).message}`);
@@ -196,7 +196,7 @@ function outOfTreePool(
   for (const f of outFiles) {
     const src = baseFiles.get(f);
     if (src === undefined) continue;
-    const baseTests = parseFiles(new Map([[f, src]]), "база").tests;
+    const baseTests = parseFiles(new Map([[f, src]]), "base").tests;
     count.set(f, baseTests.length);
     if (!headFiles.has(f)) gone.add(f);
     const left = new Map<string, number>();
@@ -818,7 +818,7 @@ function scenarioLines(scenarios: string[] | null, match: { found: Found[]; extr
 }
 
 const USAGE =
-  "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -] [--report отчёт … --spec-branch origin/spec] [--limit 100 | --full]";
+  "spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -] [--report report … --spec-branch origin/spec] [--limit 100 | --full]";
 
 /** Тесты без повторов: первым — из исходников, из отчёта — только те, которых там нет (порождённые харнессом, в `harness`). */
 function union(a: Test[], b: Test[], harness: Set<Test>): Test[] {
@@ -885,7 +885,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   const limit = v.full ? Infinity : v.limit === undefined ? SUMMARY_LIMIT : Number(v.limit);
   if (!(limit > 0) || (limit !== Infinity && !Number.isInteger(limit))) {
-    console.error(`spec-diff: --limit — целое число тестов больше нуля, а не «${v.limit}»\n${USAGE}`);
+    console.error(`spec-diff: --limit is a whole number of tests greater than zero, not «${v.limit}»\n${USAGE}`);
     return 2;
   }
   // язык проекта корня — до разбора: строки решений (модель, проверки харнесса) базы и головы сравниваются на нём
@@ -906,7 +906,7 @@ export async function main(argv: string[]): Promise<number> {
     const baseScan = parseFiles(baseFiles, v.base);
     let baseTests = baseScan.tests;
     const headFiles = v.worktree ? testsInWorktree(root) : testsAtRev(v.head, top, prefix);
-    const headScan = parseFiles(headFiles, v.worktree ? "рабочее дерево" : v.head);
+    const headScan = parseFiles(headFiles, v.worktree ? "working tree" : v.head);
     let headTests = headScan.tests;
     // сценарий стандарта — describe проверки харнесса: по исходникам, без отчёта и ветки spec
     checks = freshChecks(baseScan.checks, headScan.checks);
@@ -950,7 +950,7 @@ export async function main(argv: string[]): Promise<number> {
     const msg = (e as Error).message;
     console.error(`spec-diff: ${msg}`);
     if (/merge-base|Not a valid|unknown revision|bad revision/.test(msg)) {
-      console.error(`spec-diff: нет ревизии ${v.base}? — git fetch origin или --base <ветка>`);
+      console.error(`spec-diff: no revision ${v.base}? — git fetch origin or --base <branch>`);
     }
     return 2;
   }

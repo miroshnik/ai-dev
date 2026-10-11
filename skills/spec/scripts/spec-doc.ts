@@ -77,6 +77,16 @@ function countsLine(tests: Test[]): string {
   return [testsWord(tests.length), problemsLine(tests)].filter(Boolean).join(", ");
 }
 
+/** Число и слово по-английски — для сообщений в stderr (они не на языке проекта): «1 file», «2 files». */
+const enCount = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** Счётчики тестов для stderr: «12 tests, 1 skipped, 1 failing». */
+function enCountsLine(tests: Test[]): string {
+  const sk = tests.filter((t) => t.status === "skipped" || t.status === "todo").length;
+  const fl = tests.filter((t) => t.status === "failed").length;
+  return [enCount(tests.length, "test"), sk ? `${sk} skipped` : "", fl ? `${fl} failing` : ""].filter(Boolean).join(", ");
+}
+
 function findRoot(root?: string): string {
   if (root) return path.resolve(root);
   try {
@@ -170,7 +180,7 @@ const addOnce = (list: string[], text: string): void => {
 function mainPath(g: Group): string {
   const folder = `${L.TESTS}/${SUBDIR[g.kind]}/${g.name}`;
   const packages = g.tests.some((t) => t.path.split("/").length > 4);
-  return `${folder}/${g.name}.test.ts` + (packages ? ` или ${folder}/<пакет>/${g.name}.test.ts` : "");
+  return `${folder}/${g.name}.test.ts` + (packages ? ` or ${folder}/<package>/${g.name}.test.ts` : "");
 }
 
 /** У группы есть главный файл: в отчёте или на диске — в корне папки или в подпапке пакета. */
@@ -204,7 +214,7 @@ const EDGES = /^["'«“‘([{]+|["'»”’)\]}.,;:!?…]+$/gu;
  */
 export function isStatement(name: string, lang: string): boolean {
   const text = name.replace(/`[^`]*`/g, "");
-  if (lang === "ru") return /[А-Яа-яЁё]/.test(text);
+  if (lang === "ru") return /\p{Script=Cyrillic}/u.test(text);
   const tokens = text.split(/\s+/).map((t) => t.replace(EDGES, "")).filter(Boolean);
   const words = tokens.filter((t) => WORD.test(t));
   if (words.length >= 2) return true;
@@ -269,11 +279,11 @@ export function attachDocs(
       try {
         scan = L.scanJs(file, source);
       } catch (e) {
-        unread.push(`${file}: ${(e as Error).message} — проза JSDoc не взята`);
+        unread.push(`${file}: ${(e as Error).message} — JSDoc prose not taken`);
         continue;
       }
       const { docs } = scan;
-      for (const u of scan.unnamed) if (u.doc) unread.push(`${file}:${u.line}: название ${u.kind} не вычислить статически (${u.name}) — проза JSDoc не взята`);
+      for (const u of scan.unnamed) if (u.doc) unread.push(`${file}:${u.line}: the ${u.kind} name can't be computed statically (${u.name}) — JSDoc prose not taken`);
       if (docs.file) headers.push(file);
       for (const [key, text] of docs.describes) {
         let node: Node | undefined = g.tree;
@@ -575,10 +585,10 @@ async function loadModel(root: string): Promise<Model | null> {
   try {
     mod = (await import(pathToFileURL(file).href)) as { default?: unknown };
   } catch (e) {
-    throw new Error(`модель ${MODEL} не загружается: ${(e as Error).message}`);
+    throw new Error(`model ${MODEL} doesn't load: ${(e as Error).message}`);
   }
   const m = mod.default as Model | undefined;
-  if (!m || typeof m !== "object" || !m.modules || typeof m.modules !== "object") throw new Error(`модель ${MODEL} — нет export default с modules`);
+  if (!m || typeof m !== "object" || !m.modules || typeof m.modules !== "object") throw new Error(`model ${MODEL} has no export default with modules`);
   return m;
 }
 
@@ -594,7 +604,7 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
       const withSequences = d.replace(SEQUENCE_MARK, (line, id: string) => {
         const hit = [...META].find(([k, m]) => m.id === id && m.sequence && files.has(k.split("\0")[0]!));
         if (!hit) {
-          problems.push(`метка <!-- spec: sequence-${id} --> в ${descriptionPath(g)}: нет сценария ${id} в тестах папки`);
+          problems.push(`mark <!-- spec: sequence-${id} --> in ${descriptionPath(g)}: no scenario ${id} in the folder's tests`);
           return line;
         }
         PLACED.add(hit[0]);
@@ -605,8 +615,8 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
         const mark = `<!-- spec: ${b.mark} -->`;
         problems.push(
           b.missing === "model"
-            ? `метка ${mark} в ${descriptionPath(g)}: нет модели ${MODEL}`
-            : `неизвестная метка ${mark} в ${descriptionPath(g)} — есть: ${[...Object.keys(C4.MARKS), "sequence-<id>"].join(", ")}`,
+            ? `mark ${mark} in ${descriptionPath(g)}: no model ${MODEL}`
+            : `unknown mark ${mark} in ${descriptionPath(g)} — available: ${[...Object.keys(C4.MARKS), "sequence-<id>"].join(", ")}`,
         );
       }
       return text;
@@ -617,7 +627,9 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
 
 /** Прежний формат исключений названий — общий файл (папки — по правилу exceptionFile); не читается, переносит spec-exceptions. */
 const SHARED_NAMES = `${L.TESTS}/standards/spec-names/exceptions.ts`;
-const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
+const MIGRATE = "migrate with spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
+// формат исключений названий — как его цитирует SKILL.md скилла
+const NAME_FILES = "name exceptions — a file per name in names.exceptions/ of the decision folder";
 
 /**
  * Исключения названий — файлы каталогов `names.exceptions/` папок решений по правилу `exceptionFile` (speclib);
@@ -656,10 +668,10 @@ function readNameException(root: string, src: string): NameException {
   try {
     x = JSON.parse(readFileSync(path.join(root, src), "utf8")) as Partial<L.NameException> | null;
   } catch (e) {
-    throw new Error(`${src}: не JSON — ${(e as Error).message}`);
+    throw new Error(`${src}: not JSON — ${(e as Error).message}`);
   }
   if (!x || typeof x.file !== "string" || typeof x.name !== "string" || !Number.isInteger(x.issue)) {
-    throw new Error(`${src}: исключение названия — { file, name, issue, reason }`);
+    throw new Error(`${src}: a name exception is { file, name, issue, reason }`);
   }
   return { file: x.file, name: x.name, issue: x.issue!, reason: String(x.reason ?? ""), src };
 }
@@ -695,7 +707,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   // флаг прежнего общего файла: молча пропустить его — значит потерять исключения
   if (values["names-exceptions"] !== undefined) {
-    console.error(`spec-doc: --names-exceptions больше нет — исключения названий файлом в ${L.NAMES_DIR}/ папки решения: ${MIGRATE}`);
+    console.error(`spec-doc: --names-exceptions is gone: ${NAME_FILES} — ${MIGRATE}`);
     return 2;
   }
 
@@ -707,7 +719,7 @@ export async function main(argv: string[]): Promise<number> {
   const inCi = !!process.env.CI && !["0", "false"].includes(process.env.CI);
   for (const r of positionals) {
     if (!existsSync(r)) {
-      console.error(`spec-doc: отчёта ${r} нет — его тесты в спеку не попали${inCi ? "" : " (локально — предупреждение, в CI — ошибка)"}`);
+      console.error(`spec-doc: no report ${r} — its tests didn't get into the spec${inCi ? "" : " (locally a warning, in CI an error)"}`);
       if (inCi) return 2;
       continue;
     }
@@ -740,14 +752,14 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
   let nameExceptions = found.list;
-  const legacyNames = found.legacy.map((f) => `${f}: исключения названий — файл на название в ${L.NAMES_DIR}/ папки решения — ${MIGRATE}`);
+  const legacyNames = found.legacy.map((f) => `${f}: ${NAME_FILES} — ${MIGRATE}`);
   const nameKey = (file: string, name: string) => file + "\0" + name;
   const bad = badNames(groups);
   const badKeys = new Set(bad.map(([n, f]) => nameKey(f, n)));
   if (values["names-baseline"] !== undefined) {
     const issue = Number(values["names-baseline"]);
     if (!Number.isInteger(issue) || issue <= 0) {
-      console.error(`spec-doc: --names-baseline — номер задачи на переписывание, а не «${values["names-baseline"]}»\n${USAGE}`);
+      console.error(`spec-doc: --names-baseline is the number of the rewrite issue, not «${values["names-baseline"]}»\n${USAGE}`);
       return 2;
     }
     // исключения прежнего файла не прочитаны: baseline записал бы их заново с новой задачей
@@ -767,7 +779,7 @@ export async function main(argv: string[]): Promise<number> {
         return { ...x, src: L.writeNameException(root, L.decisionFolder(file)!, x) };
       });
     nameExceptions = [...nameExceptions.filter((x) => badKeys.has(nameKey(x.file, x.name))), ...fresh];
-    console.error(`spec-doc: исключения названий (#${issue}) — добавлено ${fresh.length}, удалено ${stale.length}`);
+    console.error(`spec-doc: name exceptions (#${issue}) — added ${fresh.length}, deleted ${stale.length}`);
   }
   const excepted = new Set(nameExceptions.map((x) => nameKey(x.file, x.name)));
   const names = bad.filter(([n, f]) => !excepted.has(nameKey(f, n)));
@@ -777,11 +789,11 @@ export async function main(argv: string[]): Promise<number> {
   const staleNames = [
     ...nameExceptions
       .filter((x) => !badKeys.has(nameKey(x.file, x.name)))
-      .map((x) => `исключение названия «${x.name}» (${x.file}) не нужно — ${allNames.has(nameKey(x.file, x.name)) ? "уже утверждение" : "теста нет"}, удали ${x.src}`),
+      .map((x) => `name exception «${x.name}» (${x.file}) isn't needed — ${allNames.has(nameKey(x.file, x.name)) ? "already a statement" : "the test is gone"}, delete ${x.src}`),
     // исключение папки — только для её тестов: иначе владелец папки снимает чужой долг
     ...nameExceptions
       .filter((x) => home(x) !== null && home(x) !== path.posix.dirname(path.posix.dirname(x.src)))
-      .map((x) => `исключение названия «${x.name}» (${x.file}) — не в папке своего теста: перенеси ${x.src} в ${home(x)}/${L.NAMES_DIR}/`),
+      .map((x) => `name exception «${x.name}» (${x.file}) isn't in its test's folder: move ${x.src} to ${home(x)}/${L.NAMES_DIR}/`),
     ...legacyNames,
   ];
   const marks = embedMarks(groups, model);
@@ -791,8 +803,8 @@ export async function main(argv: string[]): Promise<number> {
   } else {
     const outDir = path.isAbsolute(values.out) ? values.out : path.join(root, values.out);
     const { generated, removed } = writeFiles(groups, out, outDir, model);
-    for (const rel of removed) console.error(`spec-doc: удалён устаревший ${path.join(values.out, rel)}`);
-    console.error(`spec-doc: ${values.out}: README.md + ${generated.size} файлов`);
+    for (const rel of removed) console.error(`spec-doc: deleted stale ${path.join(values.out, rel)}`);
+    console.error(`spec-doc: ${values.out}: README.md + ${enCount(generated.size, "file")}`);
   }
 
   const nCap = groupNames(groups, "capability").length;
@@ -801,23 +813,23 @@ export async function main(argv: string[]): Promise<number> {
   const inTree = [...groups.values()].flatMap((g) => g.tests);
   const outN = [...out.values()].reduce((s, v) => s + v.length, 0);
   console.error(
-    `spec-doc: capabilities ${nCap}, architecture ${nArch}, standards ${nStd}, ${countsLine(inTree)}; ${L.TESTS}/lib пропущено файлов: ${libFiles.size}; вне дерева: ${outN} в ${out.size} файлах`,
+    `spec-doc: capabilities ${nCap}, architecture ${nArch}, standards ${nStd}, ${enCountsLine(inTree)}; ${L.TESTS}/lib files skipped: ${libFiles.size}; outside the tree: ${outN} in ${enCount(out.size, "file")}`,
   );
-  for (const file of [...out.keys()].sort()) console.error(`spec-doc: вне дерева: ${file} (${testsWord(out.get(file)!.length)})`);
-  if (missing.length) console.error(`spec-doc: нет исходников (${missing.length}) — проза из JSDoc не взята: ${missing.join(", ")}`);
+  for (const file of [...out.keys()].sort()) console.error(`spec-doc: outside the tree: ${file} (${enCount(out.get(file)!.length, "test")})`);
+  if (missing.length) console.error(`spec-doc: no sources (${missing.length}) — JSDoc prose not taken: ${missing.join(", ")}`);
   for (const m of unread) console.error(`spec-doc: ${m}`);
-  for (const file of undescribed) console.error(`spec-doc: нет описания ${file} — зачем, причина, отвергнутое`);
-  for (const file of noMain) console.error(`spec-doc: нет главного файла ${file} — его describe открывают страницу`);
-  for (const [name, file] of names) console.error(`spec-doc: название — не утверждение по-русски: «${name}» (${file})`);
+  for (const file of undescribed) console.error(`spec-doc: no description ${file} — why, the reason, the rejected options`);
+  for (const file of noMain) console.error(`spec-doc: no main file ${file} — its describe blocks open the page`);
+  for (const [name, file] of names) console.error(`spec-doc: the name isn't a statement in the project language (${LANG}): «${name}» (${file})`);
   for (const m of staleNames) console.error(`spec-doc: ${m}`);
-  if (NAME_DEBT.length) console.error(`spec-doc: названий в исключениях — ${NAME_DEBT.length}`);
+  if (NAME_DEBT.length) console.error(`spec-doc: names in exceptions: ${NAME_DEBT.length}`);
   for (const file of headers) {
     const [kind, name] = L.classify(file);
-    console.error(`spec-doc: шапка файла в документацию не идёт — перенеси в ${descriptionPath({ kind, name: name! })}: ${file}`);
+    console.error(`spec-doc: a file header doesn't go into the documentation — move it to ${descriptionPath({ kind, name: name! })}: ${file}`);
   }
   for (const file of legacy) {
     const base = path.posix.basename(file);
-    console.error(`spec-doc: главный файл папки — ${L.classify(file)[1]}${base.slice("rule".length)}, а не ${base} — переименуй: ${file}`);
+    console.error(`spec-doc: the folder's main file is ${L.classify(file)[1]}${base.slice("rule".length)}, not ${base} — rename: ${file}`);
   }
   for (const m of marks) console.error(`spec-doc: ${m}`);
   return (out.size || headers.length || legacy.length || undescribed.length || noMain.length || names.length || staleNames.length || marks.length) && values.strict ? 1 : 0;

@@ -135,7 +135,7 @@ describe("Под Node без Bun скрипты spec пишут то же, чт�
     const bun = runScript("spec-break", args, dir);
     const node = runScript("spec-break", args, dir, "node");
     expect([bun.code, node.code]).toEqual([0, 0]);
-    expect(node.stdout).toContain("✅ упал: вычитание (src/sum.ts)");
+    expect(node.stdout).toContain("✅ failed: вычитание (src/sum.ts)");
     expect(node.stdout).toBe(bun.stdout);
   });
 

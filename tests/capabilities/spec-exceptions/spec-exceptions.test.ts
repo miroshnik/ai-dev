@@ -80,7 +80,7 @@ describe("Исключения проекта переезжают в катал
     expect(test).toContain('import { other } from "./other.ts";\n\nconst exceptions = exceptionsIn();\n');
     expect(test).not.toContain("./exceptions.ts");
     expect(r.stdout).toContain(`- ${AUDIT}/exceptions.ts → ${AUDIT}/exceptions/ (2)`);
-    expect(r.stdout).toContain(`~ ${AUDIT}/audit.test.ts: импорт → exceptionsIn()`);
+    expect(r.stdout).toContain(`~ ${AUDIT}/audit.test.ts: import → exceptionsIn()`);
     // после переезда проверка проекта зелёная: исключение то же, но из каталога
     const t = spawnSync("bun", ["test", "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
     expect(t.status).toBe(0);
@@ -93,7 +93,7 @@ describe("Исключения проекта переезжают в катал
     const before = read(`${AUDIT}/audit.test.ts`);
     const r = migrate();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("exceptions.ts в папках решений нет — переносить нечего");
+    expect(r.stdout).toContain("no exceptions.ts in decision folders — nothing to move");
     expect(read(`${AUDIT}/audit.test.ts`)).toBe(before);
   });
 
@@ -116,7 +116,7 @@ describe("Исключения проекта переезжают в катал
     writeTree(dir, { "tests/standards/other/other.test.ts": 'import exceptions from "../audit/exceptions.ts";\nexport { exceptions };\n' });
     const r = migrate();
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain(`! tests/standards/other/other.test.ts: ссылка на ${AUDIT}/exceptions.ts — замени на exceptionsIn("${AUDIT}") харнесса`);
+    expect(r.stdout).toContain(`! tests/standards/other/other.test.ts: a reference to ${AUDIT}/exceptions.ts — replace it with the harness's exceptionsIn("${AUDIT}")`);
   });
 
   // каталог один на папку решения: exceptionsIn() теста подпапки читает каталог папки — перенос в каталог подпапки
@@ -130,7 +130,7 @@ describe("Исключения проекта переезжают в катал
     const r = migrate();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain(`- ${AUDIT}/sub/exceptions.ts → ${AUDIT}/exceptions/ (2)`);
-    expect(r.stdout).toContain(`~ ${AUDIT}/sub/sub.test.ts: импорт → exceptionsIn()`);
+    expect(r.stdout).toContain(`~ ${AUDIT}/sub/sub.test.ts: import → exceptionsIn()`);
     expect(existsSync(path.join(dir, AUDIT, "sub/exceptions"))).toBe(false);
     expect(JSON.parse(read(`${AUDIT}/exceptions/importLegacy.json`))).toEqual({ item: "importLegacy", issue: 12, reason: "импорт старых данных — аудит в #12" });
     const t = spawnSync("bun", ["test", "--reporter=junit", "--reporter-outfile=r.xml"], { cwd: dir, encoding: "utf8" });
@@ -167,7 +167,7 @@ describe("Исключения названий spec-doc переезжают в
     // после переезда spec-doc --strict зелёный: исключения те же, но из каталога
     writeFileSync(path.join(dir, "r.json"), vitestReport(dir, { [MAIN]: [[["createInvoice"], "returns 201"]], [E2E]: [[["Счета"], "returns 201"]] }));
     const doc = runScript("spec-doc", ["r.json", "--root", dir, "--stdout", "--strict"], dir);
-    expect(doc.stderr).not.toContain("не утверждение по-русски");
+    expect(doc.stderr).not.toContain("isn't a statement");
     expect(doc.code).toBe(0);
   });
 
@@ -192,7 +192,7 @@ describe("Исключения названий spec-doc переезжают в
     expect(r.stdout).toContain(`- ${SHARED} → ${BILLING}/names.exceptions/, ${AUDIT}/names.exceptions/, tests/standards/spec-names/names.exceptions/ (3)`);
     expect(JSON.parse(read("package.json")).scripts["spec:doc"]).toBe("node spec-doc.ts r.xml --strict");
     expect(read(".github/workflows/ci.yml")).toBe("      - run: node spec-doc.ts r.xml --strict\n");
-    expect(r.stdout).toContain(`~ package.json: --names-exceptions ${SHARED} убран`);
-    expect(r.stdout).toContain(`~ .github/workflows/ci.yml: --names-exceptions ${CUSTOM} убран`);
+    expect(r.stdout).toContain(`~ package.json: --names-exceptions ${SHARED} removed`);
+    expect(r.stdout).toContain(`~ .github/workflows/ci.yml: --names-exceptions ${CUSTOM} removed`);
   });
 });

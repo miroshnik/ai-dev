@@ -151,11 +151,11 @@ export async function main(argv: string[]): Promise<number> {
     try {
       list = await loadLegacy(path.join(root, rel));
     } catch (e) {
-      console.error(`spec-exceptions: ${rel} не загружается: ${(e as Error).message}`);
+      console.error(`spec-exceptions: ${rel} doesn't load: ${(e as Error).message}`);
       return 2;
     }
     if (!Array.isArray(list)) {
-      console.error(`spec-exceptions: ${rel} — нужен export default [{ item, issue, reason }]`);
+      console.error(`spec-exceptions: ${rel} — export default [{ item, issue, reason }] is needed`);
       return 2;
     }
     if (list.length && list.every((x) => x && typeof x === "object" && typeof x.item !== "string" && typeof x.name === "string")) {
@@ -164,7 +164,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     const bad = list.findIndex((x) => !x || typeof x !== "object" || typeof x.item !== "string");
     if (bad >= 0) {
-      console.error(`spec-exceptions: ${rel}: пункт ${bad + 1} — не исключение { item, issue, reason }`);
+      console.error(`spec-exceptions: ${rel}: entry ${bad + 1} is not an exception { item, issue, reason }`);
       return 2;
     }
     const folder = legacyOf(rel)!.folder;
@@ -200,11 +200,11 @@ export async function main(argv: string[]): Promise<number> {
       const at = afterImports(rest);
       const next = withHarnessImport(rest.slice(0, at) + `\nconst ${name} = exceptionsIn();\n` + rest.slice(at));
       if (next === null) {
-        manual.push(`! ${file}: импорт ${rel} не заменён — нет импорта харнесса, добавь import { exceptionsIn } и const ${name} = exceptionsIn()`);
+        manual.push(`! ${file}: the import of ${rel} isn't replaced — no harness import, add import { exceptionsIn } and const ${name} = exceptionsIn()`);
         continue;
       }
       writeFileSync(path.join(root, file), next);
-      out.push(`~ ${file}: импорт → exceptionsIn()`);
+      out.push(`~ ${file}: import → exceptionsIn()`);
     }
   }
 
@@ -214,12 +214,12 @@ export async function main(argv: string[]): Promise<number> {
     try {
       list = await loadLegacy(path.join(root, rel));
     } catch (e) {
-      console.error(`spec-exceptions: ${rel} не загружается: ${(e as Error).message}`);
+      console.error(`spec-exceptions: ${rel} doesn't load: ${(e as Error).message}`);
       return 2;
     }
     const isName = (x: Partial<NameException> | null) => !!x && typeof x.file === "string" && typeof x.name === "string" && Number.isInteger(x.issue);
     if (!Array.isArray(list) || !list.every(isName)) {
-      console.error(`spec-exceptions: ${rel} — нужен export default [{ file, name, issue, reason }]`);
+      console.error(`spec-exceptions: ${rel} — export default [{ file, name, issue, reason }] is needed`);
       return 2;
     }
     const written = (list as NameException[]).map((x) =>
@@ -242,7 +242,7 @@ export async function main(argv: string[]): Promise<number> {
       out.push(`~ ${file}: ${rel} → ${dir}`);
     }
     text = text.replace(NAMES_FLAG, (_all, rel: string) => {
-      out.push(`~ ${file}: --names-exceptions ${rel} убран`);
+      out.push(`~ ${file}: --names-exceptions ${rel} removed`);
       return "";
     });
     if (text !== readFileSync(path.join(root, file), "utf8")) writeFileSync(path.join(root, file), text);
@@ -253,11 +253,11 @@ export async function main(argv: string[]): Promise<number> {
     const text = readFileSync(path.join(root, file), "utf8");
     for (const m of text.matchAll(ANY_IMPORT)) {
       const rel = moved.find((l) => pointsTo(file, m[2]!, l));
-      if (rel) manual.push(`! ${file}: ссылка на ${rel} — замени на exceptionsIn("${legacyOf(rel)!.folder}") харнесса`);
+      if (rel) manual.push(`! ${file}: a reference to ${rel} — replace it with the harness's exceptionsIn("${legacyOf(rel)!.folder}")`);
     }
   }
 
-  if (!moved.length && !movedNames.length) out.push("exceptions.ts в папках решений нет — переносить нечего");
+  if (!moved.length && !movedNames.length) out.push("no exceptions.ts in decision folders — nothing to move");
   for (const l of [...out, ...manual]) console.log(l);
   return manual.length ? 1 : 0;
 }

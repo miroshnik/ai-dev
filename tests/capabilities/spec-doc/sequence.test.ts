@@ -69,7 +69,7 @@ describe("Сиквенс-схема сценария — на странице c
     traced({ [DESCRIBED]: "Счета.\n\n<!-- spec: sequence-refund -->\n" });
     const r = doc("--strict");
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain(`spec-doc: метка <!-- spec: sequence-refund --> в ${DESCRIBED}: нет сценария refund в тестах папки`);
+    expect(r.stderr).toContain(`spec-doc: mark <!-- spec: sequence-refund --> in ${DESCRIBED}: no scenario refund in the folder's tests`);
     expect(doc().code).toBe(0);
   });
 });
