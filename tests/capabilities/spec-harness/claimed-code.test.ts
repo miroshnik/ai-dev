@@ -112,9 +112,9 @@ describe("Код, до которого не доходит ни одна точ
       }),
     );
     expect(r["исключение: dependency:lodash (#4)"]).toBe(
-      "✗ ключ dependency:lodash — без файла: исключение закрыло бы lodash во всех воркспейсах — переименуй в dependency:packages/a/package.json#lodash, dependency:packages/b/package.json#lodash (#4)",
+      "✗ key dependency:lodash has no file: the exception would hide lodash in every workspace — rename it to dependency:packages/a/package.json#lodash, dependency:packages/b/package.json#lodash (#4)",
     );
-    expect(r["исключение: binary:tsx (#5)"]).toStartWith("✗ knip больше не находит binary:tsx — убери исключение");
+    expect(r["исключение: binary:tsx (#5)"]).toStartWith("✗ knip no longer finds binary:tsx — remove the exception");
     expect(r["нет зависимостей без импорта"]).toBe("✗ packages/a/package.json#lodash\npackages/b/package.json#lodash");
   });
 
@@ -139,7 +139,7 @@ describe("Код, до которого не доходит ни одна точ
       ]),
     });
     const r = await outcomes((it) => deadCode(it, { root: dir, report: ".knip.json" }));
-    expect(r["все находки knip — известных видов"]).toBe("✗ knip нашёл то, чего харнесс не разбирает: cycles (src/a.ts) — убери вид из запуска knip (--exclude) или обнови скилл spec");
+    expect(r["все находки knip — известных видов"]).toBe("✗ knip found what the harness doesn't parse: cycles (src/a.ts) — exclude the kind from the knip run (--exclude) or update the spec skill");
     expect(r["нет экспортов без потребителя"]).toBe("✓");
   });
 
@@ -157,7 +157,7 @@ describe("Код, до которого не доходит ни одна точ
     );
     expect(r["нет файлов без потребителя"]).toBe("✓");
     expect(r["исключение: file:src/legacy.ts (#12)"]).toBe("✓");
-    expect(r["исключение: export:src/math.ts#factorial (#13)"]).toStartWith("✗ knip больше не находит export:src/math.ts#factorial — убери исключение");
+    expect(r["исключение: export:src/math.ts#factorial (#13)"]).toStartWith("✗ knip no longer finds export:src/math.ts#factorial — remove the exception");
   });
 
   it("без отчёта — knip проекта запускается сам (node_modules/.bin/knip --reporter json)", async () => {
@@ -177,9 +177,9 @@ describe("Код, до которого не доходит ни одна точ
       return outcomes((it) => deadCode(it, { root: dir }));
     };
     const crashed = await fake("echo 'ERROR: не найден tsconfig' >&2\nexit 2");
-    expect(crashed["нет файлов без потребителя"]).toStartWith("✗ knip завершился с кодом 2: ERROR: не найден tsconfig");
+    expect(crashed["нет файлов без потребителя"]).toStartWith("✗ knip exited with code 2: ERROR: не найден tsconfig");
     const garbage = await fake("echo 'Unused files (1)'\nexit 1");
-    expect(garbage["нет экспортов без потребителя"]).toStartWith("✗ knip вывел не JSON");
+    expect(garbage["нет экспортов без потребителя"]).toStartWith("✗ knip printed non-JSON");
   });
 
   it("аргументы knip проекта передаются запуску", async () => {
@@ -246,7 +246,7 @@ describe("Подсказка конфигурации knip — упавший т
     const r = await outcomes((it) => deadCode(it, { root: dir, report: ".knip.json" }));
     // репортер — путём от корня проекта: в проекте это копия скилла, .agents/skills/spec/scripts/knip-hints.cjs
     expect(r["нет подсказок конфигурации knip"]).toBe(
-      `✗ в отчёте .knip.json нет подсказок конфигурации — сформируй его: knip --reporter json --reporter ${path.relative(dir, HINTS)} > .knip.json (или hints: false)`,
+      `✗ report .knip.json has no configuration hints — generate it: knip --reporter json --reporter ${path.relative(dir, HINTS)} > .knip.json (or hints: false)`,
     );
     expect(r["нет файлов без потребителя"]).toBe("✓");
     const off = await outcomes((it) => deadCode(it, { root: dir, report: ".knip.json", hints: false }));
@@ -319,7 +319,7 @@ describe("Код, до которого доходят только тесты, 
       deadCode(it, { root: dir, report: ".knip-production.json", production: true, hints: false, exceptions: [{ ...exceptions[2]!, rule: "prodution" }] }),
     );
     expect(typo["нет экспортов без потребителя (production)"]).toBe("✗ src/a.ts#legacy\nsrc/a.ts#testOnly");
-    expect(typo["исключения с rule — к правилам инвариантов папки"]).toStartWith("✗ исключение export:src/a.ts#testOnly: правила «prodution» нет ни у одного инварианта папки");
+    expect(typo["исключения с rule — к правилам инвариантов папки"]).toStartWith("✗ exception export:src/a.ts#testOnly: no invariant of the folder has rule «prodution»");
   });
 });
 
@@ -338,8 +338,8 @@ describe("Каждая переменная окружения объявлен�
     );
     expect(r["DATABASE_URL объявлена"]).toBe("✓");
     expect(r["SENTRY_DSN объявлена"]).toBe("✓");
-    expect(r["STRIPE_KEY объявлена"]).toStartWith("✗ STRIPE_KEY читается в src/db.ts, но не объявлена в схеме окружения");
-    expect(r["OLD_FLAG читается в коде"]).toStartWith("✗ OLD_FLAG объявлена, но не читается — убери из схемы");
+    expect(r["STRIPE_KEY объявлена"]).toStartWith("✗ STRIPE_KEY is read in src/db.ts but not declared in the environment schema");
+    expect(r["OLD_FLAG читается в коде"]).toStartWith("✗ OLD_FLAG is declared but not read — remove it from the environment schema");
     expect(r["VITE_API_URL читается в коде"]).toBe("✓");
     expect(Object.keys(r).some((n) => n.startsWith("NODE_ENV"))).toBe(false);
     // служебные — экспортом: проект со своими реестрами на invariant пропускает те же
@@ -363,13 +363,13 @@ describe("Каждая переменная окружения объявлен�
     );
     expect(r["вне охвата: SDK_TOKEN"]).toBe("✓");
     expect(r["SDK_TOKEN объявлена"]).toBeUndefined();
-    expect(r["вне охвата: GONE"]).toStartWith("✗ элемента GONE в реестре «переменные окружения в коде» нет — убери из охвата");
+    expect(r["вне охвата: GONE"]).toStartWith("✗ element GONE is not in registry «переменные окружения в коде» — remove from scope");
   });
 
   it("ignore без причины — упавший тест: перенести в outside", async () => {
     writeTree(dir, { "src/a.ts": "const a = process.env.A;\n" });
     const r = await outcomes((it) => envVars(it, { root: dir, declared: [], ignore: ["A"] }));
-    expect(r["вне охвата без причины: A"]).toStartWith("✗ ignore не держит причину — перенеси в outside: [{ item, reason }]");
+    expect(r["вне охвата без причины: A"]).toStartWith("✗ ignore holds no reason — move it to outside: [{ item, reason }]");
     expect(r["A объявлена"]).toBeUndefined();
   });
 
@@ -492,12 +492,12 @@ describe("Каждая переменная окружения объявлен�
     );
     expect(r["api/API_PORT объявлена"]).toBe("✓");
     expect(r["api/DATABASE_URL объявлена"]).toBe("✓");
-    expect(r["api/LOG_LEVEL объявлена"]).toStartWith("✗ LOG_LEVEL читается в packages/log/src/index.ts, но не объявлена в схеме окружения приложения api");
+    expect(r["api/LOG_LEVEL объявлена"]).toStartWith("✗ LOG_LEVEL is read in packages/log/src/index.ts but not declared in the environment schema of app api");
     expect(r["web/VITE_THEME объявлена"]).toBe("✓");
     expect(r["web/VITE_PORT объявлена"]).toBe("✓");
     // devDependencies в сборку не попадают: DATABASE_URL пакета db — не чтение web
     expect(r["web/DATABASE_URL объявлена"]).toBeUndefined();
-    expect(r["web/DATABASE_URL читается в коде"]).toStartWith("✗ DATABASE_URL объявлена в схеме окружения приложения web, но не читается ни им, ни его пакетами");
+    expect(r["web/DATABASE_URL читается в коде"]).toStartWith("✗ DATABASE_URL is declared in the environment schema of app web but read neither by it nor by its packages");
     expect(r["api/VITE_API объявлена"]).toBeUndefined();
   });
 

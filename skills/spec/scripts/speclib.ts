@@ -147,10 +147,10 @@ export function exceptionFile(p: string): ExceptionFile | null {
   if (at < 0) return null;
   if (at === inner.length - 1) return { folder, dir: inner[at]!.startsWith(`${NAMES_DIR}.`) ? NAMES_DIR : EXCEPTIONS_DIR, legacy: true };
   const dir = inner[at] as ExceptionFile["dir"];
-  const what = dir === NAMES_DIR ? "исключения названий" : "исключения";
-  if (at > 0) return { folder, dir, legacy: false, error: `${what} — только в ${folder}/${dir}/ папки решения, не в подпапке` };
+  const what = dir === NAMES_DIR ? "name exceptions" : "exceptions";
+  if (at > 0) return { folder, dir, legacy: false, error: `${what} — only in ${folder}/${dir}/ of the decision folder, not in a subfolder` };
   if (inner.length > 2 || !p.endsWith(".json")) {
-    const form = dir === NAMES_DIR ? "исключение названия — файл <название>.json с { file, name, issue, reason }" : "исключение — файл <элемент>.json с { item, issue, reason }";
+    const form = dir === NAMES_DIR ? "a name exception is a <name>.json file with { file, name, issue, reason }" : "an exception is an <element>.json file with { item, issue, reason }";
     return { folder, dir, legacy: false, error: form };
   }
   return { folder, dir, legacy: false };
@@ -233,14 +233,14 @@ export function loadReport(file: string, root: string): Test[] {
   try {
     data = JSON.parse(text);
   } catch (e) {
-    throw new Error(`${file}: не JSON и не XML (${(e as Error).message})`);
+    throw new Error(`${file}: neither JSON nor XML (${(e as Error).message})`);
   }
   if (data && typeof data === "object") {
     const d = data as Record<string, unknown>;
     if ("testResults" in d) return parseVitest(d, root);
     if ("suites" in d && "config" in d) return parsePlaywright(d, root);
   }
-  throw new Error(`${file}: неизвестный формат отчёта (ожидаю JSON Vitest/Jest, JSON Playwright или JUnit XML от bun test)`);
+  throw new Error(`${file}: unknown report format (expected Vitest/Jest JSON, Playwright JSON or JUnit XML from bun test)`);
 }
 
 const VITEST_STATUS: Record<string, Status> = {
@@ -459,7 +459,7 @@ function parseCode(source: string, file?: string): Parsed {
       first ??= e as Error;
     }
   }
-  throw new Error(`не разобран: ${first!.message}`);
+  throw new Error(`can't parse: ${first!.message}`);
 }
 
 const isNode = (v: unknown): v is AstNode => !!v && typeof v === "object" && typeof (v as AstNode).type === "string" && typeof (v as AstNode).start === "number";

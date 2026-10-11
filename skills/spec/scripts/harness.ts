@@ -191,7 +191,7 @@ export function marksIn(file: string, text: string): Mark[] {
   return out;
 }
 
-const MIGRATE = "перенеси командой spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
+const MIGRATE = "migrate with spec-exceptions: node .agents/skills/spec/scripts/spec-exceptions.ts";
 
 /**
  * Исключения папки решения — каталог `exceptions/`, файл на исключение (`<элемент>.json`: `{ item, issue, reason,
@@ -202,7 +202,7 @@ const MIGRATE = "перенеси командой spec-exceptions: node .agents
 export function exceptionsIn(dir?: string): Exception[] {
   // от места файла теста, а не от cwd: раннер пакета монорепо идёт из своего каталога
   const folder = dir ?? callerFolder()?.abs;
-  if (folder === undefined) throw new Error("exceptionsIn: вызов не из файла теста — передай каталог папки решения");
+  if (folder === undefined) throw new Error("exceptionsIn: not called from a test file — pass the decision folder's directory");
   return exceptionFiles(path.join(folder, EXCEPTIONS_DIR));
 }
 
@@ -223,17 +223,17 @@ export function exceptionFiles(at: string): Exception[] {
   for (const name of names) {
     const abs = path.resolve(at, name);
     const file = shownPath(abs);
-    if (!name.endsWith(".json")) throw new Error(`${file}: исключение — файл <элемент>.json с { item, issue, reason }`);
+    if (!name.endsWith(".json")) throw new Error(`${file}: an exception is an <element>.json file with { item, issue, reason }`);
     let data: Partial<Exception>;
     try {
       data = JSON.parse(readFileSync(abs, "utf8")) as Partial<Exception>;
     } catch (e) {
-      throw new Error(`${file}: не JSON — ${(e as Error).message}`);
+      throw new Error(`${file}: not JSON — ${(e as Error).message}`);
     }
-    if (!data || typeof data !== "object" || typeof data.item !== "string") throw new Error(`${file}: исключение — { item, issue, reason }, rule — по желанию`);
+    if (!data || typeof data !== "object" || typeof data.item !== "string") throw new Error(`${file}: an exception is { item, issue, reason }, rule is optional`);
     const key = `${data.rule ?? ""}\0${data.item}`;
     const twin = seen.get(key);
-    if (twin) throw new Error(`исключение ${data.item}${data.rule ? ` (${data.rule})` : ""} — в двух файлах: ${twin}, ${file} — оставь один`);
+    if (twin) throw new Error(`exception ${data.item}${data.rule ? ` (${data.rule})` : ""} is in two files: ${twin}, ${file} — keep one`);
     seen.set(key, file);
     out.push({ item: data.item, issue: data.issue as number, reason: String(data.reason ?? ""), ...(data.rule ? { rule: data.rule } : {}), file });
   }
@@ -307,7 +307,7 @@ function legacyExceptions(it: It): void {
     return x?.dir === EXCEPTIONS_DIR ? [{ f, x }] : [];
   });
   const at = (f: string) => shownPath(path.join(base, f));
-  const legacy = found.filter(({ x }) => x.legacy).map(({ f, x }) => `${at(f)}: исключения — файл на элемент в ${x.folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
+  const legacy = found.filter(({ x }) => x.legacy).map(({ f, x }) => `${at(f)}: exceptions — a file per element in ${x.folder}/${EXCEPTIONS_DIR}/ — ${MIGRATE}`);
   const misplaced = found.filter(({ x }) => x.error).map(({ f, x }) => `${at(f)}: ${x.error}`);
   const N = localeNames();
   if (legacy.length) {
@@ -363,7 +363,7 @@ function unknownRules(it: It, rule: string | undefined, exceptions: readonly Exc
       }
       if (!lost.size) return;
       const rules = [...ledger.rules].sort();
-      const have = rules.length ? `у инвариантов файла: ${rules.join(", ")}` : "инварианты файла — без rule";
+      const have = rules.length ? `the file's invariants have: ${rules.join(", ")}` : "the file's invariants have no rule";
       throw new Error([...lost.values()].map((x) => line(x, have)).join("\n"));
     });
   };
@@ -373,9 +373,9 @@ function unknownRules(it: It, rule: string | undefined, exceptions: readonly Exc
     exceptions.filter((e) => e.rule && e.rule !== rule),
     N.spec.harness.exceptionRules,
     (e) => e.file ?? `${e.rule}\0${e.item}`,
-    (e, have) => `${e.file ?? `исключение ${e.item}`}: правила «${e.rule}» нет ни у одного инварианта папки (${have}) — поправь rule или ${e.file ? "удали файл" : "убери исключение"}`,
+    (e, have) => `${e.file ?? `exception ${e.item}`}: no invariant of the folder has rule «${e.rule}» (${have}) — fix the rule or ${e.file ? "delete the file" : "remove the exception"}`,
   );
-  reconcile(ledger.marks, marks, N.spec.harness.markRules, (m) => `${m.file}:${m.line}`, (m, have) => `${m.file}:${m.line}: правила «${m.rule}» нет ни у одного инварианта папки (${have}) — поправь отметку или убери её`);
+  reconcile(ledger.marks, marks, N.spec.harness.markRules, (m) => `${m.file}:${m.line}`, (m, have) => `${m.file}:${m.line}: no invariant of the folder has rule «${m.rule}» (${have}) — fix the mark or remove it`);
 }
 
 /** Строки в коде других файлов папки решения теста (`base` — корень проекта): правила их инвариантов, которых этот прогон не видит. */
@@ -389,7 +389,7 @@ function stringsBeside(file: string, base: string): Set<string> {
 }
 
 /** Что сделать с ненужным исключением: убрать отметку, удалить файл исключения, а исключение без файла — убрать из списка. */
-const dropHint = (e: Exception): string => (e.line ? `убери отметку в ${e.file}:${e.line}` : e.file ? `убери исключение: удали ${e.file}` : "убери исключение");
+const dropHint = (e: Exception): string => (e.line ? `remove the mark in ${e.file}:${e.line}` : e.file ? `remove the exception: delete ${e.file}` : "remove the exception");
 
 /**
  * Отметки папки в файлах элементов (`fileOf`): «вне охвата» и исключения по ключу элемента; отметки с `rule` другого
@@ -419,7 +419,7 @@ function elementMarks<T>(it: It, spec: Invariant<T>, key: (item: T) => string, t
     const marks = mine.filter((m) => !m.rule || m.rule === spec.rule);
     if (!marks.length) continue;
     if (keys.length > 1) {
-      shared.push(`${file}:${marks[0]!.line}: отметку читают элементы ${keys.join(", ")} — к какому, неизвестно: элементу без своего файла — outside и exceptions/`);
+      shared.push(`${file}:${marks[0]!.line}: the mark is read by elements ${keys.join(", ")} — which one it belongs to is unknown: an element without its own file goes to outside and exceptions/`);
       continue;
     }
     for (const m of marks) {
@@ -445,14 +445,14 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
   // несколько соглашений над одним реестром в одном describe: служебные тесты различает правило
   const tag = spec.rule ? ` (${spec.rule})` : "";
   it(locale.fill(N.spec.harness.registryNotEmpty, { registry: spec.registry, tag }), () => {
-    if (!spec.items.length) throw new Error(`реестр «${spec.registry}» пуст — проверять нечего: путь или выборка реестра ошибочны`);
+    if (!spec.items.length) throw new Error(`registry «${spec.registry}» is empty — nothing to check: the registry's path or query is wrong`);
   });
   const key = spec.key ?? spec.name;
   const byKey = new Map(spec.items.map((item) => [key(item), item]));
   if (spec.includes?.length) {
     it(locale.fill(N.spec.harness.registryFinds, { registry: spec.registry, items: spec.includes.join(", "), tag }), () => {
       const missing = spec.includes!.filter((k) => !byKey.has(k));
-      if (missing.length) throw new Error(`в реестре «${spec.registry}» нет: ${missing.join(", ")} — выборка реестра потеряла элементы`);
+      if (missing.length) throw new Error(`registry «${spec.registry}» lacks: ${missing.join(", ")} — the registry's query lost elements`);
     });
   }
   const violators = Array.isArray(spec.violator) ? spec.violator : [spec.violator as { name: string; item: T }];
@@ -463,7 +463,7 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
       } catch {
         return;
       }
-      throw new Error(`проверка прошла на нарушителе «${v.name}» — она ничего не проверяет`);
+      throw new Error(`the check passed on violator «${v.name}» — it checks nothing`);
     });
   }
   // отметка в файле элемента — его запись; та же запись ещё и в тесте или exceptions/ — упавший тест, действует отметка
@@ -472,12 +472,12 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
   const twice: string[] = [];
   for (const m of [...marks.outside, ...marks.exceptions]) {
     const at = `${m.file}:${m.line}`;
-    if (marked.has(m.item)) twice.push(`${m.item}: отметки ${marked.get(m.item)} и ${at} — оставь одну`);
+    if (marked.has(m.item)) twice.push(`${m.item}: marks ${marked.get(m.item)} and ${at} — keep one`);
     else marked.set(m.item, at);
   }
   // исключение без правила — ко всем соглашениям папки, с правилом — только к своему
   const listed = [...(spec.exceptions ?? []).filter((e) => !e.rule || e.rule === spec.rule), ...(spec.outside ?? [])] as (Exception | Outside)[];
-  for (const x of listed.filter((x) => marked.has(x.item))) twice.push(`${x.item}: отметка ${marked.get(x.item)} и ${x.file ?? "outside в тесте"} — оставь одно`);
+  for (const x of listed.filter((x) => marked.has(x.item))) twice.push(`${x.item}: mark ${marked.get(x.item)} and ${x.file ?? "outside in the test"} — keep one`);
   if (twice.length) {
     it(locale.fill(N.spec.harness.oneRecord, { tag }), () => {
       throw new Error(twice.join("\n"));
@@ -499,8 +499,8 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
     const name = locale.fill(N.spec.harness.outside, { tag, item: o.item });
     meta(name, { reason: o.reason });
     it(name, () => {
-      if (!o.reason.trim()) throw new Error(`у элемента вне охвата ${o.item} нет причины${o.line ? ` — допиши причину в отметку ${o.file}:${o.line}` : ""}`);
-      if (!byKey.has(o.item)) throw new Error(`элемента ${o.item} в реестре «${spec.registry}» нет — убери из охвата`);
+      if (!o.reason.trim()) throw new Error(`element ${o.item} outside scope has no reason${o.line ? ` — add the reason to the mark in ${o.file}:${o.line}` : ""}`);
+      if (!byKey.has(o.item)) throw new Error(`element ${o.item} is not in registry «${spec.registry}» — remove from scope`);
     });
   }
   // храповик: исключение живёт, пока элемент нарушает соглашение; начал соблюдать — исключение убрать
@@ -509,15 +509,15 @@ export function invariant<T>(it: It, spec: Invariant<T>): void {
     const name = locale.fill(N.spec.harness.exception, { tag, item: e.item, issue: e.issue });
     meta(name, { issue: e.issue, reason: e.reason });
     it(name, async () => {
-      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи — ${e.line ? `допиши #N в отметку ${e.file}:${e.line}` : "issue: номер задачи, которая снимет долг"}`);
-      if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины${e.line ? ` — допиши причину в отметку ${e.file}:${e.line}` : ""}`);
-      if (!byKey.has(e.item)) throw new Error(`элемента ${e.item} в реестре «${spec.registry}» нет — ${dropHint(e)}`);
+      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`exception ${e.item} has no task — ${e.line ? `add #N to the mark in ${e.file}:${e.line}` : "issue: the number of the task that pays off the debt"}`);
+      if (!e.reason.trim()) throw new Error(`exception ${e.item} has no reason${e.line ? ` — add the reason to the mark in ${e.file}:${e.line}` : ""}`);
+      if (!byKey.has(e.item)) throw new Error(`element ${e.item} is not in registry «${spec.registry}» — ${dropHint(e)}`);
       try {
         await spec.check(byKey.get(e.item)!);
       } catch {
         return;
       }
-      throw new Error(`${e.item} уже соблюдает соглашение — ${dropHint(e)} (#${e.issue})`);
+      throw new Error(`${e.item} already complies with the convention — ${dropHint(e)} (#${e.issue})`);
     });
   }
   unknownRules(it, spec.rule, spec.exceptions ?? [], marks.skipped);
@@ -572,7 +572,7 @@ export function examples(it: It, spec: Examples): void {
   const fires = async (e: Example): Promise<LintMessage[]> => {
     const messages = await spec.linter.lint(e.code, e.path);
     const fatal = messages.find((m) => m.fatal);
-    if (fatal) throw new Error(`пример не разбирается: ${e.path} — ${fatal.message}`);
+    if (fatal) throw new Error(`the example doesn't parse: ${e.path} — ${fatal.message}`);
     return messages.filter((m) => m.ruleId === spec.rule);
   };
   // конфиг линтера грузится с регистрации, а не под таймаутом первого примера; ошибку загрузки покажет пример
@@ -580,7 +580,7 @@ export function examples(it: It, spec: Examples): void {
   const N = localeNames();
   if (!spec.bad.length) {
     it(locale.fill(N.spec.harness.badExample, { rule: spec.rule }), () => {
-      throw new Error(`у правила ${spec.rule} нет примера «нельзя» — доказать, что оно умеет падать, нечем`);
+      throw new Error(`rule ${spec.rule} has no «not allowed» example — nothing proves it can fail`);
     });
   }
   for (const e of [...spec.bad.map((x) => [N.spec.harness.bad, x] as const), ...(spec.good ?? []).map((x) => [N.spec.harness.good, x] as const), ...(spec.outside ?? []).map((x) => [N.spec.harness.outsideExample, x] as const)]) {
@@ -589,14 +589,14 @@ export function examples(it: It, spec: Examples): void {
   for (const e of spec.bad) {
     it(`${N.spec.harness.bad}: ${e.name}`, async () => {
       const hits = (await fires(e)).length;
-      if (e.count !== undefined && hits !== e.count) throw new Error(`срабатываний правила ${spec.rule}: ${hits}, а ждали ${e.count} — ${e.path}`);
-      if (!hits) throw new Error(`правило ${spec.rule} не сработало: ${e.path}`);
+      if (e.count !== undefined && hits !== e.count) throw new Error(`rule ${spec.rule} fired ${hits} ${hits === 1 ? "time" : "times"}, expected ${e.count} — ${e.path}`);
+      if (!hits) throw new Error(`rule ${spec.rule} didn't fire: ${e.path}`);
     });
   }
   const silent = (label: string) => (e: Example) =>
     it(`${label}: ${e.name}`, async () => {
       const hit = await fires(e);
-      if (hit.length) throw new Error(`правило ${spec.rule} сработало: ${e.path} — ${hit.map((m) => m.message).join("; ")}`);
+      if (hit.length) throw new Error(`rule ${spec.rule} fired: ${e.path} — ${hit.map((m) => m.message).join("; ")}`);
     });
   (spec.good ?? []).forEach(silent(N.spec.harness.good));
   (spec.outside ?? []).forEach(silent(N.spec.harness.outsideExample));
@@ -746,7 +746,7 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
   const files = codeFiles(opts.root, dirs);
   const N = localeNames();
   it(locale.fill(N.spec.harness.codeFiles, { dirs: dirs.join(", ") }), () => {
-    if (!files.length) throw new Error(`в ${dirs.join(", ")} нет файлов кода — путь ошибочен`);
+    if (!files.length) throw new Error(`no code files in ${dirs.join(", ")} — the path is wrong`);
   });
   for (const file of files) {
     const text = readFileSync(path.join(opts.root, file), "utf8");
@@ -760,8 +760,8 @@ export function lintExceptions(it: It, opts: { root: string; dirs?: string[] }):
     meta(name, { disables: disables.map((d) => ({ line: d.line, rules: d.rules, description: d.description })) });
     it(name, () => {
       const bad = disables.flatMap((d) => {
-        if (!d.rules.length) return [`${d.file}:${d.line} — отключение без названия правила: общий eslint-disable глушит всё, включая проверки`];
-        if (!/^#\d+\s+\S/.test(d.description)) return [`${d.file}:${d.line} — отключение без «-- #N причина»: ${d.rules.join(", ")}`];
+        if (!d.rules.length) return [`${d.file}:${d.line} — a disable without a rule name: a blanket eslint-disable silences everything, checks included`];
+        if (!/^#\d+\s+\S/.test(d.description)) return [`${d.file}:${d.line} — a disable without «-- #N reason»: ${d.rules.join(", ")}`];
         return [];
       });
       if (bad.length) throw new Error(bad.join("\n"));
@@ -910,15 +910,15 @@ export function sequence(
     if (opts.model) {
       const known = modelParticipants(opts.model);
       const unknown = [...new Set(calls.flatMap((c) => [c.from, c.to]).filter((x) => !known.has(x)))];
-      if (unknown.length) throw new Error(unknown.map((x) => `участник ${x} — не элемент модели`).join("\n"));
+      if (unknown.length) throw new Error(unknown.map((x) => `participant ${x} is not a model element`).join("\n"));
     }
     if (opts.order?.length) {
       const lines = calls.map(callLine);
       let j = 0;
       for (const l of lines) if (l === opts.order[j]) j++;
       if (j < opts.order.length) {
-        const after = j ? `после «${opts.order[j - 1]}»` : "с начала сценария";
-        throw new Error(`порядок сценария «${name}» нарушен: нет «${opts.order[j]}» ${after}\nтрасса:\n${lines.join("\n") || "— пусто"}`);
+        const after = j ? `after «${opts.order[j - 1]}»` : "from the start of the scenario";
+        throw new Error(`the order of scenario «${name}» is broken: no «${opts.order[j]}» ${after}\ntrace:\n${lines.join("\n") || "— empty"}`);
       }
     }
   });
@@ -999,7 +999,7 @@ function knipOutput(text: string): KnipReport {
     return JSON.parse(text) as KnipReport;
   } catch {
     const lines = text.split("\n").filter((l) => l.trim());
-    if (!lines.length) throw new Error("пустой вывод");
+    if (!lines.length) throw new Error("empty output");
     return Object.assign({}, ...lines.map((l) => JSON.parse(l) as KnipReport)) as KnipReport;
   }
 }
@@ -1060,14 +1060,14 @@ export function deadCode(it: It, opts: DeadCode): void {
   }
   it(locale.fill(N.spec.harness.knip.known, { tag }), () => {
     const { unknown } = load();
-    if (unknown.length) throw new Error(`knip нашёл то, чего харнесс не разбирает: ${unknown.join(", ")} — убери вид из запуска knip (--exclude) или обнови скилл spec`);
+    if (unknown.length) throw new Error(`knip found what the harness doesn't parse: ${unknown.join(", ")} — exclude the kind from the knip run (--exclude) or update the spec skill`);
   });
   if (hints) {
     it(locale.fill(N.spec.harness.knip.hints, { tag }), () => {
       const found = load().hints;
       const reporter = path.relative(opts.root, HINTS_REPORTER).split(path.sep).join("/");
-      if (!found && opts.report) throw new Error(`в отчёте ${opts.report} нет подсказок конфигурации — сформируй его: knip --reporter json --reporter ${reporter} > ${opts.report} (или hints: false)`);
-      if (!found) throw new Error(`knip не вывел подсказок конфигурации — репортер ${reporter} не отработал`);
+      if (!found && opts.report) throw new Error(`report ${opts.report} has no configuration hints — generate it: knip --reporter json --reporter ${reporter} > ${opts.report} (or hints: false)`);
+      if (!found) throw new Error(`knip printed no configuration hints — reporter ${reporter} didn't run`);
       const left = open(found);
       if (left.length) throw new Error(left.join("\n"));
     });
@@ -1076,8 +1076,8 @@ export function deadCode(it: It, opts: DeadCode): void {
     const name = locale.fill(N.spec.harness.exception, { tag, item: e.item, issue: e.issue });
     meta(name, { issue: e.issue, reason: e.reason });
     it(name, () => {
-      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`у исключения ${e.item} нет задачи`);
-      if (!e.reason.trim()) throw new Error(`у исключения ${e.item} нет причины`);
+      if (!Number.isInteger(e.issue) || e.issue <= 0) throw new Error(`exception ${e.item} has no task`);
+      if (!e.reason.trim()) throw new Error(`exception ${e.item} has no reason`);
       const kind = e.item.split(":")[0]!;
       const found = kind === "hint" ? load().hints : load().kinds.get(kind);
       if (found?.has(e.item)) return;
@@ -1090,8 +1090,8 @@ export function deadCode(it: It, opts: DeadCode): void {
               return tail === name || (kind === "catalog" && tail.endsWith("." + name));
             })
           : [];
-      if (renames.length) throw new Error(`ключ ${e.item} — без файла: исключение закрыло бы ${name} во всех воркспейсах — переименуй в ${renames.join(", ")} (#${e.issue})`);
-      throw new Error(`knip больше не находит ${e.item} — ${dropHint(e)} (#${e.issue})`);
+      if (renames.length) throw new Error(`key ${e.item} has no file: the exception would hide ${name} in every workspace — rename it to ${renames.join(", ")} (#${e.issue})`);
+      throw new Error(`knip no longer finds ${e.item} — ${dropHint(e)} (#${e.issue})`);
     });
   }
   unknownRules(it, rule, all, []);
@@ -1105,16 +1105,16 @@ function runKnip(opts: DeadCode, hints: boolean): KnipFindings {
     const args = ["--reporter", "json", ...(hints ? ["--reporter", HINTS_REPORTER] : []), ...(opts.production ? ["--production"] : []), ...(opts.args ?? [])];
     // отчёт монорепо — мегабайты: буфер вывода по умолчанию (1 МБ у Node) оборвал бы его
     const r = spawnSync(path.join(opts.root, "node_modules", ".bin", "knip"), args, { cwd: opts.root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-    if (r.error) throw new Error(`knip не запустился: ${r.error.message} — установи knip в проект или передай report`);
+    if (r.error) throw new Error(`knip didn't start: ${r.error.message} — install knip in the project or pass report`);
     // 0 — чисто, 1 — есть находки; иное — сбой knip, а не «мёртвого кода нет»
-    if (r.status !== 0 && r.status !== 1) throw new Error(`knip завершился с кодом ${r.status ?? r.signal}: ${(r.stderr || r.stdout).trim().slice(0, 1000)}`);
+    if (r.status !== 0 && r.status !== 1) throw new Error(`knip exited with code ${r.status ?? r.signal}: ${(r.stderr || r.stdout).trim().slice(0, 1000)}`);
     text = r.stdout;
   }
   let report: KnipReport;
   try {
     report = knipOutput(text);
   } catch {
-    throw new Error(`knip вывел не JSON — отчёт не разобрать: ${text.trim().slice(0, 300)}`);
+    throw new Error(`knip printed non-JSON — the report can't be parsed: ${text.trim().slice(0, 300)}`);
   }
   return knipFindings(report);
 }
@@ -1353,7 +1353,7 @@ export function envVars(
   const N = localeNames();
   if (opts.ignore?.length) {
     it(locale.fill(N.spec.harness.ignoreNoReason, { items: [...opts.ignore].sort().join(", ") }), () => {
-      throw new Error("ignore не держит причину — перенеси в outside: [{ item, reason }] (причина — на странице, пропала — «убери из охвата»)");
+      throw new Error("ignore holds no reason — move it to outside: [{ item, reason }] (the reason is on the page; once the variable is gone — «remove from scope»)");
     });
   }
   const dirs = opts.dirs ?? ["src"];
@@ -1378,10 +1378,10 @@ export function envVars(
     name: (i) => locale.fill(N.spec.harness.env.declaredName, { name: keyOf(i) }),
     key: keyOf,
     check: (i) => {
-      const schema = i.app ? `схеме окружения приложения ${i.app}` : "схеме окружения";
-      if (!of(i.app).declared.has(i.v)) throw new Error(`${i.v} читается в ${(of(i.app).reads.get(i.v) ?? []).join(", ")}, но не объявлена в ${schema}`);
+      const schema = i.app ? `the environment schema of app ${i.app}` : "the environment schema";
+      if (!of(i.app).declared.has(i.v)) throw new Error(`${i.v} is read in ${(of(i.app).reads.get(i.v) ?? []).join(", ")} but not declared in ${schema}`);
     },
-    violator: { name: N.spec.harness.env.undeclared, item: { app: "", v: "__НЕ_ОБЪЯВЛЕНА__" } },
+    violator: { name: N.spec.harness.env.undeclared, item: { app: "", v: "__UNDECLARED__" } },
     exceptions: forReads(opts.exceptions),
     outside: forReads(opts.outside),
   });
@@ -1394,11 +1394,11 @@ export function envVars(
       if (of(i.app).reads.has(i.v)) return;
       throw new Error(
         i.app
-          ? `${i.v} объявлена в схеме окружения приложения ${i.app}, но не читается ни им, ни его пакетами — убери из схемы окружения`
-          : `${i.v} объявлена, но не читается — убери из схемы окружения`,
+          ? `${i.v} is declared in the environment schema of app ${i.app} but read neither by it nor by its packages — remove it from the environment schema`
+          : `${i.v} is declared but not read — remove it from the environment schema`,
       );
     },
-    violator: { name: N.spec.harness.env.unread, item: { app: "", v: "__НЕ_ЧИТАЕТСЯ__" } },
+    violator: { name: N.spec.harness.env.unread, item: { app: "", v: "__UNREAD__" } },
     exceptions: forDeclared(opts.exceptions),
     outside: forDeclared(opts.outside),
   });

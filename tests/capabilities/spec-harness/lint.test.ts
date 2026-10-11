@@ -52,9 +52,9 @@ describe("Линт-правило проверяется примерами «н
       }),
     );
     expect(r["нельзя: console.log в коде"]).toBe("✓");
-    expect(r["нельзя: console.error в коде"]).toStartWith("✗ правило no-console не сработало: src/b.ts");
+    expect(r["нельзя: console.error в коде"]).toStartWith("✗ rule no-console didn't fire: src/b.ts");
     expect(r["можно: логгер вместо console"]).toBe("✓");
-    expect(r["можно: console.log в коде"]).toStartWith("✗ правило no-console сработало: src/c.ts — Unexpected console statement.");
+    expect(r["можно: console.log в коде"]).toStartWith("✗ rule no-console fired: src/c.ts — Unexpected console statement.");
     expect(r["вне охвата: console.log в тесте"]).toBe("✓");
   });
 
@@ -74,7 +74,7 @@ describe("Линт-правило проверяется примерами «н
         good: [{ name: "eqeqeq не мешает", path: "src/b.ts", code: "a == b;" }],
       }),
     );
-    expect(r["нельзя: только eqeqeq"]).toStartWith("✗ правило no-console не сработало");
+    expect(r["нельзя: только eqeqeq"]).toStartWith("✗ rule no-console didn't fire");
     expect(r["можно: eqeqeq не мешает"]).toBe("✓");
   });
 
@@ -83,7 +83,7 @@ describe("Линт-правило проверяется примерами «н
     const r = await outcomes((it) =>
       examples(it, { linter: broken, rule: "no-console", bad: [{ name: "x", path: "src/a.ts", code: "console.log(1);" }], good: [{ name: "опечатка", path: "src/b.ts", code: "{{" }] }),
     );
-    expect(r["можно: опечатка"]).toStartWith("✗ пример не разбирается: src/b.ts — Parsing error: Unexpected token");
+    expect(r["можно: опечатка"]).toStartWith("✗ the example doesn't parse: src/b.ts — Parsing error: Unexpected token");
   });
 
   it("пример «нельзя» с числом срабатываний падает, если правило сработало иначе", async () => {
@@ -99,7 +99,7 @@ describe("Линт-правило проверяется примерами «н
       }),
     );
     expect(r["нельзя: два вызова"]).toBe("✓");
-    expect(r["нельзя: ждём три"]).toStartWith("✗ срабатываний правила no-alert: 1, а ждали 3 — src/b.ts");
+    expect(r["нельзя: ждём три"]).toStartWith("✗ rule no-alert fired 1 time, expected 3 — src/b.ts");
   });
 });
 
@@ -152,7 +152,7 @@ describe("Правило ESLint живёт в папке своего станд
     expect(Object.values(on)).toEqual(["✓", "✓", "✓"]);
     const bare = project(path.join(dir, "without-fragment"), false);
     const off = await outcomes((it) => examples(it, { linter: eslintLinter({ cwd: bare, module: ESLINT }), ...spec() }));
-    expect(off["нельзя: console.log в домене"]).toStartWith("✗ правило no-console не сработало");
+    expect(off["нельзя: console.log в домене"]).toStartWith("✗ rule no-console didn't fire");
   });
 
   // flat config опции одного правила не сливает: два фрагмента с no-restricted-syntax на одни файлы — действует последний

@@ -85,7 +85,7 @@ sequence(it, "заказ оплачивается", async () => {
   trace("app", "stripe", "списание"); trace("app", "db", "резерв"); trace("mail", "resend", "письмо");
 }, ${ORDER});`);
     expect(bad.code).toBe(1);
-    expect(bad.out).toContain("порядок сценария «списание раньше резерва» нарушен: нет «app → stripe: списание» после «app → db: резерв»");
+    expect(bad.out).toContain("the order of scenario «списание раньше резерва» is broken: no «app → stripe: списание» after «app → db: резерв»");
   });
 
   it("участник не из модели — тест падает: схема говорит на языке модели", () => {
@@ -97,6 +97,6 @@ sequence(it, "не в модели", () => { trace("app", "paypal", "списа�
     // без терминала bun печатает только упавшие тесты — прошедший виден в счётчике
     expect(r.out).toMatch(/^ 1 pass$/m);
     expect(r.out).toContain("(fail) не в модели");
-    expect(r.out).toContain("участник paypal — не элемент модели");
+    expect(r.out).toContain("participant paypal is not a model element");
   });
 });

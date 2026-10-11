@@ -251,7 +251,7 @@ export function boundariesConfig(model: Model, boundaries: object, opts: { files
       {
         from: { element: { type: name } },
         disallow: { to: { element: { types: { anyOf: denied } } } },
-        message: `модуль ${name} не зависит от {{to.element.type}} — зависимости модулей в tests/architecture/model.ts`,
+        message: `module ${name} doesn't depend on {{to.element.type}} — module dependencies are in tests/architecture/model.ts`,
       },
     ];
   });
@@ -437,10 +437,10 @@ export function architecture(
     key: (d) => d,
     check: (d) => {
       const own = moduleOf(d);
-      if (!own.length) throw new Error(`${d}: код вне модулей модели — добавь модуль в tests/architecture/model.ts или перенеси код`);
-      if (own.length > 1) throw new Error(`${d}: каталог в нескольких модулях — ${own.join(", ")}`);
+      if (!own.length) throw new Error(`${d}: code outside the model's modules — add a module to tests/architecture/model.ts or move the code`);
+      if (own.length > 1) throw new Error(`${d}: the directory is in several modules — ${own.join(", ")}`);
     },
-    violator: { name: N.spec.architecture.dirViolator, item: "__вне_модели__" },
+    violator: { name: N.spec.architecture.dirViolator, item: "__outside_model__" },
   });
 
   // корни модели — руками: новый пакет workspace вне них проверка не видела бы целиком
@@ -456,9 +456,9 @@ export function architecture(
       // «вне охвата» и исключение пакета — отметкой в его package.json: удалили пакет — ушла и отметка
       fileOf: (p) => path.join(opts.root, p, "package.json"),
       check: (p) => {
-        if (!inRoots(p)) throw new Error(`${p}: пакет workspace с кодом вне корней модели — добавь его в roots tests/architecture/model.ts`);
+        if (!inRoots(p)) throw new Error(`${p}: a workspace package with code outside the model's roots — add it to roots in tests/architecture/model.ts`);
       },
-      violator: { name: N.spec.architecture.workspaceViolator, item: "__вне_корней__" },
+      violator: { name: N.spec.architecture.workspaceViolator, item: "__outside_roots__" },
     });
   }
 
@@ -479,9 +479,9 @@ export function architecture(
     name: (i) => locale.fill(N.spec.architecture.importsName, { module: i.mod, package: i.pkg }),
     key: (i) => `${i.mod}:${i.pkg}`,
     check: (i) => {
-      if (!allowed(i.mod).includes(i.pkg)) throw new Error(`модулю ${i.mod} пакет ${i.pkg} не разрешён: ${i.files.join(", ")}`);
+      if (!allowed(i.mod).includes(i.pkg)) throw new Error(`package ${i.pkg} is not allowed for module ${i.mod}: ${i.files.join(", ")}`);
     },
-    violator: { name: N.spec.architecture.importsViolator, item: { mod: names(model)[0] ?? "", pkg: "__не_разрешён__", files: ["__нарушитель__"] } },
+    violator: { name: N.spec.architecture.importsViolator, item: { mod: names(model)[0] ?? "", pkg: "__not_allowed__", files: ["__violator__"] } },
   });
 
   const declared = names(model).flatMap((mod) => allowed(mod).map((pkg) => ({ mod, pkg })));
@@ -491,9 +491,9 @@ export function architecture(
     name: (d) => locale.fill(N.spec.architecture.allowedName, { module: d.mod, package: d.pkg }),
     key: (d) => `${d.mod}:${d.pkg}`,
     check: (d) => {
-      if (!used.get(d.mod)?.has(d.pkg)) throw new Error(`модуль ${d.mod} не импортирует ${d.pkg} — убери пакет из модели или поправь код`);
+      if (!used.get(d.mod)?.has(d.pkg)) throw new Error(`module ${d.mod} doesn't import ${d.pkg} — remove the package from the model or fix the code`);
     },
-    violator: { name: N.spec.architecture.allowedViolator, item: { mod: "__нет_модуля__", pkg: "__не_используется__" } },
+    violator: { name: N.spec.architecture.allowedViolator, item: { mod: "__no_module__", pkg: "__unused__" } },
   });
 
   if (model.externals) c1(add, N, model, src);
@@ -592,13 +592,13 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
     check: (m) => {
       const c = containerOf(m);
       if (isLibrary(m)) {
-        if (!c.length) throw new Error(`библиотека ${m} не входит ни в один контейнер: от неё не зависит ни один модуль контейнеров`);
+        if (!c.length) throw new Error(`library ${m} is in no container: no module of the containers depends on it`);
         return;
       }
-      if (!c.length) throw new Error(`модуль ${m} не входит ни в один контейнер модели`);
-      if (c.length > 1) throw new Error(`модуль ${m} — в нескольких контейнерах: ${c.join(", ")} — общий пакет отметь library: true`);
+      if (!c.length) throw new Error(`module ${m} is in no container of the model`);
+      if (c.length > 1) throw new Error(`module ${m} is in several containers: ${c.join(", ")} — mark a shared package with library: true`);
     },
-    violator: { name: N.spec.architecture.containersViolator, item: "__вне_контейнеров__" },
+    violator: { name: N.spec.architecture.containersViolator, item: "__outside_containers__" },
   });
 
   const edges = names(model).flatMap((m) => (model.modules[m]!.dependsOn ?? []).map((d) => ({ m, d })));
@@ -613,7 +613,7 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
         const b = containerOf(e.d);
         // модуль вне контейнеров — тоже не «внутри контейнера»: иначе нарушитель прошёл бы на пустом списке
         if (!a.length || a.some((c) => !b.includes(c))) {
-          throw new Error(`${e.m} (${a.join(", ") || "?"}) зависит от ${e.d} (${b.join(", ") || "?"}) — между контейнерами только связь uses`);
+          throw new Error(`${e.m} (${a.join(", ") || "?"}) depends on ${e.d} (${b.join(", ") || "?"}) — across containers only a uses link`);
         }
       },
       violator: { name: N.spec.architecture.edgeViolator, item: { m: "__a__", d: "__b__" } },
@@ -629,10 +629,10 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
     name: (u) => locale.fill(N.spec.architecture.unitName, { unit: u, container: declared.get(u) ?? "?" }),
     key: (u) => u,
     check: (u) => {
-      if (!declared.has(u)) throw new Error(`${u} есть в конфигах деплоя, но не в модели — добавь контейнер в tests/architecture/model.ts`);
-      if (!found.includes(u)) throw new Error(`${u} контейнера ${declared.get(u)} нет в конфигах деплоя — модель разошлась с деплоем`);
+      if (!declared.has(u)) throw new Error(`${u} is in the deploy configs but not in the model — add a container to tests/architecture/model.ts`);
+      if (!found.includes(u)) throw new Error(`${u} of container ${declared.get(u)} is not in the deploy configs — the model diverged from the deploy`);
     },
-    violator: { name: N.spec.architecture.unitViolator, item: "__вне_модели__" },
+    violator: { name: N.spec.architecture.unitViolator, item: "__outside_model__" },
   });
 
   // клиенты хранилищ: какой контейнер их импортирует на деле (библиотека — каждый свой контейнер)
@@ -659,10 +659,10 @@ function c2(add: Add, N: Names, root: string, model: Model, src: Source[]): void
       key: (u) => `${u.pkg}:${u.c}`,
       check: (u) => {
         if (u.c !== u.s && !(cont[u.c]?.uses ?? []).includes(u.s)) {
-          throw new Error(`контейнер ${u.c} импортирует клиент ${u.pkg} хранилища ${u.s} без связи uses: ${u.files.join(", ")}`);
+          throw new Error(`container ${u.c} imports client ${u.pkg} of storage ${u.s} without a uses link: ${u.files.join(", ")}`);
         }
       },
-      violator: { name: N.spec.architecture.clientViolator, item: { s: "__хранилище__", pkg: "__клиент__", c: "__контейнер__", files: [] } },
+      violator: { name: N.spec.architecture.clientViolator, item: { s: "__storage__", pkg: "__client__", c: "__container__", files: [] } },
     });
   }
 }
@@ -703,14 +703,14 @@ function c1(add: Add, N: Names, model: Model, src: Source[]): void {
       check: (h) => {
         const found = hostFiles.get(h) ?? [];
         const x = hostOwner.get(h);
-        if (!x) throw new Error(`хост ${h} не объявлен ни одной внешней системой модели: ${files(found)}`);
+        if (!x) throw new Error(`host ${h} is declared by no external system of the model: ${files(found)}`);
         const a = adaptersOf(ext[x]!);
         const outside = found.filter((s) => !inAdapters(s, a));
         if (!outside.length) return;
-        if (!a.length) throw new Error(`у внешней системы ${x} нет адаптера, а хост ${h} — в коде: ${files(outside)}`);
-        throw new Error(`хост ${h} внешней системы ${x} — вне её ${adapterWord(a, "адаптера", "адаптеров")}: ${files(outside)}`);
+        if (!a.length) throw new Error(`external system ${x} has no adapter, yet host ${h} is in the code: ${files(outside)}`);
+        throw new Error(`host ${h} of external system ${x} is outside its ${adapterWord(a, "adapter", "adapters")}: ${files(outside)}`);
       },
-      violator: { name: N.spec.architecture.hostViolator, item: "__вне_модели__.example" },
+      violator: { name: N.spec.architecture.hostViolator, item: "__outside_model__.example" },
     });
   }
   const pkgs = Object.entries(ext).flatMap(([x, e]) => (e.packages ?? []).map((p) => ({ x, p, a: adaptersOf(e) })));
@@ -726,22 +726,22 @@ function c1(add: Add, N: Names, model: Model, src: Source[]): void {
       check: (i) => {
         const allowedTo = names(model).filter((n) => (model.modules[n]!.packages ?? []).includes(i.p));
         if (!i.a.length) {
-          if (allowedTo.length) throw new Error(`у внешней системы ${i.x} нет адаптера, а пакет ${i.p} разрешён модулям: ${allowedTo.join(", ")}`);
+          if (allowedTo.length) throw new Error(`external system ${i.x} has no adapter, yet package ${i.p} is allowed for modules: ${allowedTo.join(", ")}`);
           return;
         }
         if (!i.a.some((a) => allowedTo.includes(a))) {
-          throw new Error(`${i.a.length === 1 ? `адаптеру ${i.a[0]}` : `ни одному из адаптеров ${i.a.join(", ")}`} пакет ${i.p} внешней системы ${i.x} не разрешён в модели`);
+          throw new Error(`package ${i.p} of external system ${i.x} is not allowed in the model for ${i.a.length === 1 ? `adapter ${i.a[0]}` : `any of adapters ${i.a.join(", ")}`}`);
         }
         const others = allowedTo.filter((n) => !i.a.includes(n));
-        if (others.length) throw new Error(`пакет ${i.p} внешней системы ${i.x} разрешён не только ${i.a.length === 1 ? "адаптеру" : "адаптерам"}: ${others.join(", ")}`);
+        if (others.length) throw new Error(`package ${i.p} of external system ${i.x} is allowed not only for ${i.a.length === 1 ? "the adapter" : "the adapters"}: ${others.join(", ")}`);
       },
-      violator: { name: N.spec.architecture.packageViolator, item: { x: "__нарушитель__", p: "__нет__", a: ["__нет_модуля__"] } },
+      violator: { name: N.spec.architecture.packageViolator, item: { x: "__violator__", p: "__none__", a: ["__no_module__"] } },
     });
   }
 
   // ключ окружения и заголовок — одно соглашение: читает только адаптер; нарушителю — свой исходник, читающий вне адаптера
   type Read = { x: string; k: string; a: string[]; src?: Source[] };
-  const readOnlyByAdapters = (registry: string, noun: string, list: (e: External) => string[] | undefined, reads: (s: Source, k: string) => boolean, fake: Partial<Source>) => {
+  const readOnlyByAdapters = (registry: string, noun: string, word: string, list: (e: External) => string[] | undefined, reads: (s: Source, k: string) => boolean, fake: Partial<Source>) => {
     const items: Read[] = Object.entries(ext).flatMap(([x, e]) => (list(e) ?? []).map((k) => ({ x, k, a: adaptersOf(e) })));
     if (!items.length) return;
     add({
@@ -755,17 +755,17 @@ function c1(add: Add, N: Names, model: Model, src: Source[]): void {
       check: (i) => {
         const outside = (i.src ?? src).filter((s) => reads(s, i.k) && !inAdapters(s, i.a));
         if (!outside.length) return;
-        if (!i.a.length) throw new Error(`у внешней системы ${i.x} нет адаптера, а ${noun} ${i.k} читается в коде: ${files(outside)}`);
-        throw new Error(`${noun} ${i.k} внешней системы ${i.x} читается вне ${adapterWord(i.a, "адаптера", "адаптеров")}: ${files(outside)}`);
+        if (!i.a.length) throw new Error(`external system ${i.x} has no adapter, yet ${word} ${i.k} is read in the code: ${files(outside)}`);
+        throw new Error(`${word} ${i.k} of external system ${i.x} is read outside its ${adapterWord(i.a, "adapter", "adapters")}: ${files(outside)}`);
       },
       violator: {
         name: locale.fill(N.spec.architecture.readViolator, { noun }),
-        item: { x: "__нарушитель__", k: "__КЛЮЧ__", a: ["__нет_модуля__"], src: [{ file: "__нарушитель__.ts", dir: "__вне_модели__", packages: [], hosts: [], env: [], headers: [], ...fake }] },
+        item: { x: "__violator__", k: "__KEY__", a: ["__no_module__"], src: [{ file: "__violator__.ts", dir: "__outside_model__", packages: [], hosts: [], env: [], headers: [], ...fake }] },
       },
     });
   };
-  readOnlyByAdapters(N.spec.architecture.envRegistry, N.spec.architecture.envNoun, (e) => e.env, (s, k) => s.env.includes(k), { env: ["__КЛЮЧ__"] });
-  readOnlyByAdapters(N.spec.architecture.headersRegistry, N.spec.architecture.headerNoun, (e) => e.headers, (s, k) => s.headers.includes(k.toLowerCase()), { headers: ["__ключ__"] });
+  readOnlyByAdapters(N.spec.architecture.envRegistry, N.spec.architecture.envNoun, "key", (e) => e.env, (s, k) => s.env.includes(k), { env: ["__KEY__"] });
+  readOnlyByAdapters(N.spec.architecture.headersRegistry, N.spec.architecture.headerNoun, "header", (e) => e.headers, (s, k) => s.headers.includes(k.toLowerCase()), { headers: ["__key__"] });
 }
 
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -799,15 +799,15 @@ export function networkGuard(model: Model, fetchImpl: Fetch = globalThis.fetch, 
     const system = owner.get(host);
     throw new Error(
       system
-        ? `запрос к хосту ${host} внешней системы ${system} без мока — замокай запрос: в сеть тесты ходят только к локальным адресам и allow`
-        : `запрос к хосту ${host} вне модели — объяви внешнюю систему в tests/architecture/model.ts и замокай запрос`,
+        ? `request to host ${host} of external system ${system} without a mock — mock the request: tests go to the network only to local addresses and allow`
+        : `request to host ${host} outside the model — declare the external system in tests/architecture/model.ts and mock the request`,
     );
   };
   const check = () => {
     if (!rejected.length) return;
     const hosts = [...new Set(rejected)].join(", ");
     rejected.length = 0;
-    throw new Error(`запросы к сети, отвергнутые сторожем: ${hosts} — замокай их (исключение fetch мог поймать код под тестом)`);
+    throw new Error(`network requests rejected by the guard: ${hosts} — mock them (the code under test may have caught the fetch exception)`);
   };
   return Object.assign(guard, { rejected, check });
 }

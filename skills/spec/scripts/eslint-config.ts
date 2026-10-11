@@ -54,7 +54,7 @@ export async function collectEslint(root: string, dirs: string[] = ["tests"]): P
   const configs: object[] = [{ linterOptions: { reportUnusedDisableDirectives: "error" } }];
   for (const file of eslintFragments(root, dirs)) {
     const mod = (await import(pathToFileURL(file).href)) as { default?: object | object[] };
-    if (!mod.default) throw new Error(`${path.relative(root, file)}: нет export default — фрагмента flat config`);
+    if (!mod.default) throw new Error(`${path.relative(root, file)}: no export default — not a flat config fragment`);
     configs.push(...(Array.isArray(mod.default) ? mod.default : [mod.default]));
   }
   return configs;
