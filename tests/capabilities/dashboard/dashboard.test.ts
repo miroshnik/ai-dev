@@ -429,4 +429,27 @@ describe("Команда dashboard сервит страницу сама и о�
     expect(exitOf(r)).toBe(1);
     expect(r.stderr).toContain(`error: port ${new URL(d.url).port} is busy`);
   });
+
+  // песочница агента (Claude Code с выключенным allowLocalBinding): Bun отдаёт запрещённый listen как EADDRINUSE на любом
+  // порте, и на 0 тоже
+  const DENY_LISTEN = `Bun.serve = (o) => { throw Object.assign(new Error("Failed to start server. Is port " + o.port + " in use?"), { code: "EADDRINUSE", syscall: "listen", errno: 0 }); };\n`;
+  const denied = (args: string[]) => {
+    writeFileSync(path.join(bin, "deny-listen.mjs"), DENY_LISTEN);
+    return spawnSync("bun", ["--preload", path.join(bin, "deny-listen.mjs"), DASHBOARD, ...args], { encoding: "utf8", env: env() });
+  };
+
+  it("локальный порт не открыть (песочница агента) — ошибка, что слушать порт на 127.0.0.1 здесь запрещено, с подсказкой запустить вне песочницы, а не «port 0 is busy»", () => {
+    const r = denied(["--repo", "o/a", "--no-open"]);
+    expect(exitOf(r)).toBe(1);
+    expect(r.stderr).toContain("error: can't listen on 127.0.0.1");
+    expect(r.stderr).toContain("outside the sandbox");
+    expect(r.stderr).not.toContain("is busy");
+  });
+
+  it("--port N, когда и свободный порт не взять, — тот же запрет, а не «port N is busy»", () => {
+    const r = denied(["--repo", "o/a", "--no-open", "--port", "8123"]);
+    expect(exitOf(r)).toBe(1);
+    expect(r.stderr).toContain("error: can't listen on 127.0.0.1");
+    expect(r.stderr).not.toContain("is busy");
+  });
 });

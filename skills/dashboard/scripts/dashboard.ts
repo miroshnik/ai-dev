@@ -565,6 +565,19 @@ const USAGE = `dashboard — a task page: «Sessions» (tasks in progress and wh
 // browser.
 const CLOUD_ERR = "Claude Code cloud session: GitHub projects aren't reachable from here, and a page on its localhost can't be opened — the dashboard runs only in a local session (docs/cloud-sessions.md in ai-dev)";
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
+// An agent's sandbox (Claude Code with allowLocalBinding off) denies listen, and Bun reports that as EADDRINUSE on any
+// port: picking another port won't help, running outside the sandbox will.
+const LISTEN_ERR = "can't listen on 127.0.0.1: opening a local port is denied here, not busy (an agent's sandbox?) — run the dashboard outside the sandbox; in Claude Code sandbox.network.allowLocalBinding: true allows it inside";
+
+/** Whether a free port on 127.0.0.1 can be taken: `Bun.serve` reports a denied listen the same way as a busy port. */
+function canListen(): boolean {
+  try {
+    Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null) }).stop(true);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const nowTs = () => Date.now() / 1000;
 
 interface Options {
@@ -707,6 +720,8 @@ export function main(argv: string[]): number | null {
       started = serve({ repos, registry, since: values.since, port });
     } catch (e) {
       if ((e as { code?: unknown } | null)?.code !== "EADDRINUSE") throw e;
+      // port 0 can't be busy; a port is busy only if a free one can still be taken
+      if (port === 0 || !canListen()) throw new EstError(LISTEN_ERR);
       throw new EstError(`port ${port} is busy — pass another --port or drop it: a free one will be taken`);
     }
     const { server, refreshLive } = started;
