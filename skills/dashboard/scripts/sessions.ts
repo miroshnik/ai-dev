@@ -1,9 +1,10 @@
 /**
- * Вкладка «Сессии» дашборда — задачи «В работе», их сессии Claude Code и чего каждая ждёт.
+ * The dashboard's "Sessions" tab — "In progress" tasks, their Claude Code sessions and what each one waits for.
  *
- * Задача — элемент проекта GitHub со статусом «В работе», её сессия — файл закрепления `github task status`
- * (`<каталог конфигурации>/sessions/<id сессии>` со строкой `owner/repo#N`), состояние сессии — её транскрипт
- * (`~/.claude/projects/<каталог>/<id>.jsonl`), PR задачи и вопросы задач — GitHub. В GitHub ничего не пишет.
+ * A task is a GitHub project item with the "In progress" status, its session is the `github task status` pin file
+ * (`<configuration directory>/sessions/<session id>` with an `owner/repo#N` line), the session's state is its
+ * transcript (`~/.claude/projects/<directory>/<id>.jsonl`), the task's PR and the tasks' questions come from GitHub.
+ * Writes nothing to GitHub.
  */
 
 import { spawn } from "node:child_process";
@@ -13,50 +14,54 @@ import path from "node:path";
 import locale from "../../github/scripts/locale.cjs";
 import { branchIssueNumber, cloudSessionsIn, encodePath, EST_DIR, EstError, PROJECTS_DIR } from "../../est/scripts/est.ts";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- #280 записи транскрипта и ответы GitHub — JSON без схемы
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- #280 schemaless JSON from transcripts and GitHub
 type Any = any;
 
-/** Сессия молчит, если записей нет дольше 15 мин и в фоне ничего не идёт. */
+/** A session is silent if it has had no records for more than 15 min and nothing runs in the background. */
 export const SILENCE = 15 * 60;
-/** Фоновая задача без уведомления о завершении идёт не дольше 2 ч — потолок фоновой команды Claude Code; дальше она потеряна. */
+/**
+ * A background task without a completion notification runs no longer than 2 h — the Claude Code background command
+ * cap; after that it is lost.
+ */
 export const BG_MAX = 2 * 3600;
-/** Сессия без задачи «В работе» попадает в «Ждут владельца», если писала последние сутки. */
+/** A session without an "In progress" task gets into "Waiting for the owner" if it wrote within the last day. */
 export const RECENT = 86400;
-/** Вкладка обновляется сама: секунды. */
+/** The tab refreshes itself: seconds. */
 export const REFRESH = 30;
 /**
- * Дашборд общий на все репозитории машины: подписи — по-английски, а названия, которые он разбирает (статус «В работе»,
- * раздел и метка вопросов, последняя строка сессии), — любого языка словаря locales скилла github.
+ * The dashboard is shared by all repositories of the machine: labels are in English, and the names it parses (the
+ * "In progress" status, the questions section and label, the session's last line) — in any language of the github
+ * skill's locales dictionary.
  */
 const IN_WORK = locale.every((n) => n.status.inProgress);
 
 // ----------------------------------------------------------------------------
-// Транскрипт
+// Transcript
 // ----------------------------------------------------------------------------
 
-/** Фоновая задача сессии: команда, субагент или монитор; `at` — запуск, epoch-секунды. */
+/** A session's background task: a command, a subagent or a monitor; `at` — the start, epoch seconds. */
 export interface Bg {
   id: string;
   at: number;
   what: string;
 }
 
-/** Что видно о сессии по её транскрипту. */
+/** What the session's transcript tells about it. */
 export interface Transcript {
   id: string;
-  /** Последнее название сессии; не переименована — null. */
+  /** The session's latest name; not renamed — null. */
   title: string | null;
-  /** Время последней записи с меткой времени (и записи субагентов), epoch-секунды; записей нет — null. */
+  /** Time of the last record with a timestamp (and of subagent records), epoch seconds; no records — null. */
   last: number | null;
-  /** Фоновые задачи, запущенные без уведомления о завершении, по порядку запуска. */
+  /** Background tasks started without a completion notification, in start order. */
   bg: Bg[];
-  /** Последний ход — ответ модели без вызова инструмента: его текст; иначе null. */
+  /** The last turn is a model answer without a tool call: its text; otherwise null. */
   answer: string | null;
-  /** Последняя запись — вызов инструмента без результата: имя инструмента; иначе null. */
+  /** The last record is a tool call without a result: the tool's name; otherwise null. */
   pendingTool: string | null;
-  /** Сессия архивировала себя последним ходом. */
+  /** The session archived itself with its last turn. */
   archived: boolean;
-  /** Рутина: сессию начал промпт расписания `<scheduled-task …>`, человека в ней нет. */
+  /** A routine: the session was started by a schedule prompt `<scheduled-task …>`, there's no human in it. */
   routine: boolean;
 }
 
@@ -77,16 +82,16 @@ const isToolResult = (r: Any) => blocks(r).some((b) => b.type === "tool_result")
 const TASK_ID_RE = /<task-id>([^<\s]+)<\/task-id>/g;
 
 /**
- * Разбор транскрипта Claude Code. Фоновая задача — результат инструмента с `backgroundTaskId` (команда), `agentId` и
- * `isAsync` (субагент) или `taskId` (Monitor); завершение — запись `<task-notification>` с тем же id или результат
- * TaskStop. Последний ход —
- * записи с конца до промпта, с которого он начался. Строки разбираются, только если в них есть нужное: транскрипт
- * бывает в десятки мегабайт, а вкладка перечитывает его каждые полминуты.
+ * Parsing a Claude Code transcript. A background task is a tool result with `backgroundTaskId` (a command), `agentId`
+ * and `isAsync` (a subagent) or `taskId` (Monitor); its completion is a `<task-notification>` record with the same id
+ * or a TaskStop result. The last turn is the records from the end back to the prompt it started with. Lines are parsed
+ * only if they contain what's needed: a transcript can be tens of megabytes, and the tab re-reads it every half
+ * minute.
  */
 export function parseTranscript(id: string, text: string): Transcript {
   const lines = text.split("\n");
   let title: string | null = null;
-  let first: string | null = null; // первый промпт сессии
+  let first: string | null = null; // the session's first prompt
   const launched: (Bg & { tool: string })[] = [];
   const finished = new Set<string>();
   for (const line of lines) {
@@ -99,11 +104,11 @@ export function parseTranscript(id: string, text: string): Transcript {
       if (r?.type === "custom-title" && r.customTitle) title = String(r.customTitle);
     } else if (line.includes("<task-notification>")) {
       const r = parse(line);
-      // уведомление — промпт сессии или ещё в очереди к ней; текст инструмента, где оно лишь упомянуто, — нет
+      // a notification is a session prompt or one still queued for it; a tool's text that merely mentions it is not
       const body = r?.type === "user" ? textOf(r.message?.content) : r?.type === "queue-operation" ? String(r.content ?? "") : "";
       if (body.trimStart().startsWith("<task-notification>")) for (const m of body.matchAll(TASK_ID_RE)) finished.add(m[1]!);
     } else if (line.includes("Successfully stopped task")) {
-      // остановленная TaskStop фоновая задача уведомления не шлёт: завершение — результат остановки
+      // a background task stopped by TaskStop sends no notification: its completion is the stop's result
       const u = parse(line)?.toolUseResult;
       const task = u?.task_id ?? u?.shell_id;
       if (typeof task === "string" && /^Successfully stopped task/.test(String(u.message ?? ""))) finished.add(task);
@@ -116,7 +121,7 @@ export function parseTranscript(id: string, text: string): Transcript {
       if (typeof task === "string" && at !== null) launched.push({ id: task, at, what: String(u.description ?? ""), tool: String(tool ?? "") });
     }
   }
-  // что делает фоновая задача — описание её вызова
+  // what a background task does — the description of its call
   const want = new Set(launched.filter((b) => b.tool).map((b) => b.tool));
   const what = new Map<string, string>();
   if (want.size)
@@ -127,7 +132,7 @@ export function parseTranscript(id: string, text: string): Transcript {
   const bg = launched.filter((b) => !finished.has(b.id)).map((b) => ({ id: b.id, at: b.at, what: what.get(b.tool) || b.what || "background task" }));
 
   let last: number | null = null;
-  const turn: Any[] = []; // записи последнего хода, с конца
+  const turn: Any[] = []; // records of the last turn, from the end
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]!;
     if (!line || (last !== null && !line.includes('"type":"user"') && !line.includes('"type":"assistant"'))) continue;
@@ -136,7 +141,7 @@ export function parseTranscript(id: string, text: string): Transcript {
     last ??= tsOf(r);
     if ((r.type !== "user" && r.type !== "assistant") || r.isSidechain) continue;
     turn.push(r);
-    // ход начинается промптом: человек или уведомление; служебная вставка (isMeta) и результат инструмента — внутри хода
+    // a turn starts with a prompt: a human's or a notification; a meta insert (isMeta) and a tool result are inside it
     if (r.type === "user" && !isToolResult(r) && !r.isMeta) break;
   }
 
@@ -147,7 +152,8 @@ export function parseTranscript(id: string, text: string): Transcript {
     const calls = blocks(end).filter((b) => b.type === "tool_use");
     if (calls.length) pendingTool = String(calls[calls.length - 1].name);
     else if (end.message?.stop_reason !== "tool_use") {
-      // ответ — текст всех записей последнего сообщения модели: приложение пишет блоки сообщения по записи на блок
+      // the answer is the text of all records of the model's last message: the app writes a message's blocks one record
+      // per block
       const texts: string[] = [];
       for (const r of turn) {
         if (r.type !== "assistant" || r.message?.id !== end.message?.id) break;
@@ -161,18 +167,20 @@ export function parseTranscript(id: string, text: string): Transcript {
 }
 
 // ----------------------------------------------------------------------------
-// Вопросы
+// Questions
 // ----------------------------------------------------------------------------
 
-// строки конца сессии по канону (AGENTS.md, «Epic refresh on task close») на любом языке словаря, в том числе с разметкой
+// session end lines per the canon (AGENTS.md, "Epic refresh on task close") in any language of the dictionary,
+// markup included
 const alt = (xs: string[]) => xs.map((x) => locale.escapeRe(x.replace(/[:.]$/, ""))).join("|");
 const ASK_RE = new RegExp(`^[\\s*_>]*(?:${alt([...locale.every((n) => n.lastLine.questions), ...locale.every((n) => n.lastLine.remaining)])})`);
 const DONE_RE = new RegExp(`(?:${alt(locale.every((n) => n.lastLine.done))})\\.?\\s*$`);
 
 /**
- * Вопрос владельцу в ответе сессии: от строки «Всё сделано, но есть вопросы…» или «Осталось: …» до конца ответа; без
- * них — последний абзац. «Всё сделано. Сессию можно закрывать.» — не вопрос: null. `strict` — для сессии без задачи
- * «В работе»: её последний ответ часто просто ответ, и без этих строк вопрос — только абзац, кончающийся «?».
+ * A question to the owner in the session's answer: from the line "All done, but there are questions…" or
+ * "Remaining: …" to the end of the answer; without them — the last paragraph. "All done. The session can be closed."
+ * isn't a question: null. `strict` — for a session without an "In progress" task: its last answer is often just an
+ * answer, and without these lines a question is only a paragraph that ends with "?".
  */
 export function questionOf(answer: string, strict = false): string | null {
   const text = answer.trim();
@@ -185,10 +193,13 @@ export function questionOf(answer: string, strict = false): string | null {
   return strict && !/\?[\s*_)»"]*$/.test(last) ? null : last;
 }
 
-/** Раздел вопросов issue — `sections.questions` любого языка словаря. */
+/** The issue's questions section — `sections.questions` of any language of the dictionary. */
 const QUESTIONS_RE = new RegExp(`^(?:${alt(locale.every((n) => n.sections.questions))})\\s*$`);
 
-/** Открытые вопросы задачи — первые строки пунктов раздела вопросов («## Questions», «## Вопросы») без ✅. */
+/**
+ * A task's open questions — the first lines of the items of the questions section ("## Questions" in any language of
+ * the dictionary) without ✅.
+ */
 export function openQuestions(body: string): string[] {
   const lines = body.split(/\r?\n/);
   const from = lines.findIndex((l) => QUESTIONS_RE.test(l));
@@ -203,24 +214,24 @@ export function openQuestions(body: string): string[] {
 }
 
 // ----------------------------------------------------------------------------
-// Чего ждёт сессия
+// What a session waits for
 // ----------------------------------------------------------------------------
 
-/** Состояние чеков: идут, красные, зелёные; чеков нет — null. */
+/** Checks state: running, red, green; no checks — null. */
 export type Checks = "pending" | "failure" | "success" | null;
 
-/** PR задачи: открытый или влитый, его чеки и конфликт; `deploy` — чеки коммита мержа. */
+/** The task's PR: open or merged, its checks and conflict; `deploy` — the merge commit's checks. */
 export interface PrInfo {
   number: number;
   url: string;
   branch: string;
-  /** Задачи, которые PR закрывает (`Closes #N`). */
+  /** Tasks the PR closes (`Closes #N`). */
   closes: number[];
   merged: boolean;
   checks: Checks;
   conflict: boolean;
   deploy: Checks;
-  /** В коммитах — трейлер облачной сессии `Claude-Session`. */
+  /** The commits have the cloud session trailer `Claude-Session`. */
   cloud: boolean;
 }
 
@@ -246,13 +257,14 @@ const LABEL: Record<WaitKey, string> = {
 };
 
 /**
- * Чего ждёт сессия задачи. Идущая фоновая задача будит сессию сама — она главнее ответа: что она ждёт, видно по PR
- * (открыт и чеки идут — CI, влит и идут чеки коммита мержа — деплой). Ответ модели без вызова инструмента — ход за
- * человеком; PR при этом зелёный и вливается — ждёт мержа. Ни того, ни другого, а записей нет дольше порога — тишина.
+ * What a task's session waits for. A running background task wakes the session itself — it outranks the answer: what
+ * it waits for shows from the PR (open and checks running — CI, merged and the merge commit's checks running —
+ * deploy). A model answer without a tool call — the human's turn; if the PR is green and mergeable meanwhile, it
+ * waits for the merge. Neither, and no records for longer than the threshold — silence.
  */
 export function waitOf(s: Transcript | null, pr: PrInfo | null, now: number): Wait {
   const w = (key: WaitKey, detail = ""): Wait => ({ key, label: LABEL[key], detail });
-  // облачная сессия задачу не закрепляет: проекты GitHub ей закрыты, её состояние отсюда не видно
+  // a cloud session doesn't pin its task: GitHub projects are unreachable for it, its state isn't visible from here
   if (!s) return pr?.cloud ? w("cloud") : w("none");
   if (s.archived) return w("done", "session archived");
   const bg = s.bg.filter((b) => now - b.at <= BG_MAX);
@@ -274,17 +286,17 @@ export function waitOf(s: Transcript | null, pr: PrInfo | null, now: number): Wa
 }
 
 // ----------------------------------------------------------------------------
-// Вкладка
+// Tab
 // ----------------------------------------------------------------------------
 
-/** Задача «В работе» и её эпик. */
+/** An "In progress" task and its epic. */
 export interface Task {
   number: number;
   title: string;
   parent: { number: number; title: string } | null;
 }
 
-/** Что GitHub знает о репозитории: задачи «В работе» (без эпиков), PR, задачи с открытыми вопросами. */
+/** What GitHub knows about a repository: "In progress" tasks (without epics), PRs, tasks with open questions. */
 export interface Live {
   tasks: Task[];
   prs: PrInfo[];
@@ -292,13 +304,13 @@ export interface Live {
 }
 
 export interface SessionsInput {
-  /** Закрепления: `owner/repo#N` → id сессий. */
+  /** Pins: `owner/repo#N` → session ids. */
   pins: Record<string, string[]>;
-  /** Транскрипты закреплённых сессий по id. */
+  /** Transcripts of pinned sessions by id. */
   transcripts: Record<string, Transcript>;
-  /** GitHub по репозиториям. */
+  /** GitHub by repository. */
   live: Record<string, Live>;
-  /** Недавние сессии каталогов репозитория — их вопросы, если задачи «В работе» у них нет. */
+  /** Recent sessions of the repository's directories — their questions, if they have no "In progress" task. */
   others: Record<string, Transcript[]>;
 }
 
@@ -313,9 +325,12 @@ export interface SessionRow {
   wait: Wait;
 }
 
-/** Вопрос владельцу: задачи (ответ её сессии), сессии без задачи «В работе» или задачи с меткой «вопросы». */
+/**
+ * A question to the owner: from a task (its session's answer), from a session without an "In progress" task or from
+ * a task with the "questions" label.
+ */
 export interface Ask {
-  /** `issue` — задача «В работе» с меткой «вопросы», `backlog` — остальные задачи с меткой. */
+  /** `issue` — an "In progress" task with the "questions" label, `backlog` — the other tasks with the label. */
   kind: "task" | "session" | "issue" | "backlog";
   repo: string;
   head: string;
@@ -331,23 +346,23 @@ export interface SessionsView {
 
 const issueUrl = (repo: string, n: number) => `https://github.com/${repo}/issues/${n}`;
 const OWNER = new Set<WaitKey>(["human", "merge"]);
-// сверху — ждущие владельца, затем молчащие и красные: на них смотрят первыми
+// on top — those waiting for the owner, then silent and red ones: they're looked at first
 const RANK: Partial<Record<WaitKey, number>> = { human: 0, merge: 0, silent: 1, "ci-red": 1 };
 
-/** PR задачи: открытый, иначе последний влитый; связь — `Closes #N` или ветка `<type>/<N>-…`. */
+/** The task's PR: an open one, otherwise the last merged; the link is `Closes #N` or the branch `<type>/<N>-…`. */
 function prFor(live: Live, n: number): PrInfo | null {
   const mine = live.prs.filter((p) => p.closes.includes(n) || branchIssueNumber(p.branch) === n);
   return mine.find((p) => !p.merged) ?? mine[0] ?? null;
 }
 
-/** Строки задач «В работе» и вопросы владельцу. */
+/** "In progress" task lines and questions to the owner. */
 export function sessionsView(inp: SessionsInput, now: number): SessionsView {
   const pinned = new Set<string>();
   const rows: SessionRow[] = Object.entries(inp.live).flatMap(([repo, live]) =>
     live.tasks.map((t) => {
       const ids = inp.pins[`${repo}#${t.number}`] ?? [];
       ids.forEach((id) => pinned.add(id));
-      // после /clear у задачи новая сессия, старое закрепление остаётся: берётся писавшая последней
+      // after /clear the task has a new session and the old pin stays: the one that wrote last is taken
       const session = ids.map((id) => inp.transcripts[id]).filter((s): s is Transcript => !!s).sort((a, b) => (b.last ?? 0) - (a.last ?? 0))[0] ?? null;
       const pr = prFor(live, t.number);
       return {
@@ -360,7 +375,8 @@ export function sessionsView(inp: SessionsInput, now: number): SessionsView {
 
   const asks: Ask[] = rows.filter((r) => OWNER.has(r.wait.key)).map((r) => ({ kind: "task", repo: r.repo, head: `#${r.number} ${r.title}`, url: r.url, session: r.session, lines: questionOf(r.session!.answer ?? "")!.split("\n") }));
   for (const [repo, list] of Object.entries(inp.others)) {
-    // рутина и ответ без явного вопроса — не к владельцу: иначе блок тонет в отчётах по расписанию
+    // a routine and an answer without an explicit question aren't for the owner: otherwise the block drowns in
+    // scheduled reports
     const recent = list.flatMap((s) => {
       const q = !pinned.has(s.id) && !s.routine && s.last !== null && now - s.last <= RECENT && waitOf(s, null, now).key === "human" ? questionOf(s.answer!, true) : null;
       return q === null ? [] : [{ s, q }];
@@ -380,7 +396,7 @@ export function sessionsView(inp: SessionsInput, now: number): SessionsView {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const link = (url: string, text: string) => `<a href="${esc(url)}">${esc(text)}</a>`;
 
-/** Сколько прошло: «4 min ago», «2 h 5 min ago», «3 d ago». */
+/** Time elapsed: "4 min ago", "2 h 5 min ago", "3 d ago". */
 function ago(sec: number): string {
   const m = Math.floor(sec / 60);
   if (m < 1) return "just now";
@@ -391,7 +407,7 @@ function ago(sec: number): string {
 }
 
 const when = (s: Transcript, now: number) => (s.last === null ? "no records" : ago(now - s.last));
-/** Название сессии, если оно не повторяет задачу: по канону сессия называется «#N <название задачи>». */
+/** The session name, if it doesn't repeat the task: by the canon a session is named "#N <task name>". */
 const ownTitle = (s: Transcript, task: string) => (s.title === null ? `untitled, ${s.id.slice(0, 8)}` : s.title === task ? null : s.title);
 const CHECKS: Record<string, string> = { pending: "checks running", failure: "checks red", success: "checks green", null: "no checks" };
 const DEPLOY: Record<string, string> = { pending: " · deploy running", failure: " · deploy red", success: "", null: "" };
@@ -407,7 +423,7 @@ function asksBlock(asks: Ask[], now: number, many: boolean): string {
     const head = `${many ? a.repo : ""}${a.head}`;
     const top = (sub: string) => `<div class="ask-head">${a.url ? link(a.url, head) : esc(head)} <span class="minor">${esc(sub)}</span></div>`;
     const text = (lines: string[]) => `<div class="ask-text">${lines.map(esc).join("<br>")}</div>`;
-    // задач с вопросами десятки: строкой, сами вопросы — под раскрытием
+    // tasks with questions number in the dozens: as a line, the questions themselves — under a disclosure
     if (a.kind === "issue" || a.kind === "backlog")
       return `<li>${top(a.lines.length ? `questions label · open: ${a.lines.length}` : "questions label")}${a.lines.length ? `<details data-key="${esc(`${a.repo}${a.head}`)}"><summary>questions</summary>${text(a.lines)}</details>` : ""}</li>`;
     const name = a.kind === "task" ? ownTitle(a.session!, a.head) : null;
@@ -415,7 +431,7 @@ function asksBlock(asks: Ask[], now: number, many: boolean): string {
   };
   const live = asks.filter((a) => a.kind !== "backlog");
   const backlog = asks.filter((a) => a.kind === "backlog");
-  // вопросы бэклога ждут, пока задачу не возьмут: свёрнуты, чтобы не заслонять сессии, которые стоят сейчас
+  // backlog questions wait until the task is taken: collapsed so as not to obscure the sessions that are stuck now
   const rest = backlog.length ? `<details class="backlog" data-key="backlog"><summary>tasks with questions, not in progress: ${backlog.length}</summary><ul>${backlog.map(item).join("")}</ul></details>` : "";
   return `<section class="asks card"><h2>Waiting for the owner</h2>${live.length ? `<ul>${live.map(item).join("")}</ul>` : `<p class="note">no questions</p>`}${rest}</section>`;
 }
@@ -432,15 +448,15 @@ function rowsTable(rows: SessionRow[], now: number, many: boolean): string {
   return `<section class="card scroll"><table class="sessions"><thead><tr><th>Task</th><th>Session</th><th>Waiting for</th><th>PR</th></tr></thead><tbody>${body.join("")}</tbody></table></section>`;
 }
 
-/** Содержимое вкладки: «Ждут владельца» сверху, под ним — строка на задачу «В работе». */
+/** The tab's content: "Waiting for the owner" on top, below it — a line per "In progress" task. */
 export function sessionsBody(v: SessionsView, now: number, many: boolean): string {
   return asksBlock(v.asks, now, many) + rowsTable(v.rows, now, many);
 }
 
 /**
- * Самообновление вкладки: раз в `sec` секунд и при возврате на вкладку — страница заново и подмена `<main>`, раскрытое
- * остаётся раскрытым; скрытая вкладка не обновляется. Перезагрузка (meta refresh) сворачивала бы раскрытые вопросы
- * каждые полминуты.
+ * The tab's self-refresh: every `sec` seconds and on returning to the tab — the page afresh and `<main>` replaced,
+ * what's expanded stays expanded; a hidden tab doesn't refresh. A reload (meta refresh) would collapse expanded
+ * questions every half minute.
  */
 export function refreshScript(sec: number): string {
   return `<script>async function refreshMain() {
@@ -455,7 +471,7 @@ setInterval(() => document.hidden || refreshMain(), ${sec * 1000});
 document.addEventListener("visibilitychange", () => document.hidden || refreshMain());</script>`;
 }
 
-/** Стили вкладки; цвета — переменные темы страницы. */
+/** The tab's styles; colors are the page's theme variables. */
 export const SESSIONS_CSS = `
 h2{font-size:16px;margin:0 0 8px}
 .asks ul{list-style:none;margin:0;padding:0}
@@ -480,10 +496,12 @@ table.sessions th{text-align:left}
 `;
 
 // ----------------------------------------------------------------------------
-// Чтение: закрепления, транскрипты, GitHub
+// Reading: pins, transcripts, GitHub
 // ----------------------------------------------------------------------------
 
-/** Закрепления задач за сессиями: `owner/repo#N` → id сессий (файлы `sessions/<id>` каталога конфигурации). */
+/**
+ * Pins of tasks to sessions: `owner/repo#N` → session ids (the `sessions/<id>` files of the configuration directory).
+ */
 export function readPins(dir = path.join(EST_DIR, "sessions")): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   let names: string[];
@@ -507,7 +525,7 @@ export function readPins(dir = path.join(EST_DIR, "sessions")): Record<string, s
 
 const parsed = new Map<string, { key: string; t: Transcript }>();
 
-/** Транскрипт файла; разбирается заново, только если файл изменился. Записи субагентов — тоже признак жизни сессии. */
+/** A file's transcript; re-parsed only if the file changed. Subagent records are a sign of the session's life too. */
 function readTranscript(file: string): Transcript {
   const st = statSync(file);
   const key = `${st.size}:${st.mtimeMs}`;
@@ -516,18 +534,18 @@ function readTranscript(file: string): Transcript {
     t = parseTranscript(path.basename(file, ".jsonl"), readFileSync(file, "utf8"));
     parsed.set(file, { key, t });
   }
-  // субагент пишет в свой транскрипт (<id>/subagents/), а сессия ждёт его без записей
+  // a subagent writes to its own transcript (<id>/subagents/), and the session waits for it without records
   const sub = path.join(file.slice(0, -".jsonl".length), "subagents");
   let subAt = 0;
   try {
     for (const f of readdirSync(sub)) subAt = Math.max(subAt, statSync(path.join(sub, f)).mtimeMs / 1000);
   } catch {
-    // субагентов нет
+    // no subagents
   }
   return subAt > (t.last ?? 0) ? { ...t, last: subAt } : t;
 }
 
-/** Файлы транскриптов `<каталог>/<имя>.jsonl` каталогов `projectsDir`, подходящих под `match`. */
+/** Transcript files `<directory>/<name>.jsonl` of the `projectsDir` directories that match `match`. */
 function transcriptFiles(match: (dir: string, name: string) => boolean, projectsDir: string): string[] {
   let dirs: string[];
   try {
@@ -548,20 +566,23 @@ function transcriptFiles(match: (dir: string, name: string) => boolean, projects
   return out;
 }
 
-/** Транскрипты сессий по id — в каталоге любого проекта: сессия работает и из чужого каталога. */
+/** Session transcripts by id — in any project's directory: a session also works from someone else's directory. */
 export function findTranscripts(ids: string[], projectsDir = PROJECTS_DIR): Record<string, Transcript> {
   const want = new Set(ids.map((id) => `${id}.jsonl`));
   const out: Record<string, Transcript> = {};
   if (!want.size) return out;
   for (const f of transcriptFiles((_, n) => want.has(n), projectsDir)) {
     const t = readTranscript(f);
-    // один id в двух каталогах (приложение перенесло транскрипт) — свежий
+    // one id in two directories (the app moved the transcript) — the fresh one
     if ((t.last ?? 0) >= (out[t.id]?.last ?? 0)) out[t.id] = t;
   }
   return out;
 }
 
-/** Транскрипты каталогов репозитория (`paths` реестра est и их worktree), изменённые не раньше `since`. */
+/**
+ * Transcripts of the repository's directories (`paths` of the est registry and their worktrees) modified no earlier
+ * than `since`.
+ */
 export function repoTranscripts(paths: string[], since: number, projectsDir = PROJECTS_DIR): Transcript[] {
   const encs = paths.map(encodePath);
   if (!encs.length) return [];
@@ -575,7 +596,10 @@ const EPIC_TYPES = locale.every((n) => n.issueTypes.epic).map((t) => t.toLowerCa
 const isEpic = (i: Any) => (i.labels?.nodes ?? []).some((l: Any) => l.name === "epic") || EPIC_TYPES.includes(String(i.issueType?.name ?? "").toLowerCase());
 const PR_FIELDS = "number url headRefName mergeable closingIssuesReferences(first:10){nodes{number}} commits(last:20){nodes{commit{messageBody statusCheckRollup{state}}}}";
 
-/** Задачи «В работе», PR и задачи с меткой «вопросы» из ответа GitHub; эпик — не строка: его сессия планирует, а не делает. */
+/**
+ * "In progress" tasks, PRs and tasks with the "questions" label from the GitHub response; an epic isn't a line: its
+ * session plans rather than does.
+ */
 function packLive(data: Any): Live {
   const pack = (p: Any, merged: boolean): PrInfo => {
     const commits: Any[] = p.commits?.nodes ?? [];
@@ -594,7 +618,7 @@ function packLive(data: Any): Live {
   };
 }
 
-/** `gh api graphql` без блокировки сервера: вкладка отвечает из кэша, пока GitHub собирает свежее. */
+/** `gh api graphql` without blocking the server: the tab answers from the cache while GitHub gathers fresh data. */
 function graphql(query: string, variables: Record<string, unknown>): Promise<Any> {
   return new Promise((resolve, reject) => {
     const p = spawn("gh", ["api", "graphql", "--input", "-"], { stdio: ["pipe", "pipe", "pipe"] });
@@ -611,7 +635,7 @@ function graphql(query: string, variables: Record<string, unknown>): Promise<Any
       } catch {
         return reject(new EstError(`gh api graphql: the response isn't JSON: ${out.slice(0, 200)}`));
       }
-      // частичный ответ (нет доступа к одной задаче) — данные есть, их и берём
+      // a partial response (no access to one task) — there is data, take it
       if (data.errors?.length && !data.data) return reject(new EstError(`GraphQL: ${data.errors.map((e: Any) => e.message ?? "").join("; ")}`));
       resolve(data.data);
     });
@@ -620,12 +644,12 @@ function graphql(query: string, variables: Record<string, unknown>): Promise<Any
 }
 
 /**
- * Один запрос на репозиторий: задачи «В работе» с эпиком — фильтром проекта на стороне GitHub (строки проекта целиком,
- * с комментариями, как у вкладки «Оценка и факт», идут десятки секунд), открытые и недавно влитые PR, задачи с меткой
- * «вопросы».
+ * One request per repository: "In progress" tasks with their epic — by a project filter on GitHub's side (whole
+ * project rows, with comments, as for the "Estimate and actual" tab, take tens of seconds), open and recently merged
+ * PRs, tasks with the "questions" label.
  */
 export async function liveQuery(full: string, projectId: string): Promise<Live> {
-  // облачной сессии Projects v2 закрыты; dashboard выходит раньше, здесь — для вызова в обход него
+  // a cloud session has Projects v2 closed to it; dashboard exits earlier, this is for a call that bypasses it
   if (process.env.CLAUDE_CODE_REMOTE === "true") throw new EstError("Claude Code cloud session: GitHub projects aren't reachable from here (docs/cloud-sessions.md in ai-dev)");
   const [o, r] = full.split("/");
   const q = `query($o:String!,$r:String!,$p:ID!,$q:String!){
@@ -635,6 +659,6 @@ export async function liveQuery(full: string, projectId: string): Promise<Live> 
       open: pullRequests(states:OPEN, first:50, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ ${PR_FIELDS} } }
       merged: pullRequests(states:MERGED, first:30, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ ${PR_FIELDS} mergeCommit{ statusCheckRollup{state} } } }
       questions: issues(states:OPEN, labels:${JSON.stringify(locale.every((n) => n.labels.questions))}, first:50){ nodes{ number title body } } } }`;
-  // фильтр проекта: значения через запятую — любое из них
+  // the project filter: comma-separated values — any of them
   return packLive(await graphql(q, { o, r, p: projectId, q: `status:${IN_WORK.map((s) => JSON.stringify(s)).join(",")}` }));
 }

@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 /**
- * dashboard — страница задач в две вкладки: «Сессии» (главная) — задачи «В работе», их сессии и чего они ждут;
- * «Оценка и факт» — график оценки, факта, токенов и стоимости по времени закрытия.
+ * dashboard — a task page in two tabs: "Sessions" (the main one) — "In progress" tasks, their sessions and what they
+ * wait for; "Estimate and actual" — a chart of estimate, actual, tokens and cost by close time.
  *
  *   dashboard [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
  *
- * Сервит страницу сам (Bun.serve, только 127.0.0.1), печатает адрес и открывает его в браузере. Данные — строки
- * проекта GitHub (поля и маркеры комментариев «Оценка» и «Факт») через скрипт est рядом, закрепления и транскрипты
- * сессий (sessions.ts); в GitHub ничего не пишет. Страница собирается на сервере: SVG строкой, без зависимостей; в
- * браузере — только подсказка при наведении.
+ * Serves the page itself (Bun.serve, 127.0.0.1 only), prints the address and opens it in the browser. The data — the
+ * GitHub project rows (fields and the "Estimate" and "Actual" comment markers) via the est script next to it, session
+ * pins and transcripts (sessions.ts); writes nothing to GitHub. The page is built on the server: SVG as a string, no
+ * dependencies; in the browser — only the hover tooltip.
  */
 
 import { spawn } from "node:child_process";
@@ -21,48 +21,49 @@ import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, r
 import type { Live, SessionsInput, SessionsView } from "./sessions.ts";
 
 const DAY = 86400;
-/** Окно тренда и сводки: последние 10 закрытых задач; медиана меньше чем по трём — шум, её нет. */
+/** Trend and summary window: the last 10 closed tasks; a median of fewer than three is noise, there is none. */
 const WINDOW = 10;
 const MIN_TREND = 3;
-/** GitHub перечитывается при открытии страницы, но не чаще раза в минуту; «Обновить» — сразу. */
+/** GitHub is re-read when the page opens, but no more than once a minute; "Refresh" — at once. */
 const TTL = 60;
 
 // ----------------------------------------------------------------------------
-// Данные
+// Data
 // ----------------------------------------------------------------------------
 
-/** Задача на графике. Оценка и прогноз — только из маркера est: оценки без него — в других единицах. */
+/** A task on the chart. Estimate and forecast — only from the est marker: estimates without it are in other units. */
 export interface Point {
   repo: string;
   number: number;
   title: string;
   url: string;
-  /** Время закрытия, epoch-секунды. */
+  /** Close time, epoch seconds. */
   t: number;
   type: string;
   cov: string;
   est: number | null;
   fact: number;
   tokEst: number | null;
-  /** Токены факта, млн. */
+  /** Actual tokens, millions. */
   tok: number | null;
   usdEst: number | null;
   usd: number | null;
-  /** $ факта по моделям; null — факт посчитан до разбивки по моделям. */
+  /** Actual $ by model; null — the actual was computed before the per-model split. */
   usdModels: Record<string, number> | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-// дашборд общий на все репозитории: подписи — по-английски, разбор — названия любого языка словаря locales скилла github
+// the dashboard is shared by all repositories: labels are in English, parsing takes names in any language of the
+// github skill's locales dictionary
 const EPIC_TYPES = locale.every((n) => n.issueTypes.epic).map((t) => t.toLowerCase());
 const isEpic = (r: Row) => r.labels.includes("epic") || EPIC_TYPES.includes((r.issueType ?? "").toLowerCase());
 
-/** Закрытые задачи периода без эпиков: эпик — сумма подзадач, они уже в списке. */
+/** Closed tasks of the period without epics: an epic is the sum of its subtasks, they're already in the list. */
 function taskRows(rows: Row[], since: number | null): Row[] {
   return rows.filter((r) => r.state === "CLOSED" && r.closedAt !== null && !isEpic(r) && (since === null || r.closedAt >= since));
 }
 
-/** Точки графика — закрытые задачи с фактом, по времени закрытия. */
+/** Chart points — closed tasks with an actual, by close time. */
 export function points(repo: string, rows: Row[], since: number | null = null): Point[] {
   const out: Point[] = [];
   for (const r of taskRows(rows, since)) {
@@ -81,7 +82,7 @@ export function points(repo: string, rows: Row[], since: number | null = null): 
   return out.sort((a, b) => a.t - b.t || a.number - b.number);
 }
 
-/** Скользящая медиана последних `window` значений; пока значений меньше `min` — тренда нет. */
+/** Rolling median of the last `window` values; while there are fewer than `min` values — no trend. */
 export function trend(vals: number[], window = WINDOW, min = MIN_TREND): (number | null)[] {
   return vals.map((_, i) => {
     const w = vals.slice(Math.max(0, i - window + 1), i + 1);
@@ -89,7 +90,7 @@ export function trend(vals: number[], window = WINDOW, min = MIN_TREND): (number
   });
 }
 
-/** Медиана последних задач и предыдущих: `prev` нет, пока сравнивать не с чем. */
+/** Median of the latest tasks and of the previous ones: no `prev` while there's nothing to compare with. */
 export interface Shift {
   now: number | null;
   prev: number | null;
@@ -102,7 +103,7 @@ function shift(vals: number[]): Shift {
   return { now: last.length ? median(last) : null, prev: before.length >= MIN_TREND ? median(before) : null, n: last.length };
 }
 
-/** Доли $ по моделям последних задач и предыдущих: сдвиг тарифа рядом с трендом стоимости. */
+/** $ shares by model of the latest tasks and of the previous ones: a pricing shift next to the cost trend. */
 export interface ModelShift {
   now: [string, number][];
   prev: [string, number][];
@@ -116,7 +117,7 @@ function modelShares(pts: Point[]): [string, number][] {
 
 export interface View {
   points: Point[];
-  /** Точность оценок — k и доля в допуске, как в `est history`. */
+  /** Estimate accuracy — k and the share within tolerance, as in `est history`. */
   calib: ReturnType<typeof calib>;
   h: Shift;
   tok: Shift;
@@ -124,7 +125,10 @@ export interface View {
   models: ModelShift;
 }
 
-/** Всё, что показывает страница: точки, точность оценок и медианы последних задач — по строкам проектов репозиториев. */
+/**
+ * Everything the page shows: points, estimate accuracy and medians of the latest tasks — from the repositories'
+ * project rows.
+ */
 export function view(rowsByRepo: Record<string, Row[]>, since: number | null): View {
   const pts = Object.entries(rowsByRepo).flatMap(([repo, rows]) => points(repo, rows, since)).sort((a, b) => a.t - b.t);
   const vals = (f: (p: Point) => number | null) => pts.map(f).filter((v): v is number => v !== null);
@@ -139,7 +143,7 @@ export function view(rowsByRepo: Record<string, Row[]>, since: number | null): V
 }
 
 // ----------------------------------------------------------------------------
-// График
+// Chart
 // ----------------------------------------------------------------------------
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -153,18 +157,19 @@ interface Panel {
   title: string;
   fact: (p: Point) => number | null;
   est: (p: Point) => number | null;
-  /** Подпись ступени шкалы и подпись значения в конце тренда. */
+  /** A scale step label and the value label at the trend's end. */
   tick: (v: number) => string;
   fmt: (v: number) => string;
-  /** Опорная линия и полоса допуска — у панели отношения. */
+  /** The reference line and the tolerance band — on the ratio panel. */
   ref?: { at: number; band: [number, number] };
 }
 
 const none = () => null;
 const times = (v: number) => `×${fmtH(v)}`;
-// ступени шкалы — круглые числа любой величины (0.001, 20): fmtH округлил бы малые до нуля
+// scale steps are round numbers of any magnitude (0.001, 20): fmtH would round small ones to zero
 const tick = (v: number) => String(v);
-// Панели, а не несколько шкал на одной: часы, отношение, токены и доллары — разные единицы (tests/capabilities/dashboard).
+// Panels, not several scales on one: hours, ratio, tokens and dollars are different units
+// (tests/capabilities/dashboard).
 const PANELS: Panel[] = [
   { key: "h", title: "Hours per task", fact: (p) => p.fact, est: (p) => p.est, tick, fmt: (v) => fmtH(v) },
   { key: "ratio", title: "Actual to estimate — tolerance band ×0.5…×2", fact: (p) => (p.est ? p.fact / p.est : null), est: none, tick: (v) => `×${v}`, fmt: times, ref: { at: 1, band: [0.5, 2] } },
@@ -172,7 +177,8 @@ const PANELS: Panel[] = [
   { key: "usd", title: "Cost per task, $", fact: (p) => p.usd, est: (p) => p.usdEst, tick, fmt: (v) => v.toFixed(v < 10 ? 2 : 0) },
 ];
 
-// Геометрия в единицах viewBox: слева — подписи шкалы, справа — подпись конца тренда, снизу — общая ось времени.
+// Geometry in viewBox units: on the left — scale labels, on the right — the trend end label, at the bottom — the
+// shared time axis.
 const W = 1080;
 const LEFT = 56;
 const RIGHT = 64;
@@ -183,7 +189,7 @@ const AXIS = 30;
 const PANEL_H = HEAD + PLOT + GAP;
 const HEIGHT = PANELS.length * PANEL_H + AXIS;
 
-/** Ступени логарифмической шкалы, покрывающие [lo, hi]: ряд 1–2–5, а если ступеней больше семи — только декады. */
+/** Log scale steps covering [lo, hi]: the 1–2–5 series, and if there are more than seven steps — decades only. */
 function logTicks(lo: number, hi: number): number[] {
   const cover = (mantissas: number[]) => {
     const all: number[] = [];
@@ -196,7 +202,7 @@ function logTicks(lo: number, hi: number): number[] {
   return fine.length > 7 ? cover([1]) : fine;
 }
 
-/** Отметки оси времени — местные полуночи с шагом, при котором их не больше восьми. */
+/** Time axis marks — local midnights with a step that keeps them at eight or fewer. */
 function timeTicks(t0: number, t1: number): number[] {
   const step = [1, 2, 7, 14, 30, 60, 90, 180].find((s) => (t1 - t0) / DAY / s <= 8) ?? 365;
   const d = new Date(t0 * 1000);
@@ -222,7 +228,10 @@ function layout(pts: Point[]): Layout {
   return { x: (t) => LEFT + ((t - t0) / (t1 - t0)) * (W - LEFT - RIGHT), ticks: timeTicks(t0, t1) };
 }
 
-/** Панель: сетка, отрезки «оценка — факт», кольца оценок, линия тренда и точки факта; `ys` — высота точки факта по задачам. */
+/**
+ * A panel: the grid, "estimate — actual" segments, estimate rings, the trend line and actual points; `ys` — the actual
+ * point height for each task.
+ */
 function panelSvg(p: Panel, i: number, pts: Point[], lay: Layout): { svg: string; ys: (number | null)[] } {
   const top = i * PANEL_H + HEAD;
   const pos = (v: number | null): v is number => v !== null && v > 0;
@@ -257,7 +266,7 @@ function panelSvg(p: Panel, i: number, pts: Point[], lay: Layout): { svg: string
 
 interface Chart {
   svg: string;
-  /** Точки для подсказки: абсцисса и высоты факта по панелям в единицах viewBox. */
+  /** Points for the tooltip: the abscissa and the actual heights per panel in viewBox units. */
   hover: { x: number; y: (number | null)[] }[];
 }
 
@@ -280,28 +289,28 @@ function chart(pts: Point[]): Chart {
   return { svg, hover: pts.map((pt, k) => ({ x: r1(lay.x(pt.t)), y: panels.map((p) => p.ys[k] ?? null) })) };
 }
 
-/** График: панели с общей осью времени — часы, факт к оценке, токены, стоимость; задач нет — пустая строка. */
+/** The chart: panels with a shared time axis — hours, actual to estimate, tokens, cost; no tasks — an empty string. */
 export function chartSvg(pts: Point[]): string {
   return chart(pts).svg;
 }
 
 // ----------------------------------------------------------------------------
-// Страница
+// Page
 // ----------------------------------------------------------------------------
 
 export interface Model {
   repos: string[];
-  /** Период страницы: `30d`, `90d`…; пусто или `all` — всё время. */
+  /** The page period: `30d`, `90d`…; empty or `all` — all time. */
   since: string;
   view: View;
-  /** Когда прочитан GitHub, epoch-секунды. */
+  /** When GitHub was read, epoch seconds. */
   at: number;
   errors: string[];
 }
 
 const PRESETS: [string, string][] = [["30d", "30 days"], ["90d", "90 days"], ["all", "all time"]];
 
-// Палитра — проверенная пара «синий / оранжевый» и служебные тона для светлой и тёмной темы.
+// Palette — the tested "blue / orange" pair and utility tones for the light and dark themes.
 const CSS = `
 :root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--fact:#2a78d6;--trend:#eb6834;--good:#006300;--bad:#b42c2c;--warn:#f2b53a}
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--fact:#3987e5;--trend:#d95926;--good:#0ca30c;--bad:#e66767;--warn:#e0a52c}}
@@ -355,7 +364,8 @@ td:nth-child(2){white-space:normal;min-width:220px}
 tr.hl td{background:var(--page)}
 ${SESSIONS_CSS}`;
 
-// Подсказка: ближайшая к курсору задача (по горизонтали — вчетверо строже, чем по вертикали), перекрестие и её строка в таблице.
+// Tooltip: the task nearest to the cursor (horizontally — four times stricter than vertically), the crosshair and its
+// row in the table.
 const SCRIPT = `
 (() => {
   const svg = document.querySelector("svg.chart"); if (!svg) return;
@@ -400,7 +410,10 @@ function tile(label: string, value: string, delta: string, hint: string): string
   return `<figure class="tile card"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${delta}<div class="hint">${esc(hint)}</div></figure>`;
 }
 
-/** Плитка величины: медиана последних задач и её изменение к предыдущим; меньше — лучше, знак дублирует цвет. */
+/**
+ * A metric tile: the median of the latest tasks and its change vs the previous ones; less is better, the sign
+ * duplicates the color.
+ */
 function shiftTile(label: string, s: Shift, f: (v: number) => string): string {
   if (s.now === null) return tile(label, "—", "", "no data");
   let delta = `<div class="delta">nothing to compare with yet</div>`;
@@ -411,7 +424,10 @@ function shiftTile(label: string, s: Shift, f: (v: number) => string): string {
   return tile(label, f(s.now), delta, `median of the last ${s.n}`);
 }
 
-/** Плитка тарифа: доля $ ведущей модели последних задач, остальные и предыдущие — строками; смена модели двигает тренд $. */
+/**
+ * The pricing tile: the $ share of the leading model of the latest tasks, the others and the previous ones — as lines;
+ * a model change moves the $ trend.
+ */
 function modelsTile(m: ModelShift): string {
   const label = "Cost by model";
   const hint = `share of $ over the last ${WINDOW}: the $ trend mixes the flow with the model's rate — compare the flow by tokens and output`;
@@ -451,12 +467,15 @@ function table(pts: Point[], many: boolean): string {
 }
 
 type Tab = "sessions" | "est";
-// «Сессии» — главная: на ней видно, чего ждут задачи в работе; график — вторая вкладка
+// "Sessions" is the main tab: it shows what the in-progress tasks wait for; the chart is the second tab
 const TABS: [Tab, string, string][] = [["sessions", "/", "Sessions"], ["est", "/est", "Estimate and actual"]];
 const EST_TITLE = "Tasks: estimate, actual and cost";
 const SESSIONS_TITLE = "Sessions: tasks in progress";
 
-/** Каркас страницы: вкладки, заголовок, строка под ним (HTML), ошибки чтения GitHub — плашкой, содержимое вкладки; `tail` — после `<main>`. */
+/**
+ * The page frame: tabs, the title, the line under it (HTML), GitHub read errors — as a banner, the tab's content;
+ * `tail` — after `<main>`.
+ */
 function shell(o: { tab: Tab; title: string; repos: string[]; sub: string; errors: string[]; body: string; tail?: string }): string {
   const tabs = TABS.map(([k, href, label]) => `<a href="${href}"${k === o.tab ? ' aria-current="page"' : ""}>${label}</a>`).join("");
   return [
@@ -467,12 +486,12 @@ function shell(o: { tab: Tab; title: string; repos: string[]; sub: string; error
     `<div class="sub">${o.sub}</div>`,
     o.errors.length ? `<div class="card errors">${o.errors.map((e) => `<div>${esc(e)}</div>`).join("")}</div>` : "",
     o.body,
-    // скрипт — вне <main>: самообновление подменяет <main> и не должно подменять себя
+    // the script is outside <main>: self-refresh replaces <main> and mustn't replace itself
     `</main>${o.tail ?? ""}</body></html>`,
   ].join("");
 }
 
-/** Вкладка «Оценка и факт»: сводка, график, таблица. */
+/** The "Estimate and actual" tab: summary, chart, table. */
 export function page(m: Model): string {
   const pts = m.view.points;
   const many = m.repos.length > 1;
@@ -500,14 +519,14 @@ export function page(m: Model): string {
 interface SessionsModel {
   repos: string[];
   view: SessionsView;
-  /** Когда прочитан GitHub, epoch-секунды. */
+  /** When GitHub was read, epoch seconds. */
   at: number;
-  /** Когда прочитаны закрепления и транскрипты: от него — возраст записей сессий. */
+  /** When the pins and transcripts were read: session record ages count from it. */
   now: number;
   errors: string[];
 }
 
-/** Вкладка «Сессии»: «Ждут владельца» и строка на задачу «В работе»; обновляется сама. */
+/** The "Sessions" tab: "Waiting for the owner" and a line per "In progress" task; refreshes itself. */
 function sessionsPage(m: SessionsModel): string {
   return shell({
     tab: "sessions", title: SESSIONS_TITLE, repos: m.repos, errors: m.errors,
@@ -517,7 +536,10 @@ function sessionsPage(m: SessionsModel): string {
   });
 }
 
-/** Что показать на «Сессиях»: к GitHub — закрепления задач «В работе», транскрипты их сессий и недавние сессии репозиториев. */
+/**
+ * What to show on "Sessions": in addition to GitHub — the pins of "In progress" tasks, their sessions' transcripts and
+ * the repositories' recent sessions.
+ */
 function sessionsInput(live: Record<string, Live>, registry: Registry, now: number): SessionsInput {
   const pins = readPins();
   const ids = Object.entries(live).flatMap(([repo, l]) => l.tasks.flatMap((t) => pins[`${repo}#${t.number}`] ?? []));
@@ -526,7 +548,7 @@ function sessionsInput(live: Record<string, Live>, registry: Registry, now: numb
 }
 
 // ----------------------------------------------------------------------------
-// Сервер и CLI
+// Server and CLI
 // ----------------------------------------------------------------------------
 
 const USAGE = `dashboard — a task page: «Sessions» (tasks in progress and what they wait for) and «Estimate and actual» (a chart by close time).
@@ -539,7 +561,8 @@ const USAGE = `dashboard — a task page: «Sessions» (tasks in progress and wh
   --port N      port (by default — a free one)
   --no-open     don't open the browser (the same — BROWSER=none; BROWSER=<command> — what to open it with)`;
 
-// Облачной сессии Claude Code GitHub Projects закрыты, а её localhost не виден браузеру пользователя.
+// GitHub Projects are unreachable from a Claude Code cloud session, and its localhost isn't visible to the user's
+// browser.
 const CLOUD_ERR = "Claude Code cloud session: GitHub projects aren't reachable from here, and a page on its localhost can't be opened — the dashboard runs only in a local session (docs/cloud-sessions.md in ai-dev)";
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
 const nowTs = () => Date.now() / 1000;
@@ -551,14 +574,14 @@ interface Options {
   port: number;
 }
 
-/** Период страницы → начало, epoch-секунды; пусто и `all` — всё время. */
+/** The page period → its start, epoch seconds; empty and `all` — all time. */
 function sinceTs(s: string): number | null {
   return s && s !== "all" ? nowTs() - parseSince(s) : null;
 }
 
 function serve(o: Options) {
   let cache: { at: number; rows: Record<string, Row[]>; errors: string[] } | null = null;
-  /** Строки проектов: кэш на TTL; репозиторий с ошибкой — строкой на странице, все с ошибкой — исключение. */
+  /** Project rows: cached for TTL; a repository with an error — a line on the page, all with errors — an exception. */
   const load = () => {
     if (cache && nowTs() - cache.at < TTL) return cache;
     const rows: Record<string, Row[]> = {};
@@ -577,8 +600,8 @@ function serve(o: Options) {
   let live: { at: number; live: Record<string, Live>; errors: string[] } | null = null;
   let pending: Promise<void> | null = null;
   /**
-   * GitHub для «Сессий» — запросом на репозиторий, параллельно и без блокировки сервера; ошибка репозитория — строкой на
-   * странице. Не бросает: запускается и в фоне.
+   * GitHub for "Sessions" — a request per repository, in parallel and without blocking the server; a repository's
+   * error — a line on the page. Doesn't throw: it also runs in the background.
    */
   const refreshLive = () =>
     (pending ??= (async () => {
@@ -596,7 +619,7 @@ function serve(o: Options) {
   const html = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   const failure = (msg: string, status: number, tab: Tab) =>
     html(`<!doctype html><html lang="en"><meta charset="utf-8"><title>Dashboard: error</title><style>${CSS}</style><main><h1>${tab === "est" ? EST_TITLE : SESSIONS_TITLE}</h1><p class="card errors">${esc(msg)}</p><p><a href="${tab === "est" ? "/est" : "/"}?refresh=1">Refresh</a></p></main></html>`, status);
-  /** Вкладка «Оценка и факт»: период — из адреса, иначе из --since. */
+  /** The "Estimate and actual" tab: the period — from the address, otherwise from --since. */
   const estTab = (url: URL) => {
     const since = url.searchParams.get("since") ?? o.since;
     let from: number | null;
@@ -610,8 +633,9 @@ function serve(o: Options) {
     return html(page({ repos: o.repos, since, view: view(data.rows, from), at: data.at, errors: data.errors }));
   };
   /**
-   * Вкладка «Сессии»: закрепления и транскрипты — заново на каждое открытие, GitHub — из кэша; устарел — страница из
-   * него, а свежий собирается в фоне к следующему обновлению: вкладка обновляется сама и GitHub не ждёт.
+   * The "Sessions" tab: pins and transcripts — afresh on every open, GitHub — from the cache; if it's stale, the page
+   * comes from it, and a fresh one is gathered in the background for the next refresh: the tab refreshes itself and
+   * doesn't wait for GitHub.
    */
   const sessionsTab = async () => {
     if (!live) await refreshLive();
@@ -626,13 +650,14 @@ function serve(o: Options) {
     port: o.port,
     async fetch(req) {
       const url = new URL(req.url);
-      // страница называет задачи непубличных репозиториев: чужой Host — сайт, навёдший своё имя на 127.0.0.1 (DNS rebinding)
+      // the page names tasks of private repositories: a foreign Host is a site that pointed its name at 127.0.0.1
+      // (DNS rebinding)
       if (!["127.0.0.1", "localhost"].includes(url.hostname)) return new Response("foreign Host", { status: 403 });
       const tab = TABS.find(([, href]) => href === url.pathname)?.[0];
       if (!tab) return new Response("no such page", { status: 404 });
       if (url.searchParams.has("refresh")) {
         cache = live = null;
-        // адрес без refresh: перезагрузка вкладки не перечитывает GitHub заново
+        // an address without refresh: reloading the tab doesn't re-read GitHub
         const since = url.searchParams.get("since");
         return new Response(null, { status: 303, headers: { location: tab === "est" && since ? `/est?since=${encodeURIComponent(since)}` : url.pathname } });
       }
@@ -647,7 +672,7 @@ function serve(o: Options) {
   return { server, refreshLive };
 }
 
-/** Открывает адрес в браузере: команда из BROWSER, иначе системная; возвращает строку для вывода. */
+/** Opens the address in the browser: the command from BROWSER, otherwise the system one; returns a line for output. */
 function openBrowser(url: string, open: boolean): string {
   if (!open) return "not opening (--no-open)";
   const browser = process.env.BROWSER;
@@ -687,11 +712,12 @@ export function main(argv: string[]): number | null {
     const { server, refreshLive } = started;
     const url = `http://127.0.0.1:${server.port}/`;
     console.log(`dashboard: ${url} — ${repos.join(", ")}; stop with Ctrl+C`);
-    // главная вкладка открывается без ожидания GitHub: он читается, пока браузер открывается; строки проекта для
-    // «Оценки и факта» — при её открытии: по всем репозиториям это десятки секунд, «Сессии» их не ждут
+    // the main tab opens without waiting for GitHub: it's read while the browser opens; the project rows for
+    // "Estimate and actual" — when that tab opens: across all repositories it takes tens of seconds, "Sessions"
+    // doesn't wait for them
     void refreshLive();
     console.log(`browser: ${openBrowser(url, !values["no-open"])}`);
-    return null; // сервер живёт до остановки
+    return null; // the server lives until stopped
   } catch (e) {
     if (e instanceof EstError) {
       console.error(`error: ${e.message}`);
