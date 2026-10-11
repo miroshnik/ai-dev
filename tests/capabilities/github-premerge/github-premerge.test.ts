@@ -45,6 +45,14 @@ done < calls.txt
 exit $fail
 `;
 const TYPED = { "package.json": PKG({ typecheck: "sh tc.sh", "test:spec": "sh check.sh" }), "tc.sh": TSC, "exports.txt": "commentsIn\nother\n", "calls.txt": "other\n" };
+// тот же typecheck — `bun check` под агентом (CLAUDECODE=1): ошибка XML-блоком, текст на следующей строке
+const BUN_CHECK = `n=0; fail=0
+while read c; do
+  n=$((n+1))
+  grep -qx "$c" exports.txt || { printf '<error file="src/calls.ts" line="%s" column="1" code="TS2304">\\nCannot find name '"'%s'"'.\\n<source>\\n%s | %s()\\n</source>\\n</error>\\n' "$n" "$c" "$n" "$c"; fail=1; }
+done < calls.txt
+exit $fail
+`;
 
 /**
  * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/ai-dev.git. Голова PR лежит в
@@ -282,6 +290,14 @@ describe("pr premerge: typecheck на слиянии со свежим main — 
     // test:spec после красного typecheck не идёт, голый main проверяется тем, что упало
     expect(steps(proc)).toEqual(["bun install --frozen-lockfile", "bun run typecheck", "bun install --frozen-lockfile", "bun run typecheck"]);
     expect(worktrees(p.work)).toHaveLength(1);
+  });
+
+  it("ошибку bun check под агентом — XML-блок — premerge называет строкой tsc", () => {
+    const p = project({ files: { ...TYPED, "tc.sh": BUN_CHECK }, pr: { "exports.txt": "other\n" }, mainAfter: { "calls.txt": "other\ncommentsIn\n" } });
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, p.work, processes().run);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("bun run typecheck failed:\n  src/calls.ts(2,1): error TS2304: Cannot find name 'commentsIn'.\n");
+    expect(r.out).not.toContain("<error");
   });
 
   it("typecheck идёт на слиянии до test:spec, оба зелёные — вливать можно", () => {
