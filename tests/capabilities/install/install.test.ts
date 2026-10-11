@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -134,6 +134,55 @@ describe("В проект — копия, которую видят облачн
     expect(install([], path.join(proj, "src/app")).code).toBe(0);
     expect(existsSync(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(true);
     expect(existsSync(path.join(proj, "src/app/.agents"))).toBe(false);
+  });
+});
+
+/**
+ * Песочница агента не пускает запись в `.claude/skills` проекта (Seatbelt у Claude Code — EPERM): установка
+ * обрывается на симлинках, когда копии в `.agents/skills` уже легли. Тест закрывает каталог правами — отказ тот же
+ * по сути (EACCES).
+ */
+describe("Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку", () => {
+  const skillsDir = () => path.join(proj, ".claude/skills");
+  const lock = () => (mkdirSync(skillsDir(), { recursive: true }), chmodSync(skillsDir(), 0o555));
+  // каталог без права записи не удалить — права возвращаются до уборки песочницы
+  afterEach(() => existsSync(skillsDir()) && chmodSync(skillsDir(), 0o755));
+
+  it("нет права писать в .claude/skills — install: код 2, строка с путём и командой для своего терминала, без стека", () => {
+    lock();
+    const r = install(["--lang", "ru"]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain(".claude/skills/ci-wait");
+    expect(r.stderr).toContain("npx -y github:miroshnik/ai-dev install --lang ru");
+    expect(r.stderr).not.toMatch(/\n\s+at /);
+  });
+
+  it("повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an ai-dev skill» нет", () => {
+    lock();
+    install();
+    chmodSync(skillsDir(), 0o755);
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toContain("isn't an ai-dev skill");
+    for (const s of SKILLS) expect(readlinkSync(path.join(skillsDir(), s))).toBe(`../../.agents/skills/${s}`);
+    expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).skills).toEqual(SKILLS);
+  });
+
+  it("update: нет права писать в .claude/skills — код 2, та же строка с командой update", () => {
+    install();
+    rmSync(path.join(skillsDir(), "spec"));
+    chmodSync(skillsDir(), 0o555);
+    const r = aiDev(sb, ["update"]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain(".claude/skills/spec");
+    expect(r.stderr).toContain("npx -y github:miroshnik/ai-dev update");
+  });
+
+  it("симлинк, который уже ведёт куда надо, установка не пересоздаёт: .claude/skills без права записи не мешает повтору без нового скилла", () => {
+    install();
+    chmodSync(skillsDir(), 0o555);
+    expect(install().code).toBe(0);
+    expect(aiDev(sb, ["update"]).code).toBe(0);
   });
 });
 
