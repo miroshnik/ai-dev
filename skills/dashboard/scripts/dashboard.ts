@@ -529,18 +529,18 @@ function sessionsInput(live: Record<string, Live>, registry: Registry, now: numb
 // Сервер и CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `dashboard — страница задач: «Сессии» (задачи в работе и чего они ждут) и «Оценка и факт» (график по времени закрытия).
+const USAGE = `dashboard — a task page: «Sessions» (tasks in progress and what they wait for) and «Estimate and actual» (a chart by close time).
 
   dashboard [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
 
-  --repo o/r    репозиторий (по умолчанию — из git remote origin каталога)
-  --all-repos   все репозитории личного реестра est
-  --since 90d   период вкладки «Оценка и факт» по умолчанию (дни d, недели w, месяцы m); без него — всё время
-  --port N      порт (по умолчанию — свободный)
-  --no-open     не открывать браузер (то же — BROWSER=none; BROWSER=<команда> — чем открыть)`;
+  --repo o/r    repository (by default — from the directory's git remote origin)
+  --all-repos   all repositories in the personal est registry
+  --since 90d   default period of the «Estimate and actual» tab (days d, weeks w, months m); without it — all time
+  --port N      port (by default — a free one)
+  --no-open     don't open the browser (the same — BROWSER=none; BROWSER=<command> — what to open it with)`;
 
 // Облачной сессии Claude Code GitHub Projects закрыты, а её localhost не виден браузеру пользователя.
-const CLOUD_ERR = "облачная сессия Claude Code: проекты GitHub отсюда недоступны, а страницу с её localhost не открыть — дашборд только в локальной сессии (docs/cloud-sessions.md в ai-dev)";
+const CLOUD_ERR = "Claude Code cloud session: GitHub projects aren't reachable from here, and a page on its localhost can't be opened — the dashboard runs only in a local session (docs/cloud-sessions.md in ai-dev)";
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
 const nowTs = () => Date.now() / 1000;
 
@@ -599,7 +599,13 @@ function serve(o: Options) {
   /** Вкладка «Оценка и факт»: период — из адреса, иначе из --since. */
   const estTab = (url: URL) => {
     const since = url.searchParams.get("since") ?? o.since;
-    const from = sinceTs(since);
+    let from: number | null;
+    try {
+      from = sinceTs(since);
+    } catch (e) {
+      if (e instanceof EstError) return failure(e.message, 400, "est");
+      throw e;
+    }
     const data = load();
     return html(page({ repos: o.repos, since, view: view(data.rows, from), at: data.at, errors: data.errors }));
   };
@@ -633,7 +639,7 @@ function serve(o: Options) {
       try {
         return tab === "est" ? estTab(url) : await sessionsTab();
       } catch (e) {
-        if (e instanceof EstError) return failure(e.message, /^неверный период/.test(e.message) ? 400 : 502, tab);
+        if (e instanceof EstError) return failure(e.message, 502, tab);
         return failure(String((e as Error)?.stack ?? e), 500, tab);
       }
     },
@@ -643,14 +649,14 @@ function serve(o: Options) {
 
 /** Открывает адрес в браузере: команда из BROWSER, иначе системная; возвращает строку для вывода. */
 function openBrowser(url: string, open: boolean): string {
-  if (!open) return "не открываю (--no-open)";
+  if (!open) return "not opening (--no-open)";
   const browser = process.env.BROWSER;
-  if (browser === "none") return "не открываю (BROWSER=none)";
+  if (browser === "none") return "not opening (BROWSER=none)";
   const cmd = browser ? [browser, url] : process.platform === "darwin" ? ["open", url] : process.platform === "win32" ? ["cmd", "/c", "start", "", url] : ["xdg-open", url];
   const p = spawn(cmd[0]!, cmd.slice(1), { stdio: "ignore", detached: true });
-  p.on("error", (e) => console.error(`браузер не открылся (${e.message}) — откройте адрес сами`));
+  p.on("error", (e) => console.error(`browser didn't open (${e.message}) — open the address yourself`));
   p.unref();
-  return `открываю ${url}`;
+  return `opening ${url}`;
 }
 
 export function main(argv: string[]): number | null {
@@ -664,31 +670,31 @@ export function main(argv: string[]): number | null {
       return 0;
     }
     if (isCloud()) throw new EstError(CLOUD_ERR);
-    if (values.repo && values["all-repos"]) throw new EstError("--repo и --all-repos несовместимы");
+    if (values.repo && values["all-repos"]) throw new EstError("--repo and --all-repos are mutually exclusive");
     sinceTs(values.since);
     const port = Number(values.port);
-    if (!/^\d+$/.test(values.port) || port > 65535) throw new EstError(`--port: ожидается порт 0…65535, получено «${values.port}»`);
+    if (!/^\d+$/.test(values.port) || port > 65535) throw new EstError(`--port: expected a port 0…65535, got «${values.port}»`);
     const registry = loadRegistry();
     const repos = values["all-repos"] ? Object.keys(registry) : [resolveRepo(values.repo)];
-    if (!repos.length) throw new EstError("реестр репозиториев est пуст — укажите --repo owner/repo");
+    if (!repos.length) throw new EstError("the est repository registry is empty — pass --repo owner/repo");
     let started: ReturnType<typeof serve>;
     try {
       started = serve({ repos, registry, since: values.since, port });
     } catch (e) {
       if ((e as { code?: unknown } | null)?.code !== "EADDRINUSE") throw e;
-      throw new EstError(`порт ${port} занят — укажите другой --port или уберите его: возьмётся свободный`);
+      throw new EstError(`port ${port} is busy — pass another --port or drop it: a free one will be taken`);
     }
     const { server, refreshLive } = started;
     const url = `http://127.0.0.1:${server.port}/`;
-    console.log(`дашборд: ${url} — ${repos.join(", ")}; остановить — Ctrl+C`);
+    console.log(`dashboard: ${url} — ${repos.join(", ")}; stop with Ctrl+C`);
     // главная вкладка открывается без ожидания GitHub: он читается, пока браузер открывается; строки проекта для
     // «Оценки и факта» — при её открытии: по всем репозиториям это десятки секунд, «Сессии» их не ждут
     void refreshLive();
-    console.log(`браузер: ${openBrowser(url, !values["no-open"])}`);
+    console.log(`browser: ${openBrowser(url, !values["no-open"])}`);
     return null; // сервер живёт до остановки
   } catch (e) {
     if (e instanceof EstError) {
-      console.error(`ошибка: ${e.message}`);
+      console.error(`error: ${e.message}`);
       return 1;
     }
     if (e && typeof e === "object" && String((e as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS")) {

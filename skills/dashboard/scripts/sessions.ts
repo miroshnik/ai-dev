@@ -602,14 +602,14 @@ function graphql(query: string, variables: Record<string, unknown>): Promise<Any
     let err = "";
     p.stdout.on("data", (d) => (out += d));
     p.stderr.on("data", (d) => (err += d));
-    p.on("error", (e) => reject(new EstError((e as NodeJS.ErrnoException).code === "ENOENT" ? "не найдена команда 'gh'; нужен установленный gh CLI" : `gh api graphql: ${e.message}`)));
+    p.on("error", (e) => reject(new EstError((e as NodeJS.ErrnoException).code === "ENOENT" ? "command 'gh' not found; the gh CLI must be installed" : `gh api graphql: ${e.message}`)));
     p.on("close", (code) => {
-      if (code !== 0) return reject(new EstError(`команда gh api graphql… завершилась с кодом ${code}: ${err.trim().slice(0, 500)}`));
+      if (code !== 0) return reject(new EstError(`command gh api graphql… exited with code ${code}: ${err.trim().slice(0, 500)}`));
       let data: Any;
       try {
         data = JSON.parse(out);
       } catch {
-        return reject(new EstError(`gh api graphql: ответ не JSON: ${out.slice(0, 200)}`));
+        return reject(new EstError(`gh api graphql: the response isn't JSON: ${out.slice(0, 200)}`));
       }
       // частичный ответ (нет доступа к одной задаче) — данные есть, их и берём
       if (data.errors?.length && !data.data) return reject(new EstError(`GraphQL: ${data.errors.map((e: Any) => e.message ?? "").join("; ")}`));
@@ -626,7 +626,7 @@ function graphql(query: string, variables: Record<string, unknown>): Promise<Any
  */
 export async function liveQuery(full: string, projectId: string): Promise<Live> {
   // облачной сессии Projects v2 закрыты; dashboard выходит раньше, здесь — для вызова в обход него
-  if (process.env.CLAUDE_CODE_REMOTE === "true") throw new EstError("облачная сессия Claude Code: проекты GitHub отсюда недоступны (docs/cloud-sessions.md в ai-dev)");
+  if (process.env.CLAUDE_CODE_REMOTE === "true") throw new EstError("Claude Code cloud session: GitHub projects aren't reachable from here (docs/cloud-sessions.md in ai-dev)");
   const [o, r] = full.split("/");
   const q = `query($o:String!,$r:String!,$p:ID!,$q:String!){
     project: node(id:$p){ ... on ProjectV2{ items(first:100, query:$q){ nodes{ content{ __typename

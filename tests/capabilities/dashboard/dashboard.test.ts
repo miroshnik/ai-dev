@@ -259,7 +259,7 @@ describe("Команда dashboard сервит страницу сама и о�
       p.stdout!.on("data", (d) => {
         out += d;
         const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(out)?.[0];
-        if (url && /^браузер: .*$/m.test(out)) resolve({ url, stdout: () => out });
+        if (url && /^browser: .*$/m.test(out)) resolve({ url, stdout: () => out });
       });
       p.on("exit", (code, signal) => reject(new Error(`dashboard вышел (${code ?? signal}): ${out}${err}`)));
     });
@@ -289,7 +289,7 @@ describe("Команда dashboard сервит страницу сама и о�
   it("--no-open и BROWSER=none браузер не открывают", async () => {
     for (const [args, extra] of [[["--no-open"], {}], [[], { BROWSER: "none" }]] as [string[], Record<string, string>][]) {
       const d = await start(["--repo", "o/a", ...args], extra);
-      expect(d.stdout()).toContain("браузер: не открываю");
+      expect(d.stdout()).toContain("browser: not opening");
       expect((await fetch(d.url)).status).toBe(200);
       expect(opened()).toBeNull();
     }
@@ -331,6 +331,10 @@ describe("Команда dashboard сервит страницу сама и о�
     const bad = await fetch(new URL("/est", d.url));
     expect(bad.status).toBe(502);
     expect(await bad.text()).toContain("HTTP 502: Bad Gateway");
+    // неверный период в адресе — ошибка запроса, а не GitHub
+    const period = await fetch(new URL("/est?since=вчера", d.url));
+    expect(period.status).toBe(400);
+    expect(await period.text()).toContain("«вчера»");
     // «Сессии» — страница с ошибкой репозитория плашкой
     const sessions = await fetch(d.url);
     expect(sessions.status).toBe(200);
@@ -412,17 +416,17 @@ describe("Команда dashboard сервит страницу сама и о�
 
   it("неизвестный параметр — код 2, --help — справка", () => {
     expect(exitOf(sync(["--bogus"]))).toBe(2);
-    expect(sync(["--since", "вчера", "--no-open"]).stderr).toContain("неверный период «вчера»");
+    expect(sync(["--since", "вчера", "--no-open"]).stderr).toContain("invalid period «вчера»");
     const help = sync(["--help"]);
     expect(exitOf(help)).toBe(0);
     expect(help.stdout).toContain("dashboard [--repo o/r | --all-repos]");
-    expect(sync(["--repo", "o/a", "--all-repos"]).stderr).toContain("--repo и --all-repos несовместимы");
+    expect(sync(["--repo", "o/a", "--all-repos"]).stderr).toContain("--repo and --all-repos are mutually exclusive");
   });
 
   it("занятый порт — ошибка с подсказкой, а не трасса", async () => {
     const d = await start(["--repo", "o/a", "--no-open"]);
     const r = sync(["--repo", "o/a", "--no-open", "--port", new URL(d.url).port]);
     expect(exitOf(r)).toBe(1);
-    expect(r.stderr).toContain(`ошибка: порт ${new URL(d.url).port} занят`);
+    expect(r.stderr).toContain(`error: port ${new URL(d.url).port} is busy`);
   });
 });
