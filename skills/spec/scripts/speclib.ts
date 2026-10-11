@@ -1,13 +1,12 @@
 /**
- * speclib — общее для spec-doc, spec-diff, spec-publish, spec-exceptions и харнесса: дерево tests/, модель теста,
- * `Source:` публикации, разбор отчётов раннеров (JSON Vitest/Jest, JSON Playwright, JUnit XML
- * от `bun test`), разбор исходников тестов парсером (describe/it/test для TS/JS: названия и
- * проза из JSDoc) и правило файлов исключений папки решения (`exceptionFile`).
+ * speclib — shared by spec-doc, spec-diff, spec-publish, spec-exceptions and the harness: the tests/ tree, the test
+ * model, the publication's `Source:`, parsing of runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML from
+ * `bun test`), parsing of test sources with a parser (describe/it/test for TS/JS: names and prose from JSDoc) and the
+ * rule for a decision folder's exception files (`exceptionFile`).
  *
- * Запуск — Bun (`bun script.ts`; только `node:`-API, поэтому идёт и под Node ≥ 22.18), без
- * зависимостей (парсер — файл скилла `vendor/babel-parser.cjs`) и без конфигурации под
- * репозиторий: дерево tests/ из правила «Specification — decisions» (skills/spec/canon.md) и
- * стандартные форматы отчётов.
+ * Runs on Bun (`bun script.ts`; only `node:` APIs, so it also runs on Node ≥ 22.18), without dependencies (the parser
+ * is the skill's file `vendor/babel-parser.cjs`) and without per-repository configuration: the tests/ tree from the
+ * rule "Specification — decisions" (skills/spec/canon.md) and the standard report formats.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,21 +20,22 @@ const posix = path.posix;
 export const TESTS = "tests";
 
 /**
- * SHA исходника из сообщения коммита публикации (`Source: <sha>`, пишет spec-publish): 40 знаков — SHA-1, 64 — SHA-256.
- * Выражение одно на spec-publish и spec-diff: разойдутся — один скрипт перестанет узнавать публикации другого.
+ * Source SHA from a publication commit message (`Source: <sha>`, written by spec-publish): 40 chars — SHA-1, 64 —
+ * SHA-256. One expression for spec-publish and spec-diff: if they diverge, one script stops recognizing the other's
+ * publications.
  */
 export const sourceOf = (message: string): string | undefined => /^Source: ([0-9a-f]{40,64})$/m.exec(message)?.[1];
 export type Kind = "capability" | "architecture" | "standard" | "lib" | "out";
 export type Status = "passed" | "failed" | "skipped" | "todo";
 
 export interface Test {
-  path: string; // путь файла относительно корня, posix
-  describes: string[]; // цепочка describe
+  path: string; // file path relative to the root, posix
+  describes: string[]; // describe chain
   name: string; // it / test
   status: Status;
-  reason: string; // причина пропуска, если отчёт её знает
-  variants: number; // одинаковые записи из нескольких отчётов (проекты Playwright) свёрнуты
-  body?: string; // аргументы вызова после названия без пробелов — только из разбора исходника (тело теста)
+  reason: string; // skip reason, if the report knows it
+  variants: number; // identical records from several reports (Playwright projects) are folded
+  body?: string; // call arguments after the name without whitespace — only from source parsing (the test body)
 }
 
 export function makeTest(
@@ -53,7 +53,7 @@ export function folderOf(t: Test): string {
   return posix.dirname(t.path);
 }
 
-/** Идентичность требования: путь папки + describe + it (файл внутри папки не важен). */
+/** Requirement identity: folder path + describe + it (the file inside the folder doesn't matter). */
 export function keyOf(t: Test): string {
   return JSON.stringify([folderOf(t), t.describes, t.name]);
 }
@@ -63,8 +63,8 @@ export function titleOf(t: Test): string {
 }
 
 /**
- * Имя теста или describe для markdown: `<` вне code span экранируется — иначе GitHub примет
- * `<type>` или `<!-- … -->` за HTML и молча выбросит. Остальная разметка — как написал автор.
+ * A test or describe name for markdown: `<` outside a code span is escaped — otherwise GitHub takes `<type>` or
+ * `<!-- … -->` for HTML and silently drops it. The rest of the markup is as the author wrote it.
  */
 export function mdText(s: string): string {
   return s
@@ -73,10 +73,13 @@ export function mdText(s: string): string {
     .join("");
 }
 
-/** «1 тест», «2 теста», «5 тестов» — на языке `lang`: форма слова из словаря скилла github по правилам языка. */
+/**
+ * "1 test", "2 tests", "5 tests" — in language `lang`: the word form from the github skill's dictionary by the
+ * language's rules.
+ */
 export const testsWord = (lang: string, n: number): string => locale.count(lang, locale.names(lang).spec.tests, n);
 
-// Файлы тестов: *.test.ts / *.spec.ts / *.e2e.ts (и js/jsx/tsx/mjs/cjs…)
+// Test files: *.test.ts / *.spec.ts / *.e2e.ts (and js/jsx/tsx/mjs/cjs…)
 const TEST_FILE = /\.(test|spec|e2e)\.[cm]?[jt]sx?$/;
 
 export function isTestFile(p: string): boolean {
@@ -84,8 +87,8 @@ export function isTestFile(p: string): boolean {
 }
 
 /**
- * (вид, имя) для пути относительно корня: capability / правило архитектуры / стандарт с именем папки,
- * lib — не спека, out — вне дерева (в том числе файл прямо в tests/capabilities/ или tests/architecture/).
+ * (kind, name) for a path relative to the root: capability / architecture rule / standard with the folder name,
+ * lib — not a spec, out — outside the tree (including a file directly in tests/capabilities/ or tests/architecture/).
  */
 export function classify(p: string): [Kind, string | null] {
   const parts = p.split("/");
@@ -98,45 +101,51 @@ export function classify(p: string): [Kind, string | null] {
   return ["out", null];
 }
 
-/** Папка решения теста — `tests/<вид>/<имя>`; тест вне дерева решений — null. */
+/** A test's decision folder — `tests/<kind>/<name>`; a test outside the decision tree — null. */
 export function decisionFolder(file: string): string | null {
   const [kind] = classify(file);
   return kind === "capability" || kind === "architecture" || kind === "standard" ? file.split("/").slice(0, 3).join("/") : null;
 }
 
-/** Исключения папки решения — каталог `exceptions/`, файл на элемент реестра харнесса (`exceptionsIn`). */
+/** Decision folder exceptions — the `exceptions/` directory, a file per harness registry element (`exceptionsIn`). */
 export const EXCEPTIONS_DIR = "exceptions";
 
 /**
- * Исключения названий spec-doc — каталог `names.exceptions/` папки решения, файл на название: параллельные PR
- * снимают каждый свой файл, а в общем массиве соседние строки конфликтовали.
+ * spec-doc name exceptions — the decision folder's `names.exceptions/` directory, a file per name: parallel PRs each
+ * remove their own file, while in a shared array adjacent lines conflicted.
  */
 export const NAMES_DIR = "names.exceptions";
 
-// прежний формат — массив в одном файле: exceptions.ts харнесса, names.exceptions.ts spec-doc
+// the old format — an array in one file: the harness's exceptions.ts, spec-doc's names.exceptions.ts
 const LEGACY_EXCEPTIONS = /^(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
 
-/** Чей файл исключений и в каком виде. */
+/** Whose exceptions file it is and in what form. */
 export interface ExceptionFile {
-  /** Папка решения `tests/<вид>/<имя>`, чьи это исключения. */
+  /** The decision folder `tests/<kind>/<name>` these exceptions belong to. */
   folder: string;
-  /** Каталог исключений папки: элементы реестров харнесса или названия spec-doc. */
+  /** The folder's exceptions directory: harness registry elements or spec-doc names. */
   dir: typeof EXCEPTIONS_DIR | typeof NAMES_DIR;
-  /** Прежний формат — массив в одном файле папки или её подпапки: переносит spec-exceptions в каталог `dir` папки. */
+  /**
+   * The old format — an array in one file of the folder or a subfolder: spec-exceptions moves it into the folder's
+   * `dir` directory.
+   */
   legacy: boolean;
-  /** Не на месте или не того вида — что не так; такой файл исключением не читается. */
+  /** Misplaced or of the wrong kind — what's wrong; such a file isn't read as an exception. */
   error?: string;
 }
 
 /**
- * Файл исключений какой папки решения? Одно правило на харнесс, spec-doc, spec-diff и spec-exceptions; копия в скилле
- * github (`pr labels`: механическая правка) сверяется с ним стандартом `tests/standards/exception-files`.
+ * Exceptions file of which decision folder? One rule for the harness, spec-doc, spec-diff and spec-exceptions; a copy
+ * in the github skill (`pr labels`: a mechanical edit) is checked against it by the standard
+ * `tests/standards/exception-files`.
  *
- * - `tests/<вид>/<имя>/exceptions/<элемент>.json` (`names.exceptions/<название>.json`) — исключение папки;
- * - иной файл в каталоге (не `.json`, вложенный каталог) — ошибка: исключение — JSON-файл;
- * - каталог в подпапке папки решения — ошибка: каталог один на папку, его читает `exceptionsIn()` теста любой подпапки;
- * - `exceptions.{ts,mts,js,mjs,json}` (`names.exceptions.*`) в папке или подпапке — прежний формат исключений папки;
- * - вне папок решений и скрытые файлы — не исключения (null).
+ * - `tests/<kind>/<name>/exceptions/<element>.json` (`names.exceptions/<name>.json`) — the folder's exception;
+ * - another file in the directory (not `.json`, a nested directory) — an error: an exception is a JSON file;
+ * - the directory in a subfolder of the decision folder — an error: there's one directory per folder, `exceptionsIn()`
+ *   of a test in any subfolder reads it;
+ * - `exceptions.{ts,mts,js,mjs,json}` (`names.exceptions.*`) in the folder or a subfolder — the folder's old exceptions
+ *   format;
+ * - outside decision folders, and hidden files — not exceptions (null).
  */
 export function exceptionFile(p: string): ExceptionFile | null {
   const folder = decisionFolder(p);
@@ -156,7 +165,7 @@ export function exceptionFile(p: string): ExceptionFile | null {
   return { folder, dir, legacy: false };
 }
 
-/** Исключение названия: тест, название, задача на переписывание и причина. */
+/** A name exception: the test, the name, the task to rewrite it and the reason. */
 export interface NameException {
   file: string;
   name: string;
@@ -165,8 +174,9 @@ export interface NameException {
 }
 
 /**
- * Исключение названия файлом в `<папка>/names.exceptions/`: имя — название латиницей (стабильно, видно в диффе);
- * занято другим исключением — суффикс, тот же текст — тот же файл. Возвращает путь от корня.
+ * A name exception as a file in `<folder>/names.exceptions/`: the file name is the name in Latin characters (stable,
+ * visible in the diff); taken by another exception — a suffix, the same text — the same file. Returns the path from
+ * the root.
  */
 export function writeNameException(root: string, folder: string, x: NameException): string {
   const dir = `${folder}/${NAMES_DIR}`;
@@ -179,13 +189,13 @@ export function writeNameException(root: string, folder: string, x: NameExceptio
   return `${dir}/${name}.json`;
 }
 
-/** Статус набора: любой failed → failed; иначе есть passed → passed; иначе todo/skipped. */
+/** Suite status: any failed → failed; otherwise any passed → passed; otherwise todo/skipped. */
 export function combineStatus(a: Status, b: Status): Status {
   const order: Record<Status, number> = { failed: 3, passed: 2, todo: 1, skipped: 0 };
   return order[a] >= order[b] ? a : b;
 }
 
-/** Одинаковые записи из нескольких отчётов — в одну, порядок первого появления. */
+/** Identical records from several reports — into one, in order of first appearance. */
 export function mergeTests(tests: Test[]): Test[] {
   const byKey = new Map<string, Test>();
   for (const t of tests) {
@@ -202,13 +212,13 @@ export function mergeTests(tests: Test[]): Test[] {
   return [...byKey.values()];
 }
 
-// ---------- пути ----------
+// ---------- paths ----------
 
 const DRIVE = /^[A-Za-z]:\//;
 
 /**
- * Путь из отчёта → относительно корня. Абсолютный путь с другой машины (CI) приводится
- * по сегменту /tests/; иначе — как есть, без ведущего слеша.
+ * A path from a report → relative to the root. An absolute path from another machine (CI) is mapped by the /tests/
+ * segment; otherwise — as is, without the leading slash.
  */
 export function toRepoPath(p: string, root: string): string {
   p = (p ?? "").replace(/\\/g, "/");
@@ -224,7 +234,7 @@ export function toRepoPath(p: string, root: string): string {
   return p ? posix.normalize(p) : p;
 }
 
-// ---------- отчёты ----------
+// ---------- reports ----------
 
 export function loadReport(file: string, root: string): Test[] {
   const text = readFileSync(file, "utf8");
@@ -256,7 +266,7 @@ type Json = Record<string, unknown>;
 const arr = (v: unknown): Json[] => (Array.isArray(v) ? (v as Json[]) : []);
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-/** JSON Vitest (`--reporter=json`) — он же формат Jest: testResults[].assertionResults[]. */
+/** Vitest JSON (`--reporter=json`) — also the Jest format: testResults[].assertionResults[]. */
 export function parseVitest(data: Json, root: string): Test[] {
   const tests: Test[] = [];
   for (const tr of arr(data.testResults)) {
@@ -273,8 +283,8 @@ export function parseVitest(data: Json, root: string): Test[] {
 const PW_STATUS: Record<string, Status> = { expected: "passed", flaky: "passed", unexpected: "failed", skipped: "skipped" };
 
 /**
- * JSON Playwright (`--reporter=json`): suites[] по файлам, вложенные suites — describe,
- * specs[].tests[] — по одному на проект (chromium, firefox…) — сворачиваются в одну строку.
+ * Playwright JSON (`--reporter=json`): suites[] per file, nested suites — describe, specs[].tests[] — one per project
+ * (chromium, firefox…) — are folded into one row.
  */
 export function parsePlaywright(data: Json, root: string): Test[] {
   const config = (data.config ?? {}) as Json;
@@ -327,10 +337,10 @@ function xmlAttrs(s: string): Record<string, string> {
 type Suite = { name: string; file: string };
 
 /**
- * JUnit XML от `bun test --reporter=junit`: файл — testsuite с name = file, describe — вложенные
- * testsuite с атрибутом file, тест — testcase (file, name). Разбор регулярными выражениями со
- * стеком suite: XML-парсера без зависимостей нет, а формат прост. `<skipped/>` — пропущен,
- * `<skipped message="TODO"/>` — todo, failure/error — падает.
+ * JUnit XML from `bun test --reporter=junit`: a file is a testsuite with name = file, describe — nested testsuites with
+ * the file attribute, a test — a testcase (file, name). Parsing with regular expressions and a suite stack: there's no
+ * XML parser without dependencies, and the format is simple. `<skipped/>` — skipped, `<skipped message="TODO"/>` —
+ * todo, failure/error — failed.
  */
 export function parseJunit(text: string, root: string): Test[] {
   const tests: Test[] = [];
@@ -339,7 +349,7 @@ export function parseJunit(text: string, root: string): Test[] {
   let caseAttrs: Record<string, string> | null = null;
   let caseStart = 0;
   for (const m of text.matchAll(TOKEN)) {
-    if (!m[2]) continue; // CDATA или комментарий
+    if (!m[2]) continue; // CDATA or a comment
     const closing = m[1] === "/";
     const selfClosing = m[4] === "/";
     if (m[2] === "testsuite") {
@@ -366,7 +376,7 @@ export function parseJunit(text: string, root: string): Test[] {
 }
 
 function junitCase(a: Record<string, string>, body: string, stack: Suite[], root: string): Test {
-  // describe — вложенные suite с file, чьё имя не равно файлу (suite самого файла — не describe)
+  // describe — nested suites with file whose name isn't the file (the file's own suite isn't a describe)
   const describes = stack.filter((s) => s.file && s.name !== s.file).map((s) => s.name);
   const suiteFile = [...stack].reverse().find((s) => s.file)?.file ?? "";
   const file = toRepoPath((a.file ?? "").replace(/\\/g, "/") || suiteFile, root);
@@ -386,9 +396,9 @@ function junitCase(a: Record<string, string>, body: string, stack: Suite[], root
   return makeTest(file, describes, a.name ?? "", status, reason);
 }
 
-// ---------- разбор исходников ----------
+// ---------- source parsing ----------
 
-/** Узел AST Babel: вид, границы в исходнике и поля своего вида. */
+/** A Babel AST node: the type, bounds in the source and the fields of its type. */
 interface AstNode {
   type: string;
   start: number;
@@ -397,7 +407,7 @@ interface AstNode {
   [field: string]: unknown;
 }
 
-/** Комментарий из разбора: блочный или строчный, границы в исходнике. */
+/** A comment from parsing: block or line, bounds in the source. */
 interface AstComment {
   type: "CommentBlock" | "CommentLine";
   start: number;
@@ -410,21 +420,22 @@ interface Parsed {
 }
 
 /*
- * Парсер — `@babel/parser` 7.29.9 файлом в скилле: `vendor/babel-parser.cjs` — `lib/index.js` пакета (один файл без
- * `require`) без последней строки `//# sourceMappingURL` — карты рядом нет, Vitest ищет её и печатает ошибку; типы —
- * `vendor/babel-parser.d.cts`, лицензия рядом. Скрипты скилла — без зависимостей, job `spec-diff` в CI проекта — без
- * установки пакетов. Обновить — `npm pack @babel/parser`: его `lib/index.js` и `LICENSE` — сюда, версию — в этот
- * комментарий. Свой лексер угадывал, где регулярка, шаблон, комментарий и аргумент типа, и терял тесты молча (#267,
- * #269, #271, #275); синтаксис TypeScript шире любой догадки (#277).
+ * The parser is `@babel/parser` 7.29.9 as a file in the skill: `vendor/babel-parser.cjs` is the package's
+ * `lib/index.js` (a single file without `require`) without the last line `//# sourceMappingURL` — there's no map next
+ * to it, Vitest looks for it and prints an error; types — `vendor/babel-parser.d.cts`, the license next to it. The
+ * skill's scripts have no dependencies, the `spec-diff` job in the project's CI installs no packages. To update —
+ * `npm pack @babel/parser`: its `lib/index.js` and `LICENSE` go here, the version — into this comment. Our own lexer
+ * guessed where a regex, a template, a comment and a type argument were, and silently lost tests (#267, #269, #271,
+ * #275); TypeScript syntax is wider than any guess (#277).
  *
- * Импорт статический, вверху файла: `createRequire(import.meta.url)` ломал Playwright и Jest в проекте без
- * `"type": "module"` — они грузят TS как CommonJS, где `import.meta` — синтаксическая ошибка (#303,
+ * The import is static, at the top of the file: `createRequire(import.meta.url)` broke Playwright and Jest in a project
+ * without `"type": "module"` — they load TS as CommonJS, where `import.meta` is a syntax error (#303,
  * tests/standards/harness-load).
  */
 
 const OPTIONS = {
   sourceType: "module",
-  // ошибки, после которых AST есть (строгий режим, декоратор параметра), разбору не мешают
+  // errors after which there's still an AST (strict mode, a parameter decorator) don't get in the way of parsing
   errorRecovery: true,
   allowReturnOutsideFunction: true,
   allowAwaitOutsideFunction: true,
@@ -433,12 +444,12 @@ const OPTIONS = {
   allowNewTargetOutsideFunction: true,
   allowSuperOutsideMethod: true,
 };
-// декораторы — и в позиции после export, и у параметров (TS experimentalDecorators — ошибкой с восстановлением)
+// decorators — both in the position after export and on parameters (TS experimentalDecorators — an error with recovery)
 const DECORATORS = ["decorators", "decoratorAutoAccessors"];
 
 /**
- * Наборы плагинов по расширению файла, по порядку попыток: `.ts` — без JSX (`<T>x` — приведение типа), `.tsx` — с
- * JSX, JS — с JSX; файл неизвестен — TypeScript, затем TSX.
+ * Plugin sets by file extension, in order of attempts: `.ts` — without JSX (`<T>x` is a type cast), `.tsx` — with JSX,
+ * JS — with JSX; an unknown file — TypeScript, then TSX.
  */
 function pluginSets(file?: string): unknown[][] {
   const ts = ["typescript", ...DECORATORS];
@@ -449,7 +460,7 @@ function pluginSets(file?: string): unknown[][] {
   return [ts, [...ts, "jsx"]];
 }
 
-/** AST исходника TS/JS; не разобрать — ошибка с местом (`Unexpected token (3:7)`). */
+/** The AST of a TS/JS source; can't parse — an error with the location (`Unexpected token (3:7)`). */
 function parseCode(source: string, file?: string): Parsed {
   let first: Error | undefined;
   for (const plugins of pluginSets(file)) {
@@ -464,7 +475,7 @@ function parseCode(source: string, file?: string): Parsed {
 
 const isNode = (v: unknown): v is AstNode => !!v && typeof v === "object" && typeof (v as AstNode).type === "string" && typeof (v as AstNode).start === "number";
 
-/** Дочерние узлы в порядке исходника; комментарии, привязанные к узлу, — не узлы. */
+/** Child nodes in source order; comments attached to a node aren't nodes. */
 function children(node: AstNode): AstNode[] {
   const out: AstNode[] = [];
   for (const [k, v] of Object.entries(node)) {
@@ -475,13 +486,13 @@ function children(node: AstNode): AstNode[] {
   return out.sort((a, b) => a.start - b.start);
 }
 
-/** Обход AST в порядке исходника: visit вернул false — внутрь узла не идти. */
+/** AST walk in source order: visit returned false — don't go into the node. */
 function walkAst(node: AstNode, visit: (n: AstNode) => boolean | void): void {
   if (visit(node) === false) return;
   for (const c of children(node)) walkAst(c, visit);
 }
 
-/** Комментарии исходника по разбору — [начало, текст]; шебанг — тоже комментарий. */
+/** The source's comments from parsing — [start, text]; a shebang is a comment too. */
 export function commentsOf(source: string, file?: string): [number, string][] {
   const ast = parseCode(source, file);
   const out: [number, string][] = ast.comments.map((c) => [c.start, source.slice(c.start, c.end)]);
@@ -490,7 +501,7 @@ export function commentsOf(source: string, file?: string): [number, string][] {
   return out;
 }
 
-/** Строки исходника, известные без прогона: литералы и шаблоны без подстановок. */
+/** The source's strings known without running: literals and templates without substitutions. */
 export function stringsOf(source: string, file?: string): string[] {
   const out: string[] = [];
   walkAst(parseCode(source, file).program, (n) => {
@@ -500,7 +511,7 @@ export function stringsOf(source: string, file?: string): string[] {
   return out;
 }
 
-/** Имя вызываемого: `f(…)` и `x.f(…)` — `f`; вычисляемое — null. */
+/** The callee's name: `f(…)` and `x.f(…)` — `f`; computed — null. */
 function calleeName(call: AstNode): string | null {
   const callee = call.callee as AstNode;
   const id = callee.type === "MemberExpression" && !callee.computed ? (callee.property as AstNode) : callee;
@@ -508,8 +519,8 @@ function calleeName(call: AstNode): string | null {
 }
 
 /**
- * Значения опции `key` объектов литералом в аргументах вызова (ключ — имя или строка): `invariant(it, { registry: … })`.
- * Объект переменной или `...spec()` не вычислить без прогона.
+ * Values of option `key` in object literals among the call's arguments (the key is a name or a string):
+ * `invariant(it, { registry: … })`. An object from a variable or `...spec()` can't be computed without running.
  */
 function optionValues(call: AstNode, key: string): AstNode[] {
   const out: AstNode[] = [];
@@ -524,15 +535,16 @@ function optionValues(call: AstNode, key: string): AstNode[] {
   return out;
 }
 
-/** Значения опции `key` — строки, известные без прогона. */
+/** Values of option `key` — strings known without running. */
 function optionsOf(call: AstNode, key: string): string[] {
   return optionValues(call, key).flatMap((v) => staticString(v) ?? []);
 }
 
 /**
- * Вызовы харнесса и имя проверки по опциям вызова: у invariant — реестр (его `rule` — соглашение папки, не имя), у
- * examples — правило линтера, у deadCode — `rule` запуска (`production: true` без него — «production»), у architecture
- * имени нет — модель одна. null — имени нет или его не вычислить без прогона.
+ * Harness calls and the check name from the call's options: for invariant — the registry (its `rule` is the folder's
+ * convention, not a name), for examples — the linter rule, for deadCode — the run's `rule` (`production: true` without
+ * it — "production"), architecture has no name — there's one model. null — no name, or it can't be computed without
+ * running.
  */
 const HARNESS_NAMES: Record<string, (call: AstNode) => string | null> = {
   invariant: (n) => optionsOf(n, "registry")[0] ?? null,
@@ -541,17 +553,20 @@ const HARNESS_NAMES: Record<string, (call: AstNode) => string | null> = {
   architecture: () => null,
 };
 
-/** Вызовы харнесса: describe, в котором вызван любой из них, — сценарий стандарта (`spec-diff --scenarios`). */
+/** Harness calls: a describe in which any of them is called is a standard's scenario (`spec-diff --scenarios`). */
 export const HARNESS_CALLS: readonly string[] = Object.keys(HARNESS_NAMES);
 
-/** Проверка харнесса в исходнике: вызов, цепочка describe на его месте и реестр или правило (null — не вычислить без прогона). */
+/**
+ * A harness check in the source: the call, the describe chain at its place and the registry or rule (null — can't be
+ * computed without running).
+ */
 export interface HarnessCall {
   call: string;
   describes: string[];
   value: string | null;
 }
 
-/** Строка, известная без прогона: литерал, шаблон без подстановок или их сложение через `+`; иначе null. */
+/** A string known without running: a literal, a substitution-free template or their `+` concatenation; else null. */
 function staticString(n: AstNode | undefined): string | null {
   if (!n) return null;
   if (n.type === "StringLiteral") return n.value as string;
@@ -567,18 +582,18 @@ function staticString(n: AstNode | undefined): string | null {
   return null;
 }
 
-// describe / it / test / suite / context (+ x/f-варианты Jest, test.describe Playwright), модификаторы — только из
-// списка: test.step, test.use, test.beforeEach и т. п. — не тесты
+// describe / it / test / suite / context (+ Jest's x/f variants, Playwright's test.describe), modifiers only from the
+// list: test.step, test.use, test.beforeEach etc. aren't tests
 const KIND = /^[xf]?(describe|it|test|suite|context)$/;
 const DESCRIBE_KINDS = new Set(["describe", "suite", "context"]);
 const MODS_OK = new Set([
   "skip", "only", "todo", "each", "for", "concurrent", "sequential", "fails",
   "runIf", "skipIf", "serial", "parallel", "fixme", "fail", "shuffle",
 ]);
-// модификаторы с двумя вызовами: `it.each(таблица)(имя, …)`, `it.each\`таблица\`(имя, …)`, `it.skipIf(условие)(имя, …)`
+// modifiers with two calls: `it.each(table)(name, …)`, `it.each\`table\`(name, …)`, `it.skipIf(condition)(name, …)`
 const CURRIED = ["each", "for", "runIf", "skipIf"];
 
-/** Вид вызова теста по цепочке имён (`test.describe.serial` → describe); не тест — null. */
+/** The test call's kind by the name chain (`test.describe.serial` → describe); not a test — null. */
 function testCallee(n: unknown): { kind: string; curried: boolean } | null {
   const names: string[] = [];
   let c = n as AstNode;
@@ -595,7 +610,7 @@ function testCallee(n: unknown): { kind: string; curried: boolean } | null {
   return { kind, curried: mods.some((x) => CURRIED.includes(x)) };
 }
 
-/** Вызов теста или describe — вид и аргументы с именем первым; таблица `.each(…)` и иной вызов — null. */
+/** A test or describe call — the kind and the arguments, name first; the `.each(…)` table and any other call — null. */
 function testCall(call: AstNode): { kind: string; args: AstNode[] } | null {
   const args = call.arguments as AstNode[];
   const direct = testCallee(call.callee);
@@ -609,28 +624,28 @@ function testCall(call: AstNode): { kind: string; args: AstNode[] } | null {
 const isFunction = (n: AstNode): boolean => n.type === "ArrowFunctionExpression" || n.type === "FunctionExpression";
 
 /**
- * Проза из JSDoc исходника — то, чего не видно из названий. Ключи — JSON цепочки имён,
- * как у теста: describe — [describes…], it — [describes…, имя].
+ * Prose from the source's JSDoc — what isn't visible from the names. Keys are the JSON of the name chain, as for a
+ * test: describe — [describes…], it — [describes…, name].
  */
 export interface Docs {
-  file: string; // JSDoc в начале файла, до кода: что это за capability или стандарт
-  describes: Map<string, string>; // JSDoc вплотную перед describe
-  tests: Map<string, string>; // JSDoc вплотную перед it / test
+  file: string; // JSDoc at the start of the file, before code: what this capability or standard is
+  describes: Map<string, string>; // JSDoc right before describe
+  tests: Map<string, string>; // JSDoc right before it / test
 }
 
-/** Вызов теста или describe, чьё название не вычислить без прогона (шаблон с подстановкой, переменная). */
+/** A test or describe call whose name can't be computed without running (a template with substitution, a variable). */
 export interface Unnamed {
   line: number;
   kind: string;
-  /** Выражение названия из исходника, сокращённое. */
+  /** The name expression from the source, shortened. */
   name: string;
-  /** JSDoc вплотную перед вызовом — проза, которую не к чему привязать. */
+  /** JSDoc right before the call — prose with nothing to attach to. */
   doc: string;
 }
 
 /**
- * Текст JSDoc без скобок комментария и ведущих `*`; строки сохраняются (markdown), пустые по краям
- * и повторные сняты. Блочные теги (@see, @param…) — не проза: с первого тега всё отброшено.
+ * JSDoc text without the comment brackets and leading `*`; lines are kept (markdown), empty ones at the edges and
+ * repeated ones are removed. Block tags (@see, @param…) aren't prose: everything from the first tag on is dropped.
  */
 export function jsdocText(comment: string): string {
   const lines = comment
@@ -645,9 +660,10 @@ export function jsdocText(comment: string): string {
 }
 
 /**
- * JSDoc по месту кода: проза — последний JSDoc перед кодом, комментарии между ними не мешают. Комментарии подряд, между
- * которыми только пробелы, — одна группа; ключ — начало кода после группы. Первый JSDoc группы до всякого кода —
- * кандидат в прозу файла. `//` и блочный комментарий с одной звёздочкой — не проза.
+ * JSDoc by code position: the prose is the last JSDoc before the code, comments between them don't interfere.
+ * Consecutive comments with only whitespace between them form one group; the key is the start of the code after the
+ * group. The first JSDoc of a group before any code is a candidate for the file's prose. `//` and a block comment with
+ * a single asterisk aren't prose.
  */
 function jsdocs(source: string, ast: Parsed): { at: Map<number, string>; head: { at: number; text: string } | null } {
   const at = new Map<number, string>();
@@ -672,18 +688,19 @@ function jsdocs(source: string, ast: Parsed): { at: Map<number, string>; head: {
   return { at, head };
 }
 
-/** Тесты из исходника TS/JS. */
+/** Tests from a TS/JS source. */
 export function parseJs(file: string, source: string): Test[] {
   return scanJs(file, source).tests;
 }
 
 /**
- * Тесты и проза исходника по AST. Имя — строка, известная без прогона (литерал, шаблон без подстановок), первым
- * аргументом вызова (у .each / .for / .runIf / .skipIf — второго), аргумент типа `<…>` в любом месте; describe
- * открывает вложенность для всех своих аргументов. Название, которое не вычислить, — в `unnamed`, вызов не
- * разбирается дальше: цепочка его тестов неизвестна. JSDoc вплотную перед вызовом — его проза; первый JSDoc файла, за
- * которым идёт не вызов (обычно импорты), — проза файла. Вызовы харнесса (`HARNESS_CALLS`) — в `checks` с цепочкой
- * describe: их тесты в исходнике не названы. Не разобрать — ошибка.
+ * Tests and prose of a source by AST. The name is a string known without running (a literal, a template without
+ * substitutions), the call's first argument (for .each / .for / .runIf / .skipIf — of the second call), with a type
+ * argument `<…>` allowed anywhere; describe opens nesting for all of its arguments. A name that can't be computed goes
+ * to `unnamed`, and the call isn't parsed further: the chain of its tests is unknown. JSDoc right before a call is its
+ * prose; the file's first JSDoc followed by something other than a call (usually imports) is the file's prose. Harness
+ * calls (`HARNESS_CALLS`) go to `checks` with the describe chain: their tests aren't named in the source. Can't parse —
+ * an error.
  */
 export function scanJs(file: string, source: string): { tests: Test[]; docs: Docs; unnamed: Unnamed[]; checks: HarnessCall[] } {
   const ast = parseCode(source, file);
@@ -692,7 +709,7 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
   const unnamed: Unnamed[] = [];
   const checks: HarnessCall[] = [];
   const docs: Docs = { file: "", describes: new Map(), tests: new Map() };
-  const calls = new Set<number>(); // начала вызовов тестов: JSDoc перед ними — не проза файла
+  const calls = new Set<number>(); // starts of test calls: JSDoc before them isn't the file's prose
 
   const addDoc = (m: Map<string, string>, chain: string[], text: string | undefined): void => {
     if (!text) return;
@@ -713,7 +730,7 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
     const [first, ...rest] = call.args;
     const name = staticString(first);
     if (name === null) {
-      // `test.fail()`, `test.skip(условие, "причина")` Playwright — не тест: колбэка нет
+      // Playwright's `test.fail()`, `test.skip(condition, "reason")` aren't tests: there's no callback
       if (!first || !rest.some(isFunction)) return true;
       const text = source.slice(first.start, first.end).replace(/\s+/g, " ");
       unnamed.push({ line: first.loc.start.line, kind: call.kind, name: text.length > 60 ? text.slice(0, 59) + "…" : text, doc: doc.at.get(n.start) ?? "" });
@@ -723,7 +740,7 @@ export function scanJs(file: string, source: string): { tests: Test[]; docs: Doc
     if (DESCRIBE_KINDS.has(call.kind)) {
       addDoc(docs.describes, inner, doc.at.get(n.start));
     } else {
-      // тело — остаток аргументов вызова: переименованный тест с той же проверкой узнаётся по нему
+      // the body is the rest of the call's arguments: a renamed test with the same check is recognized by it
       const t = makeTest(file, chain, name);
       t.body = source.slice(first!.end, n.end - 1).replace(/\s+/g, "");
       out.push(t);

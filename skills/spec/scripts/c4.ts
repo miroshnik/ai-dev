@@ -1,10 +1,11 @@
 /**
- * c4 — архитектура из модели `tests/architecture/model.ts` в Markdown: три уровня C4 схемами Mermaid (C1 —
- * `C4Context`, C2 — `C4Container`, C3 — `C4Component`) и таблица модулей. Схемы строятся при каждой сборке
- * документации — рукописной, которая отстанет от кода, нет. Порядок элементов — порядок объявления в модели.
+ * c4 — architecture from the model `tests/architecture/model.ts` in Markdown: three C4 levels as Mermaid diagrams (C1 —
+ * `C4Context`, C2 — `C4Container`, C3 — `C4Component`) and a table of modules. The diagrams are built on every
+ * documentation build — there is no hand-written one to fall behind the code. Element order is the declaration order in
+ * the model.
  *
- * Метка `<!-- spec: c4-… -->` отдельной строкой в `<папка>.md` заменяется той же схемой (`embed`). Подписи — на языке
- * проекта `lang` (словарь скилла github), данные модели — как их написал проект.
+ * A mark `<!-- spec: c4-… -->` on its own line in `<folder>.md` is replaced with the same diagram (`embed`). Labels are
+ * in the project language `lang` (the github skill's dictionary), model data — as the project wrote it.
  */
 
 import locale from "../../github/scripts/locale.cjs";
@@ -13,9 +14,9 @@ import type { Container, External, Model, Module } from "./architecture.ts";
 import { mdText } from "./speclib.ts";
 
 const entries = <T>(r?: Record<string, T>): [string, T][] => Object.entries(r ?? {});
-/** Идентификатор Mermaid: латиница, цифры и `_`; префикс разводит одноимённые контейнер и модуль. */
+/** Mermaid identifier: Latin letters, digits and `_`; the prefix separates a same-named container and module. */
 const id = (prefix: string, name: string): string => prefix + name.replace(/[^A-Za-z0-9_]/g, "_");
-/** Строка Mermaid: в кавычках, без кавычек и переводов строк внутри. */
+/** A Mermaid string: in quotes, without quotes or line breaks inside. */
 const q = (s: string): string => `"${s.replace(/"/g, "'").replace(/\s+/g, " ").trim()}"`;
 const paths = (m: Module): string[] => (Array.isArray(m.path) ? m.path : [m.path]).map((p) => p.replace(/\/+$/, ""));
 const hosts = (x: { hosts?: string[] }): string => (x.hosts ?? []).join(", ");
@@ -34,7 +35,7 @@ function containerLine(name: string, c: Container, indent: string): string {
 const externalLines = (m: Model): string[] =>
   entries(m.externals).map(([n, x]) => `  System_Ext(${id("ext_", n)}, ${q(n)}, ${q(x.purpose)})`);
 
-/** «через модуль a» / «через модули a, b». */
+/** "via module a" / "via modules a, b". */
 function via(a: string[], lang: string): string {
   const n = locale.names(lang);
   return locale.fill(a.length === 1 ? n.spec.c4.viaModule : n.spec.c4.viaModules, { modules: a.join(", ") });
@@ -42,7 +43,10 @@ function via(a: string[], lang: string): string {
 
 const fence = (kind: string, title: string, body: string[]): string[] => ["```mermaid", kind, `  title ${title}`, ...body, "```"];
 
-/** C1: система и внешние системы; связь подписана модулями-адаптерами и хостами, периметр (без адаптера) — перед системой. */
+/**
+ * C1: the system and external systems; a link is labeled with the adapter modules and hosts, a perimeter one (no
+ * adapter) comes before the system.
+ */
 export function c4Context(m: Model, lang: string): string[] {
   const n = locale.names(lang);
   const link = ([name, x]: [string, External]) => {
@@ -53,8 +57,8 @@ export function c4Context(m: Model, lang: string): string[] {
 }
 
 /**
- * C2: контейнеры внутри системы (хранилище — база), связи `uses`, внешняя система — у каждого контейнера с её
- * адаптером (библиотека-адаптер — во всех своих контейнерах); у периметра связей с контейнерами нет.
+ * C2: containers inside the system (a storage — a database), `uses` links, an external system — at every container
+ * with its adapter (a library adapter — in all its containers); the perimeter has no links to containers.
  */
 export function c4Container(m: Model, lang: string): string[] {
   const n = locale.names(lang);
@@ -73,8 +77,9 @@ export function c4Container(m: Model, lang: string): string[] {
 }
 
 /**
- * C3: модули по контейнерам, библиотека — вне их границ (её контейнеры видны по зависящим модулям), зависимости
- * `dependsOn`; хранилище — у модуля, чьи пакеты — его клиенты; внешняя система — у каждого модуля-адаптера.
+ * C3: modules by container, a library — outside their boundaries (its containers are seen through the modules that
+ * depend on it), `dependsOn` dependencies; a storage — at the module whose packages are its clients; an external
+ * system — at every adapter module.
  */
 export function c4Component(m: Model, lang: string): string[] {
   const n = locale.names(lang);
@@ -112,7 +117,7 @@ export function c4Component(m: Model, lang: string): string[] {
   return fence("C4Component", n.spec.c4.components, body);
 }
 
-/** Таблица модулей: назначение, каталог, публичный API, от каких модулей зависит, какие пакеты импортирует. */
+/** Module table: purpose, directory, public API, which modules it depends on, which packages it imports. */
 export function modulesTable(m: Model, lang: string): string[] {
   const cell = (s: string) => mdText(s).replace(/\|/g, "\\|");
   const code = (xs: string[]) => (xs.length ? xs.map((x) => "`" + x + "`").join(", ") : "—");
@@ -126,7 +131,10 @@ export function modulesTable(m: Model, lang: string): string[] {
   ];
 }
 
-/** Страница архитектуры с заголовка уровня level; уровень без данных в модели (нет внешних систем, контейнеров) не рисуется. */
+/**
+ * Architecture page starting from a heading of level `level`; a level with no data in the model (no external systems,
+ * containers) isn't drawn.
+ */
 export function architecturePage(m: Model, level: number, lang: string): string[] {
   const n = locale.names(lang);
   const h = (l: number, t: string) => "#".repeat(Math.min(l, 6)) + " " + t;
@@ -137,7 +145,7 @@ export function architecturePage(m: Model, level: number, lang: string): string[
   return out;
 }
 
-/** Строка оглавления: сколько в модели модулей, контейнеров и внешних систем. */
+/** Table of contents line: how many modules, containers and external systems the model has. */
 export function modelSummary(m: Model, lang: string): string {
   const n = locale.names(lang);
   const parts = [locale.count(lang, n.spec.c4.moduleCount, Object.keys(m.modules).length)];
@@ -158,13 +166,13 @@ export const MARKS: Record<string, (m: Model, lang: string) => string[]> = {
 const MARK_LINE = /^[ \t]*<!--\s*spec:\s*([\w-]+)\s*-->[ \t]*$/gm;
 
 /**
- * Метки `<!-- spec: <имя> -->` отдельной строкой → схема из модели на языке `lang`. Метка без модели или неизвестная
- * остаётся (HTML-комментарий на странице не виден) и возвращается в `bad` — spec-doc её называет.
+ * Marks `<!-- spec: <name> -->` on their own line → a diagram from the model in language `lang`. A mark without a model
+ * or an unknown one stays (an HTML comment isn't visible on the page) and is returned in `bad` — spec-doc names it.
  */
 export function embed(text: string, model: Model | null, lang: string): { text: string; bad: { mark: string; missing: "model" | "mark" }[] } {
   const bad: { mark: string; missing: "model" | "mark" }[] = [];
   const out = text.replace(MARK_LINE, (line, name: string) => {
-    // схема сценария — не из модели: её ставит spec-doc по трассе теста
+    // a scenario diagram doesn't come from the model: spec-doc puts it in from the test's trace
     if (name.startsWith("sequence-")) return line;
     const render = Object.hasOwn(MARKS, name) ? MARKS[name] : undefined;
     if (!render) bad.push({ mark: name, missing: "mark" });

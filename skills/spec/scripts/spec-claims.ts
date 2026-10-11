@@ -1,18 +1,21 @@
 #!/usr/bin/env bun
 /**
- * spec-claims — сверка реестра точек входа с журналом вызовов: каждая точка входа (маршрут, страница, job, команда)
- * вызывается хотя бы одним тестом capability. Журнал пишет `journal` харнесса во время прогона; журналы шардов и
- * раннеров складываются из каталога и его подкаталогов (каталог на раннер). Вызов не из `tests/capabilities/` не
- * засчитывается: заявленное поведение — это capability, а не стандарт или хелпер. id в реестре не повторяются (повтор
- * спрятал бы непокрытую точку за покрытой), каждый id журнала есть в реестре (иначе формат разошёлся или реестр неполон).
+ * spec-claims — checks the entry-point registry against the call log: every entry point (route, page, job, command) is
+ * called by at least one capability test. The log is written by the harness's `journal` during the run; logs of shards
+ * and runners are gathered from the directory and its subdirectories (a directory per runner). A call not from
+ * `tests/capabilities/` doesn't count: claimed behavior is a capability, not a standard or a helper. Ids in the
+ * registry don't repeat (a repeat would hide an uncovered entry point behind a covered one), every id of the log is in
+ * the registry (otherwise the format diverged or the registry is incomplete).
  *
- *   bun spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <каталог>]
+ *   bun spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions <directory>]
  *                      [--standard tests/standards/entry-points] [--report .spec-claims.xml]
  *
- * Реестр — JSON-массив строк или модуль проекта (default — массив или функция, которая его возвращает): точки входа
- * из кода, не рукописный список. Исключения — каталог `exceptions/` папки стандарта, файл на исключение
- * (`{ item, issue, reason }`): точка без теста с задачей, пока тест не появился; появился — «убери исключение». Отчёт — JUnit в папке стандарта (`spec-doc` кладёт его в спеку с описанием
- * `<папка>.md` стандарта). Коды: 0 — всё заявлено, 1 — есть незаявленные или ошибки исключений, 2 — ошибка вызова.
+ * The registry is a JSON array of strings or a project module (default — an array or a function that returns it): entry
+ * points from the code, not a hand-written list. Exceptions — the standard folder's `exceptions/` directory, a file per
+ * exception (`{ item, issue, reason }`): an entry point without a test, with a task, until a test appears; once it
+ * appears — "remove the exception". The report is JUnit in the standard's folder (`spec-doc` puts it into the spec with
+ * the description from the standard's `<folder>.md`). Codes: 0 — everything is claimed, 1 — there are unclaimed ones or
+ * exception errors, 2 — a call error.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -33,7 +36,7 @@ interface Case {
   failure?: string;
 }
 
-/** JSON-файл или модуль проекта: default — значение или функция, которая его возвращает. */
+/** A JSON file or a project module: default — a value or a function that returns it. */
 async function load(file: string): Promise<unknown> {
   if (file.endsWith(".json")) return JSON.parse(readFileSync(file, "utf8"));
   const mod = (await import(pathToFileURL(file).href)) as { default?: unknown };
@@ -41,7 +44,7 @@ async function load(file: string): Promise<unknown> {
   return typeof v === "function" ? await (v as () => unknown)() : v;
 }
 
-/** Точка входа → файлы тестов, которые её вызывали (все журналы каталога и подкаталогов — каталог на раннер). */
+/** Entry point → test files that called it (all logs of the directory and subdirectories — a directory per runner). */
 function readJournal(dir: string): Map<string, Set<string>> {
   const calls = new Map<string, Set<string>>();
   const files = readdirSync(dir, { recursive: true, encoding: "utf8" });
@@ -57,7 +60,7 @@ function readJournal(dir: string): Map<string, Set<string>> {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** JUnit как у `bun test`: suite файла, вложенный suite — describe, testcase с file. */
+/** JUnit as in `bun test`: a suite per file, a nested suite — describe, testcase with file. */
 function junit(file: string, describe: string, cases: Case[]): string {
   const f = esc(file);
   const body = cases
@@ -115,7 +118,7 @@ export async function main(argv: string[]): Promise<number> {
     entries = [...count.keys()].sort();
     repeated = entries.filter((id) => count.get(id)! > 1).map((id) => `${id} ×${count.get(id)}`);
     if (v.exceptions) {
-      // файл на исключение: прежний массив в одном файле — переносится командой, а не читается вторым путём
+      // a file per exception: the old array in one file is migrated by a command, not read by a second path
       if (existsSync(v.exceptions) && !statSync(v.exceptions).isDirectory()) {
         throw new Error(`--exceptions is an exceptions/ directory (a file per exception), not the file ${v.exceptions} — move it with spec-exceptions`);
       }
@@ -130,7 +133,7 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
 
-  // названия тестов сверки — на языке проекта, как названия харнесса: они попадают в спеку
+  // check test names are in the project language, like the harness's names: they go into the spec
   const N = locale.names(locale.projectLanguage());
   const claimed = (id: string) => [...(calls.get(id) ?? [])].some((t) => t.startsWith(CAPABILITIES));
   const excepted = new Map(exceptions.map((e) => [e.item, e]));
