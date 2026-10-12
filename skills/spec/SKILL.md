@@ -592,7 +592,8 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
    its aliases, environment and plugins, which takes `tests/*/*/<package>/`;
    tests directly in the decision folder are cross-cutting, the root runner
    takes them. Run from the repository root: the harness (`exceptionsIn`,
-   `.spec-meta/`, the `spec-claims` journal) counts paths from cwd. The
+   `.spec-meta/`, the `spec-claims` journal) counts paths from cwd; `fileOf` —
+   a path from the project root, without a correction for cwd. The
    packages' reports go into `spec:doc` as one list: there is one decision
    page, the main file is at the folder root or in a package subfolder.
 
