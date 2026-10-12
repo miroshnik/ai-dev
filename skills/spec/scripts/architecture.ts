@@ -463,7 +463,8 @@ export function architecture(
       name: (p) => locale.fill(N.spec.architecture.workspaceName, { path: p }),
       key: (p) => p,
       // "outside scope" and a package exception — a mark in its package.json: a deleted package takes its mark with it
-      fileOf: (p) => path.join(opts.root, p, "package.json"),
+      // from the project root, not the runner's cwd: absolute, whatever `root` is given as
+      fileOf: (p) => path.resolve(opts.root, p, "package.json"),
       check: (p) => {
         if (!inRoots(p)) throw new Error(`${p}: a workspace package with code outside the model's roots — add it to roots in tests/architecture/model.ts`);
       },

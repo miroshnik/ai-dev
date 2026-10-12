@@ -315,6 +315,7 @@
       "violator": "нарушитель не проходит{tag}: {name}",
       "oneRecord": "у элемента одна запись — отметка или exceptions/ и outside{tag}",
       "markOneElement": "отметка — в файле одного элемента{tag}",
+      "elementFiles": "файлы элементов из fileOf есть на диске{tag}",
       "outside": "вне охвата{tag}: {item}",
       "exception": "исключение{tag}: {item} (#{issue})",
       "exceptionFiles": "исключения — файлом на элемент в exceptions/, а не в exceptions.ts",
