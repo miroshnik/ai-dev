@@ -56,7 +56,9 @@ export interface Invariant<T> {
   /**
    * The element's file from the project root (route, script, migration): "outside scope" and the element's exception
    * are a mark in it (`marksIn`), not a record in the test. Element removed — the mark is gone too; two PRs don't edit
-   * a shared file. `null` — no file of its own (a schema row, a router entry): `outside` and `exceptions/`.
+   * a shared file. `null` — no file of its own (a schema row, a router entry): `outside` and `exceptions/`. The root is
+   * the directory with the `tests/` tree the decision folder is in, whatever the runner's cwd (a package directory in a
+   * monorepo) — no correction for cwd; an absolute path is taken as is; a path with no file — a failing test.
    */
   fileOf?: (item: T) => string | null | undefined;
   /**
@@ -417,7 +419,8 @@ const dropHint = (e: Exception): string => (e.line ? `remove the mark in ${e.fil
 /**
  * The folder's marks in element files (`fileOf`): "outside scope" and exceptions by element key; marks with another
  * invariant's `rule` go to the rule check. A mark in a file of two elements is taken by neither — a failing test: which
- * one it belongs to is unknown.
+ * one it belongs to is unknown. `fileOf` is read from the project root the decision folder is counted from, not from
+ * the runner's cwd; a path with no file is a failing test, not a skip: the mark is there, the harness wouldn't see it.
  */
 function elementMarks<T>(it: It, spec: Invariant<T>, key: (item: T) => string, tag: string): { outside: Outside[]; exceptions: Exception[]; skipped: Mark[] } {
   const out = { outside: [] as Outside[], exceptions: [] as Exception[], skipped: [] as Mark[] };
@@ -430,30 +433,40 @@ function elementMarks<T>(it: It, spec: Invariant<T>, key: (item: T) => string, t
     if (f) byFile.set(f, [...(byFile.get(f) ?? []), key(item)]);
   }
   const shared: string[] = [];
+  const missing: string[] = [];
   for (const [file, keys] of byFile) {
     let text: string;
     try {
-      text = readFileSync(path.resolve(process.cwd(), file), "utf8");
-    } catch {
-      continue; // no file — no marks
+      text = readFileSync(path.resolve(folder.base, file), "utf8");
+    } catch (e) {
+      const why = (e as NodeJS.ErrnoException).code === "ENOENT" ? "no such file: fileOf is a path from the project root (the directory with tests/), without a correction for the runner's cwd" : (e as Error).message;
+      missing.push(`${keys.join(", ")}: fileOf ${file} — ${why}`);
+      continue;
     }
     if (!text.includes("spec-")) continue;
-    const mine = marksIn(file, text).filter((m) => m.decision === decision);
+    // an absolute path (built from a root) is shown from the repository root, like other hints
+    const shown = path.isAbsolute(file) ? shownPath(file) : file;
+    const mine = marksIn(shown, text).filter((m) => m.decision === decision);
     out.skipped.push(...mine.filter((m) => m.rule && m.rule !== spec.rule));
     const marks = mine.filter((m) => !m.rule || m.rule === spec.rule);
     if (!marks.length) continue;
     if (keys.length > 1) {
-      shared.push(`${file}:${marks[0]!.line}: the mark is read by elements ${keys.join(", ")} — which one it belongs to is unknown: an element without its own file goes to outside and exceptions/`);
+      shared.push(`${shown}:${marks[0]!.line}: the mark is read by elements ${keys.join(", ")} — which one it belongs to is unknown: an element without its own file goes to outside and exceptions/`);
       continue;
     }
     for (const m of marks) {
-      if (m.kind === "outside") out.outside.push({ item: keys[0]!, reason: m.reason, file, line: m.line });
-      else out.exceptions.push({ item: keys[0]!, issue: m.issue ?? 0, reason: m.reason, ...(m.rule ? { rule: m.rule } : {}), file, line: m.line });
+      if (m.kind === "outside") out.outside.push({ item: keys[0]!, reason: m.reason, file: shown, line: m.line });
+      else out.exceptions.push({ item: keys[0]!, issue: m.issue ?? 0, reason: m.reason, ...(m.rule ? { rule: m.rule } : {}), file: shown, line: m.line });
     }
   }
   if (shared.length) {
     it(locale.fill(localeNames().spec.harness.markOneElement, { tag }), () => {
       throw new Error(shared.join("\n"));
+    });
+  }
+  if (missing.length) {
+    it(locale.fill(localeNames().spec.harness.elementFiles, { tag }), () => {
+      throw new Error(missing.join("\n"));
     });
   }
   return out;

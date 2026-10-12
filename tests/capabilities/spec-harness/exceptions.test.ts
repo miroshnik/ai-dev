@@ -320,13 +320,15 @@ describe("Исключение с rule — к правилу инвариант�
 });
 
 /**
- * Тест папки audit над элементами со своим файлом (`fileOf` — `src/<элемент>.ts`): инвариант на каждое правило,
- * соглашение — вызов `audit(` в файле элемента.
+ * Тест папки audit над элементами со своим файлом (`fileOf` — `src/<элемент>.ts` от корня проекта): инвариант на каждое
+ * правило, соглашение — вызов `audit(` в файле элемента; файл читается от корня, не от cwd раннера.
  */
 const markedTest = ({ rules = [undefined], items = ["createInvoice", "importLegacy", "login"], fileOf = '(m) => "src/" + m + ".ts"' }: { rules?: (string | undefined)[]; items?: string[]; fileOf?: string } = {}) => `import { it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { exceptionsIn, invariant } from ${JSON.stringify(path.join(SCRIPTS, "harness.ts"))};
 const exceptions = exceptionsIn();
+const ROOT = path.resolve(import.meta.dir, "../../..");
 const fileOf = ${fileOf};
 ${rules
   .map(
@@ -336,7 +338,7 @@ ${rules
   name: (m) => m + " пишет аудит${rule ? ` (${rule})` : ""}",
   key: (m) => m,
   fileOf,
-  check: (m) => { if (!readFileSync(fileOf(m), "utf8").includes("audit(")) throw new Error(m + " не пишет аудит"); },
+  check: (m) => { if (!readFileSync(path.join(ROOT, fileOf(m)), "utf8").includes("audit(")) throw new Error(m + " не пишет аудит"); },
   violator: { name: "без аудита", item: "fake" },
   exceptions,
 });`,
@@ -373,6 +375,38 @@ describe("Отметка в файле элемента — «вне охват�
     expect(r["createInvoice пишет аудит"]).toBe("✓");
     expect(metaOf("вне охвата: login")).toMatchObject({ file: `${AUDIT}/audit.test.ts`, reason: "вход — пользователя ещё нет, аудиту некого записать" });
     expect(metaOf("исключение: importLegacy (#12)")).toMatchObject({ issue: 12, reason: "импорт старых данных — аудит в #12" });
+  });
+
+  // раннер пакета монорепо идёт из каталога пакета (turbo, pnpm -r): fileOf — путь от корня проекта, без поправки на cwd
+  it("раннер в каталоге пакета видит отметку в файле элемента по пути fileOf от корня проекта", () => {
+    mkdirSync(path.join(dir, ".git"));
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest(),
+      "src/createInvoice.ts": "export const createInvoice = () => audit();\n",
+      "src/importLegacy.ts": "// spec-exception(audit) #12: импорт старых данных — аудит в #12\nexport const importLegacy = () => load();\n",
+      "src/login.ts": "// spec-outside(audit): вход — пользователя ещё нет, аудиту некого записать\nexport const login = () => check();\n",
+      "apps/web/package.json": "{}\n",
+    });
+    const r = bunTestIn(path.join(dir, "apps/web"), `../../${AUDIT}/audit.test.ts`);
+    expect(r["вне охвата: login"]).toBe("✓");
+    expect(r["login пишет аудит"]).toBeUndefined();
+    expect(r["исключение: importLegacy (#12)"]).toBe("✓");
+    expect(r["importLegacy пишет аудит"]).toBeUndefined();
+    expect(r["createInvoice пишет аудит"]).toBe("✓");
+  });
+
+  // молчаливый пропуск прятал причину: отметка в файле есть, а харнесс её «не видит» — красным был тест элемента
+  it("путь fileOf, которого нет на диске, — красный тест с путём, а не молчаливый пропуск", () => {
+    writeTree(dir, {
+      [`${AUDIT}/audit.test.ts`]: markedTest({ items: ["createInvoice", "login"], fileOf: '(m) => (m === "login" ? "src/auth/login.ts" : "src/" + m + ".ts")' }),
+      "src/createInvoice.ts": "export const createInvoice = () => audit();\n",
+      "src/login.ts": "// spec-outside(audit): вход — пользователя ещё нет, аудиту некого записать\nexport const login = () => check();\n",
+    });
+    const r = bunTest();
+    expect(r["файлы элементов из fileOf есть на диске"]).toBe(
+      `✗ login: fileOf src/auth/login.ts — no such file: fileOf is a path from the project root (the directory with tests/), without a correction for the runner's cwd`,
+    );
+    expect(r["createInvoice пишет аудит"]).toBe("✓");
   });
 
   it("исключение отметкой в файле элемента без задачи или без причины — красный тест с путём файла", () => {
@@ -451,10 +485,14 @@ describe("Отметка в файле элемента — «вне охват�
   });
 
   it("отметка spec-outside в package.json пакета workspace выводит его из охвата с причиной на странице", () => {
+    mkdirSync(path.join(dir, ".git"));
     writeTree(dir, {
+      // root — корень проекта от cwd раннера: из каталога пакета это ../..
       "tests/architecture/modules/modules.test.ts": `import { it } from "bun:test";
+import path from "node:path";
 import { architecture } from ${JSON.stringify(path.join(SCRIPTS, "architecture.ts"))};
-architecture(it, { root: ".", model: { roots: ["apps/web/src"], modules: { web: { path: "apps/web/src", purpose: "сайт" } } } });
+const root = path.relative(process.cwd(), path.resolve(import.meta.dir, "../../..")) || ".";
+architecture(it, { root, model: { roots: ["apps/web/src"], modules: { web: { path: "apps/web/src", purpose: "сайт" } } } });
 `,
       "package.json": JSON.stringify({ name: "mono", workspaces: ["apps/*", "packages/*"] }),
       "apps/web/package.json": "{}",
@@ -473,6 +511,10 @@ architecture(it, { root: ".", model: { roots: ["apps/web/src"], modules: { web: 
     expect(r["исключение: packages/test-helpers (#9)"]).toBe("✓");
     expect(r["пакет workspace packages/http-bridge — в корнях кода"]).toStartWith("✗ packages/http-bridge: a workspace package with code outside the model's roots");
     expect(r["пакет workspace apps/web — в корнях кода"]).toBe("✓");
+    // раннер пакета: root от cwd — ../.., а отметки в package.json читаются всё так же
+    const inPackage = bunTestIn(path.join(dir, "apps/web"), "../../tests/architecture/modules/modules.test.ts");
+    expect(inPackage["вне охвата: packages/eslint-config"]).toBe("✓");
+    expect(inPackage["исключение: packages/test-helpers (#9)"]).toBe("✓");
   });
 
   it("отметка в файле двух элементов — красный тест: к какому элементу, неизвестно", () => {

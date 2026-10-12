@@ -117,6 +117,7 @@ declare namespace locale {
       violator: string;
       oneRecord: string;
       markOneElement: string;
+      elementFiles: string;
       outside: string;
       exception: string;
       exceptionFiles: string;

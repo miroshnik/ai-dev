@@ -315,6 +315,7 @@
       "violator": "violator does not pass{tag}: {name}",
       "oneRecord": "one record per element{tag}",
       "markOneElement": "a mark belongs in one element's file{tag}",
+      "elementFiles": "element files from fileOf exist{tag}",
       "outside": "outside scope{tag}: {item}",
       "exception": "exception{tag}: {item} (#{issue})",
       "exceptionFiles": "exceptions are one file per element in exceptions/, not exceptions.ts",
