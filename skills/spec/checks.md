@@ -173,7 +173,9 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
   directory; whatever it didn't rewrite — as a `!` line, exit code 1.
 - *Mark on the element* — outside scope and an exception for an element with its
   own file (a route, a script, a migration): in `invariant` — `fileOf: (item) =>
-  path from the root`, the record is a comment in that file, like
+  path from the root` (the project root — the directory with `tests/`, without
+  a correction for the runner's cwd; a path with no file — red
+  «element files from fileOf exist»), the record is a comment in that file, like
   `eslint-disable` for lint:
 
   ```ts

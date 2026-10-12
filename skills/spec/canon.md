@@ -45,9 +45,9 @@ no decision claims is dead and is deleted.
   name, then the other files. `<folder>.md` and `exceptions/` — one per
   folder, at its root. Runners are launched from the repository root (Vitest
   or Jest `projects`, `-c` with the package's config): the harness counts
-  element paths from cwd; it reads `exceptions/` relative to the test file,
-  and the exception path in the hint is from the repository root, even with
-  the runner in the package directory.
+  element paths from cwd; it reads `exceptions/` relative to the test file
+  and `fileOf` from the project root, and the exception path in the hint is
+  from the repository root, even with the runner in the package directory.
 - **Three roots of `tests/` — by the reader's question;** the tool kind isn't
   encoded in the structure:
   ```
