@@ -5462,6 +5462,20 @@
   "describes": [
    "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
   ],
+  "name": "путь fileOf, которого нет на диске, — красный тест с путём, а не молчаливый пропуск"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
+  "name": "раннер в каталоге пакета видит отметку в файле элемента по пути fileOf от корня проекта"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/exceptions.test.ts",
+  "describes": [
+   "Отметка в файле элемента — «вне охвата» и исключение: удалили элемент — ушла и отметка"
+  ],
   "name": "элемент с отметкой и записью в exceptions/ — красный тест «оставь одно»"
  },
  {
@@ -8660,6 +8674,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название spec.harness.elementFiles скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название spec.harness.env.declared скрипты читают из словаря"
  },
  {
@@ -9683,6 +9704,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «directory <dir> is in module <module>» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «element files from fileOf exist» из skills/spec/checks.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",

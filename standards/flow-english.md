@@ -111,7 +111,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 165 тестов</summary>
+<details><summary>✅ 166 тестов</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -203,6 +203,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «deployable unit \<id> is container \<c>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «deploy» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «directory \<dir> is in module \<module>» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «element files from fileOf exist» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «entry points» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «entry-point ids do not repeat in the registry» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «epic» из skills/est/SKILL.md печатает или пишет скрипт
@@ -287,7 +288,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 
 ## Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи
 
-<details><summary>✅ 286 тестов</summary>
+<details><summary>✅ 287 тестов</summary>
 
 - ✅ у каждого языка те же ключи, что у en, и ни одного пустого названия
 - ✅ в en.json нет кириллицы
@@ -525,6 +526,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ название spec.harness.bad скрипты читают из словаря
 - ✅ название spec.harness.badExample скрипты читают из словаря
 - ✅ название spec.harness.codeFiles скрипты читают из словаря
+- ✅ название spec.harness.elementFiles скрипты читают из словаря
 - ✅ название spec.harness.env.declared скрипты читают из словаря
 - ✅ название spec.harness.env.declaredName скрипты читают из словаря
 - ✅ название spec.harness.env.inCode скрипты читают из словаря
