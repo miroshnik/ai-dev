@@ -417,7 +417,7 @@ function installRules(src, root, linkMode) {
  * The install's `.agents/ai-dev.json`; missing or broken — empty.
  * @param {string} root
  * @returns {{ source?: string, sha?: string, tag?: string, clone?: string, skills?: string[], auto?: boolean,
- *   language?: string }}
+ *   language?: string, env?: unknown }}
  */
 function readManifest(root) {
   try {
@@ -433,8 +433,10 @@ function readManifest(root) {
  * has are removed. `.agents/ai-dev.json` holds the source SHA, the release tag and the installed skills; a dry run
  * doesn't compare the SHA and the tag: the install is up to date if what it installs matches (a release that changes
  * only the installer doesn't touch projects). auto and language — the project settings "a task entirely without
- * asking" and the language the agent works in, always written; the machine doesn't have them (undefined). A dry run
- * doesn't compare them either: editing a field by hand doesn't make the install "behind".
+ * asking" and the language the agent works in, always written; the machine doesn't have them (undefined). `env` —
+ * the project's task stack settings (the task-env skill: HTTP services and their ports): the project writes it, the
+ * install carries it over. A dry run doesn't compare them either: editing a field by hand doesn't make the install
+ * "behind".
  * The order survives a run cut off midway (an agent's sandbox refuses writes to `.claude/skills`): skills ai-dev no
  * longer has go while the old manifest still lists them, and the new manifest is written before the copies — a repeat
  * run takes them for ai-dev's and finishes the install instead of leaving them as someone else's.
@@ -446,6 +448,7 @@ function installSkills(src, root, linkMode, claude, auto, language) {
   const manifestPath = path.join(root, ".agents/ai-dev.json");
   const before = readManifest(root).skills ?? [];
   const names = sourceSkills(src);
+  const env = readManifest(root).env;
   const installed = names.filter((name) => {
     const dst = path.join(root, ".agents/skills", name);
     const st = lstat(dst);
@@ -469,7 +472,7 @@ function installSkills(src, root, linkMode, claude, auto, language) {
     if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
   } else {
     const sha = sourceSha(src);
-    const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }), ...(language === undefined ? {} : { language }) };
+    const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }), ...(language === undefined ? {} : { language }), ...(env === undefined ? {} : { env }) };
     mkdirSync(path.dirname(manifestPath), { recursive: true });
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   }
@@ -885,13 +888,15 @@ const modeLines = (root) => [`  tasks: ${autoOf(root) ? "entirely by itself" : "
 const CLONE_NOTE = "an ai-dev clone: the flow isn't installed into it — the canon is at its root";
 
 /**
- * An ai-dev clone: of the install it gets only the mode and the language, a manifest of two fields.
+ * An ai-dev clone: of the install it gets only the mode and the language, a manifest of two fields; the task stack
+ * settings (`env`), if the clone has them, are carried over as in a project.
  * @param {string} root @param {boolean} auto @param {string} language
  */
 function installClone(root, auto, language) {
   const file = path.join(root, ".agents/ai-dev.json");
+  const env = readManifest(root).env;
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ auto, language }, null, 2) + "\n");
+  writeFileSync(file, JSON.stringify({ auto, language, ...(env === undefined ? {} : { env }) }, null, 2) + "\n");
   note(`.agents/ai-dev.json — auto: ${auto}, language: ${language}; ${CLONE_NOTE}`);
 }
 
