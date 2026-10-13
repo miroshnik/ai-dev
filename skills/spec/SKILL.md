@@ -1,7 +1,7 @@
 ---
 name: spec
 description: Specification from tests — the spec canon (canon.md), deterministic scripts and a checks harness. spec-doc builds docs/spec from runner reports (Vitest/Jest, Playwright, bun JUnit) along tests/capabilities, tests/architecture and tests/standards, with prose from JSDoc; spec-diff prints removed, changed and added test names for the PR body; spec-publish publishes docs/spec to the spec branch after a merge, spec-run finds the green run for it; spec-claims checks entry points against the call log; spec-break proves a check can fail; spec-exceptions moves exceptions.ts into exceptions/; harness.ts — mechanical checks (registry + invariant). When — before creating a PR; in CI on a PR and after a merge; reading a project's spec; wiring spec into a project's CI; a convention must hold for every item, not an example; proving a test catches a breakage; asked what the system does or which requirements a PR removes — even if "specification" wasn't said.
-allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(node *skills/spec/scripts/spec-doc.ts *) Bash(node *skills/spec/scripts/spec-diff.ts *) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(node *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(node *skills/spec/scripts/spec-break.ts *) Bash(bun *skills/spec/scripts/spec-exceptions.ts *) Bash(node *skills/spec/scripts/spec-exceptions.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
+allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(bun *skills/spec/scripts/spec-exceptions.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
 # spec — documentation from test names, spec diff in the PR
@@ -37,9 +37,10 @@ per-repository configuration:
   registers ordinary runner tests and gets into the spec (section "Checks").
 
 Running: `bun <skill dir>/scripts/spec-doc.ts …` — Bun runs TypeScript without
-a build, there are no dependencies (the scripts use only the `node:` API and a
-TypeScript parser kept as a file in the skill — `scripts/vendor/` — and also
-run under Node ≥ 22.18). The skill directory is the one holding this file
+a build, there are no dependencies (a TypeScript parser is kept as a file in
+the skill — `scripts/vendor/`). The modules a project's tests and config import
+(`harness.ts`, `architecture.ts`, `eslint-config.ts`) load under the project's
+own runner on Node — section "Wiring into a repository". The skill directory is the one holding this file
 (`${CLAUDE_SKILL_DIR}` in Claude Code, `~/.claude/skills/spec`,
 `~/.agents/skills/spec`, the project's `.agents/skills/spec` or an ai-dev
 clone). The repository root is `git toplevel` (or `--root DIR`); the tree is
@@ -57,7 +58,7 @@ skill directory: that is the version pinned for CI.
 | Read a project's spec | `git fetch origin spec && git show origin/spec:README.md` (pages — `capabilities/<name>.md`…) or the tests themselves |
 | Asked for documentation, "what does the system do" | `spec-doc <report> --stdout` — one document, files aren't touched |
 | Asked which requirements a PR removed | `spec-diff` — the «Removed» list comes first |
-| A project moves to a test spec | section "Wiring into a repository": installing the flow, scripts under Node, workflow; migrating the old spec's requirements — `migration.md` (outcomes, removal categories, "the spec fell behind the code") |
+| A project moves to a test spec | section "Wiring into a repository": installing the flow, scripts under Bun, workflow; migrating the old spec's requirements — `migration.md` (outcomes, removal categories, "the spec fell behind the code") |
 | A convention for all items (mutations, routes, files) | `invariant` in `tests/standards/<name>/<name>.test.ts` — section "Checks" |
 | Prove that a check can fail (migrating an old spec, a "covered" review) | `spec-break` — a breakage aimed at the check, one per run |
 | After running all tests and shards | `spec-claims` — every entry point is called by a capability test; its report goes to `spec-doc` together with the runner reports |
@@ -531,8 +532,13 @@ document) when switching — an outcome for each, check by breaking, what is
 removed without a test — `migration.md` next to this file.
 
 The scripts are taken from the skill's copy in the project itself and run
-under Node — a Node project doesn't need Bun. The ai-dev flow install puts the
-copy there, and it is committed: the agent before a PR and CI call the same
+under Bun — the flow's only runtime, a Node project included (in CI — the
+`oven-sh/setup-bun@v2` step, `ci.md`). The modules the project's tests and
+config import — `harness.ts`, `architecture.ts`, `eslint-config.ts` — load
+under the project's own runner (Vitest, Jest, Playwright, ESLint on Node), not
+Bun: only `node:` APIs and erasable TypeScript, no `import.meta` and no
+top-level `await` (Playwright and Jest load them as CommonJS). The ai-dev flow
+install puts the copy there, and it is committed: the agent before a PR and CI call the same
 project `spec:doc` / `spec:diff` over the same files, so what the agent sees
 locally matches CI. Why a copy and not a submodule, a checkout in the workflow or a package —
 `reference.md`.
@@ -540,7 +546,7 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
 1. **Install** at the project root, the result (`.agents/`, `.claude/`, the
    block in `AGENTS.md`) goes into a commit:
    ```bash
-   npx -y github:miroshnik/ai-dev install
+   bunx github:miroshnik/ai-dev install
    ```
    - Exclude `.agents/` and `.claude/` from the project's linters and
      formatters (`ignores` in ESLint, `.prettierignore`, `include` in
@@ -548,14 +554,13 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
    - Update — the same command in a separate PR, then the reports and
      `spec:doc --strict`; if the format changed — CI publishes the new one
      after the merge.
-2. **Scripts** in `package.json` — via `node`: Node ≥ 22.18 strips types
-   itself, the skill's `scripts/package.json` sets ESM for any project `type`.
-   Reports — those the project has:
+2. **Scripts** in `package.json` — via `bun`: Bun runs TypeScript itself,
+   for any project `type`. Reports — those the project has:
    ```json
-   "spec:doc": "node .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
-   "spec:diff": "node .agents/skills/spec/scripts/spec-diff.ts",
-   "spec:publish": "node .agents/skills/spec/scripts/spec-publish.ts",
-   "spec:claims": "node .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
+   "spec:doc": "bun .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
+   "spec:diff": "bun .agents/skills/spec/scripts/spec-diff.ts",
+   "spec:publish": "bun .agents/skills/spec/scripts/spec-publish.ts",
+   "spec:claims": "bun .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
    Fast checks — the `test:spec` script of the project's runner, standards and
    architecture (`"test:spec": "vitest run tests/standards tests/architecture"`):
@@ -580,7 +585,7 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
    (`contents: write`), and it doesn't install the project's dependencies. A
    test failed — `spec` doesn't run: there is no point building documentation
    from a red run. `spec-diff` is its own light job: it needs git history and
-   Node, not tests, so the section is in the summary even with red tests. A
+   Bun, not tests, so the section is in the summary even with red tests. A
    fragment for pnpm (in `package.json` — `packageManager`), Vitest in 3
    shards, Playwright in 2; concurrency per `docs/ci-concurrency.md` — the
    workflow fragment is in `ci.md` next to this file.
