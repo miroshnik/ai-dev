@@ -79,12 +79,17 @@ The task's app lives at `http://web.<N>.<project>.localhost`, not at
 `localhost:3000`: everything that builds absolute links follows the address.
 
 - **The app's base URL** (`APP_URL`, `NEXTAUTH_URL` / `AUTH_URL`, `ORIGIN`) —
-  from the request: the proxy passes the client's `Host` on (Traefik's
-  `passHostHeader` is on by default), and the app builds links by it — Auth.js
-  behind a proxy with `AUTH_TRUST_HOST=true` and without `AUTH_URL`. A value
-  written in the compose file is the same for every task, and a public
-  variable baked in at build (`NEXT_PUBLIC_*_URL`, `VITE_*_URL`) is fixed by
-  the build: the task's address isn't in either.
+  from a variable, not only from the request: `task-env up` and `e2e` give
+  Compose the stack's addresses in `TASK_ENV_<SERVICE>_URL`, and the compose
+  file passes them on with a default for CI —
+  `APP_URL: ${TASK_ENV_WEB_URL:-http://localhost:3000}` (the `task-env`
+  skill, section "The task's stack"); a public variable baked in at build
+  (`NEXT_PUBLIC_*_URL`, `VITE_*_URL`) — into `build.args` the same way. A
+  framework with the address in its settings doesn't read the request; one
+  that does may take it from there: the proxy passes the client's `Host` on
+  (Traefik's `passHostHeader` is on by default) — Auth.js behind a proxy with
+  `AUTH_TRUST_HOST=true` and without `AUTH_URL`. A value written in the
+  compose file as is — the same for every task.
 - **Links in emails** — the stack's own mail catcher (Mailpit as a service of
   the compose file) shows them with the task's address.
 - **Callbacks of external services** — the next section.
