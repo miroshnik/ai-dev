@@ -88,15 +88,24 @@ const RELEASES = `https://github.com/${SOURCE}/releases`;
 /** Lines of the change list in `check` output — beyond that, "… and N more". */
 const MAX_LINES = 20;
 /**
- * Compose files Docker Compose looks for, in its order. Mirrored in skills/task-env/scripts/task-env.ts
- * (COMPOSE_FILES): it finds the file to check by the same list, here the list only keeps bun from starting in a
- * project without a compose file.
+ * Compose files Docker Compose looks for, in its order — a copy of the task-env skill's list: the installer runs under
+ * Node and doesn't import the skill's script; tests/standards/installer-mirror holds the copy to the original. The
+ * script finds the file to check by it, here it only keeps bun from starting in a project without a compose file.
+ * @mirror skills/task-env/scripts/task-env.ts COMPOSE_FILES
  */
 const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 /** The compose file check — a command of the task-env skill under Bun, from the package `check` runs from. */
 const TASK_ENV = path.join(SRC, "skills/task-env/scripts/task-env.ts");
 /** bun start and `docker compose config` take a fraction of a second; the hook has 60 s for everything. */
 const TASK_ENV_TIMEOUT = 30_000;
+/**
+ * The default name of the machine's proxy for task addresses (`proxyLines`) — a copy of the task-env skill's name,
+ * which `$AI_DEV_PROXY` overrides: tests/standards/installer-mirror holds it to the script and to the proxy's compose
+ * file.
+ * @mirror skills/task-env/scripts/task-env.ts PROXY
+ * @mirror skills/task-env/proxy/compose.yaml AI_DEV_PROXY
+ */
+const PROXY = "ai-dev-proxy";
 
 const USAGE = `Usage: ai-dev <command> [-g]
 
@@ -1155,16 +1164,16 @@ function unreleased(clone) {
 /**
  * The machine's proxy for task addresses (the task-env skill): one Traefik per machine gives containers of task stacks
  * the addresses `<service>.<N>.<project>.localhost` by their labels. Its Compose project is `$AI_DEV_PROXY`, by default
- * `ai-dev-proxy` — the same expression as `name:` of skills/task-env/proxy/compose.yaml and `proxyName` in its script:
- * a change goes into all three. A line for `check -g` and the hook: running, not running — with the start command,
- * Docker unavailable — with the reason. No task-env skill or no docker on the machine — no line: without Docker there
- * are no task stacks, and a line in every session would be noise. Asks docker itself: the installer runs under Node,
- * Bun isn't guaranteed. Doesn't change the check's code — the proxy isn't the flow falling behind.
+ * `PROXY` — the same expression as `proxyName` of the skill's script. A line for `check -g` and the hook: running, not
+ * running — with the start command, Docker unavailable — with the reason. No task-env skill or no docker on the machine
+ * — no line: without Docker there are no task stacks, and a line in every session would be noise. Asks docker itself:
+ * the installer runs under Node, Bun isn't guaranteed. Doesn't change the check's code — the proxy isn't the flow
+ * falling behind.
  * @param {string} home @returns {string[]}
  */
 function proxyLines(home) {
   if (!existsSync(path.join(home, ".agents/skills/task-env/scripts/task-env.ts"))) return [];
-  const name = process.env.AI_DEV_PROXY || "ai-dev-proxy";
+  const name = process.env.AI_DEV_PROXY || PROXY;
   const filters = ["--filter", `label=com.docker.compose.project=${name}`, "--filter", "label=com.docker.compose.service=traefik"];
   const r = spawnSync("docker", ["ps", "--all", ...filters, "--format", "{{.State}}"], { encoding: "utf8", timeout: 10_000 });
   const err = /** @type {NodeJS.ErrnoException | undefined} */ (r.error);
