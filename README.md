@@ -119,7 +119,7 @@ No exaggeration: the spec format isn't the main token cost; what costs more is h
 
 ## Installation
 
-You need `git` and Node (for `npx`); skill scripts need [Bun](https://bun.sh) ≥ 1.2 (the `spec` scripts also run under Node ≥ 22.18); the `github`, `est` and `dashboard` skills need [`gh`](https://cli.github.com) with the `project` scope (`gh auth refresh -s project`).
+You need `git` and Node (for `npx`); skill scripts need [Bun](https://bun.sh) ≥ 1.2 (the `spec` scripts also run under Node ≥ 22.18); the `github`, `est` and `dashboard` skills need [`gh`](https://cli.github.com) with the `project` scope (`gh auth refresh -s project`); `task-env` needs Docker with Compose (Docker Desktop on macOS).
 
 ```bash
 # into a project — from the root of a git repository; the copy is committed with the project
@@ -227,6 +227,12 @@ Waits for all checks of a PR or a commit (a merge commit — by the PR number) �
 Project checks — `lint`, `typecheck`, `test`, `test:*` — go through the machine queue: two runs at once, together half the cores, the rest wait in arrival order and print whom they are waiting for; the runner takes its workers from `AI_DEV_SLOT_CPUS`. The flow install puts the wrapper into the `package.json` scripts — both agents and a human in the terminal join the queue; in CI — no queue.
 
 `slot '<command>' [args…]`
+
+### [`task-env`](skills/task-env/SKILL.md) — a task's addresses `*.localhost`
+
+One proxy per machine — Traefik in Docker — gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels: no host port per app, and different hosts keep their own cookies, so parallel sessions and the owner's browser don't log each other out. A container without labels isn't published, a stopped one leaves the routes; `check -g` and the session start name whether the proxy runs, with the command to start it. The skill names the proxy's network, entry point and label format for a task stack's override.
+
+`task-env proxy up | down | status`
 
 ### References
 
