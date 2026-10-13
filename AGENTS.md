@@ -138,9 +138,14 @@ project language and parse the names of any language there.
   changes, an epic — their union.
 - **A big task is an epic + subtasks** (sub-issues; the epic has a short
   prefix `<Prefix> · …`, a subtask is one PR); **dependencies only as GitHub
-  links** (sub-issue, blocked by), not in text: a task with a non-empty
-  *blocked by* isn't taken into work. Before creating — check that it doesn't
-  exist yet (`gh issue list --search`).
+  links** (sub-issue, blocked by): a task with a non-empty *blocked by* isn't
+  taken into work. Before creating — check that it doesn't exist yet
+  (`gh issue list --search`).
+- **What GitHub keeps natively isn't repeated in an issue's text** —
+  sub-issues, blocked by, `Status`, milestone, labels, fields, the linked PR:
+  a copy goes stale with the first change. An epic's description has no list
+  of its subtasks, their order or stages — these are its sub-issues, blocked
+  by and milestones.
 - **GitHub Project** — exactly one per repository, named after the
   repository, holding all tasks and epics; `project check` once per session,
   ❌ — `project fix`. Status is only the project's `Status` field: Backlog →

@@ -45,8 +45,12 @@ closing — `task new`, `task status`, `task actualize`, `task close`,
   kind's color: a decision's kind is visible only by color.
 - **A small task** — one issue of type Task or Bug.
 - **A big task** — an epic + subtasks:
-  - the epic is an issue of type Epic: goal, context, plan (by stages, if
-    there are any), definition of done;
+  - the epic is an issue of type Epic: goal, context, the agreed design,
+    questions, definition of done; **no list of subtasks, their order or
+    stages** — the plan is the sub-issues themselves, the order — *blocked
+    by*, the stages — milestones (the epic's `Sub-issues` and
+    `Relationships` show them); a copy in text goes stale with the first
+    change of a link;
   - the epic has a **short prefix** (`Billing`, `Import`, `API`): the titles
     of the epic and all its subtasks start with it (`<Prefix> · <title>`),
     and it also goes into milestone names;
@@ -68,10 +72,13 @@ closing — `task new`, `task status`, `task actualize`, `task close`,
 - Before creating a new task we check that it doesn't exist yet
   (`gh issue list --search`); before starting work — that it isn't already
   going in a parallel session (`AGENTS.md`, section "Git, PRs and merging").
-- Status is kept only in the project's `Status` field (section "Project
-  (GitHub Projects)" below), nothing is duplicated in the issue itself; a PR
-  is linked to its task (`Closes #N`); an epic is closed when all its
-  subtasks are closed.
+- **Nothing native is duplicated in text:** status — only the project's
+  `Status` field (section "Project (GitHub Projects)" below), links — only
+  sub-issue and blocked by, a stage — only the milestone, the decisions a
+  task changes — only decision labels, estimate and actual — only the fields,
+  the PR — only `Closes #N`; the issue's text holds what GitHub doesn't keep
+  (goal, context, the agreed design, questions, scenarios). An epic is closed
+  when all its subtasks are closed.
 - No GitHub repository — say so and ask where to keep tasks, rather than
   silently filing them somewhere else.
 
@@ -171,7 +178,8 @@ on the epics themselves), **an epic's stage** (a set of its subtasks).
   (later stages may be refined).
 - **A stage not yet broken down** → the milestone has one stage task with a
   checklist (`<Epic> · Stage N. …`, a sub-issue of the epic, an estimate for
-  the whole stage; an exception to the "one PR" rule). Decomposition: issues
+  the whole stage; an exception to the "one PR" rule; its items aren't issues
+  yet, so the checklist isn't a copy). Decomposition: issues
   from the checklist items (the same milestone, sub-issues, with estimates),
   then the stage task — not planned and out of the project.
 - **Due date** — only a real deadline (then the set shows on the roadmap).
@@ -204,9 +212,10 @@ by `github task actualize <N>`; no epic or no open tasks in it — the line
    the code and specs: what doesn't exist after the rollout (fields, tables,
    routes, permissions) is removed. After **a reversal of an accepted
    decision** I edit every task where it is quoted.
-4. **Dependencies are real.** GitHub links (sub-issue, blocked by) reflect
-   the actual state: blocked by on closed tasks is removed, a new task is
-   attached to the epic, "⛔" marks in the text match the links.
+4. **Dependencies are real and only links.** GitHub links (sub-issue,
+   blocked by) reflect the actual state: blocked by on closed tasks is
+   removed, a new task is attached to the epic. Their copy in text — a list
+   of subtasks in the epic, an order, "⛔" or "after #N" marks — is removed.
 5. **Repetition is a standard.** A decision that, in what shipped, repeats an
    existing one in two or more places — a `Standard · …` issue
    (a rule in `tests/standards/` and a refactoring). First a search among the
