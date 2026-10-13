@@ -159,8 +159,9 @@ file.
 The API is how the dashboard sees a task's addresses: `proxyHosts` of the
 script reads `GET /api/http/routers` (page by page) on the proxy's port with
 the host `<name>.localhost` and returns the hosts of the enabled routers of
-`web`; the proxy isn't running — none. Not the Docker socket: the dashboard
-stays in the sandbox, and access to Docker is access to the whole machine. Not
+`web`; the proxy isn't running — none. Not the Docker socket: access to
+Docker is access to the whole machine, while the routes over HTTP need only
+the loopback and answer the same in the sandbox and outside it. Not
 a published `:8080`: a second host port is one more setting and one more
 conflict, while `web` is on `127.0.0.1` already; a site that pointed its name
 at `127.0.0.1` (DNS rebinding) comes with its own host and gets `404`. The
@@ -268,15 +269,20 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   `*.localhost` itself; `[::1]` gets no answer (the port is IPv4 only) and it
   goes to `127.0.0.1`.
 - **The Claude Code sandbox** doesn't reach the addresses by default: a direct
-  connection to the loopback is denied (`Operation not permitted`), and
-  `*.localhost` falls under `localhost` in the sandbox's `NO_PROXY` (curl
-  matches it as a suffix), so the request doesn't go through the sandbox
-  proxy either. What works: the command outside the sandbox (below,
-  section "Docker and the sandbox"); the agent's browser pane — it is
-  outside the sandbox; through the sandbox proxy with an empty `NO_PROXY` and
-  the host in the allowlist (`200` measured). By the Claude Code docs,
-  `sandbox.network.allowLocalBinding: true` lets sandboxed commands connect
-  to any port on localhost — the owner's setting, not checked here.
+  connection to the loopback is denied (`Operation not permitted`, `EPERM`
+  in Bun), and `*.localhost` falls under `localhost` in the sandbox's
+  `NO_PROXY` (curl matches it as a suffix), so the request doesn't go
+  through the sandbox proxy either. What works: the command outside the
+  sandbox (below, section "Docker and the sandbox"); the agent's browser
+  pane — it is outside the sandbox; through the sandbox proxy with an empty
+  `NO_PROXY` and the host in the allowlist (`200` measured).
+- **`sandbox.network.allowLocalBinding: true`** (desktop app; the edit
+  applied to the running session without a restart) — sandboxed commands
+  reach the loopback: a task's address `http://web.<N>.<project>.localhost:<port>`
+  answers `200` to curl and to Bun `fetch`, the proxy's API gives its routes,
+  a closed port is `ECONNREFUSED` instead of `EPERM`; a command also listens
+  on a local port and connects to it. What it is for — below, section
+  "Local ports and task addresses".
 - **`sandbox.excludedCommands`** (Claude Code in the desktop app): an edit
   of `~/.claude/settings.json` applies to the running session without a
   restart; an entry takes a Bash call out of the sandbox only when it covers
@@ -325,4 +331,26 @@ socket (`permission denied while trying to connect to the docker API`).
 A command outside the sandbox goes through the regular permissions (in auto
 mode — the classifier), and access to Docker is access to the whole machine.
 The e2e command is a child of the script and runs outside the sandbox with
-it — the addresses `*.localhost` aren't reachable from inside.
+it.
+
+### Local ports and task addresses
+
+Without the setting the sandbox denies every connection to `127.0.0.1` and
+every listen on it. The owner turns it on in `~/.claude/settings.json`:
+
+```json
+{ "sandbox": { "network": { "allowLocalBinding": true } } }
+```
+
+- **A task's apps from sandboxed commands** — curl, a test runner, a script
+  reach `http://<service>.<N>.<project>.localhost` through the proxy without
+  leaving the sandbox; without the setting only an unsandboxed command or the
+  agent's browser pane does.
+- **Tests that open a local port** — the dashboard's (its server, a fake proxy
+  API) and this skill's (a fake Traefik API) — run in the sandbox.
+- **The dashboard's server** listens in the sandbox and reads the proxy's
+  routes, but the dashboard itself still runs outside it: the `gh` it starts
+  fails TLS there (the `dashboard` skill, section "Pitfalls").
+
+It opens the loopback only: Docker stays outside the sandbox (above), other
+hosts — by the sandbox's allowlist.
