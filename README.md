@@ -11,7 +11,7 @@ Claude Code · Codex · Gemini CLI · Cursor · Copilot · OpenCode · Amp
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-standard-6f42c1)](https://agentskills.io)
 [![Spec](https://img.shields.io/badge/spec-branch-0e8a16)](https://github.com/miroshnik/ai-dev/tree/spec)
 
-[Why](#why) · [Principles](#principles) · [ai-dev and OpenSpec](#ai-dev-and-openspec) · [Installation](#installation) · [Skills](#skills) · [Layout](#repository-layout)
+[The idea](#the-idea) · [Why](#why) · [Principles](#principles) · [ai-dev and OpenSpec](#ai-dev-and-openspec) · [Installation](#installation) · [Skills](#skills) · [Layout](#repository-layout)
 
 </div>
 
@@ -48,6 +48,37 @@ flowchart LR
   task --> work --> ship --> done
 ```
 
+## The idea
+
+Developing any software is making decisions, of two kinds:
+
+- **functional** — what the system does: what it stores and for how long (an order — for good, a cart — for the session), what it shows and to whom, which interface it gives;
+- **non-functional** — what it's made of and which rules it obeys: data in Postgres, code in TypeScript, every input form has a reset button, search answers in under 300 ms.
+
+Every decision has a **mechanical check** — deterministic and concrete, run by the machine rather than judged by a person or an agent — that the decision holds. A decision without a check is a wish: nothing tells when the code stops following it.
+
+So the project answers two questions in two places:
+
+| Question | Answered by |
+|---|---|
+| What does the system do and how is it built — now | the code |
+| What should it do and how should it be built | the checks — they are the system's specification |
+
+TDD follows by itself. A check is written before the code and fails — the decision isn't implemented yet: that's its acceptance test. The code makes it pass, and from then on the same check holds the decision against every later change: that's its regression test. Not only behavior: "fast" is a decision too, and its check is a load test with a budget.
+
+Any decision can be changed — through its check: the check changes first and goes red on the current code, then the code follows it to green. The spec leads, the code follows: a code change that breaks a decision turns its check red.
+
+| Decision | Kind | Check | Lives in | Label |
+|---|---|---|---|---|
+| An order survives a restart, a cart lives for the session | functional | an integration test | `tests/capabilities/orders` | 🟩 |
+| The manager sees overdue invoices first | functional | an e2e test | `tests/capabilities/invoices` | 🟩 |
+| Search answers in under 300 ms at 100 requests per second | non-functional, a quality of one capability | a load test with the budget | `tests/capabilities/search` | 🟩 |
+| Every input form has a reset button | non-functional, a standard | "registry + invariant": every form from the code, a test per form | `tests/standards/form-reset` | 🟦 |
+| Code is TypeScript | non-functional, a standard | "registry + invariant": every source file is `.ts` | `tests/standards/typescript` | 🟦 |
+| Data is stored in Postgres | non-functional, architecture | the model: the `db` container and its `pg` client; a module importing another driver — red | `tests/architecture/model.ts` | 🟧 |
+
+**Decision labels** on GitHub tasks name the decision and show its kind by color: 🟩 green — a capability, functional; 🟦 blue — a standard and 🟧 orange — architecture, both non-functional. The color follows where the decision lives, so the budget of one capability, kept next to its behavior, is green; `github project check` holds the colors. How each check is wired — the [`spec`](skills/spec/SKILL.md) skill.
+
 ## Why
 
 An agent writes code fast. Everything around the code is what becomes slow and expensive:
@@ -64,10 +95,10 @@ An agent writes code fast. Everything around the code is what becomes slow and e
 
 The full canon is [`AGENTS.md`](AGENTS.md); here is what it stands on.
 
-1. **Code is what is; checks are what should be.** Code describes what the system does and how it is built now, so it can't be the source of what should be. What should be lives in checks, and they are all of the project's decisions: functional — tests in `tests/capabilities`, what the system must do; non-functional — architectural (`tests/architecture`, what it's made of) and standards (`tests/standards`, which rules the code obeys and which qualities it holds: performance, security, accessibility). They diverge — red CI, not silent drift. → [Specification — decisions](AGENTS.md#specification--decisions)
+1. **Code is what is; checks are what should be.** Code describes what the system does and how it is built now, so it can't be the source of what should be. What should be lives in checks, and they are all of the project's decisions: functional — tests in `tests/capabilities`, what the system must do; non-functional — architectural (`tests/architecture`, what it's made of) and standards (`tests/standards`, which rules the code obeys and which qualities it holds: performance, security, accessibility). They diverge — red CI, not silent drift. A decision changes through its check: the check first, red on the current code, then the code. → [Specification — decisions](AGENTS.md#specification--decisions)
 2. **No check — no decision.** A decision exists while a mechanism checks it: behavior — a test, a convention — a lint rule or "registry + invariant", architecture — a C1–C3 model with checks over it, a quality — a budget in a capability's test or a standard's cross-cutting invariant. Prose doesn't have to be true; a test fails. Documentation is generated from test names and published to the `spec` branch after merge: it isn't in `main` — a derived copy would conflict in every parallel PR, and review goes by the diff of requirements (`spec-diff`). → [Specification — decisions](AGENTS.md#specification--decisions)
 3. **One fact — one home.** Every fact has exactly one place: a cross-cutting rule — in a standard, behavior — in its capability, a decision's reason — in `<decision>.md` next to its check, the plan and agreements — in the issue, what is shared by all projects — in ai-dev, what is project-specific — in the project's spec. A copy goes stale silently: that's how specs diverge — a change edits one place out of several. → [Project knowledge and handoff](AGENTS.md#project-knowledge-and-handoff)
-4. **A check must be able to fail.** A test is written before the code and is red first; a regression test is proven by reverting the fix, an inherited one — by breaking the code. A test that can't fail is worse than a missing one. → [Tests and code](AGENTS.md#tests-and-code)
+4. **A check must be able to fail.** A test is written before the code and is red first — the decision's acceptance test; green after the code, it stays as its regression test. A regression test is proven by reverting the fix, an inherited one — by breaking the code. A test that can't fail is worse than a missing one. → [Tests and code](AGENTS.md#tests-and-code)
 5. **The issue is the only place to agree.** The goal, `## Questions` with answers, `## Scenarios` — future test names, visible before code; status and links — GitHub fields and relationships. No proposal files, no TODOs, no plan in the agent's memory. → [Task tracking](AGENTS.md#task-tracking)
 6. **Session = task = branch = PR.** Session `#42 …`, branch `feat/42-slug`, `Closes #42` in the PR: work is always linked to a task, so the task has an actual. A session won't take a second task into work (`task status` refuses): it goes to Backlog and into a new session. → [Session and branch](AGENTS.md#session-and-branch--one-task)
 7. **Estimates from actuals.** Analogs with a measured actual instead of a guess; the actual is the agent's active hours, tokens and their API equivalent in dollars. → [Estimate and actual](AGENTS.md#estimate-and-actual--the-est-skill)
