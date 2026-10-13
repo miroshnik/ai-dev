@@ -13,8 +13,8 @@
  *   github task drop     — close without doing it and remove from the project
  *   github task actualize — after the merge, in parallel with the deploy: the epic-refresh subagent's assignment
  *                          (or "not needed")
- *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the merged
- *                          branch removed
+ *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the task's
+ *                          stacks (task-env) and the merged branch removed
  *   github pr labels     — decision labels for the task from "Closes #N" by the PR diff, for its epic — the union
  *   github pr premerge   — before the merge: the default branch moved after the PR's CI — typecheck and test:spec on
  *                          the merge with it
@@ -1713,11 +1713,12 @@ export function cmdTaskActualize(io: Io, slug: string, number: number): number {
 }
 
 /**
- * The closing ritual after a PR merge — the actual, Status "Done", the epic, the milestone, cleaning up the merged
- * branch — in one call: the session did it one step per turn at its largest context. The epic refresh (the canon's
- * five checks) isn't here: it runs before close, in parallel with the deploy, by a subagent with the `task actualize`
- * assignment; close only reminds of it where the epic has open tasks — and names the three lines, one of which ends
- * the session's answer, and archiving the session in auto mode — except a session with questions for the owner.
+ * The closing ritual after a PR merge — the actual, Status "Done", the epic, the milestone, taking down the task's
+ * stacks, cleaning up the merged branch — in one call: the session did it one step per turn at its largest context.
+ * The epic refresh (the canon's five checks) isn't here: it runs before close, in parallel with the deploy, by a
+ * subagent with the `task actualize` assignment; close only reminds of it where the epic has open tasks — and names the
+ * three lines, one of which ends the session's answer, and archiving the session in auto mode — except a session with
+ * questions for the owner.
  */
 export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
   const ctx = taskContext(io, slug);
@@ -1763,7 +1764,12 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
       closeMilestone(io, slug, epic, true);
     } else if (epic.state === "OPEN") io.out(`○ epic #${epic.number}: open subtasks ${open}`);
   }
-  if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
+  // stacks of task-env and branches are named by the checkout's origin: from someone else's checkout — another project's
+  if (!checkoutOf(io, slug)) io.out(`○ ${o.git ? "branches and task stacks" : "task stacks"} left alone: the current directory is not a checkout of ${slug}`);
+  else {
+    takeDownStacks(io, number);
+    if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
+  }
   // three lines — in the project language: dashboard parses them
   io.out(
     `Next: ${open ? `the epic refresh, if it didn't happen before close — a subagent with the task actualize ${number} assignment; then ` : ""}` +
@@ -1813,6 +1819,31 @@ function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs:
  */
 const estScript = (io: Io) => io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
 
+/** Is the current directory a checkout of the repository: its origin names it. */
+function checkoutOf(io: Io, slug: string): boolean {
+  const remote = (io.run ?? realRun)("git", ["remote", "get-url", "origin"], io.cwd);
+  return remote.status === 0 && remote.stdout.includes(slug);
+}
+
+/** The task-env script next to the skill — laid out like est (`../task-env/scripts/task-env.ts`). */
+const taskEnvScript = (io: Io) => io.env.AI_DEV_TASK_ENV ?? path.resolve(import.meta.dir, "../../task-env/scripts/task-env.ts");
+
+/**
+ * The task's stacks (task-env, epic #392) live until someone takes them down — `task close` does: `task-env down <N>`
+ * in the checkout takes the dev and e2e stacks down with their volumes and prints a line per stack (`+`, `○`, `!`) —
+ * printed as is; it failed without a line — its error as a `!` line. A failure doesn't stop the close: a stack left
+ * behind is found by `task-env prune`. Docker doesn't work in the Claude Code sandbox — task close is an unsandboxed
+ * call (SKILL.md).
+ */
+function takeDownStacks(io: Io, number: number): void {
+  const script = taskEnvScript(io);
+  if (!existsSync(script)) return io.out(`○ task stacks: task-env is not installed (${script})`);
+  const r = (io.run ?? realRun)("bun", [script, "down", String(number)], io.cwd);
+  const lines = r.stdout.split("\n").filter((l) => l.trim());
+  for (const line of lines) io.out(line);
+  if (r.status !== 0 && !lines.length) io.out(`! task-env down: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
+}
+
 /** est with arguments: its output without the marker is printed as is, a failure — its last error line as a `!` line. */
 function runEst(io: Io, est: string, args: string[]): void {
   const r = (io.run ?? realRun)("bun", [est, ...args], io.cwd);
@@ -1850,12 +1881,11 @@ function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): v
 /**
  * Merged branches go away (SKILL.md, "Git, PRs and merging — mechanics", the "Right after a PR merge" item): the
  * checkout moves from the task branch to origin/<base> detached, the local and remote branches are deleted. "Merged" —
- * the PR is merged, without a PR — `git cherry`; not merged, someone else's or not that checkout — left alone.
+ * the PR is merged, without a PR — `git cherry`; not merged or someone else's — left alone. That the directory is the
+ * repository's checkout, the caller checks.
  */
 function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string; base: string } | null): void {
   const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd);
-  const remote = git("remote", "get-url", "origin");
-  if (remote.status !== 0 || !remote.stdout.includes(slug)) return io.out(`○ branches left alone: the current directory is not a checkout of ${slug}`);
   const base = pr?.base || "main";
   const current = git("branch", "--show-current").stdout.trim();
   const isTask = (b: string) => b === pr?.head || isTaskBranch(b, number);
@@ -2368,7 +2398,8 @@ task status — In progress pins the task to the session (file sessions/<CLAUDE_
 task actualize — right after the merge, in parallel with the deploy: prints the assignment for the epic-refresh subagent
         (the task, the epic, its open tasks, the five checks); no epic or no open tasks in it — "refresh not needed".
 task close — after the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write),
-        Status Done, the epic and the milestone, the merged branch removed (--no-git — without git).
+        Status Done, the epic and the milestone, the task's stacks taken down with their volumes (task-env down), the
+        merged branch removed (--no-git — without git). Docker and gh don't work in an agent's sandbox — run it outside.
 pr labels — decision labels from the PR diff for the tasks from «Closes #N» and their epics; doesn't remove earlier ones;
             a decision touched only mechanically (a deletion, a rename without changes, exceptions) and a decision
             with a slice label's name — an ○ line, no label.

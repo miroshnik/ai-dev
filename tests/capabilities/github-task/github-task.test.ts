@@ -20,6 +20,8 @@ const REPO = "miroshnik/ai-dev";
 const ORG = "acme/ai-dev";
 
 let pauses = 0;
+/** Вызов скрипта task-env (снятие стеков задачи в `task close`) — подпроцесс bun, как est. */
+const isTaskEnv = (args: string[]) => /skills\/task-env\/scripts\/task-env\.ts$/.test(args[0] ?? "");
 // est — подпроцесс bun (внешний край): по умолчанию молчит и ничего не пишет, git — настоящий; тесты est подменяют его сами
 const silentEst = (cmd: string, args: string[], cwd?: string) => (cmd === "bun" ? { status: 0, stdout: "", stderr: "" } : realRun(cmd, args, cwd));
 function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) {
@@ -835,10 +837,16 @@ describe("task actualize печатает задание субагенту ак
  */
 describe("task close закрывает задачу одной командой", () => {
   const FACT = "Факт: 0.25 ч активных в Claude Code (оценка 0.25 ч, ×1.00). 1 сессия, 2 промпта, стена 0.3 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.";
-  // est — подпроцесс (внешний край): в тестах подменяется, его вывод печатается как есть
+  // est — подпроцесс (внешний край): в тестах подменяется, его вывод печатается как есть; снятие стеков task-env молчит,
+  // git — настоящий
   const est =
     (calls: string[][], r: { status: number; stdout?: string; stderr?: string } = { status: 0, stdout: FACT + "\nкомментарий «Факт» создан\n" }) =>
-    (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
+    (cmd: string, args: string[], cwd?: string) =>
+      cmd !== "bun"
+        ? realRun(cmd, args, cwd)
+        : isTaskEnv(args)
+          ? { status: 0, stdout: "", stderr: "" }
+          : (calls.push([cmd, ...args]), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
   const mergedPr = (f: FakeGitHub, closes: number, head = `fix/${closes}-x`) => (f.prs[77] = { files: [], closes: [closes], head, base: "main", model: null, merged: true });
 
   it("PR задачи влит: задача закрыта, факт записан est, Status «Готово» — в выводе всё сделанное и следующий шаг", () => {
@@ -1055,36 +1063,37 @@ describe("task close закрывает задачу одной командой
   });
 });
 
+// репозиторий задачи: bare origin с путём вида …/miroshnik/ai-dev.git, чекаут на ветке задачи
+function checkout(branch: string, { merged = true } = {}) {
+  const { dir, cleanup } = tmpDir();
+  const origin = path.join(dir, "miroshnik/ai-dev.git");
+  mkdirSync(path.dirname(origin), { recursive: true });
+  execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+  const work = path.join(dir, "work");
+  mkdirSync(work);
+  const repo = gitRepo(work);
+  // чекаут ai-dev: язык проекта — русский, как у записанного проекта GitHub
+  repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
+  repo.git("remote", "add", "origin", origin);
+  repo.git("push", "-q", "-u", "origin", "main");
+  repo.git("switch", "-q", "-c", branch);
+  repo.commit({ "a.txt": "a\n" }, "work");
+  repo.git("push", "-q", "-u", "origin", branch);
+  if (merged) {
+    repo.git("switch", "-q", "main");
+    repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "merge", "-q", "--no-ff", "-m", "merge", branch);
+    repo.git("push", "-q", "origin", "main");
+    repo.git("switch", "-q", branch);
+  }
+  return { work, origin, cleanup };
+}
+const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+// git — настоящий во временном репозитории, est — подменён
+const noEst = (cmd: string, args: string[], cwd?: string) =>
+  cmd !== "bun" ? realRun(cmd, args, cwd) : { status: 0, stdout: isTaskEnv(args) ? "" : "Факт: …\n", stderr: "" };
+
 /** Влитое убирается по правилу «влитое удаляю целиком» (скилл github, «Git, PRs and merging — mechanics»): чекаут — на origin/main, ветка — долой локально и на хостинге. */
 describe("task close убирает влитое", () => {
-  // репозиторий задачи: bare origin с путём вида …/miroshnik/ai-dev.git, чекаут на ветке задачи
-  function checkout(branch: string, { merged = true } = {}) {
-    const { dir, cleanup } = tmpDir();
-    const origin = path.join(dir, "miroshnik/ai-dev.git");
-    mkdirSync(path.dirname(origin), { recursive: true });
-    execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
-    const work = path.join(dir, "work");
-    mkdirSync(work);
-    const repo = gitRepo(work);
-    // чекаут ai-dev: язык проекта — русский, как у записанного проекта GitHub
-    repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
-    repo.git("remote", "add", "origin", origin);
-    repo.git("push", "-q", "-u", "origin", "main");
-    repo.git("switch", "-q", "-c", branch);
-    repo.commit({ "a.txt": "a\n" }, "work");
-    repo.git("push", "-q", "-u", "origin", branch);
-    if (merged) {
-      repo.git("switch", "-q", "main");
-      repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "merge", "-q", "--no-ff", "-m", "merge", branch);
-      repo.git("push", "-q", "origin", "main");
-      repo.git("switch", "-q", branch);
-    }
-    return { work, origin, cleanup };
-  }
-  const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
-  // git — настоящий во временном репозитории, est — подменён
-  const noEst = (cmd: string, args: string[], cwd?: string) => (cmd === "bun" ? { status: 0, stdout: "Факт: …\n", stderr: "" } : realRun(cmd, args, cwd));
-
   it("чекаут на ветке задачи, PR влит: после close — detach на origin/main, локальной и удалённой ветки нет", () => {
     const { work, origin, cleanup } = checkout("fix/49-x");
     try {
@@ -1134,17 +1143,82 @@ describe("task close убирает влитое", () => {
     }
   });
 
-  it("текущий каталог — не чекаут репозитория задачи: ветки не трогаются", () => {
+  /** Имя проекта стеков — из `origin` чекаута (task-env): из чужого чекаута сняли бы стеки другого проекта. */
+  it("текущий каталог — не чекаут репозитория задачи: ветки и стеки задачи не трогаются", () => {
     const { dir, cleanup } = tmpDir();
     try {
       const f = new FakeGitHub(REC);
       f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
-      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: dir });
+      const calls: string[][] = [];
+      const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(args), noEst(cmd, args, cwd));
+      const r = task(f, ["close", "49"], REPO, { run, cwd: dir });
       expect(r.code).toBe(0);
-      expect(r.out).toContain("○ branches left alone: the current directory is not a checkout of miroshnik/ai-dev");
+      expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/ai-dev");
+      expect(calls).toEqual([]);
     } finally {
       cleanup();
     }
+  });
+});
+
+/**
+ * Стек задачи (скилл task-env, эпик #392) живёт, пока его не снимут: `task close` снимает стеки задачи — dev и e2e с
+ * томами — командой `task-env down <N>` в чекауте задачи. Что снято и что нет, печатает task-env; ошибка снятия
+ * закрытие не валит — стек, который не сняли, найдёт `task-env prune`.
+ */
+describe("task close снимает стеки задачи", () => {
+  type Answer = { status: number; stdout?: string; stderr?: string };
+  /** task-env — подпроцесс bun (внешний край): ответ подменён, вызовы записаны; git — настоящий, est — молчит. */
+  const taskEnv = (calls: { args: string[]; cwd?: string }[], r: Answer) => (cmd: string, args: string[], cwd?: string) =>
+    cmd === "bun" && isTaskEnv(args) ? (calls.push({ args: args.slice(1), cwd }), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }) : noEst(cmd, args, cwd);
+  const DOWN = "+ stack ai-dev-49: down, with its volumes\n+ stack ai-dev-49-e2e: down, with its volumes\n";
+  const merged = (f: FakeGitHub) => (f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true });
+
+  function close(args: string[], answer: Answer, env: Record<string, string> = {}) {
+    const { work, cleanup } = checkout("fix/49-x");
+    temp.push(cleanup);
+    const f = new FakeGitHub(REC);
+    merged(f);
+    const calls: { args: string[]; cwd?: string }[] = [];
+    const r = task(f, ["close", "49", ...args], REPO, { run: taskEnv(calls, answer), cwd: work, env });
+    return { ...r, f, work, calls };
+  }
+
+  it("task close снимает стеки закрытой задачи вместе с томами — командой task-env down <N> в чекауте задачи", () => {
+    const r = close([], { status: 0, stdout: DOWN });
+    expect(r.code).toBe(0);
+    expect(r.calls).toEqual([{ args: ["down", "49"], cwd: r.work }]);
+    expect(r.out).toContain(DOWN.trimEnd());
+    expect(statusSet(r.f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("ошибка снятия выводится строкой и не мешает закрытию задачи", () => {
+    const failed = "! stack ai-dev-49: not removed — permission denied while trying to connect to the docker API";
+    const reported = close([], { status: 2, stdout: failed + "\n" });
+    expect(reported.code).toBe(0);
+    expect(reported.out).toContain(failed);
+    expect(statusSet(reported.f)).toEqual([[49, "Готово"]]);
+    expect(reported.out).toContain("+ local branch fix/49-x deleted");
+    // task-env упал, ничего не сказав в stdout, — его ошибка строкой «!»
+    const crashed = close([], { status: 1, stderr: "error: Cannot find module 'node:fs'\n" });
+    expect(crashed.code).toBe(0);
+    expect(crashed.out).toContain("! task-env down: error: Cannot find module 'node:fs'");
+    expect(statusSet(crashed.f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("--no-git стеки снимает: флаг — про ветки", () => {
+    const r = close(["--no-git"], { status: 0, stdout: DOWN });
+    expect(r.code).toBe(0);
+    expect(r.calls).toEqual([{ args: ["down", "49"], cwd: r.work }]);
+    expect(git(r.work, "branch", "--show-current")).toBe("fix/49-x");
+  });
+
+  it("task-env не установлен рядом — строка ○, остальное сделано", () => {
+    const r = close([], { status: 0, stdout: DOWN }, { AI_DEV_TASK_ENV: "/nowhere/task-env.ts" });
+    expect(r.code).toBe(0);
+    expect(r.calls).toEqual([]);
+    expect(r.out).toContain("○ task stacks: task-env is not installed (/nowhere/task-env.ts)");
+    expect(statusSet(r.f)).toEqual([[49, "Готово"]]);
   });
 });
 

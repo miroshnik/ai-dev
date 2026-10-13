@@ -189,7 +189,7 @@ Skills are installed with the flow; the agent picks them up by itself — from t
 
 ### [`github`](skills/github/SKILL.md) — project and tasks by the canon
 
-Checks and fixes the GitHub project and the default-branch rule, creates a task with all its fields in one command, before merging checks the PR's merge with a fresh `main` if it moved after CI, after merging prints the assignment for the epic-refresh subagent and closes the task in one call — `est` actual, Done, epic and milestone, the merged branch removed — and sets decision labels from the PR diff.
+Checks and fixes the GitHub project and the default-branch rule, creates a task with all its fields in one command, before merging checks the PR's merge with a fresh `main` if it moved after CI, after merging prints the assignment for the epic-refresh subagent and closes the task in one call — `est` actual, Done, epic and milestone, the task's Compose stacks and the merged branch removed — and sets decision labels from the PR diff.
 
 `github project check` · `github project fix` · `github task new | status | drop | actualize | close` · `github pr labels | premerge`
 
