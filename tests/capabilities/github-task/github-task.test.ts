@@ -21,7 +21,9 @@ const ORG = "acme/ai-dev";
 
 let pauses = 0;
 /** Вызов скрипта task-env (снятие стеков задачи в `task close`) — подпроцесс bun, как est. */
-const isTaskEnv = (args: string[]) => /skills\/task-env\/scripts\/task-env\.ts$/.test(args[0] ?? "");
+const isTaskEnv = (args: string[]) => args.some((a) => /skills\/task-env\/scripts\/task-env\.ts$/.test(a));
+/** Аргументы вызова task-env без пути к скрипту: флаги bun и команда. */
+const taskEnvArgs = (args: string[]) => args.filter((a) => !isTaskEnv([a]));
 // est — подпроцесс bun (внешний край): по умолчанию молчит и ничего не пишет, git — настоящий; тесты est подменяют его сами
 const silentEst = (cmd: string, args: string[], cwd?: string) => (cmd === "bun" ? { status: 0, stdout: "", stderr: "" } : realRun(cmd, args, cwd));
 function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) {
@@ -176,9 +178,9 @@ describe("task new ставит оценку сам — по аналогам, �
     const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est(calls) });
     expect(r.code).toBe(0);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.slice(2)).toEqual(["estimate", "50", "--repo", REPO, "--type", "feat", "--write"]);
-    expect(calls[0]![0]).toBe("bun");
-    expect(calls[0]![1]).toMatch(/skills\/est\/scripts\/est\.ts$/);
+    expect(calls[0]!.slice(3)).toEqual(["estimate", "50", "--repo", REPO, "--type", "feat", "--write"]);
+    expect(calls[0]!.slice(0, 2)).toEqual(["bun", "--no-env-file"]);
+    expect(calls[0]![2]).toMatch(/skills\/est\/scripts\/est\.ts$/);
     expect(r.out).toContain(ESTIMATE);
     expect(r.out).toContain("«Estimate» comment created, field «Оценка, ч» = 0.5");
     expect(r.out).not.toContain("<!--");
@@ -189,7 +191,7 @@ describe("task new ставит оценку сам — по аналогам, �
     const f = new FakeGitHub(REC);
     const calls: string[][] = [];
     expect(task(f, ["new", "--title", "Экспорт падает", "--type", "Баг"], REPO, { run: est(calls) }).code).toBe(0);
-    expect(calls[0]!.slice(2)).toEqual(["estimate", "50", "--repo", REPO, "--type", "fix", "--write"]);
+    expect(calls[0]!.slice(3)).toEqual(["estimate", "50", "--repo", REPO, "--type", "fix", "--write"]);
   });
 
   it("эпик не оценивается: est не зовётся, «Next:» — оценка эпика есть сумма оценок подзадач", () => {
@@ -858,7 +860,8 @@ describe("task close закрывает задачу одной командой
     expect(byOp(f, "CloseIssue")).toEqual([{ issueId: f.issue(49).id, stateReason: "COMPLETED" }]);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.slice(-5)).toEqual(["fact", "49", "--repo", REPO, "--write"]);
-    expect(calls[0]![1]).toMatch(/skills\/est\/scripts\/est\.ts$/);
+    expect(calls[0]!.slice(0, 2)).toEqual(["bun", "--no-env-file"]);
+    expect(calls[0]![2]).toMatch(/skills\/est\/scripts\/est\.ts$/);
     expect(statusSet(f)).toEqual([[49, "Готово"]]);
     expect(r.out).toContain("+ #49 closed: PR #77 merged");
     expect(r.out).toContain(FACT);
@@ -1186,10 +1189,10 @@ describe("task close убирает влитое", () => {
       const f = new FakeGitHub(REC);
       f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
       const calls: string[][] = [];
-      const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(args.slice(1)), noEst(cmd, args, cwd));
+      const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(taskEnvArgs(args)), noEst(cmd, args, cwd));
       const r = task(f, ["close", "49"], REPO, { run, cwd: work });
       expect(r.code).toBe(0);
-      expect(calls).toEqual([["down", "49"]]);
+      expect(calls).toEqual([["--no-env-file", "down", "49"]]);
       expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
       expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
     } finally {
@@ -1207,7 +1210,7 @@ describe("task close снимает стеки задачи", () => {
   type Answer = { status: number; stdout?: string; stderr?: string };
   /** task-env — подпроцесс bun (внешний край): ответ подменён, вызовы записаны; git — настоящий, est — молчит. */
   const taskEnv = (calls: { args: string[]; cwd?: string }[], r: Answer) => (cmd: string, args: string[], cwd?: string) =>
-    cmd === "bun" && isTaskEnv(args) ? (calls.push({ args: args.slice(1), cwd }), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }) : noEst(cmd, args, cwd);
+    cmd === "bun" && isTaskEnv(args) ? (calls.push({ args: taskEnvArgs(args), cwd }), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }) : noEst(cmd, args, cwd);
   const DOWN = "+ stack ai-dev-49: down, with its volumes\n+ stack ai-dev-49-e2e: down, with its volumes\n";
   const merged = (f: FakeGitHub) => (f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true });
 
@@ -1224,7 +1227,7 @@ describe("task close снимает стеки задачи", () => {
   it("task close снимает стеки закрытой задачи вместе с томами — командой task-env down <N> в чекауте задачи", () => {
     const r = close([], { status: 0, stdout: DOWN });
     expect(r.code).toBe(0);
-    expect(r.calls).toEqual([{ args: ["down", "49"], cwd: r.work }]);
+    expect(r.calls).toEqual([{ args: ["--no-env-file", "down", "49"], cwd: r.work }]);
     expect(r.out).toContain(DOWN.trimEnd());
     expect(statusSet(r.f)).toEqual([[49, "Готово"]]);
   });
@@ -1246,7 +1249,7 @@ describe("task close снимает стеки задачи", () => {
   it("--no-git стеки снимает: флаг — про ветки", () => {
     const r = close(["--no-git"], { status: 0, stdout: DOWN });
     expect(r.code).toBe(0);
-    expect(r.calls).toEqual([{ args: ["down", "49"], cwd: r.work }]);
+    expect(r.calls).toEqual([{ args: ["--no-env-file", "down", "49"], cwd: r.work }]);
     expect(git(r.work, "branch", "--show-current")).toBe("fix/49-x");
   });
 

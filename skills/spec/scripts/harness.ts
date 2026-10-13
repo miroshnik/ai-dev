@@ -201,7 +201,7 @@ export function marksIn(file: string, text: string): Mark[] {
   return out;
 }
 
-const MIGRATE = "migrate with spec-exceptions: bun .agents/skills/spec/scripts/spec-exceptions.ts";
+const MIGRATE = "migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts";
 
 /**
  * Exceptions of a decision folder — the `exceptions/` directory, a file per exception (`<element>.json`:

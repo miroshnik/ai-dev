@@ -19,8 +19,8 @@ links) and milestones — `reference.md`, section "Manual commands". Mechanics o
 branches, push and merge — section "Git, PRs and merging — mechanics" below.
 
 ```bash
-bun <skill dir>/scripts/github.ts project check [--repo owner/repo]
-bun <skill dir>/scripts/github.ts project fix [--repo owner/repo] [--confirm] [--template owner/N | none]
+bun --no-env-file <skill dir>/scripts/github.ts project check [--repo owner/repo]
+bun --no-env-file <skill dir>/scripts/github.ts project fix [--repo owner/repo] [--confirm] [--template owner/N | none]
 ```
 
 The repository — from `git remote get-url origin` or `--repo`. Needs `gh` with
@@ -199,15 +199,15 @@ description is rewritten.
 ## Tasks — task
 
 ```bash
-bun <skill dir>/scripts/github.ts task new --title "…" --branch-type <type> [--body-file F | --body "…"] [--type Task|Bug|Epic] \
+bun --no-env-file <skill dir>/scripts/github.ts task new --title "…" --branch-type <type> [--body-file F | --body "…"] [--type Task|Bug|Epic] \
     [--epic N] [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] \
     [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
-bun <skill dir>/scripts/github.ts task status <N> "In progress"   # Backlog | In progress | Done
-bun <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
-bun <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
-bun <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
-bun <skill dir>/scripts/github.ts pr labels <PR>                 # decision labels from the PR diff
-bun <skill dir>/scripts/github.ts pr premerge <PR>               # before the merge: the merge with a fresh default branch
+bun --no-env-file <skill dir>/scripts/github.ts task status <N> "In progress"   # Backlog | In progress | Done
+bun --no-env-file <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
+bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
+bun --no-env-file <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
+bun --no-env-file <skill dir>/scripts/github.ts pr labels <PR>                 # decision labels from the PR diff
+bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               # before the merge: the merge with a fresh default branch
 ```
 
 | Moment | Action |

@@ -19,12 +19,12 @@
     "bun": ">=1.2"
   },
   "scripts": {
-    "test": "bun skills/slot/scripts/slot.ts 'bun test'",
-    "test:spec": "bun skills/slot/scripts/slot.ts 'bun test tests/standards'",
-    "typecheck": "bun skills/slot/scripts/slot.ts 'bun check'",
-    "spec:doc": "bun test --reporter=junit --reporter-outfile=.spec-report.xml && bun skills/spec/scripts/spec-doc.ts .spec-report.xml --strict",
-    "spec:diff": "bun skills/spec/scripts/spec-diff.ts",
-    "spec:publish": "bun skills/spec/scripts/spec-publish.ts"
+    "test": "bun --no-env-file skills/slot/scripts/slot.ts 'bun test'",
+    "test:spec": "bun --no-env-file skills/slot/scripts/slot.ts 'bun test tests/standards'",
+    "typecheck": "bun --no-env-file skills/slot/scripts/slot.ts 'bun check'",
+    "spec:doc": "bun test --reporter=junit --reporter-outfile=.spec-report.xml && bun --no-env-file skills/spec/scripts/spec-doc.ts .spec-report.xml --strict",
+    "spec:diff": "bun --no-env-file skills/spec/scripts/spec-diff.ts",
+    "spec:publish": "bun --no-env-file skills/spec/scripts/spec-publish.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

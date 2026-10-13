@@ -167,8 +167,8 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
   (an exception from a subfolder isn't read). A leftover `exceptions.ts` in the
   decision folder or its subfolder — a red test
   «exceptions are one file per element in exceptions/, not exceptions.ts» with a migration hint:
-  `bun .agents/skills/spec/scripts/spec-exceptions.ts` spreads each file into
-  the decision folder's directory, changes the import in the folder's tests to
+  `bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts` spreads
+  each file into the decision folder's directory, changes the import in the folder's tests to
   `exceptionsIn()`, and the path in `package.json` and the CI workflow to the
   directory; whatever it didn't rewrite — as a `!` line, exit code 1.
 - *Mark on the element* — outside scope and an exception for an element with its
@@ -409,7 +409,7 @@ claimed behavior").
   directory as artifacts):
 
   ```bash
-  bun .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions]
+  bun --no-env-file .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions]
   ```
 
   Tests «<entry> is called by a capability test»

@@ -211,7 +211,7 @@ describe("Исключения папки решения — файл на эл�
     const r = bunTest();
     expect(r["исключение: importLegacy (#12)"]).toBe("✓");
     expect(r["исключения — файлом на элемент в exceptions/, а не в exceptions.ts"]).toBe(
-      `✗ ${AUDIT}/exceptions.ts: exceptions — a file per element in ${AUDIT}/exceptions/ — migrate with spec-exceptions: bun .agents/skills/spec/scripts/spec-exceptions.ts`,
+      `✗ ${AUDIT}/exceptions.ts: exceptions — a file per element in ${AUDIT}/exceptions/ — migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts`,
     );
   });
 
@@ -235,7 +235,7 @@ describe("Исключения папки решения — файл на эл�
     });
     const r = bunTest();
     expect(r["исключения — файлом на элемент в exceptions/, а не в exceptions.ts"]).toBe(
-      `✗ ${AUDIT}/sub/exceptions.ts: exceptions — a file per element in ${AUDIT}/exceptions/ — migrate with spec-exceptions: bun .agents/skills/spec/scripts/spec-exceptions.ts`,
+      `✗ ${AUDIT}/sub/exceptions.ts: exceptions — a file per element in ${AUDIT}/exceptions/ — migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts`,
     );
   });
 });

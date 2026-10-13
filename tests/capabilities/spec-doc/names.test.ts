@@ -119,7 +119,7 @@ describe("Названия-утверждения вводятся постеп�
     const SHARED = "tests/standards/spec-names/exceptions.ts";
     const list = `export default [{ file: "${MAIN}", name: "returns 201", issue: 12, reason: "переписать" }];\n`;
     writeTree(dir, { [LEGACY]: list, [SHARED]: list });
-    const hint = "migrate with spec-exceptions: bun .agents/skills/spec/scripts/spec-exceptions.ts";
+    const hint = "migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts";
     const r = doc([[["Счета"], "returns 201"]], "--stdout", "--strict");
     expect(r.code).toBe(1);
     expect(r.stderr).toContain(`${LEGACY}: name exceptions — a file per name in names.exceptions/ of the decision folder — ${hint}`);

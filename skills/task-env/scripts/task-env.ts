@@ -104,7 +104,7 @@ export const apiHost = (env: NodeJS.ProcessEnv = process.env) => `${proxyName(en
 export const addressUrl = (host: string, port = proxyPort()) => `http://${host}${port === "80" ? "" : `:${port}`}`;
 
 /** The command that starts the proxy — as the output names it. */
-const START = `bun ${fileURLToPath(import.meta.url)} proxy up`;
+const START = `bun --no-env-file ${fileURLToPath(import.meta.url)} proxy up`;
 
 // ----------------------------------------------------------------------------
 // Addresses
@@ -687,7 +687,7 @@ function stackUp(project: Project, profiles: string[], env: NodeJS.ProcessEnv): 
   if (r.code) return console.log(r.lines.join("\n")), r.code;
   const addresses = addressesOf(project, stack, env);
   console.log([...r.lines, `stack ${stack.name}: up${addresses.length ? "" : " — no HTTP service in env.http and no published port"}`, ...shown(addresses, false)].join("\n"));
-  console.log(`logs: docker compose -p ${stack.name} logs <service>; down: bun ${fileURLToPath(import.meta.url)} down${project.task === undefined ? "" : ` ${project.task}`}`);
+  console.log(`logs: docker compose -p ${stack.name} logs <service>; down: bun --no-env-file ${fileURLToPath(import.meta.url)} down${project.task === undefined ? "" : ` ${project.task}`}`);
   return 0;
 }
 
