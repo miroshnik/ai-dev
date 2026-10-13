@@ -48,8 +48,9 @@ call: a regular one won't return until the timeout.
 1. Before showing «Estimate and actual» — `est fact --sweep --since 90d --write`
    (the `est` skill): the chart draws only recorded actuals. «Sessions» doesn't
    need it.
-2. Run the script in the background and read its output: the first line is
-   `dashboard: http://127.0.0.1:<port>/ — …`, the second is
+2. Run the script in the background — in Claude Code outside the sandbox
+   (an unsandboxed call; section "Pitfalls" says why) — and read its output: the
+   first line is `dashboard: http://127.0.0.1:<port>/ — …`, the second is
    `browser: opening …` or `browser: not opening (…)`.
 3. Give the user the address. If the agent has its own browser (the app
    panel) — run with `--no-open` and open the address there; otherwise the
@@ -167,16 +168,22 @@ no ring and no ratio.
 - The page is local: the server listens only on `127.0.0.1` and answers only
   to the names `127.0.0.1` and `localhost`. Don't expose it — it contains task
   titles of non-public repositories.
-- An agent's sandbox that denies local ports (Claude Code with
-  `sandbox.network.allowLocalBinding` off) — the script exits with
-  «can't listen on 127.0.0.1 …», even without `--port`: another port won't
-  help, run the background command outside the sandbox. The dashboard tests
-  open ports too.
+- The Claude Code sandbox (macOS, checked 2026-10-13): with
+  `sandbox.network.allowLocalBinding` off it denies local ports — the script
+  exits with «can't listen on 127.0.0.1 …», even without `--port`: another
+  port won't help. With it on the server listens and reads the proxy's
+  routes, but the `gh` the script starts fails TLS verification there
+  (`x509: OSStatus -26276`, a GitHub error in the banner, no tasks) — an
+  `excludedCommands` entry covers a direct call, not a child of a script. So
+  the dashboard runs outside the sandbox. `allowLocalBinding` is for the
+  skill's tests, which open ports with a fake `gh`, and for reaching task
+  addresses from sandboxed commands (the `task-env` skill, section "Local
+  ports and task addresses").
 - «proxy …: routes not read» in the banner: with «is denied here (an agent's
-  sandbox?)» — the dashboard can't connect to the proxy from the sandbox,
-  the links need it outside; with «a proxy without the API?» — the machine's
-  proxy predates the API: `task-env proxy up` brings it to the skill's
-  compose file.
+  sandbox?)» — the dashboard runs in a sandbox without `allowLocalBinding`
+  and can't connect to the proxy: run it outside; with «a proxy without the
+  API?» — the machine's proxy predates the API: `task-env proxy up` brings
+  it to the skill's compose file.
 - A Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`): GitHub Projects are
   closed there, and its localhost isn't visible to the user's browser — the
   script exits with an explanation (`docs/cloud-sessions.md` in ai-dev).
