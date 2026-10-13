@@ -6,7 +6,8 @@
  *
  * `up` brings the task's stack up: the number from the branch `<type>/<N>-slug`, the Compose project `<project>-<N>`
  * (without a number — `<project>`), the project's compose files plus the task's override on Compose's stdin — the
- * proxy's labels and network for the HTTP services of `env.http` in `.agents/ai-dev.json`; it prints the addresses.
+ * proxy's labels and network for the HTTP services of `env.http` in `.agents/ai-dev.json`; their addresses go to Compose's
+ * interpolation in `TASK_ENV_<SERVICE>_URL` (the compose file gives the app its own address); it prints the addresses.
  * `e2e` brings `<project>-<N>-e2e` up anew with clean volumes and runs the command on the host with the e2e addresses
  * in `TASK_ENV_*` variables; `down` takes both stacks of a task down with their volumes — `task close` calls it; `prune`
  * takes down the stacks of the project's closed tasks left on the machine — orphans, the task's state by GitHub. A stack
@@ -49,11 +50,13 @@ const USAGE = `Usage: task-env up [--profile <p>]... | e2e [--profile <p>]... [-
 
   task-env up             bring the task's stack up — the Compose project <project>-<N> by the branch <type>/<N>-slug,
                           <project> without a number — and print its addresses: env.http services of
-                          .agents/ai-dev.json through the proxy, published ports on 127.0.0.1; --profile — Compose
+                          .agents/ai-dev.json through the proxy, published ports on 127.0.0.1; the HTTP addresses go
+                          to the compose file's interpolation in TASK_ENV_<SERVICE>_URL; --profile — Compose
                           profiles; 0 — up, 1 — a service failed (its state and log), 2 — not tried
-  task-env e2e            the e2e stack <project>-<N>-e2e anew with clean volumes, then the command with its addresses
-                          in TASK_ENV_PROJECT, TASK_ENV_<SERVICE>_URL, TASK_ENV_<SERVICE>_<PORT>; the exit code is the
-                          command's; the stack stays until the next run
+  task-env e2e            the e2e stack <project>-<N>-e2e anew with clean volumes (its own addresses in the
+                          interpolation), then the command with its addresses in TASK_ENV_PROJECT,
+                          TASK_ENV_<SERVICE>_URL, TASK_ENV_<SERVICE>_<PORT>; the exit code is the command's; the stack
+                          stays until the next run
   task-env down [<N>]     take the stacks of task N (default — the branch's) down with their volumes: dev and e2e; a line
                           per stack: + down, ○ none, ! not removed (code 2); no compose file in the checkout — nothing to
                           take down, Docker isn't called; task close of the github skill calls it
@@ -490,7 +493,19 @@ function projectOf(cwd: string): Project | string {
   return { root, files, name: projectName(root), task: taskBranch(git(root, "branch", "--show-current"))?.issue, http };
 }
 
-const dc = (args: string[], cwd: string, input?: string) => spawnSync("docker", ["compose", ...args], { cwd, input, encoding: "utf8", maxBuffer: MAX_BUFFER });
+/** `docker compose` in cwd; vars — over the script's environment: Compose takes them into interpolation. */
+const dc = (args: string[], cwd: string, input?: string, vars: Record<string, string> = {}) =>
+  spawnSync("docker", ["compose", ...args], { cwd, input, encoding: "utf8", maxBuffer: MAX_BUFFER, env: { ...process.env, ...vars } });
+
+/**
+ * The stack's addresses for Compose's interpolation (#413): `TASK_ENV_<SERVICE>_URL` of each `env.http` service — the
+ * names the e2e command gets — so the compose file gives the app its own address (`APP_URL:
+ * ${TASK_ENV_WEB_URL:-http://localhost:3000}`). Known before `up`: the host is the stack's, the port is the proxy's. Only
+ * the environment of the script's Compose process — no file: `docker compose` by hand and CI get the compose file's
+ * default.
+ */
+const urlVars = (project: Project, stack: Stack, env: NodeJS.ProcessEnv) =>
+  Object.fromEntries(Object.keys(project.http).map((service) => [varOf(service, "URL"), addressUrl(stack.host(service), proxyPort(env))]));
 
 /**
  * The task stack's override — the only thing the script adds to the project's Compose: the proxy's labels and network
@@ -593,10 +608,12 @@ function addressesOf(project: Project, stack: Stack, env: NodeJS.ProcessEnv): Ad
 /**
  * Brings the stack up: the project's compose files plus the override, `up --wait` with a build — the stack runs the
  * worktree's code, not an image from another task's run. The proxy goes up first when the override joins its network
- * and it isn't running (#393, question 8); a running one isn't touched.
+ * and it isn't running (#393, question 8); a running one isn't touched. Both Compose calls get the stack's addresses
+ * for interpolation — `config` too: a required `${TASK_ENV_WEB_URL:?…}` would fail it.
  */
 function upStack(project: Project, stack: Stack, profiles: string[], env: NodeJS.ProcessEnv): { code: number; lines: string[] } {
-  const config = dc([...project.files, "--profile", "*", "config", "--format", "json"], project.root);
+  const vars = urlVars(project, stack, env);
+  const config = dc([...project.files, "--profile", "*", "config", "--format", "json"], project.root, undefined, vars);
   if (config.error || config.status !== 0) return { code: 2, lines: [`stack ${stack.name}: not started — docker compose config: ${why(config)}${hint(why(config), env)}`] };
   const parsed = JSON.parse(config.stdout) as Config;
   const lines = Object.keys(project.http)
@@ -612,7 +629,7 @@ function upStack(project: Project, stack: Stack, profiles: string[], env: NodeJS
     }
   }
   const args = ["-p", stack.name, ...project.files, ...(override ? ["-f", "-"] : []), ...profiles.flatMap((p) => ["--profile", p])];
-  const r = dc([...args, "--progress", "plain", "up", "--detach", "--wait", "--wait-timeout", WAIT_TIMEOUT, "--build", "--remove-orphans", "--quiet-pull"], project.root, override ? JSON.stringify(override) : undefined);
+  const r = dc([...args, "--progress", "plain", "up", "--detach", "--wait", "--wait-timeout", WAIT_TIMEOUT, "--build", "--remove-orphans", "--quiet-pull"], project.root, override ? JSON.stringify(override) : undefined, vars);
   if (r.error || r.status !== 0) return { code: r.error ? 2 : 1, lines: [...lines, ...report(stack.name, r, env)] };
   return { code: 0, lines };
 }

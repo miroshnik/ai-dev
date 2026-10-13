@@ -592,6 +592,9 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
   /** Стек, от которого остались одни тома: контейнеры удалены, `down` без `-v`. */
   const volumeOnly = (stack: string) => dockerOut("volume", "create", "--label", `com.docker.compose.project=${stack}`, "--label", "com.docker.compose.volume=data", `${stack}_data`);
   const containerId = (stack: string, service: string) => dockerOut("ps", "--quiet", "--filter", byProject(stack), "--filter", `label=com.docker.compose.service=${service}`);
+  /** `APP_URL` контейнера web стека — что приложение получило из compose-файла. */
+  const appUrl = (stack: string) =>
+    (JSON.parse(dockerOut("inspect", "--format", "{{json .Config.Env}}", containerId(stack, "web"))) as string[]).find((v) => v.startsWith("APP_URL="))?.slice("APP_URL=".length);
 
   /** Запрос через прокси теста с заголовком Host — так приходит браузер по адресу `*.localhost`. */
   async function get(host: string) {
@@ -616,7 +619,9 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
     const up = run("bun", [SCRIPT, "proxy", "up"], proxyEnv);
     expect(exitOf(up), up.stdout + up.stderr).toBe(0);
     port = run("docker", ["compose", "-f", COMPOSE, "port", "traefik", "80"], proxyEnv).stdout.trim().split(":").at(-1)!;
-    env = { ...process.env, AI_DEV_PROXY: PROXY, AI_DEV_PROXY_PORT: port };
+    // без TASK_ENV_* прогона (тесты под `task-env e2e`): адрес в compose-файл должен дать скрипт, а не окружение теста
+    const own = Object.entries(process.env).filter(([k]) => !k.startsWith("TASK_ENV_"));
+    env = { ...Object.fromEntries(own), AI_DEV_PROXY: PROXY, AI_DEV_PROXY_PORT: port };
     for (const image of [WHOAMI, BUSYBOX]) dockerOut("pull", "--quiet", image);
     repo = tmpDir();
     root = path.join(repo.dir, "session-379-499083");
@@ -628,6 +633,8 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
         "services:",
         "  web:",
         `    image: ${WHOAMI}`,
+        // свой адрес приложения — из интерполяции; без task-env (CI) — значение по умолчанию
+        "    environment: { APP_URL: '${TASK_ENV_WEB_URL:-http://localhost:3000}' }",
         "  db:",
         db + '    ports: ["127.0.0.1::5432"]',
         "    volumes: [data:/data]",
@@ -755,6 +762,35 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
     expect(r.stdout).toMatch(new RegExp(`\nurl=${url.replace(/\./g, "\\.")} db=127\\.0\\.0\\.1:\\d+ project=${PROJECT}-42-e2e\n`));
     expect(r.stdout).toContain(`  web  ${url}  TASK_ENV_WEB_URL\n`);
     await until(new URL(url).hostname, 200);
+  });
+
+  it("compose-файл получает адрес HTTP-сервиса стека задачи в `TASK_ENV_<СЕРВИС>_URL`", () => {
+    on("feat/42-checkout");
+    const r = taskEnv("up");
+    expect(r.code, r.out).toBe(0);
+    expect(appUrl(`${PROJECT}-42`)).toBe(`http://web.42.${PROJECT}.localhost:${port}`);
+  });
+
+  /** Без dev-стека рядом: подсетей у Docker немного (SKILL.md, «Network subnets»), а адрес dev от e2e отличает хост. */
+  it("у стека e2e в интерполяции — адреса e2e, не dev той же задачи", () => {
+    on("feat/42-checkout");
+    const r = taskEnv("e2e");
+    expect(r.code, r.out).toBe(0);
+    expect(appUrl(`${PROJECT}-42-e2e`)).toBe(`http://web.e2e.42.${PROJECT}.localhost:${port}`);
+  });
+
+  /**
+   * Страж от перекоррекции: адрес уходит только процессу Compose скрипта — ни файлом `.env`, ни override в проекте он не
+   * остаётся (запись в `.env` проекта этот тест валит).
+   */
+  it("без `task-env` переменных нет — работает значение по умолчанию compose-файла", () => {
+    on("feat/42-checkout");
+    expect(taskEnv("up").code).toBe(0);
+    // `docker compose` руками (CI) в том же чекауте
+    const config = spawnSync("docker", ["compose", "config", "--format", "json"], { cwd: root, encoding: "utf8", env });
+    expect(exitOf(config), config.stderr).toBe(0);
+    const web = (JSON.parse(config.stdout) as { services: Record<string, { environment?: Record<string, string> }> }).services.web;
+    expect(web?.environment?.APP_URL).toBe("http://localhost:3000");
   });
 
   it("стек не поднялся (образ, сборка, контейнер упал, healthcheck не прошёл) — скрипт называет сервис, его состояние и последние строки лога, код 1", () => {
