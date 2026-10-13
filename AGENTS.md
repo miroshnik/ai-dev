@@ -260,8 +260,8 @@ information without a decision (a deadline, a warning) doesn't prevent it.
   empty check list means "not registered yet", not "passed"; for a merge that
   deploys — wait for the deploy on the merge SHA (the `ci-wait` skill), the
   epic refresh in parallel. **Then — `github task close`**: actual, Done, epic
-  and milestone, the merged branch removed; I don't touch others' branches or
-  unmerged work.
+  and milestone, the task's Compose stacks (with volumes) and the merged branch
+  removed; I don't touch others' branches, stacks or unmerged work.
 - **Before a commit — exactly the checks CI runs**, via the repository's
   scripts (`lint`, `typecheck`, `test`), before merging — a full build; in
   `script | tail` chains — `set -o pipefail`.
