@@ -9,7 +9,7 @@ import type { Io } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { gitRepo, tmpDir } from "../../lib/spec.ts";
+import { githubOrigin, gitRepo, tmpDir } from "../../lib/spec.ts";
 
 // модель архитектуры скилл читает отдельным процессом bun
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -1063,10 +1063,10 @@ describe("task close закрывает задачу одной командой
   });
 });
 
-// репозиторий задачи: bare origin с путём вида …/miroshnik/ai-dev.git, чекаут на ветке задачи
-function checkout(branch: string, { merged = true } = {}) {
+// репозиторий задачи: bare origin с путём вида …/<slug>.git — для скрипта репозиторий GitHub slug, чекаут на ветке задачи
+function checkout(branch: string, { merged = true, slug = REPO } = {}) {
   const { dir, cleanup } = tmpDir();
-  const origin = path.join(dir, "miroshnik/ai-dev.git");
+  const origin = path.join(dir, `${slug}.git`);
   mkdirSync(path.dirname(origin), { recursive: true });
   execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
   const work = path.join(dir, "work");
@@ -1088,9 +1088,10 @@ function checkout(branch: string, { merged = true } = {}) {
   return { work, origin, cleanup };
 }
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
-// git — настоящий во временном репозитории, est — подменён
-const noEst = (cmd: string, args: string[], cwd?: string) =>
-  cmd !== "bun" ? realRun(cmd, args, cwd) : { status: 0, stdout: isTaskEnv(args) ? "" : "Факт: …\n", stderr: "" };
+// git — настоящий во временном репозитории, его origin — репозиторий GitHub; est — подменён
+const noEst = githubOrigin((cmd: string, args: string[], cwd?: string) =>
+  cmd !== "bun" ? realRun(cmd, args, cwd) : { status: 0, stdout: isTaskEnv(args) ? "" : "Факт: …\n", stderr: "" },
+);
 
 /** Влитое убирается по правилу «влитое удаляю целиком» (скилл github, «Git, PRs and merging — mechanics»): чекаут — на origin/main, ветка — долой локально и на хостинге. */
 describe("task close убирает влитое", () => {
@@ -1155,6 +1156,42 @@ describe("task close убирает влитое", () => {
       expect(r.code).toBe(0);
       expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/ai-dev");
       expect(calls).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  /** Чекаут узнаётся равенством owner/repo из origin (стандарт origin-repo), не подстрокой URL. */
+  it("task close из чекаута репозитория с тем же префиксом имени (ai-dev-tools при ai-dev) — не чекаут задачи: ни стеки, ни ветки не трогаются", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x", { slug: "miroshnik/ai-dev-tools" });
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+      const calls: string[][] = [];
+      const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(args), noEst(cmd, args, cwd));
+      const r = task(f, ["close", "49"], REPO, { run, cwd: work });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/ai-dev");
+      expect(calls).toEqual([]);
+      expect(git(work, "branch", "--show-current")).toBe("fix/49-x");
+      expect(git(origin, "branch", "--list", "fix/49-x")).toContain("fix/49-x");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("регистр owner/repo в origin не важен: из чекаута Miroshnik/AI-Dev task close убирает ветку и снимает стеки задачи", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x", { slug: "Miroshnik/AI-Dev" });
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+      const calls: string[][] = [];
+      const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(args.slice(1)), noEst(cmd, args, cwd));
+      const r = task(f, ["close", "49"], REPO, { run, cwd: work });
+      expect(r.code).toBe(0);
+      expect(calls).toEqual([["down", "49"]]);
+      expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
+      expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
     } finally {
       cleanup();
     }

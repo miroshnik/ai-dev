@@ -72,6 +72,20 @@ export function gitRepo(dir: string, { init = true } = {}) {
   };
 }
 
+/**
+ * `origin` тестового чекаута — локальный bare-репозиторий `…/<owner>/<repo>.git`; для скрипта он — `owner/repo` на
+ * GitHub (стандарт origin-repo): `git remote get-url origin` отвечает `git@github.com:<owner>/<repo>.git`, остальной
+ * git — настоящий. `insteadOf` не подходит: `get-url` его раскрывает.
+ */
+export function githubOrigin<R extends { status: number | null; stdout: string }>(run: (cmd: string, args: string[], cwd?: string) => R) {
+  return (cmd: string, args: string[], cwd?: string): R => {
+    const r = run(cmd, args, cwd);
+    if (cmd !== "git" || args.join(" ") !== "remote get-url origin" || r.status !== 0) return r;
+    const m = /([^/\s]+)\/([^/\s]+)\.git\s*$/.exec(r.stdout);
+    return m ? { ...r, stdout: `git@github.com:${m[1]}/${m[2]}.git\n` } : r;
+  };
+}
+
 /** Отчёт Vitest/Jest из краткого описания: файл → [describes…, имя, статус?]. */
 export function vitestReport(root: string, files: Record<string, [string[], string, string?][]>): string {
   return JSON.stringify({

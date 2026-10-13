@@ -617,10 +617,14 @@ function stackDown(root: string, task: number | undefined, env: NodeJS.ProcessEn
   return done.every((d) => d.ok) ? 0 : 2;
 }
 
-/** `owner/name` of the checkout's GitHub origin; another host or no remote — undefined. */
-function githubRepo(root: string): string | undefined {
-  const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(git(root, "remote", "get-url", "origin"));
-  return m ? `${m[1]}/${m[2]}` : undefined;
+// The checkout's GitHub repository by its origin — a copy of originRepo from skills/est/scripts/est.ts and skills/github/scripts/github.ts:
+// there's no shared module (a skill is installed alone), the tests/standards/origin-repo standard keeps the parsing identical
+const ORIGIN_RE = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/\s]+@)?(?:ssh\.)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?(?:ssh\.)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
+
+/** `owner/repo` of a GitHub origin URL (host github.com or ssh.github.com, any case, with a port), otherwise null. */
+export function originRepo(url: string): string | null {
+  const m = ORIGIN_RE.exec(url.trim());
+  return m ? `${m[1]}/${m[2]}` : null;
 }
 
 /** A task's state on GitHub (`gh api`): open, closed, missing — no such issue (a PR isn't a task); otherwise why not known. */
@@ -658,7 +662,7 @@ function prune(root: string, env: NodeJS.ProcessEnv): number {
     .map(({ stack, m }) => ({ stack, task: Number(m![1]), e2e: !!m![2] }))
     .sort((a, b) => a.task - b.task || Number(a.e2e) - Number(b.e2e));
   if (!found.length) return console.log(`○ no stacks of ${name} tasks on the machine`), 0;
-  const repo = githubRepo(root);
+  const repo = originRepo(git(root, "remote", "get-url", "origin"));
   if (!repo) return console.log(`! prune: the origin of ${root} isn't a GitHub repository — task states can't be checked; left: ${found.map((f) => f.stack).join(", ")}`), 2;
   const states = new Map<number, ReturnType<typeof taskState>>();
   let ok = true;

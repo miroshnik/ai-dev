@@ -410,14 +410,24 @@ export function loadRegistry(): Registry {
   return reg as Registry;
 }
 
+// The checkout's GitHub repository by its origin — a copy of originRepo from skills/github/scripts/github.ts and skills/task-env/scripts/task-env.ts:
+// there's no shared module (a skill is installed alone), the tests/standards/origin-repo standard keeps the parsing identical
+const ORIGIN_RE = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/\s]+@)?(?:ssh\.)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?(?:ssh\.)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
+
+/** `owner/repo` of a GitHub origin URL (host github.com or ssh.github.com, any case, with a port), otherwise null. */
+export function originRepo(url: string): string | null {
+  const m = ORIGIN_RE.exec(url.trim());
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
 function detectRepo(): string {
   const r = spawnSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" });
   if (r.error) throw new EstError("git not found; pass --repo owner/repo");
   if (r.status !== 0) throw new EstError("couldn't determine the repository from git remote origin; pass --repo owner/repo");
   const url = r.stdout.trim();
-  const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url);
-  if (!m) throw new EstError(`couldn't parse the remote «${url}»; pass --repo owner/repo`);
-  return `${m[1]}/${m[2]}`;
+  const repo = originRepo(url);
+  if (!repo) throw new EstError(`couldn't parse the remote «${url}»; pass --repo owner/repo`);
+  return repo;
 }
 
 export function resolveRepo(arg?: string): string {

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 import { main, projectCommands, realRun } from "../../../skills/github/scripts/github.ts";
 import type { Io, RunResult } from "../../../skills/github/scripts/github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { gitRepo, tmpDir } from "../../lib/spec.ts";
+import { githubOrigin, gitRepo, tmpDir } from "../../lib/spec.ts";
 
 // git и test:spec — настоящие процессы во временном репозитории
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -136,7 +136,8 @@ function processes() {
     if (cmd === "bun" && args[0] === "run") seen.push(Object.fromEntries(["items.txt", "uses.txt"].map((f) => [f, existsSync(path.join(cwd!, f)) ? readFileSync(path.join(cwd!, f), "utf8") : null])));
     return realRun(cmd, args, cwd);
   };
-  return { run, calls, seen };
+  // origin чекаута — bare-репозиторий …/miroshnik/ai-dev.git: для скрипта он — репозиторий GitHub
+  return { run: githubOrigin(run), calls, seen };
 }
 
 function premerge(gh: (args: string[]) => string, cwd: string, run = processes().run) {
