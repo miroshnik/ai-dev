@@ -29,8 +29,12 @@
  *
  * The name (Compose project and network) and the port come from AI_DEV_PROXY and AI_DEV_PROXY_PORT, by default
  * `ai-dev-proxy` and 80: a test runs its own proxy next to the machine's one, a machine with port 80 busy takes
- * another. The default name is also the default of `${AI_DEV_PROXY:-…}` in the compose file — tests/capabilities/task-env
- * holds it to `PROXY`; `check -g` of the installer imports `proxyName`.
+ * another. The defaults live only here: the script passes both to the compose file explicitly (`composeEnv`), the file
+ * has none (`${…:?}`); `check -g` of the installer imports `proxyName`.
+ *
+ * The proxy's API (Traefik `/api/http/routers`) answers on its port by the host `<name>.localhost`: `proxyHosts` reads
+ * the hosts of its routes, `taskAddress` tells a task's address among them — the dashboard shows a task's services by
+ * them over the loopback, without the Docker socket.
  *
  * Docker runs outside the Claude Code sandbox (the sandbox denies its socket): the agent runs this script as an
  * unsandboxed call — an `excludedCommands` entry for it doesn't take it out (SKILL.md, «Docker and the sandbox»).
@@ -84,8 +88,105 @@ export const proxyName = (env: NodeJS.ProcessEnv = process.env) => env.AI_DEV_PR
 /** The proxy's port on 127.0.0.1. */
 export const proxyPort = (env: NodeJS.ProcessEnv = process.env) => env.AI_DEV_PROXY_PORT || "80";
 
+/**
+ * The environment of the proxy's compose file: the name and the port are passed explicitly — the file has no defaults
+ * of its own (`${…:?}`), they live only here (#396, question 1).
+ */
+export const composeEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => ({ ...env, AI_DEV_PROXY: proxyName(env), AI_DEV_PROXY_PORT: proxyPort(env) });
+
+/** The host of the proxy's API: a router of the proxy's own labels on the `web` entry point (proxy/compose.yaml). */
+export const apiHost = (env: NodeJS.ProcessEnv = process.env) => `${proxyName(env)}.localhost`;
+
+/** A service's address through the machine's proxy: its port is in the address when it isn't 80. */
+export const addressUrl = (host: string, port = proxyPort()) => `http://${host}${port === "80" ? "" : `:${port}`}`;
+
 /** The command that starts the proxy — as the output names it. */
 const START = `bun ${fileURLToPath(import.meta.url)} proxy up`;
+
+// ----------------------------------------------------------------------------
+// Addresses
+// ----------------------------------------------------------------------------
+
+/** A task's address `<service>.<N>.<project>.localhost`, e2e — `<service>.e2e.<N>.<project>.localhost`. */
+export interface TaskAddress {
+  service: string;
+  task: number;
+  e2e: boolean;
+  project: string;
+}
+
+/** A DNS label and a Compose project name at once: lowercase letters, digits and `-`. */
+const dnsLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/**
+ * `<project>` of stacks and addresses by the repository name (#393, question 6): `projectName` takes it from `origin`,
+ * the dashboard — from the task's repository.
+ */
+export const hostProject = (repo: string) => dnsLabel(repo) || "project";
+
+// the service is lazy: `web.e2e.42.shop` is e2e of web, not the service `web.e2e`; `web.1.42.shop` is the service web.1
+const TASK_HOST = /^(.+?)\.(?:(e2e)\.)?(\d+)\.([a-z0-9-]+)\.localhost$/;
+
+/** A task's address by its host; another host (the main checkout's stack, the proxy's API, a foreign one) — null. */
+export function taskAddress(host: string): TaskAddress | null {
+  const m = TASK_HOST.exec(host.toLowerCase());
+  return m ? { service: m[1]!, task: Number(m[3]), e2e: !!m[2], project: m[4]! } : null;
+}
+
+/** The API answers locally: longer than this is a hang, not work. */
+const API_TIMEOUT = 3_000;
+/** Routers per API page — Traefik's default; the next page is in `X-Next-Page`, the last page names page 1. */
+const PER_PAGE = 100;
+const HOST_RULE = /Host\(\s*[`"]([^`"]+)[`"]\s*\)/g;
+
+/** The part of a Traefik router (`/api/http/routers`) the hosts are read from. */
+interface Router {
+  rule?: string;
+  status?: string;
+  entryPoints?: string[];
+}
+
+/**
+ * Hosts of the proxy's routes — from its API (Traefik `GET /api/http/routers`, page by page): `Host(…)` of the
+ * enabled routers of the `web` entry point; a router appears when its container starts and leaves when it stops. The
+ * proxy isn't running (the connection is refused) — null: without the proxy there are no addresses either; another
+ * failure — an exception with the reason.
+ */
+export async function proxyHosts(env: NodeJS.ProcessEnv = process.env): Promise<string[] | null> {
+  const fail = (why: string) => new Error(`proxy ${proxyName(env)}: routes not read — ${why}`);
+  const hosts = new Set<string>();
+  for (let page = 1; ; ) {
+    const url = `http://127.0.0.1:${proxyPort(env)}/api/http/routers?per_page=${PER_PAGE}&page=${page}`;
+    let r: Response;
+    try {
+      r = await fetch(url, { headers: { Host: apiHost(env) }, signal: AbortSignal.timeout(API_TIMEOUT) });
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException & { cause?: { code?: string } };
+      const code = err.code ?? err.cause?.code;
+      if (code === "ECONNREFUSED") return null;
+      if (err.name === "TimeoutError") throw fail(`127.0.0.1:${proxyPort(env)} didn't answer in ${API_TIMEOUT / 1000} s`);
+      if (code === "EPERM") throw fail(`connecting to 127.0.0.1:${proxyPort(env)} is denied here (an agent's sandbox?)`);
+      throw fail(`${code ? `${code}: ` : ""}${err.message}`);
+    }
+    // the proxy before its API (#396) or something else on the port: Traefik answers an unknown host with 404
+    if (!r.ok) throw fail(`127.0.0.1:${proxyPort(env)} answered ${apiHost(env)} with HTTP ${r.status} — a proxy without the API? task-env proxy up brings it to the compose file`);
+    let routers: Router[];
+    try {
+      routers = (await r.json()) as Router[];
+    } catch {
+      throw fail("the API answered not with JSON");
+    }
+    if (!Array.isArray(routers)) throw fail("the API answered not with a list of routers");
+    for (const x of routers) {
+      if (x.status !== "enabled" || !x.entryPoints?.includes(ENTRY_POINT)) continue;
+      for (const m of String(x.rule ?? "").matchAll(HOST_RULE)) hosts.add(m[1]!);
+    }
+    const next = Number(r.headers.get("X-Next-Page"));
+    if (!(next > page)) break;
+    page = next;
+  }
+  return [...hosts];
+}
 
 export interface ProxyRoute {
   /** The Compose project of the stack: `<project>-<N>`, `<project>-<N>-e2e`, `<project>` without a task. */
@@ -137,7 +238,7 @@ function hint(reason: string, env: NodeJS.ProcessEnv) {
   return "";
 }
 
-const compose = (args: string[], env: NodeJS.ProcessEnv) => spawnSync("docker", ["compose", "-f", PROXY_FILE, ...args], { encoding: "utf8", env });
+const compose = (args: string[], env: NodeJS.ProcessEnv) => spawnSync("docker", ["compose", "-f", PROXY_FILE, ...args], { encoding: "utf8", env: composeEnv(env) });
 
 /** Whether the proxy container runs: true / false; Docker unavailable — the reason. */
 export function proxyRunning(env: NodeJS.ProcessEnv = process.env): boolean | string {
@@ -152,7 +253,7 @@ function status(env: NodeJS.ProcessEnv): Result {
   const name = proxyName(env);
   if (typeof running === "string") return { code: 2, out: `proxy ${name}: Docker unavailable — ${running}${hint(running, env)}` };
   if (!running) return { code: 1, out: `proxy ${name}: not running — start: ${START}` };
-  return { code: 0, out: `proxy ${name}: running — http://<service>.<N>.<project>.localhost${proxyPort(env) === "80" ? "" : `:${proxyPort(env)}`} on 127.0.0.1, routes by container labels (network ${name})` };
+  return { code: 0, out: `proxy ${name}: running — ${addressUrl("<service>.<N>.<project>.localhost", proxyPort(env))} on 127.0.0.1, routes by container labels (network ${name})` };
 }
 
 function up(env: NodeJS.ProcessEnv): Result {
@@ -313,9 +414,6 @@ const WAIT_TIMEOUT = "300";
 /** Log lines of a failed service the report shows. */
 const LOG_TAIL = "20";
 
-/** A DNS label and a Compose project name at once: lowercase letters, digits and `-`. */
-const dnsLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 const git = (dir: string, ...args: string[]) => {
   const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
   return r.status === 0 ? r.stdout.trim() : "";
@@ -330,7 +428,7 @@ export function projectName(root: string): string {
   const url = git(root, "remote", "get-url", "origin").replace(/\/+$/, "");
   const common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
   const name = url ? url.split(/[/:]/).at(-1)!.replace(/\.git$/, "") : common ? path.basename(path.dirname(common)) : path.basename(root);
-  return dnsLabel(name) || "project";
+  return hostProject(name);
 }
 
 export interface Stack {
@@ -347,8 +445,6 @@ export function stackOf(project: string, task: number | undefined, e2e = false):
   return { name: [project, ...n, ...kind].join("-"), host: (service) => [dnsLabel(service), ...kind, ...n, project, "localhost"].join(".") };
 }
 
-/** A service's address through the machine's proxy: its port is in the address when it isn't 80. */
-const urlOf = (host: string, env: NodeJS.ProcessEnv) => `http://${host}${proxyPort(env) === "80" ? "" : `:${proxyPort(env)}`}`;
 
 /** The variable of a service for the e2e command: `TASK_ENV_<SERVICE>_<suffix>` (#393, question 7). */
 const varOf = (service: string, suffix: string | number) => `TASK_ENV_${service.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_${suffix}`;
@@ -481,7 +577,7 @@ function addressesOf(project: Project, stack: Stack, env: NodeJS.ProcessEnv): Ad
   const out: Address[] = [];
   const running = containers(stack.name).filter((c) => c.State === "running");
   for (const service of [...new Set(running.map((c) => c.Service))].sort()) {
-    if (project.http[service]) out.push({ service, value: urlOf(stack.host(service), env), name: varOf(service, "URL") });
+    if (project.http[service]) out.push({ service, value: addressUrl(stack.host(service), proxyPort(env)), name: varOf(service, "URL") });
     const seen = new Set<string>();
     for (const p of running.find((c) => c.Service === service)!.Publishers ?? []) {
       const proto = p.Protocol && p.Protocol !== "tcp" ? `/${p.Protocol}` : "";
