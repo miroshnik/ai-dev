@@ -45,6 +45,7 @@ task's own Compose project, and nothing of it is shared with other tasks.
 | up | `up --detach --wait --build --remove-orphans`: built images are the worktree's code, `--wait` returns when services are running and healthy (at most 300 s) |
 | profiles | `--profile <name>` (repeated) goes to Compose: a heavy service in `profiles` runs only in a task that asks for it |
 | addresses | HTTP services of `env.http` — `http://<service>.<N>.<project>.localhost` (the proxy's port when it isn't 80); a published port — `127.0.0.1:<host port> → <port>` |
+| interpolation | `TASK_ENV_<SERVICE>_URL` of each `env.http` service — in the environment of Compose's process, for the compose file (below) |
 
 The settings — `env.http` in the project's `.agents/ai-dev.json`, a service → its HTTP port inside the container
 (`install` and `update` keep the field): in a compose file a database's port doesn't differ from an app's.
@@ -55,6 +56,26 @@ The settings — `env.http` in the project's `.agents/ai-dev.json`, a service �
 
 A service of `env.http` that isn't in the compose file — a `!` line, not an error. No `env.http` — no labels, no
 proxy, only published ports.
+
+**The app's own address** — from the compose file: `up` and `e2e` give Compose's process the stack's addresses in
+`TASK_ENV_<SERVICE>_URL` (the names the e2e command gets), and the compose file passes them to the app — a base URL,
+an OAuth redirect URI, links in emails — with a default for `docker compose` without `task-env` (CI, by hand):
+
+```yaml
+services:
+  web:
+    environment:
+      APP_URL: ${TASK_ENV_WEB_URL:-http://localhost:3000}
+      NEXTAUTH_URL: ${TASK_ENV_WEB_URL:-http://localhost:3000}
+  worker:
+    environment:
+      LINK_BASE_URL: ${TASK_ENV_WEB_URL:-http://localhost:3000}   # another service's address too
+```
+
+The e2e stack gets its own addresses (`http://web.e2e.42.shop.localhost`), not the dev ones of the task. The
+variables live only in the environment of the script's Compose process — no `.env`, no file in the project:
+`docker compose up` by hand gets the default. A public variable baked in at build time (`NEXT_PUBLIC_*`, `VITE_*`)
+goes into `build.args` the same way: Compose interpolates them too.
 
 **The override** is the only thing the script adds and it isn't a file: the proxy's labels and network for the
 `env.http` services (below, section "Labels of a task stack's service"), nothing to the others — a database isn't published.
