@@ -30,9 +30,11 @@
  * at its root): `install` writes a single manifest there, with `auto` and `language`.
  * The copy in a project is committed — the flow files the project's git ignores (the `CLAUDE.md` template, the
  * `.claude/` directory) the install un-ignores with exceptions in an ai-dev block at the end of `.gitignore`, `check`
- * reports them as a mismatch (`gitignoreFlow`). The project's checks — the `package.json` scripts `lint`, `typecheck`,
- * `test`, `test:*` — the install wraps in the machine queue, the slot skill (`slotScripts`); if such a script calls
- * turbo and turbo.json doesn't pass the queue variables to tasks, it warns with a ready-made line (`turboEnv`).
+ * reports them as a mismatch (`gitignoreFlow`). A project's compose file `check` holds to the task isolation rules
+ * with the task-env skill's command (`composeCheck`): a violation is a mismatch too, `update` doesn't fix it. The
+ * project's checks — the `package.json` scripts `lint`, `typecheck`, `test`, `test:*` — the install wraps in the
+ * machine queue, the slot skill (`slotScripts`); if such a script calls turbo and turbo.json doesn't pass the queue
+ * variables to tasks, it warns with a ready-made line (`turboEnv`).
  *
  * A copy (a project, a machine without `--link`) follows ai-dev releases — tags vYYYY.MM.DD — not main: the npx package
  * (it is from main) finds the latest release and restarts from it (`toRelease`). `check` is the same install as a dry
@@ -80,6 +82,16 @@ const RELEASED = [...FLOW, "bin"];
 const RELEASE_TAG = /^v(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?$/;
 /** Lines of the change list in `check` output — beyond that, "… and N more". */
 const MAX_LINES = 20;
+/**
+ * Compose files Docker Compose looks for, in its order. Mirrored in skills/task-env/scripts/task-env.ts
+ * (COMPOSE_FILES): it finds the file to check by the same list, here the list only keeps bun from starting in a
+ * project without a compose file.
+ */
+const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+/** The compose file check — a command of the task-env skill under Bun, from the package `check` runs from. */
+const TASK_ENV = path.join(SRC, "skills/task-env/scripts/task-env.ts");
+/** bun start and `docker compose config` take a fraction of a second; the hook has 60 s for everything. */
+const TASK_ENV_TIMEOUT = 30_000;
 
 const USAGE = `Usage: ai-dev <command> [-g]
 
@@ -96,13 +108,15 @@ const USAGE = `Usage: ai-dev <command> [-g]
   install -g         onto the machine only the skills (~/.agents/skills, ~/.claude/skills) and the SessionStart hook;
                      the rules come from the project, a machine copy of a previous install is removed
   install -g --link  from an ai-dev clone: symlinks to the clone instead of copies, edits show up immediately
-  check [-g]         whether the install is behind, changes nothing: 0 — up to date, 1 — behind or the project's git
-                     ignores flow files, 2 — the check is unavailable; a copy is compared with the latest release, a
-                     --link clone — with origin/main; for a project names the mode (auto) and the language and warns
-                     (!) if a script in slot calls turbo and turbo.json doesn't pass the queue variables to tasks
-                     (the exit code stays the same); for the machine names the task-env proxy of *.localhost
-                     addresses — running or not, with the start command (with Docker on the machine; the exit code
-                     stays the same)
+  check [-g]         whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git
+                     ignores flow files or its compose file breaks task isolation, 2 — the check is unavailable; a
+                     copy is compared with the latest release, a --link clone — with origin/main; for a project names
+                     the mode (auto) and the language, holds the compose file to the task isolation rules (❌ per
+                     violation, ○ — not checked: no bun or docker compose; the task-env skill) and warns (!) if a
+                     script in slot calls turbo and turbo.json doesn't pass the queue variables to tasks (the exit
+                     code stays the same); for the machine names the task-env proxy of *.localhost addresses —
+                     running or not, with the start command (with Docker on the machine; the exit code stays the
+                     same)
   check --hook       the machine and the project at once for the Claude Code SessionStart hook: the exit code is
                      always 0, errors go to the output
   update [-g]        bring it up to date: a --link clone — git pull --ff-only, a copy — install of the latest
@@ -973,9 +987,30 @@ function changeLines(changes, root, global) {
 
 /**
  * behind — falls behind: update will install something new; ignored — the project's git ignores flow files: update
- * will add exceptions; run — the text names a command to run.
- * @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean, behind?: boolean, ignored?: boolean, run?: boolean }} Result
+ * will add exceptions; compose — the project's compose file breaks task isolation: update won't fix it; run — the text
+ * names a command to run.
+ * @typedef {{ code: 0 | 1 | 2, text: string, absent?: boolean, behind?: boolean, ignored?: boolean, compose?: boolean, run?: boolean }} Result
  */
+
+/**
+ * The project's compose file against the task isolation rules (the task-env skill, tests/capabilities/task-env): a `❌`
+ * line per violation, `○` — not checked (no bun, no docker compose, the config doesn't parse): that isn't a violation,
+ * and the exit code of `check` doesn't change. No compose file — no lines, bun doesn't start.
+ * @param {string} root @returns {{ lines: string[], violations: boolean }}
+ */
+function composeCheck(root) {
+  const file = COMPOSE_FILES.find((f) => existsSync(path.join(root, f)));
+  if (!file) return { lines: [], violations: false };
+  const r = spawnSync("bun", [TASK_ENV, "check", root], { encoding: "utf8", timeout: TASK_ENV_TIMEOUT });
+  const notChecked = (/** @type {string} */ why) => ({ lines: [`  ○ ${file}: not checked — ${why}`], violations: false });
+  const error = /** @type {NodeJS.ErrnoException | undefined} */ (r.error);
+  if (error?.code === "ENOENT") return notChecked("bun not found");
+  if (error) return notChecked(`task-env: ${error.message}`);
+  if (r.status === 0) return { lines: [], violations: false };
+  const lines = r.stdout.split("\n").filter(Boolean).map((l) => `  ${l}`);
+  if (r.status === 1 || (r.status === 2 && lines.length)) return { lines, violations: r.status === 1 };
+  return notChecked(`task-env: ${r.stderr.trim().split("\n")[0] || `exit code ${r.status ?? r.signal}`}`);
+}
 
 /** The check failed: what and why. @param {boolean} global @param {unknown} e @returns {Result} */
 const unavailable = (global, e) => ({ code: 2, text: `ai-dev ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
@@ -1026,9 +1061,12 @@ function check(global) {
   const mode = global ? [] : modeLines(root);
   // warnings — project settings that update doesn't fix: `!` lines, they don't change the exit code
   const warnings = changeLines(changes.filter((c) => c.op === "!"), root, global);
+  // the compose file breaks task isolation — a mismatch (code 1) that update doesn't fix either; `○` — not checked
+  const compose = global ? { lines: [], violations: false } : composeCheck(root);
+  const project = [...warnings, ...compose.lines, ...mode];
   const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
   const ignored = changes.filter((c) => c.op === "❌");
-  if (!stale.length && !ignored.length) return { code: 0, text: [`ai-dev ${where}: up to date (${fresh})`, ...warnings, ...mode].join("\n") };
+  if (!stale.length && !ignored.length) return { code: compose.violations ? 1 : 0, compose: compose.violations, text: [`ai-dev ${where}: up to date (${fresh})`, ...project].join("\n") };
   const m = readManifest(root);
   const fixable = ignored.some((c) => !c.manual);
   const lost = "ignores flow files — they are missing from the commit, other checkouts and the cloud session:";
@@ -1036,6 +1074,7 @@ function check(global) {
     code: 1,
     behind: stale.length > 0,
     ignored: ignored.length > 0,
+    compose: compose.violations,
     run: stale.length > 0 || fixable,
     text: [
       stale.length ? `ai-dev ${where}: behind — installed ${m.tag ?? short(m.sha) ?? "without SHA"}, latest ${fresh}` : `ai-dev ${where}: up to date (${fresh}), but git ${lost}`,
@@ -1044,8 +1083,7 @@ function check(global) {
       ...capped(changeLines(ignored, root, global)),
       // update won't fix a personal rule — what to do is said in the ❌ line
       ...(stale.length || fixable ? [`${stale.length ? "Update" : "Fix"}: npx -y github:${SOURCE} update${global ? " -g" : ""}${fixable ? " — adds exceptions to .gitignore" : ""}`] : []),
-      ...warnings,
-      ...mode,
+      ...project,
     ].join("\n"),
   };
 }
@@ -1165,6 +1203,8 @@ function hook(failed) {
   const tail = [];
   if (shown.some((r) => r.behind)) tail.push("Behind — update, commit the project copy, re-read what was updated.");
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, commit it with the copy; a rule outside the project — fix it yourself.");
+  // the session has no task yet at its start, and one session is one task: the fix goes into a task of its own
+  if (shown.some((r) => r.compose)) tail.push("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
   if (shown.some((r) => r.code === 2)) tail.push("Check unavailable — work by the current flow and say so.");
   if (shown.some((r) => r.run)) tail.push(SANDBOX_HINT);
   note(["ai-dev flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...tail].join("\n"));
