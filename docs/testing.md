@@ -2,8 +2,8 @@
 
 The rule — which test is needed and how it can fail — is `AGENTS.md`,
 "Specification — decisions" (in full — `skills/spec/canon.md`), and
-`AGENTS.md`, "Tests and code"; own port and own database —
-`docs/parallel-checkouts.md`.
+`AGENTS.md`, "Tests and code"; the task's Compose stack, its addresses and
+the runner config — `docs/parallel-checkouts.md`.
 Here — how to run tests, read the result, write e2e tests that don't flake,
 and check UI in the agent's browser. The rules hold for any stack, the
 examples are Playwright. Three things depend on the framework: which env files
@@ -95,23 +95,29 @@ against the Playwright, Next.js, Vite, SvelteKit and Nuxt documentation.
   flag" is a project standard (`tests/standards/<name>`), not attentiveness.
 - **A fresh database per run.** CI starts from an empty database and catches
   fixture races; a populated local database hides them — or the other way
-  round, its old rows show up in others' lists. Run on your own fresh database
-  (`docs/parallel-checkouts.md`). A test that is green on CI's empty database
-  and red on a populated local one is a defect of the test (it depends on
-  others' data), not of the database.
+  round, its old rows show up in others' lists. The task's e2e stack starts
+  on clean volumes every run (`task-env e2e`, `docs/parallel-checkouts.md`).
+  A test that is green on CI's empty database and red on a populated local
+  one is a defect of the test (it depends on others' data), not of the
+  database.
 
 ## e2e
 
-- **Against a production build, not the dev server.** `webServer.command` is
-  the build and the production server (table below), not `dev`. The dev
-  server changes code under a run: Next.js compiles a route on its first
-  request, Vite (and SvelteKit, Nuxt, React Router built on it) re-bundles
-  dependencies and reloads the page when it meets a new dependency mid-run —
-  timeouts and warnings that production doesn't have.
+- **Against a production build, not the dev server.** In the task's e2e
+  stack the app is a service of the compose file, and for e2e it serves the
+  production build (table below) — a profile or a build target by a variable
+  set on the `task-env e2e` command: the script passes its environment to
+  Compose. Without the stack (CI) — `webServer.command` is the build and the
+  production server, not `dev`. The dev server changes code under a run:
+  Next.js compiles a route on its first request, Vite (and SvelteKit, Nuxt,
+  React Router built on it) re-bundles dependencies and reloads the page when
+  it meets a new dependency mid-run — timeouts and warnings that production
+  doesn't have.
 - **External services — stubs or emulators** via environment flags of the
-  e2e server (`webServer.env`): email, payments, storage, LLM. A side effect
-  ("email sent", "payment created") — by polling your own database or the
-  emulator, not via a UI that itself depends on the external service.
+  e2e server (the service's `environment` in the stack, otherwise
+  `webServer.env`): email, payments, storage, LLM. A side effect ("email
+  sent", "payment created") — by polling your own database or the emulator,
+  not via a UI that itself depends on the external service.
 - **Shared data — a setup project, once per run.** What all parallel files
   see (reference data, catalogs, users to log in with) is created by the
   runner's setup project, not by a file's `beforeAll`: otherwise two files at
