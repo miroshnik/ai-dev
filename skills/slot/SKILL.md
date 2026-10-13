@@ -1,7 +1,7 @@
 ---
 name: slot
 description: "A queue for heavy runs on the machine — project checks (`lint`, `typecheck`, `test`, `test:*`) go through `slot`, and installing the flow wraps the `package.json` scripts in it; two runs at a time, together half of the cores, the rest wait in arrival order and print whom they wait for; the command gets `AI_DEV_SLOT_CPUS` (a quarter of the cores) for the runner's workers. When — you run a full project check, tests, typecheck, lint, e2e; a run is silent with the line 'slot: waiting for the machine queue'; parallel sessions choke the machine and runs hit timeouts; you set up runner workers (Vitest, Playwright, Jest) locally; a heavy command bypasses the project's scripts — even if the word 'queue' was never said."
-allowed-tools: Bash(bun *skills/slot/scripts/slot.ts *) Bash(node *skills/slot/scripts/slot.ts *)
+allowed-tools: Bash(bun *skills/slot/scripts/slot.ts *)
 ---
 
 # slot — the machine's heavy runs in a queue
@@ -26,10 +26,11 @@ otherwise wait for itself.
 ## How it is enabled
 
 Installing the flow (`install`, `update`) wraps the project's `package.json`
-scripts `lint`, `typecheck`, `test` and `test:*` in `slot`:
-`"test": "node .agents/skills/slot/scripts/slot.ts 'vitest run'"` (`bun` for a
-project on Bun). Everyone calls them — the agent, a human in a terminal,
-`github pr premerge` — and everyone joins one queue. `build` isn't wrapped —
+scripts `lint`, `typecheck`, `test` and `test:*` in `slot`, always via `bun`
+— the flow's only runtime, a Node project included:
+`"test": "bun .agents/skills/slot/scripts/slot.ts 'vitest run'"`. Everyone
+calls them — the agent, a human in a terminal, `github pr premerge` — and
+everyone joins one queue. `build` isn't wrapped —
 the host and Docker run it, where a copy of the skill may be missing; watch
 isn't either: it's long and would hold a slot for a long time. Removed the
 wrapper by hand — `check` names the script, `update` puts it back.

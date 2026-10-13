@@ -99,8 +99,8 @@ async function until(cond: () => boolean, what: string) {
 const waiting = (q: Queued, name: string) => until(() => q.err().includes("slot: waiting for the machine queue"), `${name} ждёт в очереди; stderr: ${q.err()}`);
 
 /** Синхронный `slot`; таймаут — чтобы зависание в очереди упало с объяснением, а не таймаутом теста. */
-function run(args: string[], extra: Record<string, string> = {}, runtime = "bun") {
-  return spawnSync(runtime, [SLOT, ...args], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
+function run(args: string[], extra: Record<string, string> = {}) {
+  return spawnSync("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
 }
 
 describe("Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода", () => {
@@ -180,14 +180,6 @@ describe("Команда в слоте — как без него, с долей
 
   it("код выхода — код команды", () => {
     expect(exitOf(run(["exit 3"]))).toBe(3);
-  });
-
-  /** Скрипт package.json проекта на Node зовёт slot через node (≥ 22.18): типы стираются, предупреждений нет. */
-  it("под Node без Bun — то же, что под Bun", () => {
-    const r = run(['echo "$AI_DEV_SLOT_CPUS"'], {}, "node");
-    expect(exitOf(r)).toBe(0);
-    expect(r.stdout).toBe(run(['echo "$AI_DEV_SLOT_CPUS"']).stdout);
-    expect(r.stderr).toBe("");
   });
 });
 
