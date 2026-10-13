@@ -505,6 +505,60 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
     expect(r.stdout).not.toContain("Вне дерева");
   });
 
+  // bun пишет хук (beforeAll, afterAll) пропущенного describe отдельным testcase «(unnamed)» без line: без Docker
+  // describe с ним пропускаются, и --strict падал на имени хука при зелёных тестах
+  describe("bun test: хук describe — testcase «(unnamed)» без строки", () => {
+    const file = "tests/capabilities/probe/probe.test.ts";
+    const junit = (cases: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test">
+  <testsuite name="${file}" file="${file}">
+    <testsuite name="Стек в Docker" file="${file}" line="2">
+${cases}
+    </testsuite>
+  </testsuite>
+</testsuites>`;
+    beforeEach(() =>
+      writeTree(dir, {
+        "tests/capabilities/probe/probe.md": "Проба.\n",
+        [file]: `import { afterAll, beforeAll, describe, it } from "bun:test";
+describe.skipIf(true)("Стек в Docker", () => {
+  beforeAll(() => {});
+  it("стек поднимается", () => {});
+  afterAll(() => {});
+});
+`,
+      }),
+    );
+
+    it("пропущенный хук `(unnamed)` в отчёте JUnit bun — не тест: `spec-doc --strict` его не требует назвать и в спеку не выводит", () => {
+      const r = doc(
+        "bun.xml",
+        junit(`      <testcase name="(unnamed)" classname="Стек в Docker" file="${file}"><skipped /></testcase>
+      <testcase name="стек поднимается" classname="Стек в Docker" file="${file}" line="4"><skipped /></testcase>
+      <testcase name="(unnamed)" classname="Стек в Docker" file="${file}"><skipped /></testcase>`),
+        "--stdout",
+        "--strict",
+      );
+      expect(r.stderr).not.toContain("(unnamed)");
+      expect(r.stdout).not.toContain("(unnamed)");
+      expect(r.stdout).toContain("<summary>⏭️ 1 тест, 1 пропущен</summary>\n\n- ⏭️ стек поднимается — пропущен\n\n</details>");
+      expect(r.code).toBe(0);
+    });
+
+    it("тест без имени, который выполнялся, — по-прежнему ошибка `--strict`", () => {
+      const r = doc(
+        "bun.xml",
+        junit(`      <testcase name="(unnamed)" classname="Стек в Docker" file="${file}"><failure message="нет сети">trace</failure></testcase>
+      <testcase name="стек поднимается" classname="Стек в Docker" file="${file}" line="4" />`),
+        "--stdout",
+        "--strict",
+      );
+      expect(r.stdout).toContain("- ❌ (unnamed) — падает");
+      expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «(unnamed)» (${file})`);
+      expect(r.code).toBe(1);
+    });
+  });
+
   it("одинаковый тест из двух отчётов — одна строка с худшим статусом", () => {
     writeFileSync(path.join(dir, "a.json"), vitestReport(dir, { "tests/capabilities/billing/a.test.ts": [[[], "общий"]] }));
     writeFileSync(path.join(dir, "b.json"), vitestReport(dir, { "tests/capabilities/billing/a.test.ts": [[[], "общий", "failed"]] }));
