@@ -61,7 +61,7 @@ describe("Ядро канона умещается в бюджет контек�
   });
 
   it("бюджет считается по байтам файла в UTF-8, блоки кода не исключаются", () => {
-    const md = "# Правило\n\n```bash\nnpx -y github:miroshnik/ai-dev install\n```\n";
+    const md = "# Правило\n\n```bash\nbunx github:miroshnik/ai-dev install\n```\n";
     expect(sizeOf(md)).toBe(Buffer.from(md, "utf8").length);
     expect(sizeOf("ё")).toBe(2);
   });

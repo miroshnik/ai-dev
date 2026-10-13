@@ -9,7 +9,7 @@ temporary container into which only the project repository is cloned.
 Only the project repository. Skills from the user's machine
 (`~/.claude/skills`) and the agent's memory aren't there. A cloud session has
 the canon and skills only if the flow is installed in the project:
-`npx -y github:miroshnik/ai-dev install` puts a copy into `.agents/`, and the
+`bunx github:miroshnik/ai-dev install` puts a copy into `.agents/`, and the
 symlinks in `.claude/rules` and `.claude/skills` come with the clone (the
 ai-dev README, "Installation"). It works in the project language, just like a
 local session: `language` in `.agents/ai-dev.json`, which comes with the

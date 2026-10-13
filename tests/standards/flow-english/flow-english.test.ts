@@ -85,12 +85,12 @@ describe("Код установщика и скриптов скиллов — �
       }
     },
     violator: { name: "комментарий по-русски", item: { file: "skills/x/scripts/x.ts", text: '// подсказка агенту\nconsole.log("Next: task close");\n' } },
-    includes: ["bin/ai-dev.mjs", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
+    includes: ["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
   });
 
   it("справка установщика и скриптов скиллов — на английском", () => {
     const scripts = sources(ROOT, ["skills", "bin"]).filter((f) => /^const USAGE\b/m.test(f.text)).map((f) => f.file);
-    expect(scripts).toEqual(expect.arrayContaining(["bin/ai-dev.mjs", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
+    expect(scripts).toEqual(expect.arrayContaining(["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
     const help = scripts.map((file) => {
       const r = spawnSync(process.execPath, [path.join(ROOT, file), "--help"], { cwd: ROOT, encoding: "utf8" });
       const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
@@ -231,8 +231,8 @@ describe("Названия, которые пишут и разбирают ск
  */
 describe("Язык проекта у скриптов скиллов и у установщика — один модуль", () => {
   it("установщик берёт язык и код языка модулем locale скилла github, своего правила у него нет", () => {
-    const bin = codeOnly(read("bin/ai-dev.mjs"), "bin/ai-dev.mjs");
-    expect(bin).toContain('import locale from "../skills/github/scripts/locale.cjs";');
+    const bin = codeOnly(read("bin/ai-dev.ts"), "bin/ai-dev.ts");
+    expect(bin).toContain('import locale from "../skills/github/scripts/locale.ts";');
     expect(bin).not.toMatch(/const (?:DEFAULT|LEGACY)_LANGUAGE\b|\[a-z\]\{2,3\}/);
   });
 

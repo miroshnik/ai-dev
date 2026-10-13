@@ -21,11 +21,11 @@ const skill = (name: string): Part => ({
   name: `скилл ${name} — со ссылкой на skills/${name}/SKILL.md`,
   mention: new RegExp(`\\]\\(skills/${escape(name)}/SKILL\\.md\\)`),
 });
-// в README команда — строкой запуска: `npx -y github:miroshnik/ai-dev check -g` или `node …/bin/ai-dev.mjs release`
+// в README команда — строкой запуска: `bunx github:miroshnik/ai-dev check -g` или `bun …/bin/ai-dev.ts release`
 const command = (name: string): Part => ({
   key: `ai-dev ${name}`,
   name: `команда установщика ${name} названа`,
-  mention: new RegExp(`ai-dev(?:\\.mjs)? ${escape(name)}\\b`),
+  mention: new RegExp(`ai-dev(?:\\.ts)? ${escape(name)}\\b`),
 });
 const script = (skillName: string, name: string): Part => ({
   key: `skills/${skillName}/scripts/${name}`,
@@ -60,7 +60,7 @@ function executables(): { skill: string; name: string; source: string }[] {
 /** Реестр из кода: скиллы, команды из справки установщика, исполняемые скрипты скиллов, справочники docs/. */
 function parts(): Part[] {
   const skills = readdirSync(path.join(ROOT, "skills")).filter((n) => existsSync(path.join(ROOT, "skills", n, "SKILL.md")));
-  const commands = [...new Set([...usageOf(read("bin/ai-dev.mjs")).matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]!))];
+  const commands = [...new Set([...usageOf(read("bin/ai-dev.ts")).matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]!))];
   const scripts = executables().map((x) => script(x.skill, x.name));
   const references = readdirSync(path.join(ROOT, "docs")).filter((n) => n.endsWith(".md"));
   return [...skills.map(skill), ...commands.map(command), ...scripts, ...references.map(reference)];

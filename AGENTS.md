@@ -6,10 +6,10 @@ The canon of rules for any agent: Claude Code, Codex, Gemini CLI, Cursor,
 Copilot, OpenCode and Amp read `AGENTS.md` themselves or via a link from
 their own file. It lives in the **miroshnik/ai-dev** repository together
 with the skills (`skills/*`) and references (`docs/`; `docs/…` paths in the
-rules are next to this file). Install: `npx -y github:miroshnik/ai-dev
-install` (latest release): everything is copied into the project's
-`.agents/`, and the copy is committed; `-g` puts only the skills and the hook
-on the machine, `-g --link` from a clone uses symlinks (README,
+rules are next to this file). Install: `bunx github:miroshnik/ai-dev install`
+(latest release; it needs only Bun and git): everything is copied into the
+project's `.agents/`, and the copy is committed; `-g` puts only the skills and
+the hook on the machine, `-g --link` from a clone uses symlinks (README,
 "Installation"). Only what is shared by all projects lives here; anything
 project-specific goes into the project's spec in `tests/` (section "Project
 knowledge and handoff"). A change to a rule or skill coming from another
@@ -40,7 +40,7 @@ section).
 
 Rules are loaded into context when a session starts: with a stale flow, the
 session works by old rules. So the very first thing, before the task, is
-`npx -y github:miroshnik/ai-dev check -g` (machine) and `check` (project); in
+`bunx github:miroshnik/ai-dev check -g` (machine) and `check` (project); in
 Claude Code the `SessionStart` hook runs them and puts the output at the start
 of the context. The project's `check` also prints its mode and language.
 

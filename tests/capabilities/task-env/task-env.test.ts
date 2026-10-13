@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { projectName, proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
+import { projectName, PROXY, proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
 import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
@@ -131,6 +131,20 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     expect(exitOf(stopped)).toBe(1);
     expect(stopped.stdout).toContain(`proxy ${NAME}: not running — start: bun ${SCRIPT} proxy up`);
     expect(docker("network", "ls", "--quiet", "--filter", `name=^${NAME}$`)).toBe("");
+  });
+});
+
+/**
+ * Имя прокси по умолчанию записано дважды: `PROXY` скрипта (его берут скрипт и `check -g` установщика) и значение по
+ * умолчанию подстановки `${AI_DEV_PROXY:-…}` в compose-файле — Compose скрипт не прочтёт. Расхождение молчит: прокси
+ * поднимется под одним именем, а `check -g` будет искать другое и назовёт работающий прокси незапущенным.
+ */
+describe("Имя прокси по умолчанию — одно у скрипта и compose-файла скилла", () => {
+  it("каждое значение по умолчанию ${AI_DEV_PROXY:-…} в compose-файле (комментарии не в счёт) — PROXY скрипта", () => {
+    const text = readFileSync(COMPOSE, "utf8").replace(/(^|\s)#.*$/gm, "$1");
+    const defaults = [...text.matchAll(/\$\{AI_DEV_PROXY:-([^}]*)\}/g)].map((m) => m[1]);
+    expect(defaults.length).toBeGreaterThan(0);
+    expect([...new Set(defaults)]).toEqual([PROXY]);
   });
 });
 

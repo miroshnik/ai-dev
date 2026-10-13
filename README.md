@@ -119,26 +119,26 @@ No exaggeration: the spec format isn't the main token cost; what costs more is h
 
 ## Installation
 
-You need `git` and Node (for `npx`); skill scripts need [Bun](https://bun.sh) ≥ 1.2 (the `spec` scripts also run under Node ≥ 22.18); the `github`, `est` and `dashboard` skills need [`gh`](https://cli.github.com) with the `project` scope (`gh auth refresh -s project`); `task-env` needs Docker with Compose (Docker Desktop on macOS).
+You need `git` and [Bun](https://bun.sh) ≥ 1.2 — the installer (`bunx`) and the skill scripts run under it; a project's CI on Node adds the `oven-sh/setup-bun` step; the `github`, `est` and `dashboard` skills need [`gh`](https://cli.github.com) with the `project` scope (`gh auth refresh -s project`); `task-env` needs Docker with Compose (Docker Desktop on macOS).
 
 ```bash
 # into a project — from the root of a git repository; the copy is committed with the project
-npx -y github:miroshnik/ai-dev install
+bunx github:miroshnik/ai-dev install
 
 # onto the machine — skills and the hook for every agent it has; the rules come from the project
-npx -y github:miroshnik/ai-dev install -g
+bunx github:miroshnik/ai-dev install -g
 ```
 
 Keeping the flow up to date:
 
 ```bash
-npx -y github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation), 2 — can't check; changes nothing
-npx -y github:miroshnik/ai-dev update -g   # bring it to the latest release
+bunx github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation), 2 — can't check; changes nothing
+bunx github:miroshnik/ai-dev update -g   # bring it to the latest release
 ```
 
 Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
 
-An agent's sandbox (Claude Code's Bash) doesn't let npx write its cache `~/.npm` nor the install write `.claude/skills`: then run the command in your own terminal — the refusal names it, and a repeat run finishes a cut-off install.
+An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun/install/cache` — prefix the command with `BUN_INSTALL_CACHE_DIR="$TMPDIR/bun"` — nor the install write `.claude/skills`: then run the command in your own terminal — the refusal names it, and a repeat run finishes a cut-off install.
 
 `install` in a project asks in the terminal whether the agent should do tasks entirely by itself — answer the task's questions by recommendation, commit, push, fix CI and merge its own PR on green checks (default — no); without a terminal — `install --auto` or `--no-auto`, without the flag the previous answer stays. `check` names the mode. With auto, `install` prints a hint for Claude Code: the app rejects a merge without human review in this mode too, and the session merges its own PR by itself only with the `Bash(gh pr merge *)` rule in `permissions.allow` of `~/.claude/settings.json` — the owner adds it, `install` doesn't change the machine's permission settings.
 
@@ -164,7 +164,7 @@ An agent's sandbox (Claude Code's Bash) doesn't let npx write its cache `~/.npm`
 <details>
 <summary><b>Releases and the up-to-date check</b></summary>
 
-Projects and machines with a copy get the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands are the same — the npx package from `main` finds the latest tag and restarts from it.
+Projects and machines with a copy get the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands are the same — bunx installs the package from `main` once and then runs it from its cache, so that package is only a launcher: it finds the latest tag and restarts from it by its SHA.
 
 - `check` changes nothing: it compares a copy with the latest release (the same install as a dry run, a list of differences), a `--link` clone — with `origin/main` after `git fetch`.
 - `update`: a copy — reinstalled from the latest release; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason). It says what changed, and the agent tells the user: a copy — every release after the installed one, newest first, with the list of its GitHub Release; a clone — the flow commits it pulled.
@@ -177,8 +177,8 @@ Projects and machines with a copy get the flow **by releases** — tags `vYYYY.M
 
 ```bash
 git clone https://github.com/miroshnik/ai-dev && cd ai-dev
-node bin/ai-dev.mjs install -g --link   # symlinks to the clone instead of copies: edits show up immediately
-node bin/ai-dev.mjs release --dry-run   # what goes into the release; without --dry-run — cut it
+bun bin/ai-dev.ts install -g --link   # symlinks to the clone instead of copies: edits show up immediately
+bun bin/ai-dev.ts release --dry-run   # what goes into the release; without --dry-run — cut it
 ```
 
 </details>
@@ -253,10 +253,10 @@ claude/CLAUDE.md   only what Claude Code has
 docs/              references the canon links to
 skills/<name>/     SKILL.md + scripts/ — TypeScript under Bun, no dependencies
 tests/             ai-dev's own spec: capabilities/ and standards/
-bin/ai-dev.mjs     the installer — JavaScript: npx runs it from node_modules, where Node doesn't strip types
+bin/ai-dev.ts      the installer — TypeScript under Bun too: bunx runs it from node_modules by its shebang
 ```
 
-**A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description`; body < 500 lines) and `scripts/` for the deterministic part; `reference.md` if needed. Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in ai-dev's `tests/` over the same tree. The exception is the installer `bin/ai-dev.mjs`: JavaScript, because npx runs it from `node_modules`, where Node doesn't strip types. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.
+**A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description`; body < 500 lines) and `scripts/` for the deterministic part; `reference.md` if needed. Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in ai-dev's `tests/` over the same tree. The installer `bin/ai-dev.ts` is the same TypeScript under Bun and imports skill modules instead of copying their values. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.
 
 ai-dev lives by its own flow: the spec — [`tests/`](tests), its documentation — in the [`spec` branch](https://github.com/miroshnik/ai-dev/tree/spec), tasks — in [Issues](https://github.com/miroshnik/ai-dev/issues) and the [ai-dev project](https://github.com/users/miroshnik/projects/6).
 

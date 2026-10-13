@@ -28,8 +28,8 @@
  *
  * The name (Compose project and network) and the port come from AI_DEV_PROXY and AI_DEV_PROXY_PORT, by default
  * `ai-dev-proxy` and 80: a test runs its own proxy next to the machine's one, a machine with port 80 busy takes
- * another. The default name is also the default of `${AI_DEV_PROXY:-…}` in the compose file and a copy in
- * bin/ai-dev.mjs (`check -g`) — tests/standards/installer-mirror holds them to `PROXY`.
+ * another. The default name is also the default of `${AI_DEV_PROXY:-…}` in the compose file — tests/capabilities/task-env
+ * holds it to `PROXY`; `check -g` of the installer imports `proxyName`.
  *
  * Docker runs outside the Claude Code sandbox (the sandbox denies its socket): the agent runs this script as an
  * unsandboxed call — an `excludedCommands` entry for it doesn't take it out (SKILL.md, «Docker and the sandbox»).
@@ -69,10 +69,7 @@ const SERVICE = "traefik";
 /** The entry point routers of task stacks attach to: HTTP on the proxy's port. */
 export const ENTRY_POINT = "web";
 
-/**
- * The proxy's default name. The installer under Node holds a copy (tests/standards/installer-mirror), a script under
- * Bun imports it.
- */
+/** The proxy's default name: the installer and other scripts import it, the compose file repeats it as a default. */
 export const PROXY = "ai-dev-proxy";
 
 /** The proxy's name — its Compose project and network; the same expression as in the compose file and `check -g`. */
@@ -175,8 +172,8 @@ function down(env: NodeJS.ProcessEnv): Result {
 // ----------------------------------------------------------------------------
 
 /**
- * Compose files Docker Compose looks for, in its order. The installer holds a copy — `check` doesn't start bun in a
- * project without a compose file; tests/standards/installer-mirror holds the copy to this list.
+ * Compose files Docker Compose looks for, in its order. The installer imports the list — its `check` doesn't start this
+ * script in a project without a compose file.
  */
 export const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 
