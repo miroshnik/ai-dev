@@ -76,7 +76,6 @@ describe("Тест, который запускает процессы, не п�
         "tests/capabilities/spec-diff/spec-diff.test.ts",
         "tests/capabilities/spec-doc/spec-doc.test.ts",
         "tests/capabilities/est/est.test.ts",
-        "tests/standards/node-runtime/node-runtime.test.ts",
       ]),
     );
   });
