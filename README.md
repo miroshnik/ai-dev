@@ -132,7 +132,7 @@ npx -y github:miroshnik/ai-dev install -g
 Keeping the flow up to date:
 
 ```bash
-npx -y github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files), 2 — can't check; changes nothing
+npx -y github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation), 2 — can't check; changes nothing
 npx -y github:miroshnik/ai-dev update -g   # bring it to the latest release
 ```
 
@@ -228,11 +228,11 @@ Project checks — `lint`, `typecheck`, `test`, `test:*` — go through the mach
 
 `slot '<command>' [args…]`
 
-### [`task-env`](skills/task-env/SKILL.md) — a task's addresses `*.localhost`
+### [`task-env`](skills/task-env/SKILL.md) — a task's environment: its Compose stack and addresses `*.localhost`
 
-One proxy per machine — Traefik in Docker — gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels: no host port per app, and different hosts keep their own cookies, so parallel sessions and the owner's browser don't log each other out. A container without labels isn't published, a stopped one leaves the routes; `check -g` and the session start name whether the proxy runs, with the command to start it. The skill names the proxy's network, entry point and label format for a task stack's override.
+A task's stack is the Docker Compose project `<project>-<N>`: parallel sessions of one project keep their own apps and databases without touching each other. One proxy per machine — Traefik in Docker — gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels: no host port per app, and different hosts keep their own cookies, so parallel sessions and the owner's browser don't log each other out. A container without labels isn't published, a stopped one leaves the routes; `check -g` and the session start name whether the proxy runs, with the command to start it. The skill names the proxy's network, entry point and label format for a task stack's override. The project's `check` holds the compose file to the isolation rules — no `container_name`, no fixed host port, volumes and networks without `name:` and `external`, code by relative paths — and names each violation with the rule and the service; it reads `docker compose config`, so every form of writing is covered.
 
-`task-env proxy up | down | status`
+`task-env proxy up | down | status` · `task-env check [<dir>]`
 
 ### References
 
