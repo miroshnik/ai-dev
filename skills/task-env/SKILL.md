@@ -204,9 +204,9 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   (default `ai-dev-proxy`); `AI_DEV_PROXY_PORT` — its port on `127.0.0.1`
   (default 80). Tests run their own proxy with them next to the machine's
   one. Port 80 busy — another port, and the addresses carry it:
-  `http://web.42.shop.localhost:8080`. The name is the same in three places:
-  `name:` of the compose file, `proxyName` of the script and `check -g`
-  (`bin/ai-dev.mjs`).
+  `http://web.42.shop.localhost:8080`. The name is the same in two places: the
+  `${AI_DEV_PROXY:-…}` defaults of the compose file and `proxyName` of the
+  script — `check -g` of the installer imports it.
 
 ## Checked on the machine (2026-10-13)
 

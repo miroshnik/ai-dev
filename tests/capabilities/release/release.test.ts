@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, copyPackage, npxPackage, sandbox, type AiDevPackage, type Run, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, aiDevPackage, bunxPackage, copyPackage, sandbox, type AiDevPackage, type Run, type Sandbox } from "../../lib/ai-dev.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
@@ -33,7 +33,7 @@ function owner() {
   const up = copyPackage(base, path.join(sb.tmp, "upstream"));
   const clone = path.join(sb.tmp, "clone");
   git(sb.tmp, "clone", "-q", up.dir, clone);
-  const bin = path.join(clone, "bin/ai-dev.mjs");
+  const bin = path.join(clone, "bin/ai-dev.ts");
   const tag = (name: string) => up.repo.git("tag", name);
   const rule = (text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
   return { up, clone, tag, rule, release: (args: string[] = ["--dry-run"]) => aiDev(sb, ["release", ...args], { bin }) };
@@ -56,7 +56,7 @@ describe("Релиз — тег по дате на origin/main и список �
     o.tag(PREV);
     o.up.repo.commit(o.rule("Новое правило."), "docs(agents): новое правило");
     o.up.repo.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
-    o.up.repo.commit({ "bin/ai-dev.mjs": read(path.join(o.up.dir, "bin/ai-dev.mjs")) + "// правка\n" }, "fix(install): правка установщика");
+    o.up.repo.commit({ "bin/ai-dev.ts": read(path.join(o.up.dir, "bin/ai-dev.ts")) + "// правка\n" }, "fix(install): правка установщика");
     o.up.repo.commit({ "skills/est/SKILL.md": read(path.join(o.up.dir, "skills/est/SKILL.md")) + "\nшаг\n" }, "feat(est): новый шаг");
     const { r, tag, days } = dated(() => o.release());
     expect(r.code).toBe(0);
@@ -87,7 +87,7 @@ describe("Релиз — тег по дате на origin/main и список �
     const o = owner();
     o.tag(PREV);
     o.up.repo.commit(o.rule("Правило из PR."), "feat(agents): правило из PR\n\nRefs #7");
-    o.up.repo.commit({ "bin/ai-dev.mjs": read(path.join(o.up.dir, "bin/ai-dev.mjs")) + "// правка\n" }, "fix(install): правка под правило\n\nПричина в одну строку.\nRefs #7");
+    o.up.repo.commit({ "bin/ai-dev.ts": read(path.join(o.up.dir, "bin/ai-dev.ts")) + "// правка\n" }, "fix(install): правка под правило\n\nПричина в одну строку.\nRefs #7");
     const r = o.release();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("- feat(agents): правило из PR (#7)");
@@ -135,7 +135,7 @@ describe("Релиз — тег по дате на origin/main и список �
     const sha = o.up.repo.commit(o.rule("Новое правило."), "docs(agents): новое правило");
     // gh песочницы записывает свои аргументы
     const out = path.join(sb.tmp, "gh-args.json");
-    const script = `#!/bin/sh\nexec node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))' "${out}" "$@"\n`;
+    const script = `#!/bin/sh\nexec "${process.execPath}" -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))' "${out}" "$@"\n`;
     writeFileSync(path.join(sb.bin, "gh"), script, { mode: 0o755 });
     const { r, tag, days } = dated(() => o.release([]));
     expect(r.code).toBe(0);
@@ -148,7 +148,7 @@ describe("Релиз — тег по дате на origin/main и список �
   });
 
   it("не из клона ai-dev — отказ, код 2", () => {
-    const bin = npxPackage(path.join(sb.tmp, "npx"), base.dir, base.sha);
+    const bin = bunxPackage(path.join(sb.tmp, "bunx"), base.dir, base.sha);
     const r = aiDev(sb, ["release", "--dry-run"], { bin });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("only from an ai-dev clone");

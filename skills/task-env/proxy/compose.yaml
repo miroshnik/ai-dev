@@ -1,8 +1,7 @@
 # The machine's proxy (the task-env skill, SKILL.md, «The proxy»): one Traefik per machine routes
 # http://<service>.<N>.<project>.localhost to containers of task stacks by their labels. Started by
 # `task-env proxy up`. The name — the Compose project and the network — is the same expression as `proxyName` in
-# scripts/task-env.ts; tests/standards/installer-mirror holds each default `${AI_DEV_PROXY:-…}` here to `PROXY` there
-# and to its copy in bin/ai-dev.mjs (`check -g`).
+# scripts/task-env.ts; tests/capabilities/task-env holds each default `${AI_DEV_PROXY:-…}` here to `PROXY` there.
 name: ${AI_DEV_PROXY:-ai-dev-proxy}
 services:
   traefik:

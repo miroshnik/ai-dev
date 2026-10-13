@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, copyPackage, npxPackage, npxServesPackages, REPO, sandbox, snapshot, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, aiDevPackage, bunxPackage, bunxServesPackages, copyPackage, REPO, sandbox, snapshot, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
@@ -55,7 +55,7 @@ function linkedClone() {
   const up = copyPackage(base, path.join(sb.tmp, "upstream"));
   const clone = path.join(sb.tmp, "clone");
   git(sb.tmp, "clone", "-q", up.dir, clone);
-  expect(aiDev(sb, ["install", "-g", "--link"], { bin: path.join(clone, "bin/ai-dev.mjs") }).code).toBe(0);
+  expect(aiDev(sb, ["install", "-g", "--link"], { bin: path.join(clone, "bin/ai-dev.ts") }).code).toBe(0);
   return { up, clone };
 }
 
@@ -76,7 +76,7 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(r.stdout).toContain("~ .agents/ai-dev/AGENTS.md");
     expect(r.stdout).toContain("+ .agents/skills/fresh/");
     expect(r.stdout).toContain("- .agents/skills/ci-wait/");
-    expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update\n");
+    expect(r.stdout).toContain("bunx github:miroshnik/ai-dev update\n");
     expect(snapshot(sb.proj)).toEqual(before);
   });
 
@@ -90,6 +90,24 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(existsSync(path.join(sb.proj, ".agents/skills/ci-wait"))).toBe(false);
     expect(JSON.parse(read(manifest(sb.proj))).sha).toBe(newer.sha);
     expect(aiDev(sb, ["check"], { bin: newer.bin }).code).toBe(0);
+  });
+
+  /** Флоу до перехода на Bun ставился через npx: его команду носят блок AGENTS.md и блок исключений .gitignore. */
+  it("блоки AGENTS.md и .gitignore со старой командой npx — отстаёт; update переписывает оба на bunx; после него check — актуально", () => {
+    writeFileSync(path.join(sb.proj, ".gitignore"), "CLAUDE.md\n");
+    aiDev(sb, ["install"]);
+    const files = [path.join(sb.proj, "AGENTS.md"), path.join(sb.proj, ".gitignore")];
+    for (const f of files) {
+      const text = read(f);
+      expect(text).toContain("`bunx github:miroshnik/ai-dev install`");
+      writeFileSync(f, text.replace("`bunx github:miroshnik/ai-dev install`", "`npx -y github:miroshnik/ai-dev install`"));
+    }
+    const c = aiDev(sb, ["check"]);
+    expect(c.code).toBe(1);
+    expect(c.stdout).toContain("  ~ AGENTS.md\n");
+    expect(aiDev(sb, ["update"]).code).toBe(0);
+    for (const f of files) expect(read(f)).not.toContain("npx");
+    expect(aiDev(sb, ["check"]).code).toBe(0);
   });
 
   it("старая установка без SHA — check сравнивает содержимое: совпадает — актуально, нет — отстаёт «without SHA»; update записывает SHA", () => {
@@ -162,7 +180,7 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: en\n$/) });
     const behind = check(newer.bin);
     expect(behind.code).toBe(1);
-    expect(behind.stdout).toEndWith("npx -y github:miroshnik/ai-dev update\n" + MODE_AUTO);
+    expect(behind.stdout).toEndWith("bunx github:miroshnik/ai-dev update\n" + MODE_AUTO);
     editManifest(sb.proj, { auto: undefined });
     expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/in the project: up to date[^\n]*\n {2}tasks: with permission\n {2}language: en\n$/) });
     expect(aiDev(sb, ["install", "-g"]).code).toBe(0);
@@ -172,8 +190,8 @@ describe("Копия в проекте сверяется со свежим ai-d
   /** Клон ai-dev — сам канон: сверять и обновлять в нём нечего, а режим сессии в нём знать нужно. */
   it("в клоне ai-dev check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит", () => {
     const clone = copyPackage(base, path.join(sb.tmp, "clone")).dir;
-    // установщик — пакет npx, релизы недоступны: поиск релиза дал бы код 2
-    const bin = npxPackage(path.join(sb.tmp, "npx/main"), base.dir, base.sha);
+    // установщик — пакет bunx из main, релизы недоступны: поиск релиза дал бы код 2
+    const bin = bunxPackage(path.join(sb.tmp, "bunx/main"), base.dir, null);
     const run = (...args: string[]) => aiDev(sb, args, { cwd: clone, bin, env: { AI_DEV_REPO: path.join(sb.tmp, "nowhere") } });
     const ABSENT = "ai-dev in the project: not installed — an ai-dev clone, the canon is at its root\n";
     expect(run("check")).toMatchObject({ code: 0, stdout: ABSENT + MODE_ASK });
@@ -202,7 +220,7 @@ describe("Файл флоу, который игнорирует git проек�
     expect(r.stdout).toContain("in the project: up to date");
     expect(r.stdout).toContain("git ignores flow files");
     expect(r.stdout).toContain("  ❌ .agents/ai-dev/claude/CLAUDE.md — .gitignore:1 «CLAUDE.md»\n");
-    expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update — adds exceptions to .gitignore\n");
+    expect(r.stdout).toContain("bunx github:miroshnik/ai-dev update — adds exceptions to .gitignore\n");
     expect(r.stdout).toEndWith(MODE_ASK);
     expect(snapshot(sb.proj)).toEqual(before);
   });
@@ -240,17 +258,13 @@ describe("Файл флоу, который игнорирует git проек�
 });
 
 /**
- * check проекта с compose-файлом зовёт скрипт task-env под bun, тот — `docker compose config`: в PATH песочницы — bun и
- * docker прогона. Плагин compose docker ищет в каталоге своей конфигурации, а HOME у песочницы свой — DOCKER_CONFIG
- * ведёт в настоящий; дочерний bun на macOS — без JIT (tests/standards/spawn-no-jit).
+ * check проекта с compose-файлом зовёт скрипт task-env под тем же bun, тот — `docker compose config`: в PATH песочницы
+ * — docker прогона. Плагин compose docker ищет в каталоге своей конфигурации, а HOME у песочницы свой — DOCKER_CONFIG
+ * ведёт в настоящий.
  */
-function withTools(...tools: ("bun" | "docker")[]) {
-  for (const t of tools) {
-    const found = t === "bun" ? process.execPath : execFileSync("sh", ["-c", "command -v docker"], { encoding: "utf8" }).trim();
-    symlinkSync(found, path.join(sb.bin, t));
-  }
+function withDocker() {
+  symlinkSync(execFileSync("sh", ["-c", "command -v docker"], { encoding: "utf8" }).trim(), path.join(sb.bin, "docker"));
   sb.env.DOCKER_CONFIG = process.env.DOCKER_CONFIG || path.join(os.homedir(), ".docker");
-  if (process.env.BUN_JSC_useJIT) sb.env.BUN_JSC_useJIT = process.env.BUN_JSC_useJIT;
 }
 
 const composeFile = (yaml: string) => writeFileSync(path.join(sb.proj, "compose.yaml"), yaml);
@@ -259,7 +273,7 @@ const COMPOSE_VIOLATION = "  ❌ compose.yaml: service db — container_name pg:
 
 describe("check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом", () => {
   it("нарушения — строки ❌ скрипта task-env, код 1 и при актуальном флоу; check ничего не меняет", () => {
-    withTools("bun", "docker");
+    withDocker();
     aiDev(sb, ["install"]);
     composeFile(CONTAINER_NAME);
     const before = snapshot(sb.proj);
@@ -272,7 +286,7 @@ describe("check проекта держит compose-файл правил изо
   });
 
   it("флоу отстал — строки ❌ compose-файла идут вместе со списком изменений, код 1", () => {
-    withTools("bun", "docker");
+    withDocker();
     aiDev(sb, ["install"]);
     composeFile(CONTAINER_NAME);
     const r = aiDev(sb, ["check"], { bin: newer.bin });
@@ -282,23 +296,19 @@ describe("check проекта держит compose-файл правил изо
     expect(r.stdout).toEndWith(MODE_ASK);
   });
 
-  /** Без bun в PATH: начни check скрипт в проекте без compose-файла — была бы строка ○ «bun not found». */
-  it("проект без compose-файла — ни строки сверх обычных, bun не запускается; чистый compose-файл — тоже ни строки; код 0", () => {
+  /** Без docker в PATH: начни check скрипт в проекте без compose-файла — была бы строка ○ «docker not found». */
+  it("проект без compose-файла — ни строки сверх обычных, скрипт не запускается; чистый compose-файл — тоже ни строки; код 0", () => {
     aiDev(sb, ["install"]);
     const upToDate = /^ai-dev in the project: up to date \([^)\n]+\)\n {2}tasks: with permission\n {2}language: en\n$/;
     expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(upToDate) });
-    withTools("bun", "docker");
+    withDocker();
     composeFile("services:\n  db:\n    image: postgres\n    ports: ['127.0.0.1::5432']\n");
     expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(upToDate) });
   });
 
-  it("без Docker — строка ○ «not checked» с причиной, код по-прежнему 0; без bun — так же", () => {
+  it("без Docker — строка ○ «not checked» с причиной, код по-прежнему 0", () => {
     aiDev(sb, ["install"]);
     composeFile(CONTAINER_NAME);
-    const noBun = aiDev(sb, ["check"]);
-    expect(noBun.code).toBe(0);
-    expect(noBun.stdout).toContain("  ○ compose.yaml: not checked — bun not found\n");
-    withTools("bun");
     const noDocker = aiDev(sb, ["check"]);
     expect(noDocker.code).toBe(0);
     expect(noDocker.stdout).toContain("  ○ compose.yaml: not checked — docker not found\n");
@@ -322,7 +332,7 @@ describe("Копия на машине (-g) сверяется и обновля
     const r = aiDev(sb, ["check", "-g"], { bin: newer.bin });
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("+ ~/.agents/skills/fresh/");
-    expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update -g");
+    expect(r.stdout).toContain("bunx github:miroshnik/ai-dev update -g");
     expect(snapshot(sb.home)).toEqual(before);
     expect(aiDev(sb, ["update", "-g"], { bin: newer.bin }).code).toBe(0);
     expect(existsSync(path.join(sb.home, ".agents/skills/fresh"))).toBe(true);
@@ -380,18 +390,24 @@ describe("Копия на машине (-g) сверяется и обновля
   });
 });
 
-// ai-dev с релизами: upstream — git-репозиторий, откуда установщик берёт теги (AI_DEV_REPO); npx песочницы отдаёт
-// пакеты его коммитов — голову main по `github:miroshnik/ai-dev` и релиз по SHA тега
+// ai-dev с релизами: upstream — git-репозиторий, откуда установщик берёт теги (AI_DEV_REPO); bunx песочницы отдаёт
+// пакеты его коммитов — пускатель из main по `github:miroshnik/ai-dev` и пакет каждого коммита по его SHA
 function withReleases() {
   const up = copyPackage(base, path.join(sb.tmp, "upstream"));
-  const pkgs = path.join(sb.tmp, "npx");
-  npxServesPackages(sb, pkgs);
+  const pkgs = path.join(sb.tmp, "bunx");
+  bunxServesPackages(sb, pkgs);
   const head = () => up.repo.git("rev-parse", "HEAD");
-  const serveMain = () => (rmSync(path.join(pkgs, "main"), { recursive: true, force: true }), npxPackage(path.join(pkgs, "main"), up.dir, head()));
+  const serveMain = () => {
+    rmSync(path.join(pkgs, "main"), { recursive: true, force: true });
+    bunxPackage(path.join(pkgs, head()), up.dir, head());
+    return bunxPackage(path.join(pkgs, "main"), up.dir, null);
+  };
   const bin = serveMain();
   return {
     up,
-    /** коммит в main upstream: npx теперь отдаёт его */
+    /** пускатель bunx — пакет из main, каким его запускает `bunx github:miroshnik/ai-dev` */
+    bin,
+    /** коммит в main upstream: bunx теперь отдаёт его */
     commit(files: Record<string, string | null>, message?: string) {
       const sha = up.repo.commit(files, message);
       serveMain();
@@ -401,27 +417,26 @@ function withReleases() {
     notes() {
       const clone = path.join(sb.tmp, "owner");
       if (!existsSync(clone)) git(sb.tmp, "clone", "-q", up.dir, clone);
-      const r = aiDev(sb, ["release", "--dry-run"], { bin: path.join(clone, "bin/ai-dev.mjs") });
+      const r = aiDev(sb, ["release", "--dry-run"], { bin: path.join(clone, "bin/ai-dev.ts") });
       expect(r.code).toBe(0);
       return r.stdout.split("\n").filter((l) => l.startsWith("- "));
     },
-    /** релиз — тег на голову main (annotated — аннотированный), npx отдаёт его пакет по SHA коммита */
+    /** релиз — тег на голову main (annotated — аннотированный); пакет его коммита bunx уже отдаёт по SHA */
     release(tag: string, { annotated = false } = {}) {
       const sha = head();
       if (annotated) up.repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "tag", "-a", "-m", tag, tag);
       else up.repo.git("tag", tag);
-      npxPackage(path.join(pkgs, sha), up.dir, sha);
       return sha;
     },
-    /** установщик — пакет npx из main, как его запускает `npx -y github:miroshnik/ai-dev` */
+    /** установщик — пускатель из main */
     run: (args: string[], env: Record<string, string> = {}) => aiDev(sb, args, { bin, env: { AI_DEV_REPO: up.dir, ...env } }),
   };
 }
 
 /**
  * Проекты и машина копией следуют за релизами ai-dev (теги vГГГГ.ММ.ДД), а не за main: коммит в main без релиза их
- * «отставшими» не делает. Пакет npx из main находит последний релиз и перезапускается из него — дальше и код, и
- * файлы релиза.
+ * «отставшими» не делает. bunx ставит пакет из main один раз и дальше берёт его из кеша — он только пускатель: находит
+ * последний релиз и перезапускается по его SHA, дальше и код, и файлы релиза.
  */
 describe("Копия следует за релизами ai-dev, а не за main", () => {
   const rule = (up: AiDevPackage, text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
@@ -503,7 +518,8 @@ describe("Копия следует за релизами ai-dev, а не за m
     expect(JSON.parse(read(manifest(sb.home))).tag).toBe("v2026.10.05");
   });
 
-  it("релизов ещё нет — ставит голову main, как раньше, без тега", () => {
+  /** Пускатель из кеша bunx старше main: по SHA головы ставится свежий main, а не он сам. */
+  it("релизов ещё нет — пускатель перезапускается по SHA головы main: её файлы и SHA, без тега", () => {
     const r = withReleases();
     const sha = r.commit(rule(r.up, "Правило из main."));
     expect(r.run(["install"]).code).toBe(0);
@@ -511,6 +527,21 @@ describe("Копия следует за релизами ai-dev, а не за m
     const m = JSON.parse(read(manifest(sb.proj)));
     expect(m.sha).toBe(sha);
     expect(m.tag).toBeUndefined();
+  });
+
+  /**
+   * Пускатель в кеше bunx старше релиза: флаг или команду, которые появились позже, он сам бы отверг. Поэтому он
+   * перезапускается до проверки команды и флагов.
+   */
+  it("устаревший пускатель не отвергает флаг, который знает релиз: перезапуск — до проверки флагов", () => {
+    const r = withReleases();
+    const sha = r.release("v2026.10.05");
+    const text = read(r.bin);
+    const stale = text.replace('"--auto", "--no-auto"]', '"--auto"]');
+    expect(stale).not.toBe(text);
+    writeFileSync(r.bin, stale);
+    expect(r.run(["install", "--no-auto"]).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ tag: "v2026.10.05", sha, auto: false });
   });
 
   it("последний релиз не узнать (нет сети) — check: проверка недоступна, код 2; install и update — отказ, код 2; флоу не стоит — релиз не ищет", () => {
@@ -658,7 +689,7 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.code).toBe(1);
     expect(r.stdout).not.toContain("AGENTS.md");
     expect(r.stdout).toContain("+ skills/fresh/SKILL.md");
-    expect(r.stdout).toContain("npx -y github:miroshnik/ai-dev update -g");
+    expect(r.stdout).toContain("bunx github:miroshnik/ai-dev update -g");
     expect(git(clone, "rev-parse", "HEAD")).toBe(head);
     expect(git(clone, "status", "--porcelain")).toBe("");
     expect(snapshot(sb.home)).toEqual(before);
@@ -704,12 +735,12 @@ describe("Клон --link сверяется с origin/main, update подтяг
     up.repo.git("tag", "v2026.10.05");
     up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });
     up.repo.commit({ "tests/x.test.ts": "// тест\n" });
-    up.repo.commit({ "bin/ai-dev.mjs": read(path.join(up.dir, "bin/ai-dev.mjs")) + "// правка установщика\n" });
+    up.repo.commit({ "bin/ai-dev.ts": read(path.join(up.dir, "bin/ai-dev.ts")) + "// правка установщика\n" });
     expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
     const r = aiDev(sb, ["check", "-g"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("not in a release: flow commits after v2026.10.05 — 2");
-    expect(r.stdout).toContain(`${path.join(clone, "bin/ai-dev.mjs")} release`);
+    expect(r.stdout).toContain(`${path.join(clone, "bin/ai-dev.ts")} release`);
   });
 
   it("всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано", () => {
@@ -804,17 +835,17 @@ describe("В начале сессии Claude Code проверка идёт с�
     return { code: r.status, stdout: r.stdout };
   }
 
-  // npx песочницы отдаёт пакет bin: `npx … github:miroshnik/ai-dev <команда>` → `node <bin> <команда>`
-  function npxServes(bin: string) {
-    rmSync(path.join(sb.bin, "npx"));
-    const script = `#!/bin/sh\nwhile [ "$#" -gt 0 ]; do case "$1" in github:*) shift; break ;; *) shift ;; esac; done\nexec node "${bin}" "$@"\n`;
-    writeFileSync(path.join(sb.bin, "npx"), script, { mode: 0o755 });
+  // bunx песочницы отдаёт пакет bin: `bunx … github:miroshnik/ai-dev <команда>` → `bun <bin> <команда>`
+  function bunxServes(bin: string) {
+    rmSync(path.join(sb.bin, "bunx"), { force: true });
+    const script = `#!/bin/sh\nwhile [ "$#" -gt 0 ]; do case "$1" in github:*) shift; break ;; *) shift ;; esac; done\nexec "${process.execPath}" "${bin}" "$@"\n`;
+    writeFileSync(path.join(sb.bin, "bunx"), script, { mode: 0o755 });
   }
 
   it("команда хука — check --hook: машина и проект одним выводом, код 0, даже когда отстаёт", () => {
     aiDev(sb, ["install", "-g"]);
     aiDev(sb, ["install"]);
-    npxServes(newer.bin);
+    bunxServes(newer.bin);
     const r = runHook();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("ai-dev on the machine: behind");
@@ -823,16 +854,16 @@ describe("В начале сессии Claude Code проверка идёт с�
 
   it("в git-репозитории без флоу вывод хука зовёт поставить его в проект; вне git-репозитория строки про проект нет", () => {
     aiDev(sb, ["install", "-g"]);
-    npxServes(base.bin);
+    bunxServes(base.bin);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("ai-dev in the project: not installed — install it: npx -y github:miroshnik/ai-dev install --lang <project language>");
+    expect(r.stdout).toContain("ai-dev in the project: not installed — install it: bunx github:miroshnik/ai-dev install --lang <project language>");
     expect(aiDev(sb, ["check", "--hook"], { cwd: sb.tmp }).stdout).not.toContain("in the project");
   });
 
   it("вывод хука называет режим и язык проекта; в проекте без флоу строк режима и языка нет", () => {
     aiDev(sb, ["install", "-g"]);
-    npxServes(base.bin);
+    bunxServes(base.bin);
     expect(runHook().stdout).not.toMatch(/tasks:|language:/);
     aiDev(sb, ["install", "--auto"]);
     const r = runHook();
@@ -843,7 +874,7 @@ describe("В начале сессии Claude Code проверка идёт с�
   /** Вывод check и хука — сообщение флоу агенту, а не артефакт проекта: по-английски при любом языке проекта. */
   it("check и хук называют язык и режим проекта по-английски", () => {
     aiDev(sb, ["install", "-g"]);
-    npxServes(base.bin);
+    bunxServes(base.bin);
     aiDev(sb, ["install", "--auto", "--lang", "ru"]);
     const mode = /ai-dev in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: ru\n/;
     const check = aiDev(sb, ["check"]);
@@ -859,7 +890,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     aiDev(sb, ["install", "-g"]);
     aiDev(sb, ["install"]);
     writeFileSync(path.join(sb.proj, ".gitignore"), "CLAUDE.md\n");
-    npxServes(base.bin);
+    bunxServes(base.bin);
     const r = runHook();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("❌ .agents/ai-dev/claude/CLAUDE.md");
@@ -869,10 +900,10 @@ describe("В начале сессии Claude Code проверка идёт с�
 
   /** Правка compose-файла — не текущая задача сессии: в начале сессии задачи ещё нет, а «одна сессия — одна задача». */
   it("вывод хука называет нарушения compose-файла и что их правка — отдельная задача проекта; без нарушений подсказки нет", () => {
-    withTools("bun", "docker");
+    withDocker();
     aiDev(sb, ["install", "-g"]);
     aiDev(sb, ["install"]);
-    npxServes(base.bin);
+    bunxServes(base.bin);
     composeFile(CONTAINER_NAME);
     const r = runHook();
     expect(r.code).toBe(0);
@@ -884,23 +915,23 @@ describe("В начале сессии Claude Code проверка идёт с�
   });
 
   /**
-   * Команду из вывода хука агент запускает в песочнице Bash: npx там не пишет свой кеш `~/.npm`, установка — в
+   * Команду из вывода хука агент запускает в песочнице Bash: bunx там не пишет свой кеш `~/.bun/install/cache`, установка — в
    * `.claude/skills`. Хук идёт вне песочницы и её не видит — подсказка условная.
    */
-  it("вывод хука с командой для запуска подсказывает песочницу Claude Code: кеш npm — npm_config_cache, отказ записи в .claude/ — команда в терминале владельца; без команды подсказки нет", () => {
-    const hint = /In the Claude Code sandbox npx can't write its cache ~\/\.npm — prefix the command with npm_config_cache="\$TMPDIR\/npm"; [^\n]*\.claude\/[^\n]*the owner runs the command in their terminal/;
+  it("вывод хука с командой для запуска подсказывает песочницу Claude Code: кеш bunx — BUN_INSTALL_CACHE_DIR, отказ записи в .claude/ — команда в терминале владельца; без команды подсказки нет", () => {
+    const hint = /In the Claude Code sandbox bunx can't write its cache ~\/\.bun\/install\/cache — prefix the command with BUN_INSTALL_CACHE_DIR="\$TMPDIR\/bun"; [^\n]*\.claude\/[^\n]*the owner runs the command in their terminal/;
     aiDev(sb, ["install", "-g"]);
-    npxServes(base.bin);
+    bunxServes(base.bin);
     expect(runHook().stdout).toMatch(hint);
     aiDev(sb, ["install"]);
     expect(runHook().stdout).not.toContain("sandbox");
-    npxServes(newer.bin);
+    bunxServes(newer.bin);
     expect(runHook().stdout).toMatch(hint);
   });
 
-  it("npx недоступен — код хука 0, в выводе — что проверка недоступна", () => {
+  it("bunx недоступен — код хука 0, в выводе — что проверка недоступна", () => {
     aiDev(sb, ["install", "-g"]);
-    rmSync(path.join(sb.bin, "npx"));
+    rmSync(path.join(sb.bin, "bunx"), { force: true });
     const r = runHook();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("ai-dev check unavailable");

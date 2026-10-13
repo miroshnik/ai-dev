@@ -1,5 +1,5 @@
 /**
- * Хелперы для тестов установщика ai-dev: песочница с HOME и проектом, запуск `bin/ai-dev.mjs`, пакет ai-dev с
+ * Хелперы для тестов установщика ai-dev: песочница с HOME и проектом, запуск `bin/ai-dev.ts`, пакет ai-dev с
  * правками, снимок дерева. Не спека — в документацию не попадает.
  */
 import { execFileSync, spawnSync } from "node:child_process";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { gitRepo, tmpDir, writeTree } from "./spec.ts";
 
 export const REPO = fileURLToPath(new URL("../../", import.meta.url));
-export const BIN = path.join(REPO, "bin/ai-dev.mjs");
+export const BIN = path.join(REPO, "bin/ai-dev.ts");
 
 export interface Sandbox {
   tmp: string;
@@ -23,11 +23,14 @@ export interface Sandbox {
 }
 
 /**
- * HOME и git-проект во временном каталоге. PATH — только node, git, npm, npx и sh: агенты на машине определяются по
- * каталогам в HOME, а не по тому, что стоит у раннера. AI_DEV_REPO — пустой репозиторий: установщик из пакета ищет
- * релизы в нём, а не на GitHub, и тест не зависит от сети и настоящих релизов (#145); тест с релизами даёт своё зеркало.
- * TMPDIR — каталог песочницы: временные каталоги установщика (история для списка изменений `update`) — в нём, а не в
- * системном /tmp, куда песочница агента не пускает.
+ * HOME и git-проект во временном каталоге. PATH — только bun прогона, git и sh: агенты на машине определяются по
+ * каталогам в HOME, а не по тому, что стоит у раннера; bunx в PATH нет — его даёт тест, которому он нужен
+ * (bunxServesPackages). AI_DEV_REPO — пустой репозиторий: установщик из пакета ищет релизы в нём, а не на GitHub, и
+ * тест не зависит от сети и настоящих релизов (#145); тест с релизами даёт своё зеркало. TMPDIR — каталог песочницы:
+ * временные каталоги установщика (история для списка изменений `update`) — в нём, а не в системном /tmp, куда песочница
+ * агента не пускает. BUN_JSC_useJIT — из окружения прогона: дочерний bun на macOS — без JIT
+ * (tests/standards/spawn-no-jit). Кеш транспиляции bun выключен: bun кладёт его в HOME (`~/Library/Caches/bun`), а
+ * тесты сверяют HOME песочницы снимком — это машина, где установщик пишет только своё.
  */
 export function sandbox(): Sandbox {
   const { dir: tmp, cleanup } = tmpDir();
@@ -38,10 +41,13 @@ export function sandbox(): Sandbox {
   execFileSync("git", ["init", "-q"], { cwd: proj });
   const noReleases = path.join(tmp, "no-releases.git");
   execFileSync("git", ["init", "-q", "--bare", noReleases]);
-  const cmds = ["node", "git", "npm", "npx", "sh"];
+  const cmds = ["git", "sh"];
   const found = execFileSync("sh", ["-c", `for c in ${cmds.join(" ")}; do command -v "$c"; done`], { encoding: "utf8" }).trim().split("\n");
   cmds.forEach((cmd, i) => symlinkSync(found[i]!, path.join(bin, cmd)));
-  return { tmp, home, proj, bin, env: { HOME: home, PATH: bin, TMPDIR: tmp, AI_DEV_REPO: noReleases }, cleanup };
+  symlinkSync(process.execPath, path.join(bin, "bun"));
+  const env: Record<string, string> = { HOME: home, PATH: bin, TMPDIR: tmp, AI_DEV_REPO: noReleases, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" };
+  if (process.env.BUN_JSC_useJIT) env.BUN_JSC_useJIT = process.env.BUN_JSC_useJIT;
+  return { tmp, home, proj, bin, env, cleanup };
 }
 
 export interface Run {
@@ -50,9 +56,9 @@ export interface Run {
   stderr: string;
 }
 
-/** `node <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта. */
+/** `bun <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта. */
 export function aiDev(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string> } = {}): Run {
-  const r = spawnSync("node", [opts.bin ?? BIN, ...args], { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [opts.bin ?? BIN, ...args], { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8" });
   if (r.error) throw r.error;
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }
@@ -71,7 +77,7 @@ export function aiDevPackage(dir: string, edits: Record<string, string | null> =
   }
   const repo = gitRepo(dir);
   const sha = repo.commit({});
-  return { dir, bin: path.join(dir, "bin/ai-dev.mjs"), sha, repo };
+  return { dir, bin: path.join(dir, "bin/ai-dev.ts"), sha, repo };
 }
 
 export type AiDevPackage = ReturnType<typeof aiDevPackage>;
@@ -79,34 +85,35 @@ export type AiDevPackage = ReturnType<typeof aiDevPackage>;
 /** Копия пакета вместе с `.git` в dir — без процессов git: пакет собирается один раз на файл теста. */
 export function copyPackage(pkg: AiDevPackage, dir: string): AiDevPackage {
   cpSync(pkg.dir, dir, { recursive: true });
-  return { dir, bin: path.join(dir, "bin/ai-dev.mjs"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
+  return { dir, bin: path.join(dir, "bin/ai-dev.ts"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
 }
 
 /**
- * Пакет ai-dev, как его кладёт npx по `github:miroshnik/ai-dev[#<sha>]`: файлы src без `.git` — в
- * `<dir>/node_modules/ai-dev`, коммит — в `resolved` lock-файла npm. Установщик в нём — не клон. Возвращает его bin.
+ * Пакет ai-dev, как его кладёт bunx по `github:miroshnik/ai-dev[#<sha>]`: файлы src без `.git` — в
+ * `<dir>/node_modules/ai-dev`, спецификатор — в `<dir>/package.json`: с SHA — пакет, поставленный по SHA (релиз),
+ * без SHA (sha null) — пакет из main, пускатель. Установщик в нём — не клон. Возвращает его bin.
  */
-export function npxPackage(dir: string, src: string, sha: string): string {
+export function bunxPackage(dir: string, src: string, sha: string | null): string {
   const pkg = path.join(dir, "node_modules/ai-dev");
   cpSync(src, pkg, { recursive: true, filter: (p) => path.basename(p) !== ".git" });
-  const resolved = `git+ssh://git@github.com/miroshnik/ai-dev.git#${sha}`;
-  writeFileSync(path.join(dir, "node_modules/.package-lock.json"), JSON.stringify({ packages: { "node_modules/ai-dev": { resolved } } }));
-  return path.join(pkg, "bin/ai-dev.mjs");
+  const spec = `github:miroshnik/ai-dev${sha ? `#${sha}` : ""}`;
+  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { "ai-dev": spec } }, null, 2) + "\n");
+  return path.join(pkg, "bin/ai-dev.ts");
 }
 
 /**
- * npx песочницы отдаёт пакеты из dir (npxPackage): `github:miroshnik/ai-dev#<sha>` — `<dir>/<sha>`, без `#` —
- * `<dir>/main`; аргументы после пакета — установщику.
+ * bunx песочницы отдаёт пакеты из dir (bunxPackage): `github:miroshnik/ai-dev#<sha>` — `<dir>/<sha>`, без `#` —
+ * `<dir>/main`; флаги bunx до пакета пропускает, аргументы после пакета — установщику, под bun прогона.
  */
-export function npxServesPackages(sb: Sandbox, dir: string) {
-  rmSync(path.join(sb.bin, "npx"), { force: true });
+export function bunxServesPackages(sb: Sandbox, dir: string) {
+  rmSync(path.join(sb.bin, "bunx"), { force: true });
   const script = [
     "#!/bin/sh",
     'while [ "$#" -gt 0 ]; do case "$1" in github:*) spec="$1"; shift; break ;; *) shift ;; esac; done',
     'case "$spec" in *#*) pkg="${spec#*#}" ;; *) pkg=main ;; esac',
-    `exec node "${dir}/$pkg/node_modules/ai-dev/bin/ai-dev.mjs" "$@"`,
+    `exec "${process.execPath}" "${dir}/$pkg/node_modules/ai-dev/bin/ai-dev.ts" "$@"`,
   ].join("\n");
-  writeFileSync(path.join(sb.bin, "npx"), script + "\n", { mode: 0o755 });
+  writeFileSync(path.join(sb.bin, "bunx"), script + "\n", { mode: 0o755 });
 }
 
 /** Дерево каталога: путь → содержимое файла или «-> цель» симлинка; в `.git` не заходит. */

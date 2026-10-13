@@ -1,9 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, bunxPackage, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
 import { writeTree } from "../../lib/spec.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -99,12 +99,20 @@ describe("В проект — копия, которую видят облачн
     expect(r.stderr).toContain(".agents/skills/spec");
   });
 
-  /** npx ставит пакет из GitHub в node_modules — так же, как пакет из `npm pack`: только файлы из `files`. */
-  it("через npx из пакета ai-dev: bin из node_modules ставит правила и скиллы", () => {
-    const pack = spawnSync("npm", ["pack", "--pack-destination", tmp, "--silent"], { cwd: REPO, env: { ...env, npm_config_cache: path.join(tmp, "npm") }, encoding: "utf8" });
+  /**
+   * bunx ставит пакет в node_modules своего каталога и запускает его bin по шебангу — так же, как `bun add` пакета из
+   * `bun pm pack`: только файлы из `files`, TypeScript в node_modules Bun стирает сам. Кеш bun — свой, в песочнице.
+   */
+  it("через bunx из пакета ai-dev: bin из node_modules под Bun ставит правила и скиллы", () => {
+    const bunEnv = { ...env, BUN_INSTALL_CACHE_DIR: path.join(tmp, "bun-cache") };
+    const pack = spawnSync(process.execPath, ["pm", "pack", "--destination", tmp, "--quiet"], { cwd: REPO, env: bunEnv, encoding: "utf8" });
     expect(pack.status).toBe(0);
-    const tgz = path.join(tmp, pack.stdout.trim().split("\n").pop()!);
-    const r = spawnSync("npx", ["-y", `--package=${tgz}`, "ai-dev", "install"], { cwd: proj, env: { ...env, npm_config_cache: path.join(tmp, "npm") }, encoding: "utf8" });
+    const tgz = pack.stdout.trim().split("\n").pop()!;
+    const bunx = path.join(tmp, "bunx");
+    writeTree(bunx, { "package.json": "{}\n" });
+    expect(spawnSync(process.execPath, ["add", "--silent", tgz], { cwd: bunx, env: bunEnv, encoding: "utf8" }).status).toBe(0);
+    const r = spawnSync(path.join(bunx, "node_modules/.bin/ai-dev"), ["install"], { cwd: proj, env, encoding: "utf8" });
+    expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
     expect(read(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
     expect(existsSync(path.join(proj, ".agents/ai-dev/docs/ci-concurrency.md"))).toBe(true);
@@ -117,15 +125,14 @@ describe("В проект — копия, которую видят облачн
     expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).sha).toBe(head);
   });
 
-  /** npx ставит пакет из GitHub архивом, без `.git`: коммит виден только в `resolved` lock-файла npm рядом с пакетом. */
-  it("из пакета npx — SHA из resolved в lock-файле npm", () => {
-    const nm = path.join(tmp, "npx/node_modules");
-    const pkg = path.join(nm, "ai-dev");
-    for (const rel of ["package.json", "bin", "AGENTS.md", "claude", "docs", "skills"]) cpSync(path.join(REPO, rel), path.join(pkg, rel), { recursive: true });
+  /**
+   * bunx ставит пакет из GitHub архивом, без `.git`, и в `.bun-tag` оставляет лишь 7 знаков SHA: полный коммит виден
+   * только в спецификаторе, по которому поставлено, — `package.json` каталога bunx рядом с node_modules.
+   */
+  it("из пакета bunx — SHA из спецификатора в package.json каталога bunx", () => {
     const sha = "0123456789abcdef0123456789abcdef01234567";
-    const resolved = `git+ssh://git@github.com/miroshnik/ai-dev.git#${sha}`;
-    writeFileSync(path.join(nm, ".package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: { "node_modules/ai-dev": { version: "0.0.0", resolved } } }));
-    expect(aiDev(sb, ["install"], { bin: path.join(pkg, "bin/ai-dev.mjs") }).code).toBe(0);
+    const bin = bunxPackage(path.join(tmp, "bunx"), REPO, sha);
+    expect(aiDev(sb, ["install"], { bin }).code).toBe(0);
     expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).sha).toBe(sha);
   });
 
@@ -153,7 +160,7 @@ describe("Отказ в записи посреди установки — по�
     const r = install(["--lang", "ru"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain(".claude/skills/ci-wait");
-    expect(r.stderr).toContain("npx -y github:miroshnik/ai-dev install --lang ru");
+    expect(r.stderr).toContain("bunx github:miroshnik/ai-dev install --lang ru");
     expect(r.stderr).not.toMatch(/\n\s+at /);
   });
 
@@ -175,7 +182,7 @@ describe("Отказ в записи посреди установки — по�
     const r = aiDev(sb, ["update"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain(".claude/skills/spec");
-    expect(r.stderr).toContain("npx -y github:miroshnik/ai-dev update");
+    expect(r.stderr).toContain("bunx github:miroshnik/ai-dev update");
   });
 
   it("симлинк, который уже ведёт куда надо, установка не пересоздаёт: .claude/skills без права записи не мешает повтору без нового скилла", () => {
@@ -286,7 +293,7 @@ describe("Проверки проекта идут очередью машины
   };
   const pkgFile = () => path.join(proj, "package.json");
   const scripts = () => JSON.parse(read(pkgFile())).scripts;
-  const slot = (runtime: string, cmd: string) => `${runtime} .agents/skills/slot/scripts/slot.ts '${cmd}'`;
+  const slot = (cmd: string) => `bun .agents/skills/slot/scripts/slot.ts '${cmd}'`;
 
   it("установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет", () => {
     writeTree(proj, { "package.json": JSON.stringify({ name: "app", scripts: SCRIPTS }, null, 2) + "\n" });
@@ -295,10 +302,10 @@ describe("Проверки проекта идут очередью машины
     expect(r.stdout).toContain("package.json");
     expect(scripts()).toEqual({
       ...SCRIPTS,
-      lint: slot("node", "eslint ."),
-      typecheck: slot("node", SCRIPTS.typecheck),
-      test: slot("node", "vitest run"),
-      "test:e2e": slot("node", "playwright test"),
+      lint: slot("eslint ."),
+      typecheck: slot(SCRIPTS.typecheck),
+      test: slot("vitest run"),
+      "test:e2e": slot("playwright test"),
     });
   });
 
@@ -315,21 +322,16 @@ describe("Проверки проекта идут очередью машины
     writeTree(proj, { "package.json": `{\n\t"name": "app",\n\t"scripts": {\n\t\t"test": "vitest run"\n\t}\n}` });
     install();
     const once = read(pkgFile());
-    expect(once).toBe(`{\n\t"name": "app",\n\t"scripts": {\n\t\t"test": "${slot("node", "vitest run")}"\n\t}\n}`);
+    expect(once).toBe(`{\n\t"name": "app",\n\t"scripts": {\n\t\t"test": "${slot("vitest run")}"\n\t}\n}`);
     install();
     expect(read(pkgFile())).toBe(once);
   });
 
-  it("проект на Bun зовёт slot через bun, остальные — через node", () => {
-    writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: "bun test" } }), "bun.lock": "" });
+  /** Bun — единственный рантайм флоу: прошлая установка оборачивала проект на Node через node — update это переписывает. */
+  it("slot — через bun в любом проекте: обёрнутый через node скрипт переписывается на bun, команда та же", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: "node .agents/skills/slot/scripts/slot.ts 'vitest run'", lint: "eslint ." } }) });
     install();
-    expect(scripts().test).toBe(slot("bun", "bun test"));
-    rmSync(path.join(proj, "bun.lock"));
-    install();
-    expect(scripts().test).toBe(slot("node", "bun test"));
-    writeTree(proj, { "package.json": JSON.stringify({ packageManager: "bun@1.4.2", scripts: { test: "bun test" } }) });
-    install();
-    expect(scripts().test).toBe(slot("bun", "bun test"));
+    expect(scripts()).toEqual({ test: slot("vitest run"), lint: slot("eslint .") });
   });
 
   it("check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json", () => {
@@ -343,7 +345,7 @@ describe("Проверки проекта идут очередью машины
     expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
     const u = aiDev(sb, ["update"]);
     expect(u.code).toBe(0);
-    expect(scripts().test).toBe(slot("node", "vitest run"));
+    expect(scripts().test).toBe(slot("vitest run"));
     expect(u.stdout).toMatch(/git add [^\n]* package\.json/);
     expect(aiDev(sb, ["check"]).code).toBe(0);
   });
@@ -460,6 +462,17 @@ describe("На машину (-g) — только скиллы и хук, пра
     expect(ours).toHaveLength(1);
     expect(ours[0].matcher).toContain("startup");
     expect(ours[0].hooks[0].timeout).toBeGreaterThan(0);
+  });
+
+  /**
+   * Вывод хука с кодом 0 Claude Code кладёт в контекст сессии: `--silent` — первая установка пакета bunx печатает свой
+   * прогресс в stderr, а хук сводит stderr в вывод.
+   */
+  it("команда хука — bunx --silent github:miroshnik/ai-dev check --hook, вывод с ошибками и запасной echo при сбое bunx", () => {
+    mkdirSync(path.join(home, ".claude"));
+    install(["-g"]);
+    const hooks = JSON.parse(read(path.join(home, ".claude/settings.json"))).hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
+    expect(hooks[0].command).toMatch(/^bunx --silent github:miroshnik\/ai-dev check --hook 2>&1 \|\| echo "ai-dev check unavailable/);
   });
 
   /** Хук прошлой версии — с запасным текстом по-русски: установка узнаёт свой хук по команде `check --hook`. */
