@@ -2410,7 +2410,21 @@
   "describes": [
    "task close убирает влитое"
   ],
+  "name": "task close из чекаута репозитория с тем же префиксом имени (ai-dev-tools при ai-dev) — не чекаут задачи: ни стеки, ни ветки не трогаются"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
   "name": "ветка не влита — не тронута, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
+  "name": "регистр owner/repo в origin не важен: из чекаута Miroshnik/AI-Dev task close убирает ветку и снимает стеки задачи"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -10931,6 +10945,90 @@
    "Тест проекта импортирует харнесс и модель любым раннером"
   ],
   "name": "Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует харнесс и модель и проходит тест"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "est разбирает origin по таблице"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "github разбирает origin по таблице"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "github узнаёт чекаут репозитория по равенству owner/repo без учёта регистра"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "task-env разбирает origin по таблице"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "нарушитель не проходит (checkoutOf): проверка чекаута подстрокой URL origin"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "нарушитель не проходит (originRepo): разбор до стандарта: github.com — подстрока, регистр хоста важен, порт не понят"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "реестр «скрипты скиллов с проверкой «чекаут репозитория X»» находит github (checkoutOf)"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "реестр «скрипты скиллов с проверкой «чекаут репозитория X»» не пуст (checkoutOf)"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "реестр «скрипты скиллов с разбором origin» находит est, github, task-env (originRepo)"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "реестр «скрипты скиллов с разбором origin» не пуст (originRepo)"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "таблица ловит проверку чекаута подстрокой: регистр, префикс имени, конец владельца, не GitHub"
+ },
+ {
+  "path": "tests/standards/origin-repo/origin-repo.test.ts",
+  "describes": [
+   "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
+  ],
+  "name": "таблица ловит расхождения разбора до стандарта: подстрока хоста, регистр хоста, порт, зеркало"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
