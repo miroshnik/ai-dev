@@ -23,7 +23,7 @@
  * Output by default — docs/spec/: README.md (index), architecture.md, capabilities/<name>.md, architecture/<name>.md,
  * standards/<name>.md; it deletes its own outdated files (with the marker in any dictionary language). The
  * documentation text is in the root's project language (`language` in `.agents/ai-dev.json`, the github skill's
- * dictionary). Runs on Bun or Node ≥ 22.18, no dependencies.
+ * dictionary). Runs under Bun, no dependencies.
  */
 
 import { execFileSync } from "node:child_process";

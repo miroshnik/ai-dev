@@ -8,8 +8,8 @@
  *
  * `files` paths in a fragment are from the project root. Fragments go in path order: the config is the same on any
  * machine. `tests/lib` holds helpers, not fragments. Node loads an `eslint.mts` fragment as ESM even in a project
- * without `"type": "module"`. Only `node:` APIs and erasable TypeScript: Node ≥ 22.18 imports a `.ts` fragment without
- * a build.
+ * without `"type": "module"`. Only `node:` APIs and erasable TypeScript: the project's ESLint loads this module and the
+ * fragments under Node, and Node ≥ 22.18 imports a `.ts` file without a build.
  *
  * A standard's ban is `restrict(...)`: its own rule `spec/<id>` per standard. Flat config doesn't merge one rule's
  * options: with two fragments setting `no-restricted-syntax` on the same files, the last one wins and the first one's

@@ -14,7 +14,7 @@
  *   bun spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
  *
  * Codes: 0 — found or publishing skipped, 1 — the run didn't finish by the ceiling, 2 — a call error (arguments, gh).
- * Runs on Bun or Node ≥ 22.18, no dependencies; needs `gh` with a token (in Actions — `GH_TOKEN`, `actions: read`).
+ * Runs under Bun, no dependencies; needs `gh` with a token (in Actions — `GH_TOKEN`, `actions: read`).
  */
 
 import { execFileSync } from "node:child_process";

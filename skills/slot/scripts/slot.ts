@@ -17,7 +17,7 @@
  * No queue in CI (the machine is given to the run) and inside a slot (AI_DEV_SLOT): a script that calls another script
  * through the queue would otherwise wait for itself.
  *
- * Only node: APIs: a project's package.json script calls it both through node (≥ 22.18) and through bun.
+ * Runs under Bun (`bun slot.ts`), only node: APIs.
  */
 import { spawn } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

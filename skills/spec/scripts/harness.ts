@@ -7,8 +7,9 @@
  * fire, stay silent and not apply; the linter goes through an adapter (ESLint — `eslintLinter`).
  *
  * The runner doesn't matter: `it` passes the test (Vitest, Jest, bun test, node:test — all have `it(name, fn)`).
- * Import from the skill's copy in the project (`.agents/skills/spec/scripts/harness.ts`); only erasable TypeScript
- * syntax and `node:` APIs, so it runs under Node ≥ 22.18 and under Bun with no dependencies.
+ * Import from the skill's copy in the project (`.agents/skills/spec/scripts/harness.ts`); the project's test loads it
+ * under the project's runner — Bun, Node, Vitest, Playwright or Jest, as ESM or as CommonJS — so only erasable
+ * TypeScript syntax and `node:` APIs, with no dependencies (tests/standards/harness-load).
  */
 
 import { spawnSync } from "node:child_process";

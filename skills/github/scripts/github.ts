@@ -700,8 +700,8 @@ function loadLabels(io: Io, slug: string): Label[] {
 
 /**
  * Architecture model modules and their directories: the model text goes to a temporary file, `modules` is printed by
- * a separate process of the same runtime (Bun or Node strip types; the model doesn't need the spec skill's
- * `import type`). Didn't load — the reason as a string.
+ * a separate process of the same runtime (Bun strips types; the model doesn't need the spec skill's `import type`).
+ * Didn't load — the reason as a string.
  */
 export function modelModules(text: string): Record<string, string[]> | string {
   const dir = mkdtempSync(path.join(os.tmpdir(), "github-model-"));
