@@ -3,8 +3,8 @@
  *
  * A task is a GitHub project item with the "In progress" status, its session is the `github task status` pin file
  * (`<configuration directory>/sessions/<session id>` with an `owner/repo#N` line), the session's state is its
- * transcript (`~/.claude/projects/<directory>/<id>.jsonl`), the task's PR and the tasks' questions come from GitHub.
- * Writes nothing to GitHub.
+ * transcript (`~/.claude/projects/<directory>/<id>.jsonl`), the task's PR and the tasks' questions come from GitHub, the
+ * addresses of its services — from the routes of the task-env proxy. Writes nothing to GitHub.
  */
 
 import { spawn } from "node:child_process";
@@ -13,6 +13,7 @@ import path from "node:path";
 
 import locale from "../../github/scripts/locale.ts";
 import { branchIssueNumber, cloudSessionsIn, encodePath, EST_DIR, EstError, PROJECTS_DIR } from "../../est/scripts/est.ts";
+import { addressUrl, hostProject, taskAddress } from "../../task-env/scripts/task-env.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- #280 schemaless JSON from transcripts and GitHub
 type Any = any;
@@ -312,6 +313,16 @@ export interface SessionsInput {
   live: Record<string, Live>;
   /** Recent sessions of the repository's directories — their questions, if they have no "In progress" task. */
   others: Record<string, Transcript[]>;
+  /** Hosts of the task-env proxy's routes; the proxy isn't running — none. */
+  hosts: string[];
+  /** The proxy's port: the address URL carries it unless it is 80. */
+  port: string;
+}
+
+/** A link to a service of the task's stack. */
+export interface Address {
+  service: string;
+  url: string;
 }
 
 export interface SessionRow {
@@ -323,6 +334,8 @@ export interface SessionRow {
   session: Transcript | null;
   pr: PrInfo | null;
   wait: Wait;
+  /** Addresses of the task stack's services; no stack — none. */
+  addresses: Address[];
 }
 
 /**
@@ -355,6 +368,21 @@ function prFor(live: Live, n: number): PrInfo | null {
   return mine.find((p) => !p.merged) ?? mine[0] ?? null;
 }
 
+/**
+ * Addresses of a task's services — the proxy's hosts `<service>.<N>.<project>.localhost` with its number and its
+ * repository as the project (task-env). e2e addresses aren't shown: that stack is recreated on every run, a link to it
+ * lives minutes (#396, question 4).
+ */
+function addressesOf(inp: SessionsInput, repo: string, n: number): Address[] {
+  const project = hostProject(repo.slice(repo.indexOf("/") + 1));
+  return inp.hosts
+    .flatMap((host) => {
+      const a = taskAddress(host);
+      return a && !a.e2e && a.task === n && a.project === project ? [{ service: a.service, url: addressUrl(host, inp.port) }] : [];
+    })
+    .sort((a, b) => a.service.localeCompare(b.service));
+}
+
 /** "In progress" task lines and questions to the owner. */
 export function sessionsView(inp: SessionsInput, now: number): SessionsView {
   const pinned = new Set<string>();
@@ -367,7 +395,7 @@ export function sessionsView(inp: SessionsInput, now: number): SessionsView {
       const pr = prFor(live, t.number);
       return {
         repo, number: t.number, title: t.title, url: issueUrl(repo, t.number), session, pr, wait: waitOf(session, pr, now),
-        epic: t.parent ? { ...t.parent, url: issueUrl(repo, t.parent.number) } : null,
+        epic: t.parent ? { ...t.parent, url: issueUrl(repo, t.parent.number) } : null, addresses: addressesOf(inp, repo, t.number),
       };
     }),
   );
@@ -439,7 +467,8 @@ function asksBlock(asks: Ask[], now: number, many: boolean): string {
 function rowsTable(rows: SessionRow[], now: number, many: boolean): string {
   if (!rows.length) return `<p class="card">No tasks in progress.</p>`;
   const body = rows.map((r) => {
-    const task = `${link(r.url, `${many ? r.repo : ""}#${r.number}`)} ${esc(r.title)}${r.epic ? `<div class="minor">epic ${link(r.epic.url, `#${r.epic.number} ${r.epic.title}`)}</div>` : ""}`;
+    const addresses = r.addresses.length ? `<div class="minor addresses">services: ${r.addresses.map((a) => `<a href="${esc(a.url)}" title="${esc(a.url)}">${esc(a.service)}</a>`).join(" · ")}</div>` : "";
+    const task = `${link(r.url, `${many ? r.repo : ""}#${r.number}`)} ${esc(r.title)}${r.epic ? `<div class="minor">epic ${link(r.epic.url, `#${r.epic.number} ${r.epic.title}`)}</div>` : ""}${addresses}`;
     const name = r.session && ownTitle(r.session, `#${r.number} ${r.title}`);
     const session = r.session ? `${esc(when(r.session, now))}${name ? `<div class="minor">${esc(name)}</div>` : ""}` : "—";
     const wait = `<span class="wait ${r.wait.key}">${esc(r.wait.label)}</span>${r.wait.detail ? `<div class="minor">${esc(r.wait.detail)}</div>` : ""}`;

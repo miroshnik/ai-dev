@@ -1,6 +1,6 @@
 ---
 name: dashboard
-description: A browser task dashboard served by the script itself, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, and the «Waiting for the owner» block with questions from session answers and from tasks with the «questions» label; refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual in hours, actual to estimate, tokens and cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "which tasks are hanging", "what is the session waiting for", which questions await an answer; asked for a dashboard, a chart or "show it visually", how accurately tasks are estimated, whether they get pricier or cheaper, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
+description: A browser task dashboard served by the script itself, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, links to the services of the task's stack (task-env addresses `*.localhost`), and the «Waiting for the owner» block with questions from session answers and from tasks with the «questions» label; refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual in hours, actual to estimate, tokens and cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "which tasks are hanging", "what is the session waiting for", which questions await an answer, where a task's app opens; asked for a dashboard, a chart or "show it visually", how accurately tasks are estimated, whether they get pricier or cheaper, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
 allowed-tools: Bash(bun *skills/dashboard/scripts/dashboard.ts *)
 ---
 
@@ -13,8 +13,9 @@ estimate accuracy and the cost of a task, while the `est history` table shows
 tasks one at a time, without a trend. The `scripts/dashboard.ts` script brings
 up a page with two tabs:
 
-- **«Sessions»** (`/`, the main one) — In progress tasks, their sessions and
-  what each is waiting for, with «Waiting for the owner» at the top;
+- **«Sessions»** (`/`, the main one) — In progress tasks, their sessions,
+  what each is waiting for and links to the task's services, with «Waiting
+  for the owner» at the top;
 - **«Estimate and actual»** (`/est`) — a chart by task close date: GitHub
   project fields and the «Estimate» and «Actual» comment markers.
 
@@ -31,7 +32,9 @@ with the `project` scope, as for `est`. A task's session is found by the pin
 file written by `github task status <N> "In progress"` (in the project
 language — `locales/<language>.json` of the `github` skill)
 (`~/.config/ai-dev/sessions/<session id>` or in `$AI_DEV_CONFIG_DIR`), its
-state — by the transcript `~/.claude/projects/<dir>/<id>.jsonl`. The dashboard
+state — by the transcript `~/.claude/projects/<dir>/<id>.jsonl`, the addresses
+of its services — by the routes of the `task-env` proxy (its script next to
+it, `../task-env/scripts/task-env.ts`). The dashboard
 is shared by all the machine's repositories: its labels are in English, and what
 it parses — the In progress status, the questions section and label, the last
 line of a session, the epic type — in any language of the dictionary.
@@ -71,6 +74,14 @@ call: a regular one won't return until the timeout.
   (`Closes #N` or branch `<type>/<N>-…`) — number, checks, conflict, merged,
   and whether a deploy is running. At the top — those waiting for the owner,
   then silent and red ones.
+- **Services of the task** — under the task, a link per service of its stack
+  (`task-env`): the hosts `<service>.<N>.<project>.localhost` from the
+  proxy's API, where `<N>` is the task and `<project>` its repository; the
+  proxy's port, if it isn't 80, is in the link. No stack — no line; e2e
+  addresses aren't shown: that stack is recreated on every run. The routes
+  are read on every open — a container's route leaves with it; the proxy
+  isn't running — no links and no error, the routes weren't read otherwise —
+  the reason in the tab's error banner.
 - **What it is waiting for.** A session's background task (command,
   subagent, Monitor) without a completion notification — the session is
   waiting for it: PR open and checks running — «CI running», red —
@@ -161,6 +172,11 @@ no ring and no ratio.
   «can't listen on 127.0.0.1 …», even without `--port`: another port won't
   help, run the background command outside the sandbox. The dashboard tests
   open ports too.
+- «proxy …: routes not read» in the banner: with «is denied here (an agent's
+  sandbox?)» — the dashboard can't connect to the proxy from the sandbox,
+  the links need it outside; with «a proxy without the API?» — the machine's
+  proxy predates the API: `task-env proxy up` brings it to the skill's
+  compose file.
 - A Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`): GitHub Projects are
   closed there, and its localhost isn't visible to the user's browser — the
   script exits with an explanation (`docs/cloud-sessions.md` in ai-dev).

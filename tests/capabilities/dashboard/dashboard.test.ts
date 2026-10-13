@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { chartSvg, page, points, trend, view } from "../../../skills/dashboard/scripts/dashboard.ts";
 import { calib, median } from "../../../skills/est/scripts/est.ts";
@@ -215,11 +215,28 @@ function openItem(number: number, title: string, status: string, issueType: stri
   };
 }
 
+/**
+ * Прокси task-env подменяется своим API: подставной Traefik отдаёт маршруты `routers` по хосту `fake-proxy.localhost`,
+ * `status` не 200 — сбой; рабочий прокси машины на 80 тест не читает.
+ */
+const fakeProxy = { routers: [] as unknown[], status: 200 };
+const PROXY_NAME = "fake-proxy";
+
 describe("Команда dashboard сервит страницу сама и открывает её в браузере", () => {
   let dir: string;
   let cleanup: () => void;
   let bin: string;
   let running: ChildProcess[];
+  let proxyApi: ReturnType<typeof Bun.serve>;
+  beforeAll(() => {
+    proxyApi = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (req) =>
+        req.headers.get("host") !== `${PROXY_NAME}.localhost` ? new Response("404 page not found", { status: 404 }) : fakeProxy.status !== 200 ? new Response("internal error", { status: fakeProxy.status }) : Response.json(fakeProxy.routers, { headers: { "X-Next-Page": "1" } }),
+    });
+  });
+  afterAll(() => proxyApi.stop(true));
   const world = (w: { repos: Record<string, { project: number; items: unknown[]; live?: unknown }>; fail?: string }) => writeFileSync(path.join(bin, "world.json"), JSON.stringify(w));
   const ONE = { repos: { "o/a": { project: 1, items: [item(1, "Экспорт счетов", 1), item(2, "Импорт выписок", 2), item(3, "Сверка платежей", 3), item(9, "Биллинг · эпик", 3, "Эпик")] } } };
 
@@ -237,13 +254,15 @@ describe("Команда dashboard сервит страницу сама и о�
       chmodSync(path.join(bin, name), 0o755);
     }
     world(ONE);
+    fakeProxy.routers = [];
+    fakeProxy.status = 200;
   });
   afterEach(() => {
     for (const p of running) p.kill("SIGKILL");
     cleanup();
   });
 
-  const env = (extra: Record<string, string> = {}) => ({ ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, BROWSER: path.join(bin, "browser"), ...extra });
+  const env = (extra: Record<string, string> = {}) => ({ ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, BROWSER: path.join(bin, "browser"), AI_DEV_PROXY: PROXY_NAME, AI_DEV_PROXY_PORT: String(proxyApi.port), ...extra });
   const itemsReads = () => readFileSync(path.join(bin, "calls.jsonl"), "utf8").split("\n").filter((l) => l.includes("node(id:$id)")).length;
   const opened = () => (existsSync(path.join(bin, "opened")) ? readFileSync(path.join(bin, "opened"), "utf8").trim() : null);
   const sync = (args: string[], extra: Record<string, string> = {}) => spawnSync("bun", [DASHBOARD, ...args], { encoding: "utf8", env: env(extra) });
@@ -405,6 +424,26 @@ describe("Команда dashboard сервит страницу сама и о�
     for (const q of ["Осталось: мерж — от владельца.", "1. Делить импорт?", "1. Валюта отчёта?"]) expect(asks).toContain(q);
     // обновляется сама: раз в 30 с страница заново, подменой <main> — раскрытое остаётся раскрытым
     expect(html).toMatch(/<\/main><script>[\s\S]*replaceWith[\s\S]*setInterval\([^\n]*, 30000\);[\s\S]*<\/script>/);
+  });
+
+  it("«Sessions» — у задачи «В работе» ссылки на адреса её сервисов из маршрутов прокси; маршруты не прочитаны — причина плашкой, страница отдаётся", async () => {
+    world({ repos: { "o/a": { project: 1, items: [openItem(5, "Импорт банков", "В работе"), openItem(6, "Отчёт по ROI", "В работе")] } } });
+    const route = (host: string) => ({ name: "r@docker", rule: `Host(\`${host}\`)`, status: "enabled", entryPoints: ["web"], provider: "docker" });
+    fakeProxy.routers = [route("web.5.a.localhost"), route("api.5.a.localhost"), route("web.6.b.localhost")];
+    const d = await start(["--repo", "o/a", "--no-open"]);
+    const html = await (await fetch(d.url)).text();
+    const row = (n: number) => new RegExp(`<tr[^>]*data-task="o/a#${n}"[\\s\\S]*?</tr>`).exec(html)?.[0] ?? "";
+    // ссылка — с портом прокси: он не 80
+    expect(row(5)).toContain(`<a href="http://web.5.a.localhost:${proxyApi.port}"`);
+    expect(row(5)).toContain(`<a href="http://api.5.a.localhost:${proxyApi.port}"`);
+    // у #6 стека нет: web.6.b — задача другого проекта
+    expect(row(6)).not.toContain("services:");
+    fakeProxy.status = 500;
+    const failed = await fetch(d.url);
+    expect(failed.status).toBe(200);
+    const page = await failed.text();
+    expect(page).toContain(`proxy ${PROXY_NAME}: routes not read`);
+    expect(page).toContain('data-task="o/a#5"');
   });
 
   it("в облачной сессии — ошибка с объяснением, а не сбой gh", () => {

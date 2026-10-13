@@ -7,8 +7,8 @@
  *
  * Serves the page itself (Bun.serve, 127.0.0.1 only), prints the address and opens it in the browser. The data — the
  * GitHub project rows (fields and the "Estimate" and "Actual" comment markers) via the est script next to it, session
- * pins and transcripts (sessions.ts); writes nothing to GitHub. The page is built on the server: SVG as a string, no
- * dependencies; in the browser — only the hover tooltip.
+ * pins and transcripts (sessions.ts), the routes of the task-env proxy — task addresses; writes nothing to GitHub. The
+ * page is built on the server: SVG as a string, no dependencies; in the browser — only the hover tooltip.
  */
 
 import { spawn } from "node:child_process";
@@ -17,6 +17,7 @@ import { parseArgs } from "node:util";
 import locale from "../../github/scripts/locale.ts";
 import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo, sharesTxt, usdByModel, usdShares } from "../../est/scripts/est.ts";
 import type { Registry, Row } from "../../est/scripts/est.ts";
+import { proxyHosts, proxyPort } from "../../task-env/scripts/task-env.ts";
 import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, repoTranscripts, SESSIONS_CSS, sessionsBody, sessionsView } from "./sessions.ts";
 import type { Live, SessionsInput, SessionsView } from "./sessions.ts";
 
@@ -537,14 +538,26 @@ function sessionsPage(m: SessionsModel): string {
 }
 
 /**
- * What to show on "Sessions": in addition to GitHub — the pins of "In progress" tasks, their sessions' transcripts and
- * the repositories' recent sessions.
+ * What to show on "Sessions": in addition to GitHub — the pins of "In progress" tasks, their sessions' transcripts,
+ * the repositories' recent sessions and the hosts of the proxy's routes.
  */
-function sessionsInput(live: Record<string, Live>, registry: Registry, now: number): SessionsInput {
+function sessionsInput(live: Record<string, Live>, registry: Registry, now: number, hosts: string[]): SessionsInput {
   const pins = readPins();
   const ids = Object.entries(live).flatMap(([repo, l]) => l.tasks.flatMap((t) => pins[`${repo}#${t.number}`] ?? []));
   const others = Object.fromEntries(Object.keys(live).map((repo) => [repo, repoTranscripts(registry[repo]?.paths ?? [], now - RECENT)]));
-  return { pins, transcripts: findTranscripts(ids), live, others };
+  return { pins, transcripts: findTranscripts(ids), live, others, hosts, port: proxyPort() };
+}
+
+/**
+ * Hosts of the task-env proxy's routes — read on every open, like the pins: a local request, and a route leaves with
+ * its container. The proxy isn't running — no addresses and no error; another failure — a line in the tab's banner.
+ */
+async function readHosts(): Promise<{ hosts: string[]; error: string | null }> {
+  try {
+    return { hosts: (await proxyHosts()) ?? [], error: null };
+  } catch (e) {
+    return { hosts: [], error: (e as Error).message };
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -654,9 +667,10 @@ function serve(o: Options) {
     if (!live) await refreshLive();
     else if (nowTs() - live.at >= TTL) void refreshLive();
     const l = live!;
+    const routes = await readHosts();
     const now = nowTs();
-    const v = sessionsView(sessionsInput(l.live, o.registry, now), now);
-    return html(sessionsPage({ repos: o.repos, view: v, at: l.at, now, errors: l.errors }));
+    const v = sessionsView(sessionsInput(l.live, o.registry, now, routes.hosts), now);
+    return html(sessionsPage({ repos: o.repos, view: v, at: l.at, now, errors: routes.error ? [...l.errors, routes.error] : l.errors }));
   };
   const server = Bun.serve({
     hostname: "127.0.0.1",
