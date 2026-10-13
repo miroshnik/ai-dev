@@ -41,6 +41,12 @@ project's `CLAUDE.md`.
   `G=x.ts; bun $G …` or `${=G}`, a comma-joined list — `${(j:,:)arr}`;
   `echo ====` and a glob without matches (`--include=*.ts`) are errors: quote
   them.
+- The Bash sandbox: `gh` in it fails on TLS (`x509: OSStatus -26276`). A
+  skill script that calls `gh` (`github`, `est`, `dashboard`, `spec-run`) —
+  at once a separate call with `dangerouslyDisableSandbox`: no
+  `excludedCommands` entry takes `bun <file>` out. Entries `gh *` and `bash
+  <path>/wait-ci.sh *` (`ci-wait`) do — the owner's step; without them — the
+  same separate call. The `task-env` skill, section "Docker and the sandbox".
 - A subagent that writes gets `isolation: worktree`: an isolated session
   doesn't write into others' worktrees, an agent without it inherits the
   parent's isolation. An agent cut off by a limit or a dropped session leaves
