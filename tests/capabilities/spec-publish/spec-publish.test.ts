@@ -183,7 +183,7 @@ function publishAmid(pushes: string[], ...args: string[]) {
   writeFileSync(path.join(bin, "git"), FAKE_GIT);
   chmodSync(path.join(bin, "git"), 0o755);
   pushes.forEach((sh, i) => writeFileSync(path.join(bin, `push-${i + 1}`), sh));
-  return runScript("spec-publish", ["--interval", "0", ...args], work, "bun", { PATH: `${bin}:${process.env.PATH}`, FAKE_GIT: bin, REAL_GIT: Bun.which("git")! });
+  return runScript("spec-publish", ["--interval", "0", ...args], work, { PATH: `${bin}:${process.env.PATH}`, FAKE_GIT: bin, REAL_GIT: Bun.which("git")! });
 }
 
 /** Коммит параллельной публикации из source: его собирает настоящий spec-publish, ветка на «GitHub» затем возвращается назад. */
@@ -329,7 +329,7 @@ function findRun(github: { artifacts: Artifact[]; runs?: Record<number, Workflow
   chmodSync(path.join(bin, "gh"), 0o755);
   writeFileSync(path.join(bin, "artifacts.json"), JSON.stringify(github.artifacts));
   writeFileSync(path.join(bin, "runs.json"), JSON.stringify(github.runs ?? {}));
-  const r = runScript("spec-run", ["--tree", TREE, "--interval", "0", ...args], work, "bun", { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin });
+  const r = runScript("spec-run", ["--tree", TREE, "--interval", "0", ...args], work, { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin });
   const log = path.join(bin, "calls");
   return { ...r, calls: existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [] };
 }
