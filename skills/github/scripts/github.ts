@@ -1765,7 +1765,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     } else if (epic.state === "OPEN") io.out(`○ epic #${epic.number}: open subtasks ${open}`);
   }
   // stacks of task-env and branches are named by the checkout's origin: from someone else's checkout — another project's
-  if (!checkoutOf(io, slug)) io.out(`○ ${o.git ? "branches and task stacks" : "task stacks"} left alone: the current directory is not a checkout of ${slug}`);
+  if (!checkoutOf(originUrl(io), slug)) io.out(`○ ${o.git ? "branches and task stacks" : "task stacks"} left alone: the current directory is not a checkout of ${slug}`);
   else {
     takeDownStacks(io, number);
     if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
@@ -1819,10 +1819,10 @@ function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs:
  */
 const estScript = (io: Io) => io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
 
-/** Is the current directory a checkout of the repository: its origin names it. */
-function checkoutOf(io: Io, slug: string): boolean {
+/** The origin URL of the current directory's checkout; not a checkout or no origin — "". */
+function originUrl(io: Io): string {
   const remote = (io.run ?? realRun)("git", ["remote", "get-url", "origin"], io.cwd);
-  return remote.status === 0 && remote.stdout.includes(slug);
+  return remote.status === 0 ? remote.stdout : "";
 }
 
 /** The task-env script next to the skill — laid out like est (`../task-env/scripts/task-env.ts`). */
@@ -2265,8 +2265,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
 
   const run = io.run ?? realRun;
   const git = (cwd: string | undefined, ...args: string[]) => run("git", args, cwd);
-  const remote = git(io.cwd, "remote", "get-url", "origin");
-  if (remote.status !== 0 || !remote.stdout.includes(slug)) throw new GhError(`the merge check runs from a checkout of ${slug}: the current directory is not one`);
+  if (!checkoutOf(originUrl(io), slug)) throw new GhError(`the merge check runs from a checkout of ${slug}: the current directory is not one`);
   for (const ref of [base, `refs/pull/${number}/head`]) {
     const f = git(io.cwd, "fetch", "-q", "origin", ref);
     if (f.status !== 0) throw new GhError(`git fetch origin ${ref}: ${f.stderr.trim()}`);
@@ -2414,11 +2413,26 @@ const issueNumber = (s: string | undefined, what: string): number => {
   return Number(m[1]);
 };
 
+// The checkout's GitHub repository by its origin — a copy of originRepo from skills/est/scripts/est.ts and skills/task-env/scripts/task-env.ts:
+// there's no shared module (a skill is installed alone), the tests/standards/origin-repo standard keeps the parsing identical
+const ORIGIN_RE = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/\s]+@)?(?:ssh\.)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?(?:ssh\.)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
+
+/** `owner/repo` of a GitHub origin URL (host github.com or ssh.github.com, any case, with a port), otherwise null. */
+export function originRepo(url: string): string | null {
+  const m = ORIGIN_RE.exec(url.trim());
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+/** A checkout with this origin URL is a checkout of `repo` (owner/name): the parsed origin equals it — GitHub ignores case. */
+export function checkoutOf(origin: string, repo: string): boolean {
+  return originRepo(origin)?.toLowerCase() === repo.toLowerCase();
+}
+
 function detectRepo(): string {
   const r = spawnSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" });
-  const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec((r.stdout ?? "").trim());
-  if (r.status !== 0 || !m) throw new GhError("couldn't determine the repository from git remote origin; pass --repo owner/repo");
-  return `${m[1]}/${m[2]}`;
+  const repo = r.status === 0 ? originRepo(r.stdout ?? "") : null;
+  if (!repo) throw new GhError("couldn't determine the repository from git remote origin; pass --repo owner/repo");
+  return repo;
 }
 
 export function main(argv: string[], io: Io): number {

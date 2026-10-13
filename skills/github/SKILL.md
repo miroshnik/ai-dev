@@ -398,7 +398,10 @@ mechanics" below: the checkout moves off the task's branch to `origin/<base>`
 detached, the local and remote branches are deleted; not merged or someone
 else's — an `○` line, nothing is touched. The directory isn't a checkout of
 the repository — neither stacks nor branches are touched (an `○` line: both
-are named by the checkout's `origin`). The command doesn't delete the
+are named by the checkout's `origin`); a checkout — the `owner/repo` of its
+`origin` equals the task's repository, case aside, not a URL substring:
+`ai-dev-tools` isn't a checkout of `ai-dev` (standard `origin-repo`, the same
+for `pr premerge`). The command doesn't delete the
 session's worktree — the `Next` hint. `--no-git` — without the git step, the
 stacks still go. The last output line — the end-of-session steps: the
 epic has open tasks — a reminder about the epic refresh (its place is before
