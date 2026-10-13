@@ -110,8 +110,7 @@ afterEach(() => cleanup());
 
 // ESLint — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
 const ESLINT = createRequire(import.meta.url).resolve("eslint");
-// TypeScript и типы Node — оттуда же
-const TSC = path.join(path.dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin/tsc");
+// типы проверяет `bun check`; типы Node — оттуда же
 const TYPES = path.join(path.dirname(createRequire(import.meta.url).resolve("@types/node/package.json")), "..");
 const FRAGMENT = "tests/standards/domain-no-console/eslint.ts";
 
@@ -192,8 +191,8 @@ describe("Правило ESLint живёт в папке своего станд
         files: ["example.test.mts"],
       }),
     });
-    const r = spawnSync(process.execPath, [TSC, "-p", dir], { encoding: "utf8" });
-    expect(r.stdout + r.stderr).toBe("");
+    const r = spawnSync(process.execPath, ["check", "--no-pretty", "-p", dir], { encoding: "utf8" });
+    expect(r.stdout + r.stderr).toContain("No type errors");
     expect(exitOf(r)).toBe(0);
   });
 
