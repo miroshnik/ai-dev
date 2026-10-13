@@ -134,6 +134,17 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(JSON.parse(read(manifest(sb.proj))).language).toBe("ru");
   });
 
+  /** `env` — настройка стека задачи (скилл task-env: HTTP-сервисы и их порты): её пишет проект, установщик переносит. */
+  it("`install` и `update` сохраняют `env` в `.agents/ai-dev.json`", () => {
+    const env = { http: { web: 3000, admin: 5173 } };
+    aiDev(sb, ["install"]);
+    editManifest(sb.proj, { env });
+    expect(aiDev(sb, ["update"], { bin: newer.bin }).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ sha: newer.sha, env });
+    expect(aiDev(sb, ["install", "--lang", "ru"]).code).toBe(0);
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ language: "ru", env });
+  });
+
   /** Язык — последней строкой: в начале сессии агент видит, на каком языке работать, не читая манифест. */
   it("check называет язык проекта; установка прошлой версии без поля — ru, отставанием не считается", () => {
     aiDev(sb, ["install", "--lang", "ru"]);
