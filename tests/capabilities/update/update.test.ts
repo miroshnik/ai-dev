@@ -313,10 +313,18 @@ function withReleases() {
   return {
     up,
     /** коммит в main upstream: npx теперь отдаёт его */
-    commit(files: Record<string, string | null>) {
-      const sha = up.repo.commit(files);
+    commit(files: Record<string, string | null>, message?: string) {
+      const sha = up.repo.commit(files, message);
       serveMain();
       return sha;
+    },
+    /** пункты списка изменений, который `release --dry-run` владельца выпустил бы сейчас в GitHub Release */
+    notes() {
+      const clone = path.join(sb.tmp, "owner");
+      if (!existsSync(clone)) git(sb.tmp, "clone", "-q", up.dir, clone);
+      const r = aiDev(sb, ["release", "--dry-run"], { bin: path.join(clone, "bin/ai-dev.mjs") });
+      expect(r.code).toBe(0);
+      return r.stdout.split("\n").filter((l) => l.startsWith("- "));
     },
     /** релиз — тег на голову main (annotated — аннотированный), npx отдаёт его пакет по SHA коммита */
     release(tag: string, { annotated = false } = {}) {
@@ -456,6 +464,102 @@ describe("Копия следует за релизами ai-dev, а не за m
   });
 });
 
+/**
+ * update говорит, что поменялось: агент передаёт это пользователю. Список релиза собирает та же функция, что заметки
+ * GitHub Release, — из истории git того же репозитория, где теги.
+ */
+describe("update называет изменения каждого пропущенного релиза", () => {
+  const rule = (up: AiDevPackage, text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
+  const block = (tag: string, items: string[]) => [`${tag} — https://github.com/miroshnik/ai-dev/releases/tag/${tag}`, ...items.map((i) => `  ${i}`)].join("\n");
+
+  it("update копии перечисляет каждый пропущенный релиз от нового к старому: тег, ссылка и пункты — те же, что в заметках релиза", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило A."), "feat(agents): правило A\n\nRefs #7");
+    const a = r.notes();
+    r.release("v2026.10.08");
+    r.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
+    r.commit(rule(r.up, "Правило B."), "fix(est): правка B\n\nRefs #8");
+    const b = r.notes();
+    r.release("v2026.10.12");
+    r.commit(rule(r.up, "Правило из main."), "feat(agents): правило из main");
+    const u = r.run(["update"]);
+    expect(u.code).toBe(0);
+    expect(a).toEqual(["- feat(agents): правило A (#7)"]);
+    expect(b).toEqual(["- fix(est): правка B (#8)"]);
+    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → v2026.10.12, new releases: 2 — tell the user what changed:\n${block("v2026.10.12", b)}\n${block("v2026.10.08", a)}\nCommit the project copy`);
+    expect(u.stdout).not.toContain("только тесты");
+    expect(u.stdout).not.toContain("правило из main");
+  });
+
+  it("пропущен один релиз — один блок; ничего нового — строка, что релиз уже стоял", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило A."), "feat(agents): правило A");
+    r.release("v2026.10.12");
+    const u = r.run(["update"]);
+    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n${block("v2026.10.12", ["- feat(agents): правило A"])}\n`);
+    const again = r.run(["update"]);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain("ai-dev flow v2026.10.12 was already installed — nothing changed");
+  });
+
+  it("релизов ещё нет — список коммитов флоу от стоявшего SHA до новой головы", () => {
+    const r = withReleases();
+    const from = r.up.repo.git("rev-parse", "HEAD");
+    r.run(["install"]);
+    r.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
+    const to = r.commit(rule(r.up, "Правило A."), "feat(agents): правило A\n\nRefs #7");
+    const u = r.run(["update"]);
+    expect(u.code).toBe(0);
+    expect(u.stdout).toContain(`ai-dev flow ${short(from)} → ${short(to)} — tell the user what changed:\n  - feat(agents): правило A (#7)\nCommit the project copy`);
+    expect(u.stdout).not.toContain("только тесты");
+  });
+
+  it("установщик из клона — коммиты флоу после последнего релиза отдельным блоком «not in a release» над релизами", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило A."), "feat(agents): правило A");
+    r.release("v2026.10.12");
+    const head = r.commit(rule(r.up, "Правило B."), "feat(agents): правило B");
+    const u = aiDev(sb, ["update"], { bin: r.up.bin, env: { AI_DEV_REPO: r.up.dir } });
+    expect(u.code).toBe(0);
+    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → ${short(head)}, new releases: 1 — tell the user what changed:\n${short(head)} — not in a release\n  - feat(agents): правило B\n${block("v2026.10.12", ["- feat(agents): правило A"])}\n`);
+  });
+
+  it("update -g копией на машине — тот же список", () => {
+    mkdirSync(path.join(sb.home, ".claude"));
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install", "-g"]);
+    r.commit(rule(r.up, "Правило A."), "feat(agents): правило A\n\nRefs #7");
+    r.release("v2026.10.12");
+    const u = r.run(["update", "-g"]);
+    expect(u.code).toBe(0);
+    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n${block("v2026.10.12", ["- feat(agents): правило A (#7)"])}\n`);
+  });
+
+  it("список не узнать (в манифесте нет SHA, стоявшего SHA нет в истории) — update всё равно завершается кодом 0, строка с причиной и ссылкой на релизы", () => {
+    const r = withReleases();
+    r.release("v2026.10.05");
+    r.run(["install"]);
+    r.commit(rule(r.up, "Правило A."), "feat(agents): правило A");
+    r.release("v2026.10.12");
+    dropSha(sb.proj);
+    const u = r.run(["update"]);
+    expect(u.code).toBe(0);
+    expect(u.stdout).toContain("ai-dev flow v2026.10.05 → v2026.10.12: changes unavailable — installed without SHA; releases: https://github.com/miroshnik/ai-dev/releases\n");
+    expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ tag: "v2026.10.12" });
+    editManifest(sb.proj, { sha: "1".repeat(40) });
+    const lost = r.run(["update"]);
+    expect(lost.code).toBe(0);
+    expect(lost.stdout).toMatch(/ai-dev flow v2026\.10\.12 → v2026\.10\.12: changes unavailable — .+; releases: https:\/\/github\.com\/miroshnik\/ai-dev\/releases\n/);
+  });
+});
+
 describe("Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя", () => {
   const RULE = "\nНовое правило.\n";
 
@@ -490,6 +594,21 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(realpathSync(path.join(sb.home, ".agents/skills/fresh"))).toBe(realpathSync(path.join(clone, "skills/fresh")));
     expect(realpathSync(path.join(sb.home, ".claude/skills/fresh"))).toBe(realpathSync(path.join(clone, "skills/fresh")));
     expect(aiDev(sb, ["check", "-g"]).code).toBe(0);
+  });
+
+  it("update -g называет коммиты флоу между старой и новой головой клона, тем же форматом, что заметки релиза", () => {
+    const { up, clone } = linkedClone();
+    const before = git(clone, "rev-parse", "HEAD");
+    up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE }, "feat(agents): новое правило\n\nRefs #9");
+    const after = up.repo.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
+    const u = aiDev(sb, ["update", "-g"]);
+    expect(u.code).toBe(0);
+    // путь клона — из манифеста, как его записал install: настоящий, без симлинков (/tmp → /private/tmp на macOS)
+    const real = realpathSync(clone);
+    expect(u.stdout).toContain(`clone ${real}: ${short(before)} → ${short(after)} — tell the user what changed:\n  - feat(agents): новое правило (#9)\n`);
+    expect(u.stdout).not.toContain("только тесты");
+    const again = aiDev(sb, ["update", "-g"]);
+    expect(again.stdout).toContain(`clone ${real}: ${short(after)} → ${short(after)}, the flow hasn't changed\n`);
   });
 
   it("коммиты в main без файлов флоу — актуально, код 0", () => {
