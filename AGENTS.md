@@ -51,7 +51,9 @@ clone); the `check` line about flow changes not yet released is a reminder to
 them; the agent cuts a release only when the owner asks.
 
 - **Behind** — `update` (`-g` for the machine): a `--link` clone does `git
-  pull --ff-only`, a copy is reinstalled. Commit the project copy as a
+  pull --ff-only`, a copy is reinstalled. `update` lists what changed — every
+  release it skipped with the list of its GitHub Release: I tell the user,
+  briefly, in the project language. Commit the project copy as a
   separate `chore(agents): …` commit with the ai-dev tag (`update` prints the
   command) into the current task's branch, without asking; no task branch —
   don't commit, say so. Then re-read what was updated and follow it, not what

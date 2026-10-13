@@ -167,8 +167,8 @@ An agent's sandbox (Claude Code's Bash) doesn't let npx write its cache `~/.npm`
 Projects and machines with a copy get the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands are the same — the npx package from `main` finds the latest tag and restarts from it.
 
 - `check` changes nothing: it compares a copy with the latest release (the same install as a dry run, a list of differences), a `--link` clone — with `origin/main` after `git fetch`.
-- `update`: a copy — reinstalled from the latest release; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason).
-- `release` — the owner's step: a date tag (UTC) on `origin/main` and a GitHub Release listing the flow and installer changes since the previous release; nothing to release — refused.
+- `update`: a copy — reinstalled from the latest release; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason). It says what changed, and the agent tells the user: a copy — every release after the installed one, newest first, with the list of its GitHub Release; a clone — the flow commits it pulled.
+- `release` — the owner's step: a date tag (UTC) on `origin/main` and a GitHub Release listing the flow and installer changes since the previous release (the same list `update` prints); nothing to release — refused.
 
 </details>
 
