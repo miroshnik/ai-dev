@@ -20,8 +20,8 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import locale from "../../github/scripts/locale.cjs";
-import type { Names, Plural } from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
+import type { Names, Plural } from "../../github/scripts/locale.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;

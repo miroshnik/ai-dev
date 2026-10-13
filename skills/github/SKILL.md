@@ -45,7 +45,7 @@ Names of views, `Status` options, fields, issue types and label markers here
 and below are the `en` ones (in the project language — `locales/<language>.json`
 of the `github` skill). The project language — `language` in
 `.agents/ai-dev.json` of the checkout the script runs from (module
-`scripts/locale.cjs`). Views, `Status` options, fields and issue types named in
+`scripts/locale.ts`). Views, `Status` options, fields and issue types named in
 another language of the dictionary — ❌, `fix` renames them keeping the ids
 (task values and the «Item closed» target survive; with tasks in the project —
 after `--confirm`); a decision label with a marker in another language — its

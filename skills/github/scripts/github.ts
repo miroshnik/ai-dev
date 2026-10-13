@@ -32,8 +32,8 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import locale from "./locale.cjs";
-import type { Names } from "./locale.cjs";
+import locale from "./locale.ts";
+import type { Names } from "./locale.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -43,7 +43,7 @@ type Any = any;
 // ----------------------------------------------------------------------------
 
 /**
- * Canon names in the project language (`locales/<language>.json`, the `locale.cjs` module): views, Status options,
+ * Canon names in the project language (`locales/<language>.json`, the `locale.ts` module): views, Status options,
  * fields, issue types, label markers, sections, comments. The language is the one of the project of the `io.cwd`
  * directory, `main` sets it; parsing — by the names of any dictionary language (`locale.every`).
  */

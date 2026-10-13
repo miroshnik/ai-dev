@@ -16,8 +16,8 @@ import type { Dirent } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 
-import locale from "../../github/scripts/locale.cjs";
-import type { Names } from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
+import type { Names } from "../../github/scripts/locale.ts";
 import { codeOnly, envNamesInCode, invariant } from "./harness.ts";
 import type { EnvReader, Exception, Invariant, It } from "./harness.ts";
 

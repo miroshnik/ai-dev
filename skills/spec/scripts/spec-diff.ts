@@ -24,8 +24,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import locale from "../../github/scripts/locale.cjs";
-import type { Names } from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
+import type { Names } from "../../github/scripts/locale.ts";
 import { disablesIn } from "./harness.ts";
 import * as L from "./speclib.ts";
 import type { Test } from "./speclib.ts";
