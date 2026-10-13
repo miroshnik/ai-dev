@@ -36,7 +36,7 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 76 тестов</summary>
+<details><summary>✅ 77 тестов</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
@@ -61,6 +61,7 @@
 - ✅ docs/parallel-checkouts.md: docs/testing.md, «e2e» — есть такой раздел
 - ✅ docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел
 - ✅ docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Compose file isolation rules» — есть такой раздел
+- ✅ docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
 - ✅ docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Settings» — есть такой раздел
 - ✅ docs/parallel-checkouts.md: skills/task-env/SKILL.md, «The proxy» — есть такой раздел
 - ✅ docs/parallel-checkouts.md: skills/task-env/SKILL.md, «The task's stack» — есть такой раздел

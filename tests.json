@@ -11760,6 +11760,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Settings» — есть такой раздел"
  },
  {
