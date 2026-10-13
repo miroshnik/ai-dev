@@ -192,7 +192,7 @@ describe("Правило ESLint живёт в папке своего станд
         files: ["example.test.mts"],
       }),
     });
-    const r = spawnSync("node", [TSC, "-p", dir], { encoding: "utf8" });
+    const r = spawnSync(process.execPath, [TSC, "-p", dir], { encoding: "utf8" });
     expect(r.stdout + r.stderr).toBe("");
     expect(exitOf(r)).toBe(0);
   });

@@ -391,7 +391,7 @@ describe("Каждая переменная окружения объявлен�
         files: ["env.test.mts"],
       }),
     });
-    const r = spawnSync("node", [TSC, "-p", dir], { encoding: "utf8" });
+    const r = spawnSync(process.execPath, [TSC, "-p", dir], { encoding: "utf8" });
     expect(r.stdout + r.stderr).toBe("");
     expect(exitOf(r)).toBe(0);
     expect(["const a = process.env.A; // process.env.OLD", "const b = import.meta.env.VITE_B;"].flatMap(envNamesIn)).toEqual(["A", "VITE_B"]);
