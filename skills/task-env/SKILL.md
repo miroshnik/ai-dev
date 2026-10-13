@@ -1,10 +1,10 @@
 ---
 name: task-env
-description: "A task's environment on the machine — the machine's proxy (Traefik in Docker) gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without host ports: different hosts — different cookies, parallel sessions don't log each other out. `task-env proxy up | down | status`; `check -g` names whether the proxy runs. When — `check -g` or the session start says the proxy isn't running; an address `*.localhost` of a task doesn't open (404, connection refused); you add Traefik labels to a container or write a task stack's override; port 80 is busy; asked how task addresses work, whether Secure cookies work over http://*.localhost, how to reach them from the Claude Code sandbox — even if the word 'proxy' wasn't said."
+description: "A task's environment on the machine — the task's Docker Compose stack `<project>-<N>` and the machine's proxy (Traefik in Docker) that gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without host ports: different hosts — different cookies, parallel sessions don't log each other out. `task-env proxy up | down | status`; `check -g` names whether the proxy runs; `task-env check` holds the project's compose file to the task isolation rules — no `container_name`, no fixed host port, volumes and networks without `name:` and `external`, code by relative paths — and the project's `check` names each violation. When — `check -g` or the session start says the proxy isn't running; the project's `check` printed ❌ or ○ lines about the compose file; an address `*.localhost` of a task doesn't open (404, connection refused); you add Traefik labels to a container, write a task stack's override or edit a compose file; two sessions of one project fight over a port, a container or a volume; port 80 is busy; asked how task addresses work, whether Secure cookies work over http://*.localhost, how to reach them from the Claude Code sandbox, whether a project's Compose setup lets tasks run side by side — even if the words 'proxy' or 'isolation' weren't said."
 allowed-tools: Bash(bun *skills/task-env/scripts/task-env.ts *)
 ---
 
-# task-env — a task's environment: addresses `*.localhost` through one proxy
+# task-env — a task's environment: its own Compose stack, addresses `*.localhost` through one proxy
 
 Parallel sessions of one project run their apps at once. On `localhost` with
 different ports they share cookies — cookies don't tell ports apart — and an
@@ -19,6 +19,7 @@ no host port per app, no port search. The scheme and the reasons — epic
 bun <skill dir>/scripts/task-env.ts proxy up       # start it (or bring it to the compose file), wait until healthy
 bun <skill dir>/scripts/task-env.ts proxy status   # 0 — running, 1 — not running (the start command), 2 — no Docker
 bun <skill dir>/scripts/task-env.ts proxy down     # stop and remove it with its network
+bun <skill dir>/scripts/task-env.ts check [<dir>]  # the compose file against the isolation rules: 0 — hold, 1 — ❌ lines, 2 — not checked
 ```
 
 The skill's `check -g` line: `proxy *.localhost: running (ai-dev-proxy)`,
@@ -76,6 +77,46 @@ networks:
   published on the host.
 - The network is `external`: the proxy creates it, so `proxy up` goes before
   the task stack.
+
+## Compose file isolation rules
+
+The task's stack is the Docker Compose project `<project>-<N>`, and Compose
+keeps stacks apart by the project name — containers, volumes and the network
+get its prefix. Four entries in a compose file bypass the prefix and break
+isolation silently; the project's `check` (and the session start hook) names
+each with `task-env check`, a violation is code 1 of `check`.
+
+| Rule | Breaks | Instead |
+|---|---|---|
+| no `container_name` | a second stack can't start: one container name per machine | nothing — Compose names containers by the project |
+| no fixed host port (`5432:5432`, `127.0.0.1:5432:5432`) | a second stack can't start: the port is taken | `127.0.0.1::5432` (Docker picks the port) or no `ports`; from outside — Traefik or `docker compose port` |
+| volumes and networks without `name:` and `external` | stacks share them: `down -v` of one task wipes another's data, services of different tasks see each other | nothing — Compose names them `<project>_<key>` |
+| code by relative paths in `volumes` and `build` | the stack mounts and builds someone else's checkout, not its own worktree | a path relative to the compose file (`./src`) |
+
+A bind mount of a machine resource — the Docker socket, `/etc/localtime`, a
+device (a source in `/var/run`, `/run`, `/etc`, `/dev`, `/proc`, `/sys`) — is
+not code and is fine; `~/…` is an absolute path.
+
+### What the agent does
+
+| Moment | Action |
+|---|---|
+| The project's `check` (the session start hook) printed `❌ <file>: …` | each line names the subject (a service, or a volume or network with the services using it), the rule and the fix; fixing it is a task of its own in the project, not the current one |
+| `○ <file>: not checked — …` | the check couldn't run (no bun, no `docker` or its `compose` plugin, the config doesn't parse — the line has the reason): nothing is known about violations, it isn't an error |
+| You edit a compose file | `task-env check` before the commit |
+
+### What is checked
+
+Not the YAML itself but `docker compose config --format json` in the
+project directory: Compose has already brought the short and long syntax, the
+override file, variables and `extends` to one form. With
+`--no-path-resolution` (otherwise relative paths come out absolute) and
+`--profile '*'` (otherwise services in `profiles` aren't shown). Volumes and
+networks Compose names `<project>_<key>` by itself — only another name or
+`external` is a violation. The Docker daemon isn't needed, the command works
+in an agent's sandbox. The compose file is looked for under Compose's names in
+its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
+`docker-compose.yml`.
 
 ## Settings
 

@@ -1,8 +1,17 @@
 #!/usr/bin/env bun
 /**
- * task-env — a task's environment (the task-env skill). Here — the machine's proxy: one Traefik per machine gives
- * containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without ports on
- * the host (tests/capabilities/task-env).
+ * task-env — a task's environment (the task-env skill): the task's stack is the Docker Compose project `<project>-<N>`;
+ * the machine's proxy — one Traefik per machine — gives containers of task stacks the addresses
+ * `http://<service>.<N>.<project>.localhost` by their labels, without ports on the host (tests/capabilities/task-env).
+ *
+ * `check` holds the project's compose file to the isolation rules: Compose keeps two stacks of one project apart by the
+ * project name — containers, volumes and networks get its prefix — and four entries bypass the prefix and break
+ * isolation silently: `container_name`, a fixed host port, a volume or a network with `name:` or `external`, an
+ * absolute path to code in `volumes` and `build`. It reads not the YAML but `docker compose config --format json`:
+ * Compose has already brought the forms of writing (short and long syntax, the override file, variables, `extends`) to
+ * one. Without path resolution — otherwise Compose makes relative paths absolute itself; with all profiles — otherwise
+ * heavy services in `profiles` aren't shown. `config` needs no Docker daemon, it works in the sandbox too. `check` of
+ * the ai-dev installer calls it for a project with a compose file.
  *
  * The proxy is the Compose project of `proxy/compose.yaml` next to this directory: the Docker provider with
  * `exposedByDefault: false` (a container without labels isn't published), its own network, the `web` entry point on
@@ -19,10 +28,17 @@
  * and `docker compose` into `sandbox.excludedCommands` (SKILL.md).
  */
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const USAGE = `Usage: task-env proxy <up | down | status>
+const USAGE = `Usage: task-env proxy <up | down | status> | check [<dir>]
 
+  task-env check [<dir>]  holds the compose file in <dir> (default — the current directory) to the task isolation
+                          rules: no container_name, no fixed host port, volumes and networks without name and
+                          external, code by paths relative to the compose file; one ❌ line per violation; 0 — the
+                          rules hold or there is no compose file, 1 — violations, 2 — not checked (no docker compose,
+                          the config doesn't parse)
   task-env proxy up       start the machine's proxy (Traefik) or bring it to the skill's compose file and wait
                           until it is healthy; port 80 busy — AI_DEV_PROXY_PORT
   task-env proxy down     stop and remove the proxy and its network
@@ -130,10 +146,123 @@ function down(env: NodeJS.ProcessEnv): Result {
   return { code: 0, out: `proxy ${proxyName(env)}: removed` };
 }
 
+// ----------------------------------------------------------------------------
+// check — the compose file isolation rules
+// ----------------------------------------------------------------------------
+
+/**
+ * Compose files Docker Compose looks for, in its order. Mirrored in bin/ai-dev.mjs (COMPOSE_FILES): `check` doesn't
+ * start bun in a project without a compose file.
+ */
+const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+
+/**
+ * Sources of a bind mount that are the machine's resources, not code — the Docker socket, `/etc/localtime`, devices:
+ * they don't tie a stack to a checkout (#398, question 3).
+ */
+const MACHINE = /^\/(?:var\/run|run|etc|dev|proc|sys)(?:\/|$)/;
+/** `docker compose config` reads a few files — longer than this is a hang, not work. */
+const CONFIG_TIMEOUT = 20_000;
+
+interface Port {
+  target: number;
+  published?: string;
+  host_ip?: string;
+  protocol?: string;
+}
+interface Mount {
+  type: string;
+  source?: string;
+}
+interface Service {
+  container_name?: string;
+  ports?: Port[];
+  volumes?: Mount[];
+  build?: { context?: string; dockerfile?: string };
+  networks?: Record<string, unknown>;
+}
+interface Resource {
+  name?: string;
+  external?: boolean;
+}
+/** The part of the normalized `docker compose config --format json` the rules read. */
+interface Config {
+  name: string;
+  services?: Record<string, Service>;
+  volumes?: Record<string, Resource>;
+  networks?: Record<string, Resource>;
+}
+
+const absolute = (p: string) => p.startsWith("/") || p === "~" || p.startsWith("~/");
+const list = (names: string[]) => `${names.length === 1 ? "service" : "services"} ${names.join(", ")}`;
+
+/** Violations of the isolation rules, one line each: services, then volumes, then networks; Compose sorts the keys. */
+function violations(config: Config, file: string): string[] {
+  const out: string[] = [];
+  const line = (subject: string, what: string) => out.push(`❌ ${file}: ${subject} — ${what}`);
+  const services = Object.entries(config.services ?? {});
+  for (const [name, s] of services) {
+    const subject = `service ${name}`;
+    if (s.container_name) line(subject, `container_name ${s.container_name}: a second task stack can't start; remove it, Compose names containers by the project`);
+    for (const p of s.ports ?? []) {
+      if (!p.published) continue;
+      const proto = p.protocol && p.protocol !== "tcp" ? `/${p.protocol}` : "";
+      const host = p.host_ip ? `${p.host_ip}:` : "";
+      line(subject, `fixed host port ${host}${p.published}:${p.target}${proto}: two task stacks contend for it; publish 127.0.0.1::${p.target}${proto} or drop ports`);
+    }
+    // a URL context (a git repository) isn't absolute either: it starts neither with / nor with ~
+    for (const [field, p] of [["context", s.build?.context], ["dockerfile", s.build?.dockerfile]] as const) {
+      if (p && absolute(p)) line(subject, `build ${field}: absolute path ${p}: builds code outside the task's worktree; use a path relative to the compose file`);
+    }
+    for (const v of s.volumes ?? []) {
+      if (v.type === "bind" && v.source && absolute(v.source) && !MACHINE.test(v.source)) {
+        line(subject, `volumes: absolute path ${v.source}: mounts code outside the task's worktree; use a path relative to the compose file`);
+      }
+    }
+  }
+  const shared = (kind: "volume" | "network", key: string, r: Resource, users: string[], why: string) => {
+    const subject = `${kind} ${key} (${list(users)})`;
+    if (r.external) line(subject, `external: ${why}; drop external`);
+    else if (r.name && r.name !== `${config.name}_${key}`) line(subject, `name ${r.name}: ${why}; remove name, Compose prefixes it by the project`);
+  };
+  for (const [key, r] of Object.entries(config.volumes ?? {})) {
+    const users = services.filter(([, s]) => (s.volumes ?? []).some((v) => v.type === "volume" && v.source === key)).map(([n]) => n);
+    shared("volume", key, r, users, "task stacks share it, down -v of one wipes another's data");
+  }
+  for (const [key, r] of Object.entries(config.networks ?? {})) {
+    const users = services.filter(([, s]) => Object.hasOwn(s.networks ?? {}, key)).map(([n]) => n);
+    shared("network", key, r, users, "task stacks share it and reach each other's services");
+  }
+  return out;
+}
+
+/** `check`: the exit code; all lines go to stdout — `check` of the installer reads them from there. */
+function check(dir: string): number {
+  const file = COMPOSE_FILES.find((f) => existsSync(path.join(dir, f)));
+  if (!file) return console.log(`no compose file in ${dir} — nothing to check`), 0;
+  const notChecked = (why: string) => (console.log(`○ ${file}: not checked — ${why}`), 2);
+  const r = spawnSync("docker", ["compose", "--profile", "*", "config", "--no-path-resolution", "--format", "json"], { cwd: dir, encoding: "utf8", timeout: CONFIG_TIMEOUT });
+  const error = r.error as NodeJS.ErrnoException | undefined;
+  if (error?.code === "ENOENT") return notChecked("docker not found");
+  if (error) return notChecked(`docker compose config: ${error.message}`);
+  if (r.status !== 0) return notChecked(`docker compose config: ${r.stderr.trim().split("\n")[0] || `exit code ${r.status}`}`);
+  let config: Config;
+  try {
+    config = JSON.parse(r.stdout) as Config;
+  } catch {
+    return notChecked("docker compose config printed no JSON");
+  }
+  const lines = violations(config, file);
+  if (!lines.length) return console.log(`${file}: the task isolation rules hold`), 0;
+  console.log(lines.join("\n"));
+  return 1;
+}
+
 const COMMANDS: Record<string, (env: NodeJS.ProcessEnv) => Result> = { up, down, status };
 
 function main(argv: string[]): number {
   const [group, cmd = "", ...rest] = argv;
+  if (group === "check" && !rest.length && !cmd.startsWith("-")) return check(path.resolve(cmd || "."));
   const fn = group === "proxy" && !rest.length ? COMMANDS[cmd] : undefined;
   if (!fn) {
     process.stderr.write(USAGE);

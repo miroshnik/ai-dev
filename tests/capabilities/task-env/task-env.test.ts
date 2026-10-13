@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDe
 import { proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
 import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -202,5 +203,215 @@ describe("check -g называет прокси на машине: работа
     const r = aiDev(sb, ["check", "--hook"], { env: { FAKE_DOCKER: "none", FAKE_DOCKER_LOG: log } });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/ai-dev on the machine: up to date[^\n]*\n {2}proxy \*\.localhost: not running/);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// task-env check — правила изоляции compose-файла
+// ----------------------------------------------------------------------------
+
+let project: { dir: string; cleanup: () => void };
+/** Проект Compose — каталог `proj`: имя проекта «proj», имена томов и сетей по умолчанию — `proj_<ключ>`. */
+let proj: string;
+function projectPerTest() {
+  beforeEach(() => {
+    project = tmpDir();
+    proj = path.join(project.dir, "proj");
+    mkdirSync(proj);
+  });
+  afterEach(() => project.cleanup());
+}
+
+/**
+ * `task-env check <proj>` с настоящим `docker compose`: нормализацию compose-файла проверка берёт у Compose, и тест —
+ * тоже; демон Docker для `config` не нужен. env — поверх окружения прогона.
+ */
+function composeCheck(env: Record<string, string> = {}) {
+  const r = spawnSync(process.execPath, [SCRIPT, "check", proj], { cwd: project.dir, encoding: "utf8", env: { ...process.env, ...env } });
+  return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr };
+}
+
+const composeFile = (yaml: string, name = "compose.yaml") => writeTree(proj, { [name]: yaml });
+
+/** PATH без docker: bun скрипт запускает по полному пути, docker ищется в PATH. */
+function noDockerPath() {
+  const bin = path.join(project.dir, "bin");
+  mkdirSync(bin, { recursive: true });
+  return bin;
+}
+
+describe("task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом", () => {
+  projectPerTest();
+
+  it("container_name — нарушение: строка с сервисом и именем, код 1", () => {
+    composeFile("services:\n  db:\n    image: postgres\n    container_name: pg\n  app:\n    image: app\n");
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe("❌ compose.yaml: service db — container_name pg: a second task stack can't start; remove it, Compose names containers by the project\n");
+  });
+
+  it("фиксированный порт хоста — нарушение, и с IP хоста; порт, выданный Docker (127.0.0.1::5433, 5434), и сервис без ports — нет", () => {
+    composeFile(
+      [
+        "services:",
+        "  db:",
+        "    image: postgres",
+        '    ports: ["5432:5432", "127.0.0.1::5433", "5434", "127.0.0.1:8080:80", "53:53/udp"]',
+        "  app:",
+        "    image: app",
+        "",
+      ].join("\n"),
+    );
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe(
+      [
+        "❌ compose.yaml: service db — fixed host port 5432:5432: two task stacks contend for it; publish 127.0.0.1::5432 or drop ports",
+        "❌ compose.yaml: service db — fixed host port 127.0.0.1:8080:80: two task stacks contend for it; publish 127.0.0.1::80 or drop ports",
+        "❌ compose.yaml: service db — fixed host port 53:53/udp: two task stacks contend for it; publish 127.0.0.1::53/udp or drop ports",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("том или сеть с name: или external — нарушение с сервисами, которые их берут; имя, которое Compose даёт сам (proj_<ключ>), — нет", () => {
+    composeFile(
+      [
+        "services:",
+        "  db:",
+        "    image: postgres",
+        "    volumes: [data:/var/lib/postgresql/data, cache:/cache, shared:/shared, own:/own]",
+        "    networks: [default, back]",
+        "  app:",
+        "    image: app",
+        "    volumes: [shared:/shared]",
+        "    networks: [back, edge]",
+        "volumes:",
+        "  data: { name: pgdata }",
+        "  cache: { external: true }",
+        "  shared: { name: proj_shared }",
+        "  own: {}",
+        "networks:",
+        "  default: { name: devnet }",
+        "  back: { external: true, name: traefik }",
+        "  edge: {}",
+        "",
+      ].join("\n"),
+    );
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe(
+      [
+        "❌ compose.yaml: volume cache (service db) — external: task stacks share it, down -v of one wipes another's data; drop external",
+        "❌ compose.yaml: volume data (service db) — name pgdata: task stacks share it, down -v of one wipes another's data; remove name, Compose prefixes it by the project",
+        "❌ compose.yaml: network back (services app, db) — external: task stacks share it and reach each other's services; drop external",
+        "❌ compose.yaml: network default (service db) — name devnet: task stacks share it and reach each other's services; remove name, Compose prefixes it by the project",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("абсолютный путь к коду в volumes и build — нарушение, ~ тоже; относительный путь, именованный том и ресурс машины (сокет Docker, /etc/localtime) — нет", () => {
+    composeFile(
+      [
+        "services:",
+        "  app:",
+        "    build: { context: /work/app, dockerfile: /work/app/Dockerfile }",
+        "    volumes:",
+        "      - /work/app/src:/app/src",
+        "      - ~/code/lib:/app/lib",
+        "      - ./src:/app/src2",
+        "      - node_modules:/app/node_modules",
+        "      - /var/run/docker.sock:/var/run/docker.sock",
+        "      - /etc/localtime:/etc/localtime:ro",
+        "  web:",
+        "    build: ./web",
+        "volumes:",
+        "  node_modules: {}",
+        "",
+      ].join("\n"),
+    );
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe(
+      [
+        "❌ compose.yaml: service app — build context: absolute path /work/app: builds code outside the task's worktree; use a path relative to the compose file",
+        "❌ compose.yaml: service app — build dockerfile: absolute path /work/app/Dockerfile: builds code outside the task's worktree; use a path relative to the compose file",
+        "❌ compose.yaml: service app — volumes: absolute path /work/app/src: mounts code outside the task's worktree; use a path relative to the compose file",
+        "❌ compose.yaml: service app — volumes: absolute path ~/code/lib: mounts code outside the task's worktree; use a path relative to the compose file",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  /** Сервисы в profiles `config` без профиля не показывает, override-файл Compose берёт сам — проверка видит оба. */
+  it("сервис в profiles и правка из compose.override.yaml проверяются наравне с остальными", () => {
+    composeFile("services:\n  app:\n    image: app\n  search:\n    image: elasticsearch\n    profiles: [heavy]\n    container_name: es\n");
+    composeFile("services:\n  app:\n    ports: ['3000:3000']\n", "compose.override.yaml");
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("❌ compose.yaml: service search — container_name es:");
+    expect(r.stdout).toContain("❌ compose.yaml: service app — fixed host port 3000:3000:");
+  });
+
+  it("строка называет compose-файл под тем именем, что лежит в проекте: docker-compose.yml", () => {
+    composeFile("services:\n  db:\n    image: postgres\n    container_name: pg\n", "docker-compose.yml");
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    expect(r.stdout).toStartWith("❌ docker-compose.yml: service db — container_name pg:");
+  });
+
+  it("чистый compose-файл — код 0, ни одной строки ❌", () => {
+    composeFile(
+      [
+        "services:",
+        "  db:",
+        "    image: postgres",
+        '    ports: ["127.0.0.1::5432"]',
+        "    volumes: [data:/var/lib/postgresql/data, ./init:/docker-entrypoint-initdb.d]",
+        "  app:",
+        "    build: .",
+        "volumes:",
+        "  data: {}",
+        "",
+      ].join("\n"),
+    );
+    const r = composeCheck();
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("❌");
+  });
+});
+
+describe("Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку", () => {
+  projectPerTest();
+
+  it("проект без compose-файла — код 0, ни строки ❌ и ○, docker не нужен", () => {
+    const r = composeCheck({ PATH: noDockerPath() });
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toMatch(/[❌○]/u);
+    expect(r.stderr).toBe("");
+  });
+
+  it("без Docker — строка ○ «not checked» с причиной, код 2", () => {
+    composeFile("services:\n  db:\n    image: postgres\n    container_name: pg\n");
+    const r = composeCheck({ PATH: noDockerPath() });
+    expect(r.code).toBe(2);
+    expect(r.stdout).toBe("○ compose.yaml: not checked — docker not found\n");
+  });
+
+  it("docker без плагина compose — «not checked» с ответом docker, код 2", () => {
+    composeFile("services:\n  db:\n    image: postgres\n");
+    const bin = noDockerPath();
+    writeFileSync(path.join(bin, "docker"), "#!/bin/sh\necho \"docker: unknown command: docker $1\" >&2\nexit 1\n", { mode: 0o755 });
+    const r = composeCheck({ PATH: `${bin}:/usr/bin:/bin` });
+    expect(r.code).toBe(2);
+    expect(r.stdout).toBe("○ compose.yaml: not checked — docker compose config: docker: unknown command: docker compose\n");
+  });
+
+  it("config не разбирает файл (незаданная обязательная переменная) — «not checked» с ответом Compose, код 2", () => {
+    composeFile("services:\n  db:\n    image: ${DB_IMAGE:?set DB_IMAGE}\n");
+    const r = composeCheck();
+    expect(r.code).toBe(2);
+    expect(r.stdout).toMatch(/^○ compose\.yaml: not checked — docker compose config: [^\n]*DB_IMAGE[^\n]*\n$/);
   });
 });
