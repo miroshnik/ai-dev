@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -224,6 +225,73 @@ describe("Файл флоу, который игнорирует git проек�
     expect(r.stdout).toContain("  ❌ .claude/ — ~/personal-ignore:1 «.claude/»: the directory is excluded outside the project");
     expect(r.stdout).toContain("fix the rule");
     expect(r.stdout).not.toContain("ai-dev update");
+  });
+});
+
+/**
+ * check проекта с compose-файлом зовёт скрипт task-env под bun, тот — `docker compose config`: в PATH песочницы — bun и
+ * docker прогона. Плагин compose docker ищет в каталоге своей конфигурации, а HOME у песочницы свой — DOCKER_CONFIG
+ * ведёт в настоящий; дочерний bun на macOS — без JIT (tests/standards/spawn-no-jit).
+ */
+function withTools(...tools: ("bun" | "docker")[]) {
+  for (const t of tools) {
+    const found = t === "bun" ? process.execPath : execFileSync("sh", ["-c", "command -v docker"], { encoding: "utf8" }).trim();
+    symlinkSync(found, path.join(sb.bin, t));
+  }
+  sb.env.DOCKER_CONFIG = process.env.DOCKER_CONFIG || path.join(os.homedir(), ".docker");
+  if (process.env.BUN_JSC_useJIT) sb.env.BUN_JSC_useJIT = process.env.BUN_JSC_useJIT;
+}
+
+const composeFile = (yaml: string) => writeFileSync(path.join(sb.proj, "compose.yaml"), yaml);
+const CONTAINER_NAME = "services:\n  db:\n    image: postgres\n    container_name: pg\n";
+const COMPOSE_VIOLATION = "  ❌ compose.yaml: service db — container_name pg: a second task stack can't start; remove it, Compose names containers by the project\n";
+
+describe("check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом", () => {
+  it("нарушения — строки ❌ скрипта task-env, код 1 и при актуальном флоу; check ничего не меняет", () => {
+    withTools("bun", "docker");
+    aiDev(sb, ["install"]);
+    composeFile(CONTAINER_NAME);
+    const before = snapshot(sb.proj);
+    const r = aiDev(sb, ["check"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("in the project: up to date");
+    expect(r.stdout).toContain(COMPOSE_VIOLATION);
+    expect(r.stdout).toEndWith(MODE_ASK);
+    expect(snapshot(sb.proj)).toEqual(before);
+  });
+
+  it("флоу отстал — строки ❌ compose-файла идут вместе со списком изменений, код 1", () => {
+    withTools("bun", "docker");
+    aiDev(sb, ["install"]);
+    composeFile(CONTAINER_NAME);
+    const r = aiDev(sb, ["check"], { bin: newer.bin });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("in the project: behind");
+    expect(r.stdout).toContain(COMPOSE_VIOLATION);
+    expect(r.stdout).toEndWith(MODE_ASK);
+  });
+
+  /** Без bun в PATH: начни check скрипт в проекте без compose-файла — была бы строка ○ «bun not found». */
+  it("проект без compose-файла — ни строки сверх обычных, bun не запускается; чистый compose-файл — тоже ни строки; код 0", () => {
+    aiDev(sb, ["install"]);
+    const upToDate = /^ai-dev in the project: up to date \([^)\n]+\)\n {2}tasks: with permission\n {2}language: en\n$/;
+    expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(upToDate) });
+    withTools("bun", "docker");
+    composeFile("services:\n  db:\n    image: postgres\n    ports: ['127.0.0.1::5432']\n");
+    expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(upToDate) });
+  });
+
+  it("без Docker — строка ○ «not checked» с причиной, код по-прежнему 0; без bun — так же", () => {
+    aiDev(sb, ["install"]);
+    composeFile(CONTAINER_NAME);
+    const noBun = aiDev(sb, ["check"]);
+    expect(noBun.code).toBe(0);
+    expect(noBun.stdout).toContain("  ○ compose.yaml: not checked — bun not found\n");
+    withTools("bun");
+    const noDocker = aiDev(sb, ["check"]);
+    expect(noDocker.code).toBe(0);
+    expect(noDocker.stdout).toContain("  ○ compose.yaml: not checked — docker not found\n");
+    expect(noDocker.stdout).toEndWith(MODE_ASK);
   });
 });
 
@@ -667,6 +735,22 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.stdout).toContain("❌ .agents/ai-dev/claude/CLAUDE.md");
     expect(r.stdout).toContain("Git ignores flow files — update adds exceptions to .gitignore");
     expect(r.stdout).not.toContain("Behind —");
+  });
+
+  /** Правка compose-файла — не текущая задача сессии: в начале сессии задачи ещё нет, а «одна сессия — одна задача». */
+  it("вывод хука называет нарушения compose-файла и что их правка — отдельная задача проекта; без нарушений подсказки нет", () => {
+    withTools("bun", "docker");
+    aiDev(sb, ["install", "-g"]);
+    aiDev(sb, ["install"]);
+    npxServes(base.bin);
+    composeFile(CONTAINER_NAME);
+    const r = runHook();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(COMPOSE_VIOLATION);
+    expect(r.stdout).toContain("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
+    expect(r.stdout).not.toContain("Behind —");
+    composeFile("services:\n  db:\n    image: postgres\n");
+    expect(runHook().stdout).not.toContain("compose");
   });
 
   /**
