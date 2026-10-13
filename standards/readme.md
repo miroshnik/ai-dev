@@ -13,7 +13,7 @@ README читают первым, а правят последним: новый
 
 ## README называет всё, что ставит флоу, и не ссылается на то, чего нет
 
-<details><summary>✅ 50 тестов</summary>
+<details><summary>✅ 55 тестов</summary>
 
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, ai-dev install, ai-dev release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
@@ -28,6 +28,7 @@ README читают первым, а правят последним: новый
 - ✅ README: скилл github — со ссылкой на skills/github/SKILL.md
 - ✅ README: скилл slot — со ссылкой на skills/slot/SKILL.md
 - ✅ README: скилл spec — со ссылкой на skills/spec/SKILL.md
+- ✅ README: скилл task-env — со ссылкой на skills/task-env/SKILL.md
 - ✅ README: скрипт dashboard скилла dashboard назван
 - ✅ README: скрипт est скилла est назван
 - ✅ README: скрипт github скилла github назван
@@ -39,6 +40,7 @@ README читают первым, а правят последним: новый
 - ✅ README: скрипт spec-exceptions скилла spec назван
 - ✅ README: скрипт spec-publish скилла spec назван
 - ✅ README: скрипт spec-run скилла spec назван
+- ✅ README: скрипт task-env скилла task-env назван
 - ✅ README: скрипт wait-ci скилла ci-wait назван
 - ✅ README: справочник docs/ci-concurrency.md — со ссылкой
 - ✅ README: справочник docs/cloud-sessions.md — со ссылкой
@@ -64,6 +66,9 @@ README читают первым, а правят последним: новый
 - ✅ README: подкоманда github task drop названа
 - ✅ README: подкоманда github task new названа
 - ✅ README: подкоманда github task status названа
+- ✅ README: подкоманда task-env proxy down названа
+- ✅ README: подкоманда task-env proxy status названа
+- ✅ README: подкоманда task-env proxy up названа
 - ✅ относительные ссылки и якоря README ведут на существующие файлы и разделы
 
 </details>

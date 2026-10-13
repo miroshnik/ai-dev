@@ -35,7 +35,7 @@
 
 ## Флоу написан по-английски: в его документах нет кириллицы
 
-<details><summary>✅ 25 тестов</summary>
+<details><summary>✅ 26 тестов</summary>
 
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md
@@ -62,6 +62,7 @@
 - ✅ в skills/spec/ci.md нет кириллицы
 - ✅ в skills/spec/migration.md нет кириллицы
 - ✅ в skills/spec/reference.md нет кириллицы
+- ✅ в skills/task-env/SKILL.md нет кириллицы
 
 </details>
 
@@ -72,7 +73,7 @@
 (`skills/github/locales`), а комментарии — по-английски, как документы флоу, поэтому кириллицы в коде скриптов нет
 вовсе: файл сверяется целиком, с комментариями.
 
-<details><summary>✅ 28 тестов</summary>
+<details><summary>✅ 29 тестов</summary>
 
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» не пуст
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.mjs, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts
@@ -101,6 +102,7 @@
 - ✅ в skills/spec/scripts/speclib.ts нет кириллицы
 - ✅ в skills/spec/scripts/vendor/babel-parser.cjs нет кириллицы
 - ✅ в skills/spec/scripts/vendor/babel-parser.d.cts нет кириллицы
+- ✅ в skills/task-env/scripts/task-env.ts нет кириллицы
 - ✅ справка установщика и скриптов скиллов — на английском
 
 </details>
