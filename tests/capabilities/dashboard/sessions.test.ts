@@ -28,7 +28,7 @@ const session = (id: string, name: string, ...recs: unknown[]): Transcript => pa
 const pr = (o: Partial<PrInfo> = {}): PrInfo => ({ number: 70, url: "https://github.com/o/r/pull/70", branch: "feat/7-export", closes: [7], merged: false, checks: "success", conflict: false, deploy: null, cloud: false, ...o });
 const live = (o: Partial<Live> = {}): Live => ({ tasks: [], prs: [], questions: [], ...o });
 const task = (number: number, title = `Задача ${number}`, parent: Task["parent"] = null): Task => ({ number, title, parent });
-const input = (o: Partial<SessionsInput> = {}): SessionsInput => ({ pins: {}, transcripts: {}, live: {}, others: {}, ...o });
+const input = (o: Partial<SessionsInput> = {}): SessionsInput => ({ pins: {}, transcripts: {}, live: {}, others: {}, hosts: [], port: "80", ...o });
 const byId = (...ts: Transcript[]) => Object.fromEntries(ts.map((t) => [t.id, t]));
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 /** Строка таблицы задачи по номеру: текст её ячеек. */
@@ -151,6 +151,55 @@ describe("Строка задачи «В работе» — её сессия и
     expect(v.rows[0]!.session?.id).toBe("new");
     expect(v.rows[0]!.wait.key).toBe("done");
     expect(v.asks).toEqual([]);
+  });
+});
+
+describe("Адреса сервисов задачи — ссылки из маршрутов прокси task-env", () => {
+  /** Строка задачи #N репозитория `repo` при маршрутах прокси `hosts` на порту `port`. */
+  const one = (n: number, hosts: string[], repo = "o/shop", port = "80") => sessionsView(input({ live: { [repo]: live({ tasks: [task(n, "Экспорт")] }) }, hosts, port }), NOW).rows[0]!;
+  const html = (n: number, hosts: string[], repo = "o/shop", port = "80") => {
+    const v = sessionsView(input({ live: { [repo]: live({ tasks: [task(n, "Экспорт")] }) }, hosts, port }), NOW);
+    return /<tr[\s\S]*?<\/tr>/.exec(sessionsBody(v, NOW, false).split("<tbody>")[1] ?? "")?.[0] ?? "";
+  };
+
+  it("у задачи с поднятым стеком — ссылки на адреса её сервисов", () => {
+    const hosts = ["web.7.shop.localhost", "api.7.shop.localhost"];
+    expect(one(7, hosts).addresses).toEqual([
+      { service: "api", url: "http://api.7.shop.localhost" },
+      { service: "web", url: "http://web.7.shop.localhost" },
+    ]);
+    const row = html(7, hosts);
+    expect(text(row)).toContain("services: api · web");
+    expect(row).toContain('<a href="http://web.7.shop.localhost"');
+  });
+
+  it("у задачи без стека ссылок нет", () => {
+    expect(one(7, []).addresses).toEqual([]);
+    expect(html(7, [])).not.toContain("services:");
+  });
+
+  it("адреса другой задачи не попадают к этой", () => {
+    const hosts = [
+      "web.7.shop.localhost",
+      // другая задача того же проекта, номер с тем же началом
+      "web.70.shop.localhost",
+      // та же задача другого проекта
+      "web.7.cart.localhost",
+      // стек основного чекаута и API прокси — не адреса задачи
+      "web.shop.localhost",
+      "ai-dev-proxy.localhost",
+    ];
+    expect(one(7, hosts).addresses.map((a) => a.url)).toEqual(["http://web.7.shop.localhost"]);
+    // проект в адресе — имя репозитория строчными буквами, цифрами и «-»
+    expect(one(7, ["web.7.my-shop.localhost"], "o/My_Shop").addresses.map((a) => a.service)).toEqual(["web"]);
+  });
+
+  it("адреса стека e2e на вкладку не попадают: он пересоздаётся на каждый прогон", () => {
+    expect(one(7, ["web.e2e.7.shop.localhost"]).addresses).toEqual([]);
+  });
+
+  it("порт прокси не 80 — ссылки с портом", () => {
+    expect(one(7, ["web.7.shop.localhost"], "o/shop", "8080").addresses).toEqual([{ service: "web", url: "http://web.7.shop.localhost:8080" }]);
   });
 });
 
