@@ -35,8 +35,8 @@ inside `github task new` (from analogs with actuals, not off the top of the head
 «Actual, h», «Tokens, M», «Cost, $» — `est fact --write` inside `github task close`;
 never touch them by hand.
 
-Run: `bun <skill folder>/scripts/est.ts <subcommand> …` (Bun, no dependencies) —
-the skill folder is the one holding this file (`~/.claude/skills/est`,
+Run: `bun --no-env-file <skill folder>/scripts/est.ts <subcommand> …` (Bun, no
+dependencies) — the skill folder is the one holding this file (`~/.claude/skills/est`,
 `~/.agents/skills/est`, the project's `.agents/skills/est` or an ai-dev clone; in
 Claude Code — `${CLAUDE_SKILL_DIR}`); below abbreviated to `est`. `--repo
 owner/repo` can be omitted when you work in the repository's folder. The

@@ -713,7 +713,7 @@ export function modelModules(text: string): Record<string, string[]> | string {
         "const paths = (p) => (Array.isArray(p) ? p : [p]).map((x) => String(x).replace(/\\/+$/, \"\"));\n" +
         "console.log(JSON.stringify(Object.fromEntries(Object.entries(m.default?.modules ?? {}).map(([k, v]) => [k, paths(v?.path ?? [])]))));\n",
     );
-    const r = spawnSync(process.execPath, [path.join(dir, "modules.mjs")], { encoding: "utf8", timeout: 30_000 });
+    const r = spawnSync(process.execPath, ["--no-env-file", path.join(dir, "modules.mjs")], { encoding: "utf8", timeout: 30_000 });
     if (r.status !== 0) return ((r.stderr || r.error?.message || "").trim().split("\n").find((l) => /error/i.test(l)) ?? "the process exited with an error").trim().slice(0, 200);
     return JSON.parse(r.stdout) as Record<string, string[]>;
   } catch (e) {
@@ -1704,7 +1704,7 @@ export function cmdTaskActualize(io: Io, slug: string, number: number): number {
     "",
     checks,
     "",
-    locale.fill(N.actualize.scope, { ...vars, questions: N.sections.questions, script: `bun ${import.meta.path}` }),
+    locale.fill(N.actualize.scope, { ...vars, questions: N.sections.questions, script: `bun --no-env-file ${import.meta.path}` }),
     locale.fill(N.actualize.comment, vars),
     N.actualize.answer,
   ])
@@ -1838,7 +1838,7 @@ const taskEnvScript = (io: Io) => io.env.AI_DEV_TASK_ENV ?? path.resolve(import.
 function takeDownStacks(io: Io, number: number): void {
   const script = taskEnvScript(io);
   if (!existsSync(script)) return io.out(`○ task stacks: task-env is not installed (${script})`);
-  const r = (io.run ?? realRun)("bun", [script, "down", String(number)], io.cwd);
+  const r = (io.run ?? realRun)("bun", ["--no-env-file", script, "down", String(number)], io.cwd);
   const lines = r.stdout.split("\n").filter((l) => l.trim());
   for (const line of lines) io.out(line);
   if (r.status !== 0 && !lines.length) io.out(`! task-env down: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
@@ -1846,7 +1846,7 @@ function takeDownStacks(io: Io, number: number): void {
 
 /** est with arguments: its output without the marker is printed as is, a failure — its last error line as a `!` line. */
 function runEst(io: Io, est: string, args: string[]): void {
-  const r = (io.run ?? realRun)("bun", [est, ...args], io.cwd);
+  const r = (io.run ?? realRun)("bun", ["--no-env-file", est, ...args], io.cwd);
   for (const line of r.stdout.split("\n")) if (line.trim() && !line.startsWith("<!--")) io.out(line);
   if (r.status !== 0) io.out(`! est ${args[0]}: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
 }
@@ -2224,7 +2224,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     if (unnamed.length) {
       const priority = pr.base?.repo?.owner?.type === "Organization" ? " --priority Urgent" : "";
       const title = `${locale.fill(N.mainRed.title, { base })}: ${what(unnamed)}`;
-      io.out(`no bug on red ${base} about ${say(unnamed)} — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun ${import.meta.path} task new --type ${N.issueTypes.bug}${priority} --title ${JSON.stringify(title)}; ${wait("<N>")}`);
+      io.out(`no bug on red ${base} about ${say(unnamed)} — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun --no-env-file ${import.meta.path} task new --type ${N.issueTypes.bug}${priority} --title ${JSON.stringify(title)}; ${wait("<N>")}`);
     }
     io.out(`⛔ don't merge: ${base} is red, not this PR — don't fix it in your PR`);
     return 3;

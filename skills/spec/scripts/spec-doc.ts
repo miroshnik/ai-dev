@@ -656,7 +656,7 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
  * moves it.
  */
 const SHARED_NAMES = `${L.TESTS}/standards/spec-names/exceptions.ts`;
-const MIGRATE = "migrate with spec-exceptions: bun .agents/skills/spec/scripts/spec-exceptions.ts";
+const MIGRATE = "migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts";
 // the name exceptions format — as the skill's SKILL.md quotes it
 const NAME_FILES = "name exceptions — a file per name in names.exceptions/ of the decision folder";
 

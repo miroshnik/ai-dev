@@ -18,8 +18,8 @@ e2e run in its own Docker Compose stack — a copy of the project's compose
 file, the `task-env` skill:
 
 ```bash
-bun <skill dir>/scripts/task-env.ts up                           # the task's stack by the branch, its addresses
-bun <skill dir>/scripts/task-env.ts e2e -- npx playwright test   # the e2e stack anew, the run with its addresses
+bun --no-env-file <skill dir>/scripts/task-env.ts up                           # the task's stack by the branch, its addresses
+bun --no-env-file <skill dir>/scripts/task-env.ts e2e -- npx playwright test   # the e2e stack anew, the run with its addresses
 ```
 
 - **The stack** — Compose project `<project>-<N>` by the number from the

@@ -22,7 +22,7 @@ up a page with two tabs:
 It writes nothing to GitHub.
 
 ```bash
-bun <skill dir>/scripts/dashboard.ts [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
+bun --no-env-file <skill dir>/scripts/dashboard.ts [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
 ```
 
 The skill dir is the one this file is in (in Claude Code —

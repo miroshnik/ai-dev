@@ -141,7 +141,7 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     expect(exitOf(proxy("down"))).toBe(0);
     const stopped = proxy("status");
     expect(exitOf(stopped)).toBe(1);
-    expect(stopped.stdout).toContain(`proxy ${NAME}: not running — start: bun ${SCRIPT} proxy up`);
+    expect(stopped.stdout).toContain(`proxy ${NAME}: not running — start: bun --no-env-file ${SCRIPT} proxy up`);
     expect(docker("network", "ls", "--quiet", "--filter", `name=^${NAME}$`)).toBe("");
   });
 });
@@ -172,7 +172,7 @@ describe("check -g называет прокси на машине: работа
   afterEach(() => sb.cleanup());
 
   const check = (state: string, extra: Record<string, string> = {}) => aiDev(sb, ["check", "-g"], { env: { FAKE_DOCKER: state, FAKE_DOCKER_LOG: log, ...extra } });
-  const START = "start: bun ~/.agents/skills/task-env/scripts/task-env.ts proxy up";
+  const START = "start: bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up";
 
   it("`check -g` называет незапущенный прокси и команду его запуска", () => {
     for (const state of ["none", "exited"]) {

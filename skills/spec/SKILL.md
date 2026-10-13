@@ -36,8 +36,8 @@ per-repository configuration:
 - `harness.ts` — a library for the project's tests: a mechanical check
   registers ordinary runner tests and gets into the spec (section "Checks").
 
-Running: `bun <skill dir>/scripts/spec-doc.ts …` — Bun runs TypeScript without
-a build, there are no dependencies (a TypeScript parser is kept as a file in
+Running: `bun --no-env-file <skill dir>/scripts/spec-doc.ts …` — Bun runs
+TypeScript without a build, there are no dependencies (a TypeScript parser is kept as a file in
 the skill — `scripts/vendor/`). The modules a project's tests and config import
 (`harness.ts`, `architecture.ts`, `eslint-config.ts`) load under the project's
 own runner on Node — section "Wiring into a repository". The skill directory is the one holding this file
@@ -86,7 +86,7 @@ the reports.
 ## spec-doc
 
 ```bash
-bun <skill dir>/scripts/spec-doc.ts .spec-report.json [more reports] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
+bun --no-env-file <skill dir>/scripts/spec-doc.ts .spec-report.json [more reports] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
 ```
 
 What ends up in `docs/spec/` (the generated text is in the project language):
@@ -239,7 +239,7 @@ describe("A paid invoice is closed without the accountant", () => { … });
 ## spec-diff
 
 ```bash
-bun <skill dir>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -] [--report report … [--spec-branch origin/spec]] [--limit 100 | --full]
+bun --no-env-file <skill dir>/scripts/spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--no-merge-base] [--json] [--root DIR] [--scenarios issue.md | -] [--report report … [--spec-branch origin/spec]] [--limit 100 | --full]
 ```
 
 Decisions outside test names — as separate sections «<title> — removed» and
@@ -386,7 +386,7 @@ new commits with tests — regenerate it and replace it.
 ## spec-publish
 
 ```bash
-bun <skill dir>/scripts/spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check]
+bun --no-env-file <skill dir>/scripts/spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check]
 ```
 
 The root of the `spec` branch is the contents of `docs/spec`; the commit
@@ -419,7 +419,7 @@ rejected on all attempts, 2 — no directory or not git. Without a configured
 ## spec-run
 
 ```bash
-bun <skill dir>/scripts/spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
+bun --no-env-file <skill dir>/scripts/spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
 ```
 
 Publishing on a PR merge without CI on `main` (`ci.md`): the id of the green
@@ -442,9 +442,9 @@ error or `gh`.
 ## spec-break
 
 ```bash
-bun <skill dir>/scripts/spec-break.ts --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>
-bun <skill dir>/scripts/spec-break.ts --plan breaks.json [--no-baseline] [-- <test command…>]
-bun <skill dir>/scripts/spec-break.ts --restore
+bun --no-env-file <skill dir>/scripts/spec-break.ts --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>
+bun --no-env-file <skill dir>/scripts/spec-break.ts --plan breaks.json [--no-baseline] [-- <test command…>]
+bun --no-env-file <skill dir>/scripts/spec-break.ts --restore
 ```
 
 A decision's check must be able to fail: a breakage is a code edit that
@@ -469,7 +469,7 @@ isn't applied, exit code 2 — compare by hand.
 ## spec-exceptions
 
 ```bash
-bun <skill dir>/scripts/spec-exceptions.ts [--root DIR]
+bun --no-env-file <skill dir>/scripts/spec-exceptions.ts [--root DIR]
 ```
 
 A decision's exceptions are the folder's `exceptions/` directory, one file per
@@ -557,10 +557,10 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
 2. **Scripts** in `package.json` — via `bun`: Bun runs TypeScript itself,
    for any project `type`. Reports — those the project has:
    ```json
-   "spec:doc": "bun .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
-   "spec:diff": "bun .agents/skills/spec/scripts/spec-diff.ts",
-   "spec:publish": "bun .agents/skills/spec/scripts/spec-publish.ts",
-   "spec:claims": "bun .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
+   "spec:doc": "bun --no-env-file .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
+   "spec:diff": "bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts",
+   "spec:publish": "bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts",
+   "spec:claims": "bun --no-env-file .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
    Fast checks — the `test:spec` script of the project's runner, standards and
    architecture (`"test:spec": "vitest run tests/standards tests/architecture"`):

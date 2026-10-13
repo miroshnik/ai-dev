@@ -16,14 +16,14 @@ no host port per app, no port search. The scheme and the reasons — epic
 "Environment" in ai-dev (`tests/capabilities/task-env/task-env.md`).
 
 ```bash
-bun <skill dir>/scripts/task-env.ts up [--profile <p>]...                  # the task's stack by the branch, its addresses
-bun <skill dir>/scripts/task-env.ts e2e [--profile <p>]... [-- <command>]  # the e2e stack anew, the command with its addresses
-bun <skill dir>/scripts/task-env.ts down [<N>]                             # the task's stacks with their volumes
-bun <skill dir>/scripts/task-env.ts prune                                  # stacks of the project's closed tasks
-bun <skill dir>/scripts/task-env.ts proxy up       # start it (or bring it to the compose file), wait until healthy
-bun <skill dir>/scripts/task-env.ts proxy status   # 0 — running, 1 — not running (the start command), 2 — no Docker
-bun <skill dir>/scripts/task-env.ts proxy down     # stop and remove it with its network
-bun <skill dir>/scripts/task-env.ts check [<dir>]  # the compose file against the isolation rules: 0 — hold, 1 — ❌ lines, 2 — not checked
+bun --no-env-file <skill dir>/scripts/task-env.ts up [--profile <p>]...                  # the task's stack by the branch, its addresses
+bun --no-env-file <skill dir>/scripts/task-env.ts e2e [--profile <p>]... [-- <command>]  # the e2e stack anew, the command with its addresses
+bun --no-env-file <skill dir>/scripts/task-env.ts down [<N>]                             # the task's stacks with their volumes
+bun --no-env-file <skill dir>/scripts/task-env.ts prune                                  # stacks of the project's closed tasks
+bun --no-env-file <skill dir>/scripts/task-env.ts proxy up       # start it (or bring it to the compose file), wait until healthy
+bun --no-env-file <skill dir>/scripts/task-env.ts proxy status   # 0 — running, 1 — not running (the start command), 2 — no Docker
+bun --no-env-file <skill dir>/scripts/task-env.ts proxy down     # stop and remove it with its network
+bun --no-env-file <skill dir>/scripts/task-env.ts check [<dir>]  # the compose file against the isolation rules: 0 — hold, 1 — ❌ lines, 2 — not checked
 ```
 
 The skill's `check -g` line: `proxy *.localhost: running (ai-dev-proxy)`,
@@ -310,9 +310,8 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   every command in it — `docker ps | head`, `…; echo` or a redirection to a
   file keep the call sandboxed (the Claude Code docs say the same).
   `docker compose *`, `docker ps *` and `gh *` work. No entry takes out a
-  script run by `bun`: `bun ~/.agents/skills/task-env/scripts/task-env.ts
-  proxy status` stayed sandboxed with the entry written with `~` and with
-  the absolute path, `bun …/github.ts project check` — with the absolute
+  script run by `bun`: `bun …/task-env.ts proxy status` stayed sandboxed
+  with the entry written with `~` and with the absolute path, `bun …/github.ts project check` — with the absolute
   path through the `~/.agents/skills` symlink, the call's text matching the
   entry exactly. The cause is Claude Code's matcher, not the path (2.1.295;
   the docs list the call shapes that stay sandboxed only "among others"):

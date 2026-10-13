@@ -112,7 +112,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: docs-spec, path: docs/spec }
-      - run: bun .agents/skills/spec/scripts/spec-publish.ts
+      - run: bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts
 
   spec-diff:
     if: github.event_name == 'pull_request'
@@ -124,7 +124,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: spec-reports }
-      - run: bun .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
+      - run: bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
 The `.spec-*` reports and logs are hidden files: `upload-artifact` skips them
@@ -188,10 +188,10 @@ jobs:
       - name: docs/spec from the run that checked the merge tree
         run: |
           tree=$(git rev-parse 'HEAD^{tree}')
-          run=$(bun .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
+          run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
           [ -n "$run" ] || exit 0 # skip: the reason is in spec-run's line above
           gh run download "$run" --name "docs-spec-$tree" --dir docs/spec
-          bun .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
+          bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
 ```
 
 - Only a tree checked in full is published: the artifact is named after the

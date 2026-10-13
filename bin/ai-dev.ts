@@ -970,7 +970,7 @@ interface Result {
 function composeCheck(root: string): { lines: string[]; violations: boolean } {
   const file = COMPOSE_FILES.find((f) => existsSync(path.join(root, f)));
   if (!file) return { lines: [], violations: false };
-  const r = spawnSync(process.execPath, [TASK_ENV, "check", root], { encoding: "utf8", timeout: TASK_ENV_TIMEOUT });
+  const r = spawnSync(process.execPath, ["--no-env-file", TASK_ENV, "check", root], { encoding: "utf8", timeout: TASK_ENV_TIMEOUT });
   const notChecked = (why: string) => ({ lines: [`  ○ ${file}: not checked — ${why}`], violations: false });
   if (r.error) return notChecked(`task-env: ${r.error.message}`);
   if (r.status === 0) return { lines: [], violations: false };
@@ -1091,7 +1091,7 @@ function checkLink(home: string, clone: string): Result {
  * tell — no line.
  */
 function unreleased(clone: string): string[] {
-  const cmd = `release it: bun ${path.join(clone, "bin/ai-dev.ts")} release`;
+  const cmd = `release it: bun --no-env-file ${path.join(clone, "bin/ai-dev.ts")} release`;
   try {
     const last = releases("origin", clone).at(-1);
     if (!last) return [`  not in a release: no releases yet — ${cmd}`];
@@ -1120,7 +1120,7 @@ function proxyLines(home: string): string[] {
   if (err?.code === "ENOENT") return [];
   if (err || r.status !== 0) return [`  proxy *.localhost: Docker unavailable — ${err ? (err.code === "ETIMEDOUT" ? "docker didn't answer in 10 s" : err.message) : String(r.stderr).trim().split("\n")[0]}`];
   if (r.stdout.split("\n").includes("running")) return [`  proxy *.localhost: running (${name})`];
-  return ["  proxy *.localhost: not running — start: bun ~/.agents/skills/task-env/scripts/task-env.ts proxy up"];
+  return ["  proxy *.localhost: not running — start: bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up"];
 }
 
 /** The check's result plus the proxy line for the machine (`proxyLines`): installed or not, behind or not. */
@@ -1302,7 +1302,7 @@ function updateLink(clone: string) {
   const items = changeItems(clone, `${before}..${after}`);
   const head = `clone ${clone}: ${short(before)} → ${short(after)}`;
   note((items.length ? [`${head} — tell the user what changed:`, ...items.map((i) => `  ${i}`)] : [`${head}, the flow hasn't changed`]).join("\n"));
-  return spawnSync(process.execPath, [path.join(clone, "bin/ai-dev.ts"), "install", "-g", "--link"], { stdio: "inherit" }).status ?? 2;
+  return spawnSync(process.execPath, ["--no-env-file", path.join(clone, "bin/ai-dev.ts"), "install", "-g", "--link"], { stdio: "inherit" }).status ?? 2;
 }
 
 /**
