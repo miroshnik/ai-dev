@@ -11,7 +11,7 @@ import { spawn } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import locale from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
 import { branchIssueNumber, cloudSessionsIn, encodePath, EST_DIR, EstError, PROJECTS_DIR } from "../../est/scripts/est.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- #280 schemaless JSON from transcripts and GitHub

@@ -17,8 +17,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import locale from "../../github/scripts/locale.cjs";
-import type { Names } from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
+import type { Names } from "../../github/scripts/locale.ts";
 import type { Model } from "./architecture.ts";
 import knipHints from "./knip-hints.cjs";
 import { commentsOf, decisionFolder, EXCEPTIONS_DIR, exceptionFile, stringsOf } from "./speclib.ts";

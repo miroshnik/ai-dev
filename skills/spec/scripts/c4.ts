@@ -8,7 +8,7 @@
  * in the project language `lang` (the github skill's dictionary), model data — as the project wrote it.
  */
 
-import locale from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
 import { adaptersOf, moduleContainers } from "./architecture.ts";
 import type { Container, External, Model, Module } from "./architecture.ts";
 import { mdText } from "./speclib.ts";

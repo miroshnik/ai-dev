@@ -12,7 +12,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import locale from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
 import * as babel from "./vendor/babel-parser.cjs";
 
 const posix = path.posix;

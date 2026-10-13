@@ -14,7 +14,7 @@
 import { spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 
-import locale from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
 import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo, sharesTxt, usdByModel, usdShares } from "../../est/scripts/est.ts";
 import type { Registry, Row } from "../../est/scripts/est.ts";
 import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, repoTranscripts, SESSIONS_CSS, sessionsBody, sessionsView } from "./sessions.ts";

@@ -23,7 +23,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import locale from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
 import { exceptionFiles } from "./harness.ts";
 import type { Exception } from "./harness.ts";
 

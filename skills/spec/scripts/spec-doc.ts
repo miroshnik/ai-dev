@@ -32,8 +32,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import locale from "../../github/scripts/locale.cjs";
-import type { Names, Plural } from "../../github/scripts/locale.cjs";
+import locale from "../../github/scripts/locale.ts";
+import type { Names, Plural } from "../../github/scripts/locale.ts";
 import type { Model } from "./architecture.ts";
 import * as C4 from "./c4.ts";
 import type { Call } from "./harness.ts";

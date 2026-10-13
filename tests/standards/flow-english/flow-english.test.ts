@@ -5,9 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import localeModule from "../../../skills/github/scripts/locale.cjs";
-import type { Names as LocaleNames } from "../../../skills/github/scripts/locale.cjs";
-import en from "../../../skills/github/locales/en.json" with { type: "json" };
+import localeModule from "../../../skills/github/scripts/locale.ts";
 import { codeOnly, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -190,10 +188,17 @@ describe("Названия, которые пишут и разбирают ск
     expect(cyrillicLines(read(`${LOCALES}/en.json`))).toEqual([]);
   });
 
-  it("словарь en соответствует типам модуля locale (Names в locale.d.cts)", () => {
-    // проверка — typecheck этого присваивания: ключ из Names, которого нет в en.json, — ошибка tsc
-    const typed: LocaleNames = en;
-    expect(Object.keys(typed)).toEqual(Object.keys(dictionary("en")));
+  /**
+   * Модуль `locale` берёт словари статическим импортом в карту, типизированную `Names`, — каталог `locales/` он не
+   * читает: так tsc сверяет каждый словарь с типом, а модуль грузится любым раннером проекта
+   * (tests/standards/harness-load). Файл языка, которого нет в карте, молча не подхватился бы ни скриптами, ни typecheck.
+   */
+  it("каждый файл skills/github/locales/*.json — язык модуля locale с этим словарём, en первым", () => {
+    const files = readdirSync(path.join(ROOT, LOCALES)).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5)).sort();
+    expect(files).toContain("en");
+    expect(localeModule.languages()).toEqual(["en", ...files.filter((l) => l !== "en")]);
+    const loaded = files.map((lang): { lang: string; names: unknown } => ({ lang, names: localeModule.names(lang) }));
+    expect(loaded).toEqual(files.map((lang) => ({ lang, names: dictionary(lang) })));
   });
 
   /**
@@ -222,7 +227,7 @@ describe("Названия, которые пишут и разбирают ск
 
 /**
  * Язык проекта — `language` в `.agents/ai-dev.json`, без поля — `ru`, без манифеста — `en`: скрипты скиллов и
- * установщик берут его одним модулем `skills/github/scripts/locale.cjs` — правило в одном месте.
+ * установщик берут его одним модулем `skills/github/scripts/locale.ts` — правило в одном месте.
  */
 describe("Язык проекта у скриптов скиллов и у установщика — один модуль", () => {
   it("установщик берёт язык и код языка модулем locale скилла github, своего правила у него нет", () => {
