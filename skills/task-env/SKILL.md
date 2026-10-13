@@ -233,11 +233,20 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   restart; an entry takes a Bash call out of the sandbox only when it covers
   every command in it — `docker ps | head`, `…; echo` or a redirection to a
   file keep the call sandboxed (the Claude Code docs say the same).
-  `docker compose *`, `docker ps *` and `gh *` work. An entry for this
-  script doesn't: `bun ~/.agents/skills/task-env/scripts/task-env.ts proxy
-  status` stayed sandboxed with the entry written with `~` and with the
-  absolute path, the call's text matching it exactly; the docs don't say
-  why.
+  `docker compose *`, `docker ps *` and `gh *` work. No entry takes out a
+  script run by `bun`: `bun ~/.agents/skills/task-env/scripts/task-env.ts
+  proxy status` stayed sandboxed with the entry written with `~` and with
+  the absolute path, `bun …/github.ts project check` — with the absolute
+  path through the `~/.agents/skills` symlink, the call's text matching the
+  entry exactly. The cause is Claude Code's matcher, not the path (2.1.295;
+  the docs list the call shapes that stay sandboxed only "among others"):
+  `bun` leaves the sandbox only when its first argument that isn't a flag is
+  a subcommand of its own — `install`, `add`, `test` and the like, and `bun
+  run` not even then; a file to run is code it doesn't exempt. A script
+  under `bash` is taken out: `bash ~/.agents/skills/ci-wait/scripts/wait-ci.sh
+  *` works with the absolute path through the symlink. Checking an entry: in
+  auto mode Claude Code refuses `allowed_domains` on a call that would run
+  outside the sandbox, before running it.
 - **HMR of an app in a container with the worktree's code** — works: Vite 8.3
   (`node:24-alpine`, the worktree bind-mounted to `/app`, `node_modules` in a
   volume) on Docker Desktop (engine 29.8) through the proxy on port 80 — a CSS
@@ -250,9 +259,9 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
 Docker doesn't work inside the Claude Code sandbox: the sandbox denies its
 socket (`permission denied while trying to connect to the docker API`).
 
-- **This script** — an unsandboxed Bash call (`dangerouslyDisableSandbox`):
-  an `excludedCommands` entry doesn't take it out (above, section "Checked
-  on the machine"). In the sandbox the script exits with code 2
+- **This script**, like any skill script run by `bun`, — an unsandboxed
+  Bash call (`dangerouslyDisableSandbox`): an `excludedCommands` entry
+  doesn't take it out (above, section "Checked on the machine"). In the sandbox the script exits with code 2
   and names it — the cue to run the command again outside.
 - **Docker itself**, which the agent calls directly (`docker compose -p
   <stack> logs`, `exec`, `ps`), — the owner takes it out in
