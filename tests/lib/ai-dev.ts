@@ -26,6 +26,8 @@ export interface Sandbox {
  * HOME и git-проект во временном каталоге. PATH — только node, git, npm, npx и sh: агенты на машине определяются по
  * каталогам в HOME, а не по тому, что стоит у раннера. AI_DEV_REPO — пустой репозиторий: установщик из пакета ищет
  * релизы в нём, а не на GitHub, и тест не зависит от сети и настоящих релизов (#145); тест с релизами даёт своё зеркало.
+ * TMPDIR — каталог песочницы: временные каталоги установщика (история для списка изменений `update`) — в нём, а не в
+ * системном /tmp, куда песочница агента не пускает.
  */
 export function sandbox(): Sandbox {
   const { dir: tmp, cleanup } = tmpDir();
@@ -39,7 +41,7 @@ export function sandbox(): Sandbox {
   const cmds = ["node", "git", "npm", "npx", "sh"];
   const found = execFileSync("sh", ["-c", `for c in ${cmds.join(" ")}; do command -v "$c"; done`], { encoding: "utf8" }).trim().split("\n");
   cmds.forEach((cmd, i) => symlinkSync(found[i]!, path.join(bin, cmd)));
-  return { tmp, home, proj, bin, env: { HOME: home, PATH: bin, AI_DEV_REPO: noReleases }, cleanup };
+  return { tmp, home, proj, bin, env: { HOME: home, PATH: bin, TMPDIR: tmp, AI_DEV_REPO: noReleases }, cleanup };
 }
 
 export interface Run {

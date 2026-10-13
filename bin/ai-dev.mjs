@@ -41,12 +41,15 @@
  * run: the release package lists what it would change. A machine with `--link` is different: the clone is compared
  * with `origin/main` after `git fetch`, `update` does `git pull --ff-only` and re-creates the links with the code of
  * the updated clone.
+ * `update` says what changed — the agent tells the user: a copy — every release after the installed one, newest first,
+ * with the list of changes its GitHub Release has (one function, `changeItems`, builds both); a `--link` clone — the
+ * flow commits it pulled.
  *
  * JavaScript, not TypeScript like the skills' scripts: npx puts the package into node_modules, and there Node doesn't
  * strip types (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). No dependencies, only node: APIs.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isatty } from "node:tty";
@@ -80,6 +83,8 @@ const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md", "skills"];
 const RELEASED = [...FLOW, "bin"];
 /** Release tag: vYYYY.MM.DD, a same-day patch — vYYYY.MM.DD.N. */
 const RELEASE_TAG = /^v(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?$/;
+/** ai-dev releases on GitHub: a release's page is `${RELEASES}/tag/<tag>`. */
+const RELEASES = `https://github.com/${SOURCE}/releases`;
 /** Lines of the change list in `check` output — beyond that, "… and N more". */
 const MAX_LINES = 20;
 /**
@@ -123,7 +128,9 @@ const USAGE = `Usage: ai-dev <command> [-g]
                      release (the project's mode and language are kept; an install of a previous version without a
                      language gets ru: before the field the flow worked in Russian); in a project install and update
                      un-ignore flow files from .gitignore patterns with exceptions at its end and wrap the
-                     package.json checks (lint, typecheck, test, test:*) in the machine queue slot
+                     package.json checks (lint, typecheck, test, test:*) in the machine queue slot; prints what
+                     changed: every release after the installed one, newest first, with the list of changes of its
+                     GitHub Release (a --link clone — the flow commits it pulled)
   release [--dry-run]  from an ai-dev clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow
                      changes since the previous release; --dry-run — only show them
 
@@ -190,7 +197,7 @@ function git(dir, ...args) {
 /** The first stderr line of a failed command. @param {unknown} e */
 function reason(e) {
   const err = /** @type {{ stderr?: string | Buffer, message?: string }} */ (e);
-  return (String(err.stderr ?? "").trim() || String(err.message)).split("\n")[0];
+  return (String(err.stderr ?? "").trim() || String(err.message)).split("\n")[0] ?? "";
 }
 
 /** @param {string | null | undefined} sha */
@@ -250,6 +257,9 @@ function releases(remote, cwd) {
   return [...tags].map(([tag, sha]) => ({ tag, sha })).sort((a, b) => cmp(key(a.tag), key(b.tag)));
 }
 
+/** Where releases and their history come from: AI_DEV_REPO (a mirror, tests) or GitHub. */
+const repoUrl = () => process.env.AI_DEV_REPO || `https://github.com/${SOURCE}.git`;
+
 /**
  * A copy follows ai-dev releases, not main: the npx package (it is from main) finds the latest release and, if it
  * isn't that release itself, restarts from it by SHA — from then on both the code and the files are the release's.
@@ -263,7 +273,7 @@ function toRelease(argv) {
   if (pinned) return (release = pinned), null;
   let latest;
   try {
-    latest = releases(process.env.AI_DEV_REPO || `https://github.com/${SOURCE}.git`).at(-1);
+    latest = releases(repoUrl()).at(-1);
   } catch (e) {
     throw new Error(`can't find out the latest ai-dev release — ${reason(e)}`);
   }
@@ -1201,7 +1211,7 @@ function hook(failed) {
   if (results[1]?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `ai-dev in the project: not installed — install it: npx -y github:${SOURCE} install --lang <project language>` });
   if (!shown.length) return 0;
   const tail = [];
-  if (shown.some((r) => r.behind)) tail.push("Behind — update, commit the project copy, re-read what was updated.");
+  if (shown.some((r) => r.behind)) tail.push("Behind — update, tell the user what changed (update lists it), commit the project copy, re-read what was updated.");
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, commit it with the copy; a rule outside the project — fix it yourself.");
   // the session has no task yet at its start, and one session is one task: the fix goes into a task of its own
   if (shown.some((r) => r.compose)) tail.push("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
@@ -1225,22 +1235,105 @@ const commitSubject = (root, version) => locale.fill(locale.names(languageOf(roo
  */
 function update(global) {
   if (global) {
-    const clone = linkedClone(os.homedir());
+    const home = os.homedir();
+    const clone = linkedClone(home);
     if (clone) return updateLink(clone);
+    const from = readManifest(home);
     installGlobal(SRC, false);
+    note(whatChanged(from).join("\n"));
     return 0;
   }
   const root = projectRoot();
   if (isAiDevClone(root)) return note(CLONE_NOTE), 0;
+  const from = readManifest(root);
   const changed = installProject(SRC, root);
   const version = release ?? short(sourceSha(SRC));
   note(
     [
+      ...whatChanged(from),
       "Commit the project copy as a separate commit into the current task's branch:",
       `  git add -A .agents .claude/rules .claude/skills AGENTS.md${changed.map((f) => ` ${f}`).join("")} && git commit -m "chore(agents): ${commitSubject(root, version)}"`,
     ].join("\n"),
   );
   return 0;
+}
+
+/**
+ * What the update brought, for the agent to tell the user: every release after the installed one up to this package's,
+ * newest first — the tag, its page and the list its GitHub Release has (`changeItems`); no releases yet or an installer
+ * from a clone — also the flow commits after the last release up to this package's SHA. Can't tell (an install without
+ * SHA, no network, the SHA isn't in the history) — a line with the reason: the flow is already installed, the update
+ * doesn't fail over it.
+ * @param {{ sha?: unknown, tag?: unknown }} from the manifest before the update @returns {string[]}
+ */
+function whatChanged(from) {
+  const to = sourceSha(SRC);
+  const sha = typeof from.sha === "string" ? from.sha : null;
+  const was = (typeof from.tag === "string" && from.tag) || short(sha) || "without SHA";
+  const now = release ?? short(to) ?? "SHA unknown";
+  if (sha && sha === to) return [`ai-dev flow ${now} was already installed — nothing changed`];
+  const unavailable = (/** @type {string} */ why) => [`ai-dev flow ${was} → ${now}: changes unavailable — ${why}; releases: ${RELEASES}`];
+  if (!sha) return unavailable("installed without SHA");
+  if (!to) return unavailable("the SHA of this package is unknown");
+  let groups;
+  try {
+    groups = releaseGroups(sha, to);
+  } catch (e) {
+    return unavailable(reason(e));
+  }
+  const tags = groups.filter((g) => g.tag).length;
+  return [
+    `ai-dev flow ${was} → ${now}${tags ? `, new releases: ${tags}` : ""} — tell the user what changed:`,
+    // commits after the last release (an installer from a clone) are named only next to releases
+    ...groups.flatMap((g) => [...(g.tag ? [`${g.tag} — ${RELEASES}/tag/${g.tag}`] : tags ? [`${short(to)} — not in a release`] : []), ...g.items.map((i) => `  ${i}`)]),
+  ];
+}
+
+/**
+ * The releases between two SHAs of ai-dev, newest first, each with its list of changes; commits after the last of them
+ * (no releases yet, an installer from a clone) — a group without a tag. The history comes from where the releases do, fetched without file
+ * contents into a temporary repository: the npx package has no `.git`. A release's list starts from the previous
+ * release, the first one's — from `from`: with an install from a release that is exactly its GitHub Release's list.
+ * @param {string} from @param {string} to @returns {{ tag?: string, items: string[] }[]}
+ */
+function releaseGroups(from, to) {
+  const remote = repoUrl();
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "ai-dev-history-"));
+  try {
+    git(tmp, "init", "--quiet", "--bare");
+    git(tmp, "fetch", "--quiet", "--no-tags", "--filter=blob:none", remote, to);
+    const range = new Set(git(tmp, "rev-list", `${from}..${to}`).split("\n"));
+    const tags = releases(remote).filter((r) => range.has(r.sha));
+    /** @type {{ tag?: string, items: string[] }[]} */
+    const groups = [];
+    let prev = from;
+    for (const r of tags) groups.push({ tag: r.tag, items: changeItems(tmp, `${prev}..${(prev = r.sha)}`) });
+    if (prev !== to) groups.push({ items: changeItems(tmp, `${prev}..${to}`) });
+    return groups.reverse();
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The flow changes in a range of first-parent commits, a `- …` line each — the list of a GitHub Release and of
+ * `update`: commits that touched the flow or the installer; a PR merged with a merge commit — by its title and number,
+ * one merged by rebase — by its own commits with the task number from `Refs #N`.
+ * @param {string} repo @param {string} range @returns {string[]}
+ */
+function changeItems(repo, range) {
+  return git(repo, "log", "--first-parent", "--format=%s%x1f%b%x1e", range, "--", ...RELEASED)
+    .split("\x1e")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [subject = "", body = ""] = entry.split("\x1f");
+      const pr = /^Merge pull request #(\d+) /.exec(subject);
+      const title = body.trim().split("\n")[0];
+      if (pr && title) return `- ${title} (#${pr[1]})`;
+      const refs = [...new Set([...body.matchAll(/^Refs #(\d+)/gm)].map((m) => `#${m[1]}`))];
+      return refs.length ? `- ${subject} (${refs.join(", ")})` : `- ${subject}`;
+    });
 }
 
 /**
@@ -1265,45 +1358,34 @@ function updateLink(clone) {
   } catch (e) {
     return warn(`update: git pull --ff-only in clone ${clone} — ${reason(e)}`), 2;
   }
-  note(`clone ${clone}: ${short(before)} → ${short(git(clone, "rev-parse", "HEAD"))}`);
+  const after = git(clone, "rev-parse", "HEAD");
+  const items = changeItems(clone, `${before}..${after}`);
+  const head = `clone ${clone}: ${short(before)} → ${short(after)}`;
+  note((items.length ? [`${head} — tell the user what changed:`, ...items.map((i) => `  ${i}`)] : [`${head}, the flow hasn't changed`]).join("\n"));
   return spawnSync(process.execPath, [path.join(clone, "bin/ai-dev.mjs"), "install", "-g", "--link"], { stdio: "inherit" }).status ?? 2;
 }
 
 /**
  * A release is the owner's step, from a clone: the tag vYYYY.MM.DD (the date in UTC; a second one the same day — .1,
- * .2…) on origin/main and a GitHub Release with the list of changes since the previous release — first-parent commits
- * that touched the flow or the installer (a PR merged with a merge commit — by its title and number; one merged by
- * rebase — by its own commits with the task number from `Refs #N`). Nothing to release — a refusal (code 1): projects
- * mustn't update for nothing.
+ * .2…) on origin/main and a GitHub Release with the list of changes since the previous release (`changeItems` — `update`
+ * prints the same list). Nothing to release — a refusal (code 1): projects mustn't update for nothing.
  * @param {boolean} preview `--dry-run`: show the tag and the list, create nothing
  */
 function releaseCmd(preview) {
   if (!existsSync(path.join(SRC, ".git"))) return warn("release — only from an ai-dev clone: node <clone>/bin/ai-dev.mjs release"), 2;
-  let head, tags, log;
+  let head, tags, items;
   try {
     git(SRC, "fetch", "--quiet", "origin", "main");
     head = git(SRC, "rev-parse", "origin/main");
     tags = releases("origin", SRC);
     const last = tags.at(-1);
-    log = last ? git(SRC, "log", "--first-parent", "--format=%s%x1f%b%x1e", `${last.sha}..${head}`, "--", ...RELEASED) : "";
+    items = last ? changeItems(SRC, `${last.sha}..${head}`) : [];
   } catch (e) {
     return warn(`release: ${reason(e)}`), 2;
   }
   const last = tags.at(-1);
   if (last?.sha === head) return warn(`release: origin/main ${short(head)} is already in release ${last.tag}`), 1;
-  if (last && !log) return warn(`release: the flow hasn't changed since ${last.tag} — no release needed`), 1;
-  const items = log
-    .split("\x1e")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const [subject = "", body = ""] = entry.split("\x1f");
-      const pr = /^Merge pull request #(\d+) /.exec(subject);
-      const title = body.trim().split("\n")[0];
-      if (pr && title) return `- ${title} (#${pr[1]})`;
-      const refs = [...new Set([...body.matchAll(/^Refs #(\d+)/gm)].map((m) => `#${m[1]}`))];
-      return refs.length ? `- ${subject} (${refs.join(", ")})` : `- ${subject}`;
-    });
+  if (last && !items.length) return warn(`release: the flow hasn't changed since ${last.tag} — no release needed`), 1;
   const notes = last ? [`Flow changes since ${last.tag}:`, "", ...items].join("\n") : "First release: projects install and update the flow by ai-dev releases, not by main.";
   const day = `v${new Date().toISOString().slice(0, 10).replaceAll("-", ".")}`;
   const names = new Set(tags.map((t) => t.tag));
@@ -1316,7 +1398,7 @@ function releaseCmd(preview) {
   } catch (e) {
     return warn(`release: gh release create — ${reason(e)}`), 2;
   }
-  note(`\nRelease ${tag}: https://github.com/${SOURCE}/releases/tag/${tag}`);
+  note(`\nRelease ${tag}: ${RELEASES}/tag/${tag}`);
   return 0;
 }
 
