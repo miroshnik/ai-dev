@@ -1,6 +1,6 @@
 ---
 name: github
-description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task status`, `task drop`; `task actualize` prints the epic-refresh subagent's assignment right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
+description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task status`, `task drop`; `task actualize` prints the epic-refresh subagent's assignment right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
 allowed-tools: Bash(bun *skills/github/scripts/github.ts *) Bash(git remote get-url *)
 ---
 
@@ -26,6 +26,13 @@ bun <skill dir>/scripts/github.ts project fix [--repo owner/repo] [--confirm] [-
 The repository — from `git remote get-url origin` or `--repo`. Needs `gh` with
 the `project` scope (`gh auth refresh -s project`); the organization's issue
 types — `admin:org`.
+
+**In Claude Code — at once a separate unsandboxed call**
+(`dangerouslyDisableSandbox`): `gh` fails on TLS in the sandbox, `task close`
+also calls Docker for the task's stacks — the sandbox denies its socket, and
+no `excludedCommands` entry takes a script run by `bun` out — checked with
+`bun <path>/github.ts project check` too (`claude/CLAUDE.md`; `SKILL.md` of the
+task-env skill, "Checked on the machine").
 
 ## What to run when
 
@@ -198,7 +205,7 @@ bun <skill dir>/scripts/github.ts task new --title "…" --branch-type <type> [-
 bun <skill dir>/scripts/github.ts task status <N> "In progress"   # Backlog | In progress | Done
 bun <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
 bun <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
-bun <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, branch removed
+bun <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
 bun <skill dir>/scripts/github.ts pr labels <PR>                 # decision labels from the PR diff
 bun <skill dir>/scripts/github.ts pr premerge <PR>               # before the merge: the merge with a fresh default branch
 ```
@@ -379,13 +386,21 @@ the est script next to it (`../est/scripts/est.ts`; missing — the line
 `○ actual unavailable`, failed — its error as a `!` line, the
 rest is done); `Status` Done; the last sub-issue closed — the epic is closed
 and gets Done; no open tasks left in the task's (and the epic's) milestone —
-the milestone is closed (REST); the merged branch — per the "Right after a PR
-merge" item of "Git, PRs and merging — mechanics" below: the checkout moves
-off the task's branch to `origin/<base>` detached, the local and remote
-branches are deleted; not merged, someone else's, or the directory isn't a
-checkout of the repository — an `○` line, nothing is touched; the command
-doesn't delete the session's worktree — the `Next` hint. `--no-git` —
-without the git step. The last output line — the end-of-session steps: the
+the milestone is closed (REST); the task's stacks (the `task-env` skill) —
+`task-env down <N>` by the script next to it (`../task-env/scripts/task-env.ts`;
+missing — the line `○ task stacks: task-env is not installed`) in the
+checkout: the dev and e2e stacks `<project>-<N>` and `<project>-<N>-e2e` go
+with their volumes, its lines (`+`, `○`, `!`) are printed as is; no compose
+file in the checkout — an `○` line, Docker isn't called; a failure — a `!`
+line, the rest is done, and `task-env prune` finds the stack later; the merged
+branch — per the "Right after a PR merge" item of "Git, PRs and merging —
+mechanics" below: the checkout moves off the task's branch to `origin/<base>`
+detached, the local and remote branches are deleted; not merged or someone
+else's — an `○` line, nothing is touched. The directory isn't a checkout of
+the repository — neither stacks nor branches are touched (an `○` line: both
+are named by the checkout's `origin`). The command doesn't delete the
+session's worktree — the `Next` hint. `--no-git` — without the git step, the
+stacks still go. The last output line — the end-of-session steps: the
 epic has open tasks — a reminder about the epic refresh (its place is before
 close, in parallel with the deploy; if it didn't happen — a subagent with the
 `task actualize N` assignment), then the last line of the answer, one of three
@@ -459,9 +474,9 @@ rules. Waiting for checks, the full SHA and a merge that deploys —
   branch —
   `git fetch --prune && git switch --detach origin/main && git branch -D <branch>`,
   the remote branch — `git push origin --delete <branch>` if the host didn't
-  delete it, my own worktrees and the session's temporary resources
-  (databases, containers). "Merged" — by the PR
-  (`gh pr view <N> --json state` = `MERGED`) or
+  delete it, the task's Compose stacks with their volumes (`task-env down
+  <N>`), my own worktrees and the session's other temporary resources.
+  "Merged" — by the PR (`gh pr view <N> --json state` = `MERGED`) or
   `git cherry origin/main <branch>`, not `git branch --merged`: after a rebase
   merge the commits in `main` have different SHAs, git doesn't see that the
   branch is merged — the session panel and `git status` call for a second PR,
