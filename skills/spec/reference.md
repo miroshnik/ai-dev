@@ -147,17 +147,24 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
 - `bun script.ts`: TypeScript without a build and without a `package.json`
   next to it — the skill lives in `~/.claude/skills` or `~/.agents/skills`,
   where nothing can be built.
-- The scripts use only `node:` APIs (`fs`, `path`, `child_process`,
-  `util.parseArgs`) — no `Bun.*`, so they also run under Node ≥ 22.18
-  (erasable syntax: no `enum`, `namespace` or parameter properties, imports
-  with `.ts`). A project's CI on Node calls them via `node` — Bun there would
-  be a second runtime for two scripts. The guard is
-  `tests/standards/node-runtime`: output under Node and under Bun matches byte
-  for byte; ai-dev's CI installs Node 22.18.0 — the lower bound.
+- Bun is the scripts' only runtime, a Node project included: its
+  `package.json` calls them via `bun`, its CI adds the `oven-sh/setup-bun@v2`
+  step. Rejected (#405): the scripts also under Node, so that a Node project's
+  CI calls them without Bun — two runtimes for every script, only their common
+  subset of APIs and a byte-for-byte comparison of the output in the tests,
+  while the flow needs Bun anyway (the installer, the other skills' scripts).
+- The modules a project's tests and config import — `harness.ts`,
+  `architecture.ts`, `eslint-config.ts` and `speclib.ts` behind them — load
+  under the project's own runner on Node (Vitest, Jest, Playwright, ESLint), not
+  under Bun: only `node:` APIs, erasable syntax (no `enum`, `namespace` or
+  parameter properties, imports with `.ts`), no `import.meta` and no top-level
+  `await` — Playwright and Jest in a project without `"type": "module"` load
+  them as CommonJS. The guard is `tests/standards/harness-load`: a real
+  Playwright in a temporary project, CommonJS and ESM.
 - The skill's tests — `bun test` (imports from `bun:test`; it also understands
   imports from `vitest`): runner overhead of 0.01 s versus 0.3 s for Vitest per
-  file. Scripts in the tests are run via `bun` — what the user runs; the
-  `node-runtime` guard also via `node`, which is why ai-dev's CI has Node.
+  file. Scripts in the tests are run via `bun` — what the user runs. Node in
+  ai-dev's CI is the runner image's own: `harness-load` runs Playwright on it.
 
 ## Wiring into the project's CI
 
@@ -165,7 +172,7 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
   before a PR and CI need one version: the `docs/spec` format changes (as it
   did in #32), and documentation built by the skill from a fresh ai-dev
   wouldn't match CI on another version. Installing the flow
-  (`npx github:miroshnik/ai-dev install`) puts the skill into
+  (`bunx github:miroshnik/ai-dev install`) puts the skill into
   `.agents/skills/spec`, and it is committed with the project: the project's
   `spec:doc` / `spec:diff` call these files for the agent, in CI and in a
   cloud session; an update is an ordinary PR. The same mechanism installs the
@@ -176,14 +183,16 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
     project, where the project's Vitest and ESLint pick them up;
   - an ai-dev checkout in the workflow (`repository` + `ref: <SHA>`) pins only
     CI: the agent locally calls the skill of another version;
-  - a package (`github:miroshnik/ai-dev#<SHA>` in devDependencies): Node
-    doesn't strip types in `node_modules`
-    (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`) — a build would be needed.
+  - a package (`github:miroshnik/ai-dev#<SHA>` in devDependencies): the
+    project's runner imports the harness from it, and Node doesn't strip types
+    in `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`) — a build
+    would be needed.
 - The copy sits under the project's `package.json`, which may lack
   `"type": "module"` (Node loads an ESM `.ts` file with a warning) or have
-  `"type": "commonjs"` (doesn't load it at all). So the scripts have their own
-  `scripts/package.json` with `"type": "module"`; the guard is the same
-  `tests/standards/node-runtime`.
+  `"type": "commonjs"` (doesn't load it at all). So the skill has its own
+  `scripts/package.json` with `"type": "module"`: Node's own loader (the
+  project's `eslint.config.*`, `node --test`) takes `eslint-config.ts` and the
+  harness as ESM whatever the project's `type`.
 - **The runner merges shards.** `spec-doc` merges several reports but takes
   the order of tests in a file by first appearance. Playwright with
   `fullyParallel` splits a file between shards, and the line order would

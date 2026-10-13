@@ -6,8 +6,10 @@ concurrency — per `docs/ci-concurrency.md`. The shards write blob reports, the
 `spec` job merges them with the runners' own tools and builds `docs/spec` with
 `--strict`; on `main` it hands it as an artifact to the `spec-publish` job —
 the only one with a write token (no CI on `main` — publishing on PR merge,
-section at the end). `spec-diff` is its own light job after `spec`: git
-history, Node and the merged reports (harness tests are visible only in the
+section at the end). The skill's scripts run under Bun: `oven-sh/setup-bun@v2`
+next to the project's Node in `spec`, instead of it in `spec-publish` and
+`spec-diff`. `spec-diff` is its own light job after `spec`: git
+history, Bun and the merged reports (harness tests are visible only in the
 report; their base is the `tests.json` of the `spec` branch). The
 `.spec-claims.xml` claims report goes there too: its tests are in `tests.json`,
 and without the report they show up as "deleted" in every PR.
@@ -70,6 +72,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
+      - uses: oven-sh/setup-bun@v2 # the spec scripts: spec:claims, spec:doc
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v8
         with: { pattern: vitest-blob-*, path: vitest-blob, merge-multiple: true }
@@ -106,11 +109,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 } # main runs are parallel: history for the "already newer" check
-      - uses: actions/setup-node@v7
-        with: { node-version: 24, package-manager-cache: false }
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: docs-spec, path: docs/spec }
-      - run: node .agents/skills/spec/scripts/spec-publish.ts
+      - run: bun .agents/skills/spec/scripts/spec-publish.ts
 
   spec-diff:
     if: github.event_name == 'pull_request'
@@ -119,11 +121,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 } # merge-base with the base branch, and the spec branch
-      - uses: actions/setup-node@v7
-        with: { node-version: 24, package-manager-cache: false }
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: spec-reports }
-      - run: node .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
+      - run: bun .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
 The `.spec-*` reports and logs are hidden files: `upload-artifact` skips them
@@ -183,15 +184,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: '${{ github.event.pull_request.merge_commit_sha }}', fetch-depth: 0 } # history for the "already newer" check
-      - uses: actions/setup-node@v7
-        with: { node-version: 24, package-manager-cache: false }
+      - uses: oven-sh/setup-bun@v2
       - name: docs/spec from the run that checked the merge tree
         run: |
           tree=$(git rev-parse 'HEAD^{tree}')
-          run=$(node .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
+          run=$(bun .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
           [ -n "$run" ] || exit 0 # skip: the reason is in spec-run's line above
           gh run download "$run" --name "docs-spec-$tree" --dir docs/spec
-          node .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
+          bun .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
 ```
 
 - Only a tree checked in full is published: the artifact is named after the
