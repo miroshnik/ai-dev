@@ -11,8 +11,7 @@ import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-// TypeScript и типы Node — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
-const TSC = path.join(path.dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin/tsc");
+// типы проверяет `bun check`; типы Node — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
 const TYPES = path.join(path.dirname(createRequire(import.meta.url).resolve("@types/node/package.json")), "..");
 
 // `it` раннера подменяется сборщиком: харнесс только регистрирует тесты, запускать их — дело раннера
@@ -391,8 +390,8 @@ describe("Каждая переменная окружения объявлен�
         files: ["env.test.mts"],
       }),
     });
-    const r = spawnSync(process.execPath, [TSC, "-p", dir], { encoding: "utf8" });
-    expect(r.stdout + r.stderr).toBe("");
+    const r = spawnSync(process.execPath, ["check", "--no-pretty", "-p", dir], { encoding: "utf8" });
+    expect(r.stdout + r.stderr).toContain("No type errors");
     expect(exitOf(r)).toBe(0);
     expect(["const a = process.env.A; // process.env.OLD", "const b = import.meta.env.VITE_B;"].flatMap(envNamesIn)).toEqual(["A", "VITE_B"]);
   });
