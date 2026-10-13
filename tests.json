@@ -10651,6 +10651,80 @@
   "name": "Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует харнесс и модель и проходит тест"
  },
  {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
+   "примеры"
+  ],
+  "name": "JSDoc без @mirror — не копия"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
+   "примеры"
+  ],
+  "name": "compose-файл: каждое вхождение ${<имя>:-…} — отдельное значение, другие переменные и комментарии не в счёт"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
+   "примеры"
+  ],
+  "name": "метка @mirror без константы-литерала под ней — нарушение, а не пропуск"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
+   "примеры"
+  ],
+  "name": "у копии несколько оригиналов: сверяется с каждым"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
+  ],
+  "name": "COMPOSE_FILES установщика совпадает с COMPOSE_FILES из skills/task-env/scripts/task-env.ts"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
+  ],
+  "name": "PROXY установщика совпадает с PROXY из skills/task-env/scripts/task-env.ts и ${AI_DEV_PROXY:-…} в skills/task-env/proxy/compose.yaml"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
+  ],
+  "name": "нарушитель не проходит: в копии COMPOSE_FILES лишнее имя compose-файла"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
+  ],
+  "name": "нарушитель не проходит: имя прокси в установщике не то, что в compose-файле прокси"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
+  ],
+  "name": "реестр «копии значений скилла в установщике» находит COMPOSE_FILES, PROXY"
+ },
+ {
+  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
+  "describes": [
+   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
+  ],
+  "name": "реестр «копии значений скилла в установщике» не пуст"
+ },
+ {
   "path": "tests/standards/node-runtime/node-runtime.test.ts",
   "describes": [
    "Под Node без Bun скрипты spec пишут то же, что под Bun"
