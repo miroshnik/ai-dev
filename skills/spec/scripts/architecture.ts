@@ -8,7 +8,8 @@
  *   it's allowed for, and each allowed package is actually used — the model doesn't diverge from the code either way.
  *
  * Imports — by static parsing of the sources (no build, no resolver): relative paths, the model's aliases and Node
- * built-in modules aren't packages. Only `node:` APIs and erasable TypeScript: Node ≥ 22.18 and Bun.
+ * built-in modules aren't packages. Only `node:` APIs and erasable TypeScript: the project's test loads the module
+ * under the project's runner, Node included (tests/standards/harness-load).
  */
 
 import { readdirSync, readFileSync } from "node:fs";

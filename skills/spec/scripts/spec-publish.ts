@@ -15,8 +15,8 @@
  *   bun spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check] [--root DIR]
  *
  * Codes: 0 — published, matches or already newer, 1 — the branch differs from the directory (or doesn't exist) with
- * --check, the push was rejected on all attempts, 2 — a call error (no directory, not git). Runs on Bun or Node ≥ 22.18,
- * no dependencies.
+ * --check, the push was rejected on all attempts, 2 — a call error (no directory, not git). Runs under Bun, no
+ * dependencies.
  */
 
 import { execFileSync } from "node:child_process";

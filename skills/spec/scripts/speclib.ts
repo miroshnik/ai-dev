@@ -4,9 +4,11 @@
  * `bun test`), parsing of test sources with a parser (describe/it/test for TS/JS: names and prose from JSDoc) and the
  * rule for a decision folder's exception files (`exceptionFile`).
  *
- * Runs on Bun (`bun script.ts`; only `node:` APIs, so it also runs on Node ≥ 22.18), without dependencies (the parser
- * is the skill's file `vendor/babel-parser.cjs`) and without per-repository configuration: the tests/ tree from the
- * rule "Specification — decisions" (skills/spec/canon.md) and the standard report formats.
+ * The scripts run under Bun (`bun script.ts`); the harness imports this module too, and a project's test loads the
+ * harness under the project's runner, Node included — so only `node:` APIs and erasable TypeScript
+ * (tests/standards/harness-load). Without dependencies (the parser is the skill's file `vendor/babel-parser.cjs`) and
+ * without per-repository configuration: the tests/ tree from the rule "Specification — decisions"
+ * (skills/spec/canon.md) and the standard report formats.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
