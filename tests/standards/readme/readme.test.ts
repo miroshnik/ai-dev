@@ -36,7 +36,7 @@ const script = (skillName: string, name: string): Part => ({
 const subcommand = (scriptName: string, words: string[]): Part => ({
   key: `${scriptName} ${words.join(" ")}`,
   name: `подкоманда ${scriptName} ${words.join(" ")} названа`,
-  mention: new RegExp(`\`${escape([scriptName, ...words.slice(0, -1)].join(" "))}(?: [a-z-]+ \\|)* ${escape(words[words.length - 1]!)}[\` ]`),
+  mention: new RegExp(`\`${escape([scriptName, ...words.slice(0, -1)].join(" "))}(?: [a-z0-9-]+ \\|)* ${escape(words[words.length - 1]!)}[\` ]`),
 });
 const reference = (file: string): Part => ({
   key: `docs/${file}`,
@@ -66,9 +66,12 @@ function parts(): Part[] {
   return [...skills.map(skill), ...commands.map(command), ...scripts, ...references.map(reference)];
 }
 
-/** Подкоманды из справки скрипта: слова после его имени до первого аргумента — `  github task close <N>` → `task close`. */
+/**
+ * Подкоманды из справки скрипта: слова после его имени до первого аргумента — `  github task close <N>` → `task close`;
+ * цифра в слове — его часть (`task-env e2e`).
+ */
 function subcommandsOf(scriptName: string, usage: string): Part[] {
-  const lines = [...usage.matchAll(new RegExp(`^ {2}${escape(scriptName)}((?: [a-z][a-z-]*)+)`, "gm"))].map((m) => m[1]!.trim());
+  const lines = [...usage.matchAll(new RegExp(`^ {2}${escape(scriptName)}((?: [a-z][a-z0-9-]*)+)`, "gm"))].map((m) => m[1]!.trim());
   return [...new Set(lines)].map((words) => subcommand(scriptName, words.split(" ")));
 }
 
@@ -193,6 +196,13 @@ describe("README называет всё, что ставит флоу, и не 
       expect(close.test("`github task new | status | drop | close` · `github pr labels`")).toBe(true);
       expect(close.test("`github task new | status | drop` · `github pr labels`")).toBe(false);
       expect(close.test("github task close закрывает задачу")).toBe(false);
+    });
+
+    it("цифра в слове подкоманды — его часть: `e2e` из справки — подкоманда `e2e`, названная в перечне", () => {
+      const parts = subcommandsOf("task-env", "  task-env up             …\n  task-env e2e            …\n  task-env down [<N>]     …\n");
+      expect(parts.map((p) => p.key)).toEqual(["task-env up", "task-env e2e", "task-env down"]);
+      expect(parts[1]!.mention.test("`task-env up | e2e | down` · `task-env check [<dir>]`")).toBe(true);
+      expect(parts[1]!.mention.test("`task-env up | down`")).toBe(false);
     });
 
     it("внешняя ссылка и ссылка в блоке кода — вне правила", () => {
