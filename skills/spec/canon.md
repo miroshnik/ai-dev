@@ -75,13 +75,26 @@ no decision claims is dead and is deleted.
   mutation writes an audit record", "every route checks permissions", "every
   page passes axe") is a standard, "registry + invariant"; the budget of a
   single capability ("search responds in under 300 ms") — in its capability,
-  next to the behavior. A quality without a check isn't a decision.
+  next to the behavior, checked by a load test that asserts the budget. A
+  quality without a check isn't a decision.
+- **A check is the decision's acceptance test and its regression test — that
+  is TDD, for every decision.** Written before the code, it is red: the
+  decision isn't implemented yet; the code turns it green; from then on the
+  same check holds the decision against every later change. Not only
+  behavior: "fast" is held by a load test, "data in Postgres" — by the model,
+  "every form has a reset button" — by an invariant over the forms. **A
+  decision changes through its check:** the check changes first and goes red
+  on the current code, then the code follows it to green. Code changed the
+  other way round, against a check, turns it red — that's the check doing its
+  job, not an obstacle to remove.
 - **The mechanism — by what we pin down** (how to wire it — `checks.md` next
   to this file); each is wrapped in a runner test, so `spec-doc` and
   `spec-diff` see everything the same way:
   - behavior — a test: an algorithm — a unit test, a subsystem — an
     integration test, interaction of subsystems — e2e; the level isn't encoded
     in the name, the `.e2e.ts` suffix is only for the runner;
+  - a budget (latency, throughput, size) — a test that measures and asserts
+    it: "fast" is a load test against the budget, in the capability's folder;
   - a form convention ("no `console` in the domain") — a lint rule with
     examples (the harness's `examples`): "not allowed" gives a rule error,
     "allowed" and a file outside scope — don't;
@@ -97,8 +110,11 @@ no decision claims is dead and is deleted.
     scope and exception): the element is deleted — the record goes too,
     whereas a record in a test or in `exceptions/` outlived the element, and a
     parallel PR added a record about what no longer existed;
-  - boundaries and dependencies — the architecture model: `boundariesConfig`
-    (ESLint, the error shows in the editor) and `architecture` (a directory is
+  - boundaries, dependencies and the stack (a database, a framework) — the
+    architecture model: "data in Postgres" is a storage container with its
+    `pg` client, a framework is a package allowed for its modules;
+    `boundariesConfig` (ESLint, the error shows in the editor) and
+    `architecture` (a directory is
     in a module, a package is allowed for a module and used, an external
     system only through an adapter, a module in one container, a library in
     the containers of the modules that depend on it); the whole graph (cycles,

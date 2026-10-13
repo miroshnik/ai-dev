@@ -273,8 +273,11 @@ information without a decision (a deadline, a warning) doesn't prevent it.
 A project's spec is **decisions with a mechanical check**, functional and
 non-functional: a test, a lint rule, a check over the architecture model.
 **No check — no decision; no decision — no code:** behavior without a check
-may be changed without agreement; code that no decision claims is dead. The
-test is written before the code and is red first. Three roots of `tests/`, by
+may be changed without agreement; code that no decision claims is dead.
+Checks are what the system should be, code is what it is: a check is written
+before the code and is red first (the decision's acceptance test), then holds
+it (its regression test); a decision changes through its check — the check
+first, red, then the code. Three roots of `tests/`, by
 the reader's question: `capabilities/<name>` (what the system does),
 `architecture` (what it's made of — a model with checks), `standards/<name>`
 (code rules and cross-cutting qualities); a decision is a folder
