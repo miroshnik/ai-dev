@@ -454,8 +454,11 @@ function installSkills(src: string, root: string, linkMode: boolean, claude: boo
  * without a queue).
  */
 const SLOT_SCRIPT = ".agents/skills/slot/scripts/slot.ts";
-/** A package.json script already wrapped in slot (by any runtime — a previous install wrapped with node too). */
-const SLOT_WRAPPED = /^(?:node|bun) \.agents\/skills\/slot\/scripts\/slot\.ts '((?:[^']|'\\'')*)'$/;
+/**
+ * A package.json script already wrapped in slot (by any runtime — a previous install wrapped with node too; with Bun's
+ * env files too — a previous install wrapped without `--no-env-file`).
+ */
+const SLOT_WRAPPED = /^(?:node|bun)(?: --no-env-file)? \.agents\/skills\/slot\/scripts\/slot\.ts '((?:[^']|'\\'')*)'$/;
 /**
  * Check scripts that go through the machine queue: `lint`, `typecheck`, `test`, `test:*`. Not `build` — hosting and
  * Docker run it, where the skill's copy may be missing; not watch — long-running, it would hold a slot for long.
@@ -464,10 +467,12 @@ const slotted = (name: string) => /^(?:lint|typecheck|test)$|^test:/.test(name) 
 
 /**
  * The project's checks — through the machine queue (the slot skill): `slotted` scripts in the root package.json are
- * wrapped in `bun SLOT_SCRIPT '<command>'` — any agent and human call them; Bun is the flow's only runtime, in a project
- * on Node too (a previous install wrapped such a project with node — rewritten). The indentation and the trailing
- * newline stay as they were. The slot skill isn't installed (someone else's directory with the same name) — left
- * alone.
+ * wrapped in `bun --no-env-file SLOT_SCRIPT '<command>'` — any agent and human call them; Bun is the flow's only
+ * runtime, in a project on Node too (a previous install wrapped such a project with node — rewritten). Without
+ * `--no-env-file` Bun would load the project's `.env`, `.env.local` into slot, and slot would pass them to the command
+ * — production keys reaching the test runner (tests/standards/no-env-file); a wrapper without the flag is rewritten.
+ * The indentation and the trailing newline stay as they were. The slot skill isn't installed (someone else's directory
+ * with the same name) — left alone.
  * @param skills installed skills
  * @returns package.json changed
  */
@@ -483,15 +488,20 @@ function slotScripts(root: string, skills: string[]) {
   }
   const scripts = pkg.scripts;
   if (!scripts || typeof scripts !== "object") return false;
-  const wrapped: string[] = [];
+  const outside: string[] = [];
+  const envFiles: string[] = [];
   for (const [name, cmd] of Object.entries(scripts)) {
     if (!slotted(name) || typeof cmd !== "string") continue;
-    const inner = SLOT_WRAPPED.exec(cmd)?.[1]?.replaceAll("'\\''", "'") ?? cmd;
-    const want = `bun ${SLOT_SCRIPT} '${inner.replaceAll("'", "'\\''")}'`;
-    if (cmd !== want) (scripts[name] = want), wrapped.push(name);
+    const inner = SLOT_WRAPPED.exec(cmd)?.[1]?.replaceAll("'\\''", "'");
+    const want = `bun --no-env-file ${SLOT_SCRIPT} '${(inner ?? cmd).replaceAll("'", "'\\''")}'`;
+    if (cmd !== want) (scripts[name] = want), (inner === undefined ? outside : envFiles).push(name);
   }
+  const wrapped = [...outside, ...envFiles];
   if (!wrapped.length) return false;
-  if (dry) return change("~", file, { note: `checks outside the slot queue: ${wrapped.join(", ")}` }), false;
+  if (dry) {
+    const notes = [outside.length && `checks outside the slot queue: ${outside.join(", ")}`, envFiles.length && `the slot wrapper without --no-env-file — the command gets the project's env files: ${envFiles.join(", ")}`];
+    return change("~", file, { note: notes.filter(Boolean).join("; ") }), false;
+  }
   const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? 2;
   writeFileSync(file, JSON.stringify(pkg, null, indent) + (text.endsWith("\n") ? "\n" : ""));
   note(`package.json — checks through the machine queue (slot): ${wrapped.join(", ")}`);

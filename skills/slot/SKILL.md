@@ -15,7 +15,7 @@ cores, the other half is for the human, the app and the agents themselves. Why
 it is so and what was rejected — `tests/capabilities/slot/slot.md` in ai-dev.
 
 ```bash
-bun <skill dir>/scripts/slot.ts '<command>' [arguments…]
+bun --no-env-file <skill dir>/scripts/slot.ts '<command>' [arguments…]
 ```
 
 The command runs through `sh`, the arguments are appended to its end, as with
@@ -28,12 +28,29 @@ otherwise wait for itself.
 Installing the flow (`install`, `update`) wraps the project's `package.json`
 scripts `lint`, `typecheck`, `test` and `test:*` in `slot`, always via `bun`
 — the flow's only runtime, a Node project included:
-`"test": "bun .agents/skills/slot/scripts/slot.ts 'vitest run'"`. Everyone
-calls them — the agent, a human in a terminal, `github pr premerge` — and
-everyone joins one queue. `build` isn't wrapped —
-the host and Docker run it, where a copy of the skill may be missing; watch
-isn't either: it's long and would hold a slot for a long time. Removed the
-wrapper by hand — `check` names the script, `update` puts it back.
+`"test": "bun --no-env-file .agents/skills/slot/scripts/slot.ts 'vitest run'"`.
+Everyone calls them — the agent, a human in a terminal, `github pr premerge` —
+and everyone joins one queue. `build` isn't wrapped — the host and Docker run
+it, where a copy of the skill may be missing; watch isn't either: it's long and
+would hold a slot for a long time. Removed the wrapper or its `--no-env-file`
+by hand — `check` names the script, `update` puts it back.
+
+## The project's env files are off
+
+Bun loads the env files of the working directory — `.env`,
+`.env.<NODE_ENV>`, `.env.local` — into its process by itself, and `slot`
+passes its environment to the command. `.env.local` often holds production
+keys (`vercel env pull`): without `--no-env-file` they reach a runner that
+never saw them before the wrapper — tests of "the key isn't set" go red
+locally and green in CI, a test calling an external service goes there with a
+production key. With the flag the command gets exactly the environment it
+would get without the wrapper: `npm run` and `bun run` don't load env files
+for a `package.json` script, and a runner that loads them itself (`bun test`
+— `.env.test`) still does. Not `env = false` in the project's `bunfig.toml`:
+it would turn env files off for every `bun` of a Bun project, its own
+`bun test` and `bun run dev` included. The same flag is on every call of a
+skill script (`tests/standards/no-env-file` in ai-dev): a child `bun` inherits
+what its parent loaded.
 
 ## What the agent does
 
@@ -43,7 +60,7 @@ wrapper by hand — `check` names the script, `update` puts it back.
 | `slot: waiting for the machine queue — running …` | not a hang: who holds the slots (directory, command) and how long they have been running. Don't kill someone else's run or delete its ticket |
 | `slot: waited …` | the time in the queue; compare run speed without it — by CI or by `user` from `time` |
 | A targeted run (`vitest run <file>`) | bypasses the queue — it's cheap |
-| A heavy command bypassing the project's scripts | `bun <skill dir>/scripts/slot.ts '<command>'` |
+| A heavy command bypassing the project's scripts | `bun --no-env-file <skill dir>/scripts/slot.ts '<command>'` |
 | Runner workers locally | from `AI_DEV_SLOT_CPUS` — below |
 
 ## Runner workers
