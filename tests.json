@@ -2851,7 +2851,7 @@
   "describes": [
    "В проект — копия, которую видят облачная сессия и CI"
   ],
-  "name": "из пакета npx — SHA из resolved в lock-файле npm"
+  "name": "из пакета bunx — SHA из спецификатора в package.json каталога bunx"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -2879,7 +2879,7 @@
   "describes": [
    "В проект — копия, которую видят облачная сессия и CI"
   ],
-  "name": "через npx из пакета ai-dev: bin из node_modules ставит правила и скиллы"
+  "name": "через bunx из пакета ai-dev: bin из node_modules под Bun ставит правила и скиллы"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -2977,6 +2977,13 @@
   "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
+  "name": "команда хука — bunx --silent github:miroshnik/ai-dev check --hook, вывод с ошибками и запасной echo при сбое bunx"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
+  ],
   "name": "повторный install -g убирает правила прошлой установки — ~/.agents/ai-dev, симлинки ~/.claude/rules/ai-dev*.md и симлинки агентов на канон; свой файл правил агента остаётся"
  },
  {
@@ -3068,6 +3075,13 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
+  "name": "slot — через bun в любом проекте: обёрнутый через node скрипт переписывается на bun, команда та же"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
   "name": "обёрнутый скрипт идёт как прежде: кавычки команды на месте, аргументы — в её конце"
  },
  {
@@ -3083,13 +3097,6 @@
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
   "name": "предупреждения нет, если переменные очереди доходят до задач turbo — globalPassThroughEnv или globalEnv с масками, envMode loose, --env-mode=loose — или turbo зовёт скрипт вне очереди"
- },
- {
-  "path": "tests/capabilities/install/install.test.ts",
-  "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
-  ],
-  "name": "проект на Bun зовёт slot через bun, остальные — через node"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3279,13 +3286,6 @@
    "Команда в слоте — как без него, с долей ядер для раннера"
   ],
   "name": "команда получает четверть ядер в AI_DEV_SLOT_CPUS"
- },
- {
-  "path": "tests/capabilities/slot/slot.test.ts",
-  "describes": [
-   "Команда в слоте — как без него, с долей ядер для раннера"
-  ],
-  "name": "под Node без Bun — то же, что под Bun"
  },
  {
   "path": "tests/capabilities/slot/slot.test.ts",
@@ -4266,13 +4266,6 @@
    "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
   ],
   "name": "модель не загружается — код 2 и сообщение"
- },
- {
-  "path": "tests/capabilities/spec-doc/architecture.test.ts",
-  "describes": [
-   "Архитектура — страница из модели `tests/architecture/model.ts`: система, контейнеры, модули"
-  ],
-  "name": "под Node без Bun — та же страница"
  },
  {
   "path": "tests/capabilities/spec-doc/architecture.test.ts",
@@ -5971,6 +5964,13 @@
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
+   "Имя прокси по умолчанию — одно у скрипта и compose-файла скилла"
+  ],
+  "name": "каждое значение по умолчанию ${AI_DEV_PROXY:-…} в compose-файле (комментарии не в счёт) — PROXY скрипта"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
    "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
   ],
   "name": "config не разбирает файл (незаданная обязательная переменная) — «not checked» с ответом Compose, код 2"
@@ -6092,7 +6092,7 @@
   "describes": [
    "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
   ],
-  "name": "без Docker — строка ○ «not checked» с причиной, код по-прежнему 0; без bun — так же"
+  "name": "без Docker — строка ○ «not checked» с причиной, код по-прежнему 0"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6106,7 +6106,7 @@
   "describes": [
    "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
   ],
-  "name": "проект без compose-файла — ни строки сверх обычных, bun не запускается; чистый compose-файл — тоже ни строки; код 0"
+  "name": "проект без compose-файла — ни строки сверх обычных, скрипт не запускается; чистый compose-файл — тоже ни строки; код 0"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6162,6 +6162,13 @@
   "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
+  "name": "bunx недоступен — код хука 0, в выводе — что проверка недоступна"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
   "name": "check --hook: проверка недоступна — объяснение в stdout, код 0"
  },
  {
@@ -6170,13 +6177,6 @@
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
   "name": "check и хук называют язык и режим проекта по-английски"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
-  ],
-  "name": "npx недоступен — код хука 0, в выводе — что проверка недоступна"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6211,7 +6211,7 @@
   "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
-  "name": "вывод хука с командой для запуска подсказывает песочницу Claude Code: кеш npm — npm_config_cache, отказ записи в .claude/ — команда в терминале владельца; без команды подсказки нет"
+  "name": "вывод хука с командой для запуска подсказывает песочницу Claude Code: кеш bunx — BUN_INSTALL_CACHE_DIR, отказ записи в .claude/ — команда в терминале владельца; без команды подсказки нет"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6365,6 +6365,13 @@
   "describes": [
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
+  "name": "блоки AGENTS.md и .gitignore со старой командой npx — отстаёт; update переписывает оба на bunx; после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
   "name": "в клоне ai-dev check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит"
  },
  {
@@ -6477,7 +6484,14 @@
   "describes": [
    "Копия следует за релизами ai-dev, а не за main"
   ],
-  "name": "релизов ещё нет — ставит голову main, как раньше, без тега"
+  "name": "релизов ещё нет — пускатель перезапускается по SHA головы main: её файлы и SHA, без тега"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами ai-dev, а не за main"
+  ],
+  "name": "устаревший пускатель не отвергает флаг, который знает релиз: перезапуск — до проверки флагов"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7029,7 +7043,7 @@
   "describes": [
    "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
   ],
-  "name": "вне охвата: bin/ai-dev.mjs"
+  "name": "вне охвата: bin/ai-dev.ts"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
@@ -7050,7 +7064,7 @@
   "describes": [
    "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
   ],
-  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/ai-dev.mjs"
+  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/ai-dev.ts"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
@@ -7148,7 +7162,7 @@
   "describes": [
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
-  "name": "в bin/ai-dev.mjs нет кириллицы"
+  "name": "в bin/ai-dev.ts нет кириллицы"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -7183,14 +7197,7 @@
   "describes": [
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
-  "name": "в skills/github/scripts/locale.cjs нет кириллицы"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
-  ],
-  "name": "в skills/github/scripts/locale.d.cts нет кириллицы"
+  "name": "в skills/github/scripts/locale.ts нет кириллицы"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -7330,7 +7337,7 @@
   "describes": [
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
-  "name": "реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.mjs, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts"
+  "name": "реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -7373,6 +7380,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "вне охвата: standardIssue"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "каждый файл skills/github/locales/*.json — язык модуля locale с этим словарём, en первым"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9346,13 +9360,6 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "словарь en соответствует типам модуля locale (Names в locale.d.cts)"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
-  ],
   "name": "у каждого языка те же ключи, что у en, и ни одного пустого названия"
  },
  {
@@ -10718,6 +10725,13 @@
   "describes": [
    "Тест проекта импортирует харнесс и модель любым раннером"
   ],
+  "name": "Node проекта с \"type\": \"commonjs\" своим загрузчиком импортирует фрагмент ESLint, харнесс и модель без ошибок и предупреждений"
+ },
+ {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
+   "Тест проекта импортирует харнесс и модель любым раннером"
+  ],
   "name": "Playwright в проекте без \"type\": \"module\" (загрузка CommonJS) импортирует харнесс и модель и проходит тест"
  },
  {
@@ -10726,150 +10740,6 @@
    "Тест проекта импортирует харнесс и модель любым раннером"
   ],
   "name": "Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует харнесс и модель и проходит тест"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
-   "примеры"
-  ],
-  "name": "JSDoc без @mirror — не копия"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
-   "примеры"
-  ],
-  "name": "compose-файл: каждое вхождение ${<имя>:-…} — отдельное значение, другие переменные и комментарии не в счёт"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
-   "примеры"
-  ],
-  "name": "метка @mirror без константы-литерала под ней — нарушение, а не пропуск"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом",
-   "примеры"
-  ],
-  "name": "у копии несколько оригиналов: сверяется с каждым"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
-  ],
-  "name": "COMPOSE_FILES установщика совпадает с COMPOSE_FILES из skills/task-env/scripts/task-env.ts"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
-  ],
-  "name": "PROXY установщика совпадает с PROXY из skills/task-env/scripts/task-env.ts и ${AI_DEV_PROXY:-…} в skills/task-env/proxy/compose.yaml"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
-  ],
-  "name": "нарушитель не проходит: в копии COMPOSE_FILES лишнее имя compose-файла"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
-  ],
-  "name": "нарушитель не проходит: имя прокси в установщике не то, что в compose-файле прокси"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
-  ],
-  "name": "реестр «копии значений скилла в установщике» находит COMPOSE_FILES, PROXY"
- },
- {
-  "path": "tests/standards/installer-mirror/installer-mirror.test.ts",
-  "describes": [
-   "Значение скилла, которое установщик держит копией, совпадает с оригиналом"
-  ],
-  "name": "реестр «копии значений скилла в установщике» не пуст"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-break печатает под Node тот же отчёт, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-claims пишет под Node тот же отчёт, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-diff в проекте на en печатает под Node тот же раздел для PR, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-diff печатает тот же раздел для PR, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-doc в проекте на en пишет под Node тот же docs/spec, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-doc пишет тот же docs/spec, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-exceptions переносит под Node то же, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-publish публикует под Node то же дерево, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "spec-run находит под Node тот же прогон, что под Bun"
- },
- {
-  "path": "tests/standards/node-runtime/node-runtime.test.ts",
-  "describes": [
-   "Под Node без Bun скрипты spec пишут то же, что под Bun"
-  ],
-  "name": "копия скилла в проекте без \"type\": \"module\" запускается под Node без предупреждений"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -11445,21 +11315,21 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "bin/ai-dev.mjs: AGENTS.md, «First step of a session» — есть такой раздел"
+  "name": "bin/ai-dev.ts: AGENTS.md, «First step of a session» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "bin/ai-dev.mjs: AGENTS.md, «Language» — есть такой раздел"
+  "name": "bin/ai-dev.ts: AGENTS.md, «Language» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "bin/ai-dev.mjs: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел"
+  "name": "bin/ai-dev.ts: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
@@ -11872,7 +11742,7 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.mjs → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»"
+  "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
@@ -12122,13 +11992,6 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/standards/harness-load/harness-load.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
- },
- {
-  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
-  "describes": [
-   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
-  ],
-  "name": "tests/standards/node-runtime/node-runtime.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
