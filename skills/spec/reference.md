@@ -12,7 +12,10 @@ A reference for `SKILL.md`: the reasoning behind decisions and parsing details.
 - `bun test` has no JSON report but produces JUnit XML (`--reporter=junit`):
   a file is a `testsuite` with `name = file`, a describe is a nested
   `testsuite` with a `file` attribute, a test is a `testcase`; `<skipped/>` —
-  skipped, `<skipped message="TODO"/>` — todo. The XML is parsed with regular
+  skipped, `<skipped message="TODO"/>` — todo. A hook (`beforeAll`,
+  `afterAll`) of a skipped describe bun writes as a skipped `testcase`
+  `(unnamed)` without `line` — not a test, it is dropped; a failed hook stays
+  a failing test. The XML is parsed with regular
   expressions and a suite stack: Bun and Node have no XML parser without
   dependencies, and the format is simple. The entities `&amp;`, `&lt;`, `&#…;`
   are expanded.

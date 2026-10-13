@@ -342,7 +342,8 @@ type Suite = { name: string; file: string };
  * JUnit XML from `bun test --reporter=junit`: a file is a testsuite with name = file, describe — nested testsuites with
  * the file attribute, a test — a testcase (file, name). Parsing with regular expressions and a suite stack: there's no
  * XML parser without dependencies, and the format is simple. `<skipped/>` — skipped, `<skipped message="TODO"/>` —
- * todo, failure/error — failed.
+ * todo, failure/error — failed. A hook (`beforeAll`, `afterAll`) of a skipped describe bun writes as a skipped testcase
+ * `(unnamed)` without `line` — it isn't a test and is dropped; a failed hook stays: its failure is visible.
  */
 export function parseJunit(text: string, root: string): Test[] {
   const tests: Test[] = [];
@@ -370,11 +371,17 @@ export function parseJunit(text: string, root: string): Test[] {
         caseStart = m.index + m[0].length;
       }
     } else if (caseAttrs) {
-      tests.push(junitCase(caseAttrs, text.slice(caseStart, m.index), stack, root));
+      const body = text.slice(caseStart, m.index);
+      if (!skippedHook(caseAttrs, body)) tests.push(junitCase(caseAttrs, body, stack, root));
       caseAttrs = null;
     }
   }
   return mergeTests(tests);
+}
+
+/** A skipped describe's hook: a test always has `line`, a hook — the name `(unnamed)` and no `line` (bun 1.4). */
+function skippedHook(a: Record<string, string>, body: string): boolean {
+  return a.name === "(unnamed)" && a.line === undefined && /<skipped\b/.test(body);
 }
 
 function junitCase(a: Record<string, string>, body: string, stack: Suite[], root: string): Test {
