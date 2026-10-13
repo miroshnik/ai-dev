@@ -6185,6 +6185,13 @@
   "describes": [
    "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
   ],
+  "name": "compose-файл получает адрес HTTP-сервиса стека задачи в `TASK_ENV_<СЕРВИС>_URL`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
   "name": "override добавляет метки только HTTP-сервисам из настройки"
  },
  {
@@ -6193,6 +6200,13 @@
    "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
   ],
   "name": "адрес сервиса — `<сервис>.<N>.<проект>.localhost`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "без `task-env` переменных нет — работает значение по умолчанию compose-файла"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -6263,6 +6277,13 @@
    "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
   ],
   "name": "у e2e свой стек с чистыми томами, отличный от dev той же задачи"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "у стека e2e в интерполяции — адреса e2e, не dev той же задачи"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
