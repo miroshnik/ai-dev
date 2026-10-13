@@ -6903,6 +6903,13 @@
   "describes": [
    "Ядро канона умещается в бюджет контекста"
   ],
+  "name": "skills/task-env/SKILL.md есть в репозитории"
+ },
+ {
+  "path": "tests/standards/canon-size/canon-size.test.ts",
+  "describes": [
+   "Ядро канона умещается в бюджет контекста"
+  ],
   "name": "бюджет считается по байтам файла в UTF-8, блоки кода не исключаются"
  },
  {
@@ -11597,14 +11604,42 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "docs/parallel-checkouts.md: docs/testing.md, «Framework: three questions» — есть такой раздел"
+  "name": "docs/parallel-checkouts.md: docs/testing.md, «e2e» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "docs/parallel-checkouts.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
+  "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Compose file isolation rules» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «Settings» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «The proxy» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/parallel-checkouts.md: skills/task-env/SKILL.md, «The task's stack» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
