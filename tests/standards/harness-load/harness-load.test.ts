@@ -22,7 +22,7 @@ afterEach(() => cleanup());
  * Проект с копией скиллов, как после установки флоу (харнесс берёт названия из словаря скилла github), и e2e-тестом,
  * который импортирует харнесс и модель; без браузера.
  */
-function project(type?: "module"): void {
+function project(type?: "module" | "commonjs"): void {
   writeTree(dir, {
     "package.json": JSON.stringify({ name: "app", type }),
     "playwright.config.ts": 'export default { testDir: "e2e" };\n',
@@ -47,11 +47,29 @@ function playwright(): { code: number | string; output: string } {
   return { code: exitOf(r), output: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
+/**
+ * Свой загрузчик Node — у `eslint.config.*` проекта и `node --test`: фрагмент ESLint, харнесс и модель он грузит как
+ * есть, без транспиляции раннера. Проект с `"type": "commonjs"` объявил бы ESM-модули копии CommonJS — у скиллов spec и
+ * github поэтому свой `"type": "module"`.
+ */
+function nodeImport(): { code: number | string; output: string } {
+  const code = ["eslint-config", "harness", "architecture"].map((m) => `await import("./.agents/skills/spec/scripts/${m}.ts");`).join(" ");
+  const r = spawnSync("node", ["--input-type=module", "-e", code], { cwd: dir, encoding: "utf8" });
+  return { code: exitOf(r), output: (r.stdout ?? "") + (r.stderr ?? "") };
+}
+
 describe("Тест проекта импортирует харнесс и модель любым раннером", () => {
   it("Playwright в проекте без \"type\": \"module\" (загрузка CommonJS) импортирует харнесс и модель и проходит тест", () => {
     project();
     const r = playwright();
     expect(r.output).toContain("1 passed");
+    expect(r.code).toBe(0);
+  });
+
+  it("Node проекта с \"type\": \"commonjs\" своим загрузчиком импортирует фрагмент ESLint, харнесс и модель без ошибок и предупреждений", () => {
+    project("commonjs");
+    const r = nodeImport();
+    expect(r.output).toBe("");
     expect(r.code).toBe(0);
   });
 

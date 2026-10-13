@@ -325,16 +325,6 @@ describe("Архитектура — страница из модели `tests/a
     expect(page).toContain("## Rules\n\n- [modules](architecture/modules.md)\n");
   });
 
-  it("под Node без Bun — та же страница", () => {
-    writeTree(dir, { [MODEL]: model(FULL) });
-    expect(doc(rules()).code).toBe(0);
-    const bun = read("docs/spec/architecture.md");
-    rmSync(path.join(dir, "docs"), { recursive: true });
-    const r = runScript("spec-doc", ["r.json", "--root", dir], dir, "node");
-    expect(r.stderr).not.toContain("doesn't load");
-    expect(r.code).toBe(0);
-    expect(read("docs/spec/architecture.md")).toBe(bun);
-  });
 });
 
 // главный файл capability billing и его описание — место для метки

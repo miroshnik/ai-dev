@@ -100,13 +100,13 @@ describe("Исключения проекта переезжают в катал
   it("путь к exceptions.ts в package.json и workflow CI — на каталог", () => {
     writeTree(dir, {
       "tests/standards/entry-points/exceptions.ts": 'export default [{ item: "job:cleanup", issue: 12, reason: "тест — в #12" }];\n',
-      "package.json": JSON.stringify({ scripts: { claims: "node .agents/skills/spec/scripts/spec-claims.ts --entries e.ts --exceptions tests/standards/entry-points/exceptions.ts" } }, null, 2) + "\n",
-      ".github/workflows/ci.yml": "      - run: node spec-claims.ts --exceptions tests/standards/entry-points/exceptions.ts\n",
+      "package.json": JSON.stringify({ scripts: { claims: "bun .agents/skills/spec/scripts/spec-claims.ts --entries e.ts --exceptions tests/standards/entry-points/exceptions.ts" } }, null, 2) + "\n",
+      ".github/workflows/ci.yml": "      - run: bun spec-claims.ts --exceptions tests/standards/entry-points/exceptions.ts\n",
     });
     const r = migrate();
     expect(r.code).toBe(0);
     expect(read("package.json")).toContain("--exceptions tests/standards/entry-points/exceptions\"");
-    expect(read(".github/workflows/ci.yml")).toBe("      - run: node spec-claims.ts --exceptions tests/standards/entry-points/exceptions\n");
+    expect(read(".github/workflows/ci.yml")).toBe("      - run: bun spec-claims.ts --exceptions tests/standards/entry-points/exceptions\n");
     expect(r.stdout).toContain("~ package.json: tests/standards/entry-points/exceptions.ts → tests/standards/entry-points/exceptions");
     expect(r.stdout).toContain("~ .github/workflows/ci.yml: tests/standards/entry-points/exceptions.ts → tests/standards/entry-points/exceptions");
   });
@@ -177,8 +177,8 @@ describe("Исключения названий spec-doc переезжают в
     writeTree(dir, {
       [SHARED]: namesModule([named(MAIN, "returns 201"), named(AUDIT_TEST, "writes row"), named("tests/x.test.ts", "orphan")]),
       [CUSTOM]: namesModule([named(MAIN, "returns 404")]),
-      "package.json": JSON.stringify({ scripts: { "spec:doc": `node spec-doc.ts r.xml --strict --names-exceptions ${SHARED}` } }, null, 2) + "\n",
-      ".github/workflows/ci.yml": `      - run: node spec-doc.ts r.xml --names-exceptions=${CUSTOM} --strict\n`,
+      "package.json": JSON.stringify({ scripts: { "spec:doc": `bun spec-doc.ts r.xml --strict --names-exceptions ${SHARED}` } }, null, 2) + "\n",
+      ".github/workflows/ci.yml": `      - run: bun spec-doc.ts r.xml --names-exceptions=${CUSTOM} --strict\n`,
     });
     const r = migrate();
     expect(r.code).toBe(0);
@@ -190,8 +190,8 @@ describe("Исключения названий spec-doc переезжают в
     // тест вне папки решения — исключение остаётся у прежнего файла: spec-doc назовёт его ненужным
     expect(read("tests/standards/spec-names/names.exceptions/orphan.json")).toBe(json(named("tests/x.test.ts", "orphan")));
     expect(r.stdout).toContain(`- ${SHARED} → ${BILLING}/names.exceptions/, ${AUDIT}/names.exceptions/, tests/standards/spec-names/names.exceptions/ (3)`);
-    expect(JSON.parse(read("package.json")).scripts["spec:doc"]).toBe("node spec-doc.ts r.xml --strict");
-    expect(read(".github/workflows/ci.yml")).toBe("      - run: node spec-doc.ts r.xml --strict\n");
+    expect(JSON.parse(read("package.json")).scripts["spec:doc"]).toBe("bun spec-doc.ts r.xml --strict");
+    expect(read(".github/workflows/ci.yml")).toBe("      - run: bun spec-doc.ts r.xml --strict\n");
     expect(r.stdout).toContain(`~ package.json: --names-exceptions ${SHARED} removed`);
     expect(r.stdout).toContain(`~ .github/workflows/ci.yml: --names-exceptions ${CUSTOM} removed`);
   });
