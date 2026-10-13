@@ -6048,6 +6048,48 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
+   "update называет изменения каждого пропущенного релиза"
+  ],
+  "name": "update -g копией на машине — тот же список"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "update называет изменения каждого пропущенного релиза"
+  ],
+  "name": "update копии перечисляет каждый пропущенный релиз от нового к старому: тег, ссылка и пункты — те же, что в заметках релиза"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "update называет изменения каждого пропущенного релиза"
+  ],
+  "name": "пропущен один релиз — один блок; ничего нового — строка, что релиз уже стоял"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "update называет изменения каждого пропущенного релиза"
+  ],
+  "name": "релизов ещё нет — список коммитов флоу от стоявшего SHA до новой головы"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "update называет изменения каждого пропущенного релиза"
+  ],
+  "name": "список не узнать (в манифесте нет SHA, стоявшего SHA нет в истории) — update всё равно завершается кодом 0, строка с причиной и ссылкой на релизы"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "update называет изменения каждого пропущенного релиза"
+  ],
+  "name": "установщик из клона — коммиты флоу после последнего релиза отдельным блоком «not in a release» над релизами"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
   "name": "check --hook: проверка недоступна — объяснение в stdout, код 0"
@@ -6114,6 +6156,13 @@
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
   "name": "git fetch не удался (нет сети, нет remote) — проверка недоступна, код 2"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "update -g называет коммиты флоу между старой и новой головой клона, тем же форматом, что заметки релиза"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
