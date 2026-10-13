@@ -149,11 +149,24 @@ owner's step: Docker Desktop → Settings → Docker Engine,
 | entry point | `web` — HTTP on `127.0.0.1:80`; not on all interfaces: task apps aren't visible on the local network |
 | restart | `unless-stopped` — comes back with Docker; `proxy down` removes it for good |
 | health | `traefik healthcheck --ping`: `proxy up` returns when the proxy serves |
+| API | Traefik's routes on the `web` entry point by the host `ai-dev-proxy.localhost` — a router `ai-dev-proxy-api` of the proxy's own labels to `api@internal`; no UI |
 
 Routes follow Docker events: a container appears in them when it starts and
 leaves them when it stops — no reload. An unknown host — `404` from Traefik.
 `proxy up` again after a skill update brings the container to the new compose
 file.
+
+The API is how the dashboard sees a task's addresses: `proxyHosts` of the
+script reads `GET /api/http/routers` (page by page) on the proxy's port with
+the host `<name>.localhost` and returns the hosts of the enabled routers of
+`web`; the proxy isn't running — none. Not the Docker socket: the dashboard
+stays in the sandbox, and access to Docker is access to the whole machine. Not
+a published `:8080`: a second host port is one more setting and one more
+conflict, while `web` is on `127.0.0.1` already; a site that pointed its name
+at `127.0.0.1` (DNS rebinding) comes with its own host and gets `404`. The
+router is named after the proxy: a test proxy sees the labels of the
+machine's one, and routers of one name with different rules Traefik would
+drop.
 
 ## Labels of a task stack's service
 
@@ -182,7 +195,9 @@ networks:
   labels, Traefik balances between them.
 - The address: `<service>.<N>.<project>.localhost`, e2e —
   `<service>.e2e.<N>.<project>.localhost`, without a task —
-  `<service>.<project>.localhost`.
+  `<service>.<project>.localhost`. `<project>` — the repository name in
+  lowercase letters, digits and `-` (`hostProject` of the script); a task's
+  host is parsed by `taskAddress`, its URL with the proxy's port — `addressUrl`.
 - The port — the service's HTTP port inside the container; nothing is
   published on the host.
 - The network is `external`: the proxy creates it, so `proxy up` goes before
@@ -237,9 +252,10 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   (default `ai-dev-proxy`); `AI_DEV_PROXY_PORT` — its port on `127.0.0.1`
   (default 80). Tests run their own proxy with them next to the machine's
   one. Port 80 busy — another port, and the addresses carry it:
-  `http://web.42.shop.localhost:8080`. The name is the same in two places: the
-  `${AI_DEV_PROXY:-…}` defaults of the compose file and `proxyName` of the
-  script — `check -g` of the installer imports it.
+  `http://web.42.shop.localhost:8080`. The defaults live only in the script
+  (`proxyName`, `proxyPort`): it passes both to the compose file explicitly,
+  the file has `${…:?}` — `docker compose -f proxy/compose.yaml` by hand needs
+  both set; `check -g` of the installer imports `proxyName`.
 
 ## Checked on the machine (2026-10-13)
 

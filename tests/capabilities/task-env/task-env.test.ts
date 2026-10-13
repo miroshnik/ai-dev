@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { projectName, PROXY, proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
+import { composeEnv, hostProject, projectName, PROXY, proxyHosts, proxyLabels, stackOf, taskAddress } from "../../../skills/task-env/scripts/task-env.ts";
 import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
@@ -18,8 +18,8 @@ const WHOAMI = "traefik/whoami:v1.12.0";
 /** Ждать события дольше этого — ошибка с объяснением, а не таймаут теста без него. */
 const PATIENCE = 30_000;
 
-/** Имя прокси по умолчанию — из compose-файла скилла: `name: ${AI_DEV_PROXY:-<имя>}`. */
-const DEFAULT_NAME = /^name: \$\{AI_DEV_PROXY:-([a-z0-9_-]+)\}$/m.exec(readFileSync(COMPOSE, "utf8"))?.[1];
+/** Имя прокси по умолчанию — из скрипта скилла: compose-файл своего значения по умолчанию не держит (#396, вопрос 1). */
+const DEFAULT_NAME = PROXY;
 
 /** Docker отвечает — сценарии с настоящим прокси идут; в CI без Docker они падают, а не пропускаются. */
 const dockerUp = spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8", timeout: 20_000 }).status === 0;
@@ -114,6 +114,18 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     expect((await get("bare.43.demo.localhost")).status).toBe(404);
   });
 
+  it("API прокси называет хосты маршрутов по адресу `<имя прокси>.localhost` на его порту: контейнер стартовал — его хост есть, остановился — нет", async () => {
+    const env = { ...proxyEnv, AI_DEV_PROXY_PORT: port };
+    const id = app("listed", labels("demo-45", "web", "web.45.demo.localhost"));
+    await until("web.45.demo.localhost", 200);
+    expect(await proxyHosts(env)).toEqual(expect.arrayContaining(["web.45.demo.localhost", `${NAME}.localhost`]));
+    docker("stop", "--time", "0", id);
+    await until("web.45.demo.localhost", 404);
+    expect(await proxyHosts(env)).not.toContain("web.45.demo.localhost");
+    // API — только по своему хосту: сайт, навёдший своё имя на 127.0.0.1, приходит со своим Host
+    expect((await get("evil.example")).status).toBe(404);
+  });
+
   it("остановленный контейнер пропадает из маршрутов", async () => {
     const id = app("stopped", labels("demo-44", "web", "web.44.demo.localhost"));
     await until("web.44.demo.localhost", 200);
@@ -131,20 +143,6 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     expect(exitOf(stopped)).toBe(1);
     expect(stopped.stdout).toContain(`proxy ${NAME}: not running — start: bun ${SCRIPT} proxy up`);
     expect(docker("network", "ls", "--quiet", "--filter", `name=^${NAME}$`)).toBe("");
-  });
-});
-
-/**
- * Имя прокси по умолчанию записано дважды: `PROXY` скрипта (его берут скрипт и `check -g` установщика) и значение по
- * умолчанию подстановки `${AI_DEV_PROXY:-…}` в compose-файле — Compose скрипт не прочтёт. Расхождение молчит: прокси
- * поднимется под одним именем, а `check -g` будет искать другое и назовёт работающий прокси незапущенным.
- */
-describe("Имя прокси по умолчанию — одно у скрипта и compose-файла скилла", () => {
-  it("каждое значение по умолчанию ${AI_DEV_PROXY:-…} в compose-файле (комментарии не в счёт) — PROXY скрипта", () => {
-    const text = readFileSync(COMPOSE, "utf8").replace(/(^|\s)#.*$/gm, "$1");
-    const defaults = [...text.matchAll(/\$\{AI_DEV_PROXY:-([^}]*)\}/g)].map((m) => m[1]);
-    expect(defaults.length).toBeGreaterThan(0);
-    expect([...new Set(defaults)]).toEqual([PROXY]);
   });
 });
 
@@ -858,5 +856,100 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
     expect(r.code, r.out).toBe(0);
     expect(r.stdout).toMatch(new RegExp(`^○ stack ${PROJECT}-9: its containers are from \\S*/other — another project, left\n$`));
     expect(services(`${PROJECT}-9`)).toEqual(["db"]);
+  });
+});
+
+describe("Адреса задачи и маршруты прокси — для дашборда, без сокета Docker", () => {
+  it("адрес задачи разбирается по схеме: сервис, номер, e2e, проект; другой хост — не адрес", () => {
+    expect(taskAddress("web.42.shop.localhost")).toEqual({ service: "web", task: 42, e2e: false, project: "shop" });
+    expect(taskAddress("web.e2e.42.shop.localhost")).toEqual({ service: "web", task: 42, e2e: true, project: "shop" });
+    // номер — метка перед проектом: в имени сервиса бывают точки и цифры
+    expect(taskAddress("web.1.42.shop.localhost")).toEqual({ service: "web.1", task: 42, e2e: false, project: "shop" });
+    // адрес, который строит стек задачи, разбирается обратно
+    expect(taskAddress(stackOf("shop", 42).host("web"))).toEqual({ service: "web", task: 42, e2e: false, project: "shop" });
+    expect(taskAddress(stackOf("shop", 42, true).host("web"))).toEqual({ service: "web", task: 42, e2e: true, project: "shop" });
+    // стек основного чекаута, API прокси, не *.localhost
+    for (const host of [stackOf("shop", undefined).host("web"), `${PROXY}.localhost`, "web.42.shop.example"]) expect(taskAddress(host)).toBeNull();
+  });
+
+  it("проект в адресе — имя репозитория строчными буквами, цифрами и «-»", () => {
+    expect(["ai-dev", "My_Shop", "shop.web", "--Shop--"].map(hostProject)).toEqual(["ai-dev", "my-shop", "shop-web", "shop"]);
+  });
+
+  describe("API прокси", () => {
+    /** Подставной Traefik: `/api/http/routers` постранично (`X-Next-Page`, последняя страница называет 1) — только по хосту `fake-proxy.localhost`. */
+    let routers: unknown[] = [];
+    let status = 200;
+    let server: ReturnType<typeof Bun.serve>;
+    beforeAll(() => {
+      server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch(req) {
+          const url = new URL(req.url);
+          if (req.headers.get("host") !== "fake-proxy.localhost" || url.pathname !== "/api/http/routers") return new Response("404 page not found", { status: 404 });
+          if (status !== 200) return new Response("internal error", { status });
+          const [per, page] = [Number(url.searchParams.get("per_page") || 100), Number(url.searchParams.get("page") || 1)];
+          return Response.json(routers.slice((page - 1) * per, page * per), { headers: { "X-Next-Page": String(page * per < routers.length ? page + 1 : 1) } });
+        },
+      });
+    });
+    afterAll(() => server.stop(true));
+    beforeEach(() => {
+      routers = [];
+      status = 200;
+    });
+    const env = (name = "fake-proxy") => ({ AI_DEV_PROXY: name, AI_DEV_PROXY_PORT: String(server.port) });
+    const router = (rule: string, o: Record<string, unknown> = {}) => ({ name: "r@docker", rule, service: "s", status: "enabled", entryPoints: ["web"], provider: "docker", ...o });
+
+    it("API прокси отдаёт хосты включённых маршрутов точки входа web по адресу `<имя прокси>.localhost` на его порту, все страницы", async () => {
+      routers = [
+        ...Array.from({ length: 150 }, (_, i) => router(`Host(\`s${i}.7.shop.localhost\`)`)),
+        router("Host(`off.7.shop.localhost`)", { status: "disabled" }),
+        router("PathPrefix(`/ping`)", { entryPoints: ["traefik"], provider: "internal" }),
+      ];
+      const hosts = await proxyHosts(env());
+      expect(hosts).toHaveLength(150);
+      expect(hosts).toContain("s0.7.shop.localhost");
+      expect(hosts).toContain("s149.7.shop.localhost");
+    });
+
+    it("прокси не запущен — хостов нет и ошибки нет; маршруты не прочитаны по другой причине — ошибка с ней", async () => {
+      const closed = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null) });
+      const port = String(closed.port);
+      closed.stop(true);
+      expect(await proxyHosts({ AI_DEV_PROXY: "fake-proxy", AI_DEV_PROXY_PORT: port })).toBeNull();
+      // на порту прокси без API: чужой хост Traefik отдаёт 404
+      await expect(proxyHosts(env("other-proxy"))).rejects.toThrow(/^proxy other-proxy: routes not read — .*HTTP 404/);
+      status = 500;
+      await expect(proxyHosts(env())).rejects.toThrow("HTTP 500");
+    });
+  });
+
+  it("значения по умолчанию имени и порта прокси — только в скрипте: compose-файл без них не собирается, `proxy up` передаёт их сам", () => {
+    expect(readFileSync(COMPOSE, "utf8")).not.toMatch(/\$\{AI_DEV_PROXY(?:_PORT)?:-/);
+    // docker — подставной: пишет в журнал, с какими имя и порт прокси его позвали, на `ps` отвечает «running»
+    const { dir, cleanup } = tmpDir();
+    try {
+      const log = path.join(dir, "docker.log");
+      writeFileSync(path.join(dir, "docker"), `#!/bin/sh\necho "$AI_DEV_PROXY $AI_DEV_PROXY_PORT $1 $2" >> "${log}"\n[ "$1" = ps ] && echo running\nexit 0\n`, { mode: 0o755 });
+      const up = run("bun", [SCRIPT, "proxy", "up"], { ...process.env, PATH: `${dir}:${process.env.PATH}`, AI_DEV_PROXY: "", AI_DEV_PROXY_PORT: "" });
+      expect(exitOf(up), up.stdout + up.stderr).toBe(0);
+      expect(readFileSync(log, "utf8")).toContain(`${PROXY} 80 compose -f`);
+    } finally {
+      cleanup();
+    }
+    const config = (env: NodeJS.ProcessEnv) => spawnSync("docker", ["compose", "-f", COMPOSE, "config", "--format", "json"], { encoding: "utf8", env });
+    const bare = { ...process.env, AI_DEV_PROXY: "", AI_DEV_PROXY_PORT: "" };
+    const none = config(bare);
+    expect(exitOf(none)).not.toBe(0);
+    expect(none.stderr).toContain("required variable AI_DEV_PROXY");
+    const set = config(composeEnv(bare));
+    expect(exitOf(set), set.stderr).toBe(0);
+    const c = JSON.parse(set.stdout);
+    expect([c.name, c.networks.proxy.name]).toEqual([PROXY, PROXY]);
+    expect(c.services.traefik.ports).toEqual([expect.objectContaining({ host_ip: "127.0.0.1", published: "80", target: 80 })]);
+    // API — роутер с именем прокси на точке входа web
+    expect(c.services.traefik.labels[`traefik.http.routers.${PROXY}-api.rule`]).toBe(`Host(\`${PROXY}.localhost\`)`);
   });
 });

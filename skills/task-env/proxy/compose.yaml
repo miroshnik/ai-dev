@@ -1,8 +1,9 @@
 # The machine's proxy (the task-env skill, SKILL.md, «The proxy»): one Traefik per machine routes
 # http://<service>.<N>.<project>.localhost to containers of task stacks by their labels. Started by
-# `task-env proxy up`. The name — the Compose project and the network — is the same expression as `proxyName` in
-# scripts/task-env.ts; tests/capabilities/task-env holds each default `${AI_DEV_PROXY:-…}` here to `PROXY` there.
-name: ${AI_DEV_PROXY:-ai-dev-proxy}
+# `task-env proxy up`. The name — the Compose project and the network — and the port come from AI_DEV_PROXY and
+# AI_DEV_PROXY_PORT, which scripts/task-env.ts passes explicitly (`composeEnv`): their defaults live only there, so
+# the file has none (`${…:?}`) and doesn't come up without the script.
+name: ${AI_DEV_PROXY:?set by task-env.ts}
 services:
   traefik:
     image: traefik:v3.7
@@ -14,12 +15,23 @@ services:
       # a container is published only with traefik.enable=true
       - --providers.docker.exposedByDefault=false
       # task containers sit in several networks: the proxy reaches them through its own
-      - --providers.docker.network=${AI_DEV_PROXY:-ai-dev-proxy}
+      - --providers.docker.network=${AI_DEV_PROXY:?set by task-env.ts}
+      # the API — the routes for the dashboard: on the web entry point by the host <name>.localhost (labels below),
+      # without Traefik's own UI
+      - --api=true
+      - --api.dashboard=false
       # /ping on the internal entry point :8080 — for the healthcheck, not published
       - --ping=true
     ports:
       # the loopback only: task apps aren't visible on the local network
-      - 127.0.0.1:${AI_DEV_PROXY_PORT:-80}:80
+      - 127.0.0.1:${AI_DEV_PROXY_PORT:?set by task-env.ts}:80
+    labels:
+      # the router is named after the proxy: a test proxy sees this container's labels too, and routers of one name
+      # with different rules Traefik would drop
+      - traefik.enable=true
+      - traefik.http.routers.${AI_DEV_PROXY:?set by task-env.ts}-api.rule=Host(`${AI_DEV_PROXY:?set by task-env.ts}.localhost`)
+      - traefik.http.routers.${AI_DEV_PROXY:?set by task-env.ts}-api.entrypoints=web
+      - traefik.http.routers.${AI_DEV_PROXY:?set by task-env.ts}-api.service=api@internal
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [proxy]
@@ -32,4 +44,4 @@ services:
 networks:
   proxy:
     # a fixed name: task stacks join it as external
-    name: ${AI_DEV_PROXY:-ai-dev-proxy}
+    name: ${AI_DEV_PROXY:?set by task-env.ts}
