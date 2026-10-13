@@ -52,7 +52,7 @@
     "shipped": "Репозиторий {repo}. Выкачено: #{number} «{title}», {shipped}.",
     "prs": "PR {list}",
     "noPr": "PR не найден — коммиты {command}",
-    "epic": "Эпик #{epic} «{title}». Открытые задачи эпика:",
+    "epic": "Эпик #{epic} «{title}». Открытые задачи эпика — его подзадачи (sub-issues), а не список в описании эпика:",
     "openTask": "- #{number} «{title}»",
     "checks": "Пять проверок (канон — reference.md скилла github, «Epic refresh on task close»):",
     "scope": "Меняешь только задачи GitHub — описание, «{questions}», связи, статус; скрипт скилла github — `{script}`: без выполнения — `task drop <N>`, новая — `task new … --branch-type <тип> --epic {epic}` (оценку ставит сама). Код, ветки и git не трогать; #{number}, эпик #{epic} и их milestone не закрывать — это сделает task close после тебя.",

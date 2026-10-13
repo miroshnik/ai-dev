@@ -801,7 +801,7 @@ describe("task actualize печатает задание субагенту ак
     // номер задачи — после слова «Задача»: est привязывает работу субагента к задаче, эпик после «эпик» — нет
     expect(lines[0]).toBe("Задача #46 (эпик #45): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.");
     expect(lines).toContain("Репозиторий miroshnik/ai-dev. Выкачено: #46 «GitHub · Проект по канону — github project check и fix», PR #77 (`gh pr view 77`, `gh pr diff 77`).");
-    expect(lines).toContain("Эпик #45 «GitHub · Скилл github: проект и задачи по канону одной командой». Открытые задачи эпика:");
+    expect(lines).toContain("Эпик #45 «GitHub · Скилл github: проект и задачи по канону одной командой». Открытые задачи эпика — его подзадачи (sub-issues), а не список в описании эпика:");
     expect(lines).toContain("- #47 «GitHub · Задача одной командой — github task»");
     expect(CHECKS.match(/^\d\. \*\*/gm)).toHaveLength(5);
     expect(r.out).toContain(CHECKS);
@@ -822,6 +822,15 @@ describe("task actualize печатает задание субагенту ак
     const r = task(f, ["actualize", "47"]);
     expect(r.code).toBe(0);
     expect(r.out).toBe("○ refresh not needed: epic #45 has no open tasks besides #47. Next: task close 47 — after the deploy, where the merge deploys.");
+  });
+
+  it("задачи эпика в задании — его подзадачи (sub-issues): список задач в описании эпика туда не попадает", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(45).body = "## План\n\n- #48 «GitHub · Старая задача из плана»\n- #49 «GitHub · Задача без эпика»";
+    const r = task(f, ["actualize", "46"]);
+    expect(r.out).toContain("- #47 «GitHub · Задача одной командой — github task»");
+    expect(r.out).not.toContain("#48");
+    expect(r.out).not.toContain("#49");
   });
 
   it("новая открытая подзадача эпика попадает в задание", () => {
@@ -1337,7 +1346,7 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
     f.prs[77] = { files: [], closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true };
     const lines = task(f, ["actualize", "46"], REPO, { cwd: checkoutWith(EN) }).out.split("\n");
     expect(lines[0]).toBe("Task #46 (epic #45): epic refresh after the merge — bring the epic's open tasks in line with what shipped.");
-    expect(lines).toContain("Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой». The epic's open tasks:");
+    expect(lines).toContain("Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой». The epic's open tasks — its sub-issues, not a list in the epic's description:");
     expect(lines.at(-1)).toBe("Answer — fixes one per line with task numbers and questions to the owner, if any; otherwise «The block is current».");
   });
 

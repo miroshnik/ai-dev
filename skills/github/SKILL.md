@@ -356,7 +356,7 @@ subagent as is: in the project language, the first line «Task #N (epic #M)»
 (`subagentPrompt` of the dictionary; `est` links the subagent's work to the task
 by it in any language), the task and its merged PR (the
 link, otherwise the branch or "Closes #N" among recent PRs), the epic and its
-open tasks, the five checks from `reference.md`, what may be changed (only
+open tasks (its sub-issues, not a list in its description), the five checks from `reference.md`, what may be changed (only
 GitHub tasks; the task, the epic and their milestone are closed by
 `task close`), where to write the edits (a comment in the epic) and the answer
 form. No epic, or no open tasks in the epic other than this one — the line
