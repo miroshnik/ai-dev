@@ -8,7 +8,8 @@
  * (without a number — `<project>`), the project's compose files plus the task's override on Compose's stdin — the
  * proxy's labels and network for the HTTP services of `env.http` in `.agents/ai-dev.json`; it prints the addresses.
  * `e2e` brings `<project>-<N>-e2e` up anew with clean volumes and runs the command on the host with the e2e addresses
- * in `TASK_ENV_*` variables; `down` takes both stacks of a task down with their volumes — `task close` calls it. A stack
+ * in `TASK_ENV_*` variables; `down` takes both stacks of a task down with their volumes — `task close` calls it; `prune`
+ * takes down the stacks of the project's closed tasks left on the machine — orphans, the task's state by GitHub. A stack
  * that didn't come up — each failed service with its state and the end of its log.
  *
  * `check` holds the project's compose file to the isolation rules: Compose keeps two stacks of one project apart by the
@@ -39,7 +40,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const USAGE = `Usage: task-env up [--profile <p>]... | e2e [--profile <p>]... [-- <command>...] | down [<N>]
+const USAGE = `Usage: task-env up [--profile <p>]... | e2e [--profile <p>]... [-- <command>...] | down [<N>] | prune
        task-env proxy <up | down | status> | check [<dir>]
 
   task-env up             bring the task's stack up — the Compose project <project>-<N> by the branch <type>/<N>-slug,
@@ -49,7 +50,12 @@ const USAGE = `Usage: task-env up [--profile <p>]... | e2e [--profile <p>]... [-
   task-env e2e            the e2e stack <project>-<N>-e2e anew with clean volumes, then the command with its addresses
                           in TASK_ENV_PROJECT, TASK_ENV_<SERVICE>_URL, TASK_ENV_<SERVICE>_<PORT>; the exit code is the
                           command's; the stack stays until the next run
-  task-env down [<N>]     take the stacks of task N (default — the branch's) down with their volumes: dev and e2e
+  task-env down [<N>]     take the stacks of task N (default — the branch's) down with their volumes: dev and e2e; a line
+                          per stack: + down, ○ none, ! not removed (code 2); no compose file in the checkout — nothing to
+                          take down, Docker isn't called; task close of the github skill calls it
+  task-env prune          take down the stacks of the project's closed tasks left on the machine (orphans) with their
+                          volumes: the task's state — by GitHub (gh); stacks of open tasks, of the main checkout, of
+                          numbers that aren't tasks and of another repository with the same name — left
 
   task-env check [<dir>]  holds the compose file in <dir> (default — the current directory) to the task isolation
                           rules: no container_name, no fixed host port, volumes and networks without name and
@@ -125,6 +131,7 @@ function why(r: ReturnType<typeof spawnSync>) {
 /** A hint for a docker failure: what to do about it. */
 function hint(reason: string, env: NodeJS.ProcessEnv) {
   if (/already allocated|address already in use|bind/i.test(reason)) return ` — port 127.0.0.1:${proxyPort(env)} is busy: free it or set AI_DEV_PROXY_PORT (the addresses then carry the port)`;
+  if (/cannot connect to the docker daemon|is the docker daemon running/i.test(reason)) return " — Docker isn't running: start it (Docker Desktop on macOS)";
   if (/docker\.sock|not permitted|permission denied/i.test(reason)) return " — an agent's sandbox? Docker doesn't work in it: run this command outside the sandbox (SKILL.md, «Docker and the sandbox»)";
   if (/address pools/i.test(reason)) return " — Docker is out of network subnets: take down stacks nobody needs or widen default-address-pools (SKILL.md, «Network subnets»)";
   return "";
@@ -517,11 +524,41 @@ function upStack(project: Project, stack: Stack, profiles: string[], env: NodeJS
 /**
  * Takes a stack down with its volumes — by the Compose project from `/`, without the compose file: it may be gone
  * already (`task close` after the worktree), and a compose file found by Compose would hide services of other profiles.
+ * Compose finds the stack's containers, networks and volumes by their labels — a stack left with volumes only too.
  */
-function downStack(stack: string): { ok: boolean; line: string } {
+function downStack(stack: string, env: NodeJS.ProcessEnv): { ok: boolean; line: string } {
   const r = dc(["-p", stack, "down", "--volumes", "--remove-orphans"], "/");
   const ok = !r.error && r.status === 0;
-  return { ok, line: ok ? `stack ${stack}: down, with its volumes` : `stack ${stack}: not removed — ${why(r)}` };
+  return { ok, line: ok ? `+ stack ${stack}: down, with its volumes` : `! stack ${stack}: not removed — ${why(r)}${hint(why(r), env)}` };
+}
+
+/** The label Compose marks a stack's containers, volumes and networks with: the Compose project. */
+const PROJECT_LABEL = "com.docker.compose.project";
+/** Compose projects on the machine → the directories of their containers; no docker — missing, Docker unavailable — the reason. */
+type Machine = Map<string, Set<string>> | { missing: true } | string;
+
+/**
+ * Stacks on the machine — by the label of containers, volumes and networks, not `docker compose ls`: a stack whose
+ * containers are gone but volumes stay (`down` without `-v`, containers removed by hand) isn't in its list (#395,
+ * question 2). A container's directory (`working_dir` — where Compose ran) tells a stack of another repository with the
+ * same name (`prune`).
+ */
+function machineStacks(env: NodeJS.ProcessEnv): Machine {
+  const stacks = new Map<string, Set<string>>();
+  for (const list of [["ps", "--all"], ["volume", "ls"], ["network", "ls"]]) {
+    const format = list[0] === "ps" ? `{{.Label "${PROJECT_LABEL}"}}\t{{.Label "${PROJECT_LABEL}.working_dir"}}` : `{{.Label "${PROJECT_LABEL}"}}`;
+    const r = spawnSync("docker", [...list, "--filter", `label=${PROJECT_LABEL}`, "--format", format], { encoding: "utf8", env, timeout: CONFIG_TIMEOUT });
+    if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") return { missing: true };
+    if (r.error || r.status !== 0) return why(r);
+    for (const line of r.stdout.split("\n")) {
+      const [name, dir] = line.split("\t");
+      if (!name?.trim()) continue;
+      const dirs = stacks.get(name.trim()) ?? new Set<string>();
+      if (dir?.trim()) dirs.add(dir.trim());
+      stacks.set(name.trim(), dirs);
+    }
+  }
+  return stacks;
 }
 
 /** Address lines: the service column aligned; withVar — the variable the e2e command gets it in. */
@@ -548,7 +585,7 @@ function stackUp(project: Project, profiles: string[], env: NodeJS.ProcessEnv): 
  */
 function stackE2e(project: Project, profiles: string[], command: string[], env: NodeJS.ProcessEnv): number {
   const stack = stackOf(project.name, project.task, true);
-  const clean = downStack(stack.name);
+  const clean = downStack(stack.name, env);
   if (!clean.ok) return console.log(clean.line), 2;
   const r = upStack(project, stack, profiles, env);
   if (r.code) return console.log(r.lines.join("\n")), r.code;
@@ -561,11 +598,90 @@ function stackE2e(project: Project, profiles: string[], command: string[], env: 
   return run.status ?? 1;
 }
 
-/** `down`: the task's stacks — dev and e2e — with their volumes; stacks of other tasks aren't touched. */
-function stackDown(name: string, task: number | undefined): number {
-  const done = [stackOf(name, task), stackOf(name, task, true)].map((s) => downStack(s.name));
+/**
+ * `down`: the task's stacks — dev and e2e — with their volumes, those that are on the machine; stacks of other tasks
+ * aren't touched. A checkout without a compose file has no task stacks: Docker isn't called — `task close` of every
+ * project calls `down`, and with Docker stopped a project without Compose would get a `!` line (#395, question 4).
+ */
+function stackDown(root: string, task: number | undefined, env: NodeJS.ProcessEnv): number {
+  if (!COMPOSE_FILES.some((f) => existsSync(path.join(root, f)))) return console.log(`○ no compose file in ${root} — the project has no task stacks`), 0;
+  const name = projectName(root);
+  const stacks = [stackOf(name, task), stackOf(name, task, true)].map((s) => s.name);
+  const machine = machineStacks(env);
+  if (typeof machine === "string") return console.log(`! stacks ${stacks.join(", ")}: not removed — Docker unavailable: ${machine}${hint(machine, env)}`), 2;
+  if (!(machine instanceof Map)) return console.log("○ no Docker on the machine — no task stacks"), 0;
+  const present = stacks.filter((s) => machine.has(s));
+  if (!present.length) return console.log(`○ stacks ${stacks.join(", ")}: none on the machine`), 0;
+  const done = present.map((s) => downStack(s, env));
   console.log(done.map((d) => d.line).join("\n"));
   return done.every((d) => d.ok) ? 0 : 2;
+}
+
+/** `owner/name` of the checkout's GitHub origin; another host or no remote — undefined. */
+function githubRepo(root: string): string | undefined {
+  const m = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(git(root, "remote", "get-url", "origin"));
+  return m ? `${m[1]}/${m[2]}` : undefined;
+}
+
+/** A task's state on GitHub (`gh api`): open, closed, missing — no such issue (a PR isn't a task); otherwise why not known. */
+function taskState(repo: string, n: number, env: NodeJS.ProcessEnv): "open" | "closed" | "missing" | { error: string } {
+  const r = spawnSync("gh", ["api", `repos/${repo}/issues/${n}`], { encoding: "utf8", env, timeout: 30_000 });
+  if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") return { error: "gh not found — prune checks tasks on GitHub with the gh CLI" };
+  if (r.error) return { error: r.error.message };
+  if (r.status !== 0) return /HTTP 404|Not Found/i.test(r.stderr) ? "missing" : { error: r.stderr.trim().split("\n").at(-1) || `gh: code ${r.status}` };
+  try {
+    const issue = JSON.parse(r.stdout) as { state?: string; pull_request?: unknown };
+    if (issue.pull_request) return "missing";
+    return issue.state === "closed" ? "closed" : issue.state === "open" ? "open" : { error: `gh: state ${issue.state}` };
+  } catch {
+    return { error: "gh printed no JSON" };
+  }
+}
+
+/**
+ * `prune`: stacks of the project's closed tasks left on the machine — orphans: a task closed without `task close`, a
+ * close that couldn't reach Docker, a task that removed the compose file. The stacks `<project>-<N>` and
+ * `<project>-<N>-e2e` of the machine (containers, volumes and networks, #395, question 2); the task's state — by GitHub:
+ * closed — the stacks go with their volumes; open, not an issue, not checked — left. A stack whose containers ran in an
+ * existing directory of another project — another repository with the same name (`shop-2` at the project `shop`) —
+ * left (#395, question 3). Without confirmation: a closed task's stack is nobody's (#395, question 1).
+ */
+function prune(root: string, env: NodeJS.ProcessEnv): number {
+  const name = projectName(root);
+  const machine = machineStacks(env);
+  if (typeof machine === "string") return console.log(`! prune: Docker unavailable — ${machine}${hint(machine, env)}`), 2;
+  if (!(machine instanceof Map)) return console.log("○ no Docker on the machine — no task stacks"), 0;
+  const re = new RegExp(`^${name}-(\\d+)(-e2e)?$`);
+  const found = [...machine.keys()]
+    .map((stack) => ({ stack, m: re.exec(stack) }))
+    .filter((x) => x.m)
+    .map(({ stack, m }) => ({ stack, task: Number(m![1]), e2e: !!m![2] }))
+    .sort((a, b) => a.task - b.task || Number(a.e2e) - Number(b.e2e));
+  if (!found.length) return console.log(`○ no stacks of ${name} tasks on the machine`), 0;
+  const repo = githubRepo(root);
+  if (!repo) return console.log(`! prune: the origin of ${root} isn't a GitHub repository — task states can't be checked; left: ${found.map((f) => f.stack).join(", ")}`), 2;
+  const states = new Map<number, ReturnType<typeof taskState>>();
+  let ok = true;
+  for (const { stack, task } of found) {
+    const other = [...machine.get(stack)!].find((dir) => existsSync(dir) && projectName(dir) !== name);
+    if (other) {
+      console.log(`○ stack ${stack}: its containers are from ${other} — another project, left`);
+      continue;
+    }
+    if (!states.has(task)) states.set(task, taskState(repo, task, env));
+    const state = states.get(task)!;
+    if (state === "closed") {
+      const d = downStack(stack, env);
+      console.log(d.ok ? `${d.line} — task #${task} is closed` : d.line);
+      ok &&= d.ok;
+    } else if (state === "open") console.log(`○ stack ${stack}: task #${task} is open — left`);
+    else if (state === "missing") console.log(`○ stack ${stack}: no task #${task} in ${repo} — left`);
+    else {
+      console.log(`! stack ${stack}: task #${task} not checked — ${state.error}; left`);
+      ok = false;
+    }
+  }
+  return ok ? 0 : 2;
 }
 
 /** `--profile <name>` options of `up` and `e2e` before the command: the profiles and what follows them. */
@@ -581,12 +697,13 @@ function profilesOf(args: string[]): { profiles: string[]; rest: string[] } | un
 
 /** The stack commands: undefined — not one of them or wrong arguments. */
 function stackCommand(group: string, args: string[], env: NodeJS.ProcessEnv): number | undefined {
-  if (group !== "up" && group !== "e2e" && group !== "down") return undefined;
-  if (group === "down") {
-    if (args.length > 1 || (args[0] && !/^\d+$/.test(args[0]))) return undefined;
-    // no compose file is needed: the stacks are found by the Compose project
+  if (group !== "up" && group !== "e2e" && group !== "down" && group !== "prune") return undefined;
+  if (group === "down" || group === "prune") {
+    if (group === "prune" ? args.length : args.length > 1 || (args[0] && !/^\d+$/.test(args[0]))) return undefined;
+    // the stacks are found by the Compose project: the task's worktree may be gone already
     const root = git(process.cwd(), "rev-parse", "--show-toplevel") || process.cwd();
-    return stackDown(projectName(root), args[0] ? Number(args[0]) : taskBranch(git(root, "branch", "--show-current"))?.issue);
+    if (group === "prune") return prune(root, env);
+    return stackDown(root, args[0] ? Number(args[0]) : taskBranch(git(root, "branch", "--show-current"))?.issue, env);
   }
   const opts = profilesOf(args);
   if (!opts || (group === "up" && opts.rest.length)) return undefined;
