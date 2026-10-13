@@ -36,7 +36,7 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 67 тестов</summary>
+<details><summary>✅ 68 тестов</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
@@ -77,6 +77,7 @@
 - ✅ skills/github/SKILL.md: AGENTS.md, «Task tracking» — есть такой раздел
 - ✅ skills/github/SKILL.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел
 - ✅ skills/github/SKILL.md: skills/github/reference.md, «Manual commands» — есть такой раздел
+- ✅ skills/github/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел
 - ✅ skills/github/reference.md: AGENTS.md, «Estimate and actual — the `est` skill» — есть такой раздел
 - ✅ skills/github/reference.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел
 - ✅ skills/github/reference.md: AGENTS.md, «Task tracking» — есть такой раздел

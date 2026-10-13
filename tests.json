@@ -2338,6 +2338,34 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task close снимает стеки задачи"
+  ],
+  "name": "--no-git стеки снимает: флаг — про ветки"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close снимает стеки задачи"
+  ],
+  "name": "task close снимает стеки закрытой задачи вместе с томами — командой task-env down <N> в чекауте задачи"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close снимает стеки задачи"
+  ],
+  "name": "task-env не установлен рядом — строка ○, остальное сделано"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close снимает стеки задачи"
+  ],
+  "name": "ошибка снятия выводится строкой и не мешает закрытию задачи"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task close убирает влитое"
   ],
   "name": "ветка не влита — не тронута, строка ○"
@@ -2354,7 +2382,7 @@
   "describes": [
    "task close убирает влитое"
   ],
-  "name": "текущий каталог — не чекаут репозитория задачи: ветки не трогаются"
+  "name": "текущий каталог — не чекаут репозитория задачи: ветки и стеки задачи не трогаются"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -6027,6 +6055,41 @@
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
+   "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
+  ],
+  "name": "Docker не отвечает — строка ! с причиной, код 2"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
+  ],
+  "name": "prune: стеков задач проекта на машине нет — строка ○, GitHub не спрашивает"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
+  ],
+  "name": "без Docker на машине — строка ○, код 0"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
+  ],
+  "name": "в чекауте без compose-файла down Docker не зовёт — строка ○, код 0"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
+  ],
+  "name": "у задачи нет стеков на машине — строка ○, Compose ничего не снимает"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
    "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
   ],
   "name": "override добавляет метки только HTTP-сервисам из настройки"
@@ -6064,6 +6127,13 @@
   "describes": [
    "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
   ],
+  "name": "поиск сирот находит только стеки закрытых задач: снимает их с томами, стеки открытых задач, основного чекаута и номеров, которых нет в GitHub, не трогает"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
   "name": "профиль (`--profile`) поднимает сервисы профиля, без него их нет"
  },
  {
@@ -6071,7 +6141,21 @@
   "describes": [
    "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
   ],
-  "name": "снятие убирает контейнеры и тома только своей задачи"
+  "name": "снятие убирает и стек, от которого остались одни тома"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "снятие убирает контейнеры и тома только своей задачи — стеки другой задачи и основного чекаута остаются"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "стек другого репозитория с именем `<проект>-<N>` prune не трогает, даже если задача N закрыта"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -10977,6 +11061,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: подкоманда task-env prune названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: подкоманда task-env up названа"
  },
  {
@@ -11533,6 +11624,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/github/SKILL.md: skills/github/reference.md, «Manual commands» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
