@@ -36,7 +36,7 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 68 тестов</summary>
+<details><summary>✅ 72 теста</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
@@ -67,6 +67,8 @@
 - ✅ docs/testing.md: AGENTS.md, «This file and skills» — есть такой раздел
 - ✅ docs/testing.md: docs/testing.md, «Framework: three questions» — есть такой раздел
 - ✅ docs/testing.md: docs/testing.md, «UI in the agent's browser» — есть такой раздел
+- ✅ skills/dashboard/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел
+- ✅ skills/dashboard/SKILL.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
 - ✅ skills/dashboard/scripts/sessions.ts: AGENTS.md, «Epic refresh on task close» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «Period summary» — есть такой раздел
@@ -99,9 +101,11 @@
 - ✅ skills/spec/checks.md: skills/spec/SKILL.md, «Checks» — есть такой раздел
 - ✅ skills/spec/ci.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/migration.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Labels of a task stack's service» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
 - ✅ tests/capabilities/task-env/task-env.md: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел

@@ -396,6 +396,13 @@
   "describes": [
    "Команда dashboard сервит страницу сама и открывает её в браузере"
   ],
+  "name": "«Sessions» — у задачи «В работе» ссылки на адреса её сервисов из маршрутов прокси; маршруты не прочитаны — причина плашкой, страница отдаётся"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
   "name": "в облачной сессии — ошибка с объяснением, а не сбой gh"
  },
  {
@@ -530,6 +537,41 @@
    "Страница — один график: часы, токены и стоимость на общей оси времени"
   ],
   "name": "шкала на несколько порядков — только декады: подписи ступеней не налезают друг на друга"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Адреса сервисов задачи — ссылки из маршрутов прокси task-env"
+  ],
+  "name": "адреса другой задачи не попадают к этой"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Адреса сервисов задачи — ссылки из маршрутов прокси task-env"
+  ],
+  "name": "адреса стека e2e на вкладку не попадают: он пересоздаётся на каждый прогон"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Адреса сервисов задачи — ссылки из маршрутов прокси task-env"
+  ],
+  "name": "порт прокси не 80 — ссылки с портом"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Адреса сервисов задачи — ссылки из маршрутов прокси task-env"
+  ],
+  "name": "у задачи без стека ссылок нет"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Адреса сервисов задачи — ссылки из маршрутов прокси task-env"
+  ],
+  "name": "у задачи с поднятым стеком — ссылки на адреса её сервисов"
  },
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
@@ -5985,16 +6027,46 @@
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
-   "Имя проекта стеков и адресов — из репозитория, а не из каталога"
+   "Адреса задачи и маршруты прокси — для дашборда, без сокета Docker",
+   "API прокси"
   ],
-  "name": "имя проекта — из репозитория, а не из каталога worktree"
+  "name": "API прокси отдаёт хосты включённых маршрутов точки входа web по адресу `<имя прокси>.localhost` на его порту, все страницы"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
-   "Имя прокси по умолчанию — одно у скрипта и compose-файла скилла"
+   "Адреса задачи и маршруты прокси — для дашборда, без сокета Docker",
+   "API прокси"
   ],
-  "name": "каждое значение по умолчанию ${AI_DEV_PROXY:-…} в compose-файле (комментарии не в счёт) — PROXY скрипта"
+  "name": "прокси не запущен — хостов нет и ошибки нет; маршруты не прочитаны по другой причине — ошибка с ней"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Адреса задачи и маршруты прокси — для дашборда, без сокета Docker"
+  ],
+  "name": "адрес задачи разбирается по схеме: сервис, номер, e2e, проект; другой хост — не адрес"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Адреса задачи и маршруты прокси — для дашборда, без сокета Docker"
+  ],
+  "name": "значения по умолчанию имени и порта прокси — только в скрипте: compose-файл без них не собирается, `proxy up` передаёт их сам"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Адреса задачи и маршруты прокси — для дашборда, без сокета Docker"
+  ],
+  "name": "проект в адресе — имя репозитория строчными буквами, цифрами и «-»"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Имя проекта стеков и адресов — из репозитория, а не из каталога"
+  ],
+  "name": "имя проекта — из репозитория, а не из каталога worktree"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -6023,6 +6095,13 @@
    "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
   ],
   "name": "проект без compose-файла — код 0, ни строки ❌ и ○, docker не нужен"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "API прокси называет хосты маршрутов по адресу `<имя прокси>.localhost` на его порту: контейнер стартовал — его хост есть, остановился — нет"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -9969,6 +10048,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «a proxy without the API?» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «actual unavailable» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
@@ -10236,6 +10322,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «is declared» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «is denied here (an agent's sandbox?)» из skills/dashboard/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -10523,6 +10616,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «perimeter» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «proxy …: routes not read» из skills/dashboard/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -11560,6 +11660,20 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/dashboard/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/dashboard/SKILL.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/dashboard/scripts/sessions.ts: AGENTS.md, «Epic refresh on task close» — есть такой раздел"
  },
  {
@@ -11784,6 +11898,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/task-env/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел"
  },
  {
@@ -11799,6 +11920,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Labels of a task stack's service» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
