@@ -4,6 +4,13 @@
  * the machine's proxy — one Traefik per machine — gives containers of task stacks the addresses
  * `http://<service>.<N>.<project>.localhost` by their labels, without ports on the host (tests/capabilities/task-env).
  *
+ * `up` brings the task's stack up: the number from the branch `<type>/<N>-slug`, the Compose project `<project>-<N>`
+ * (without a number — `<project>`), the project's compose files plus the task's override on Compose's stdin — the
+ * proxy's labels and network for the HTTP services of `env.http` in `.agents/ai-dev.json`; it prints the addresses.
+ * `e2e` brings `<project>-<N>-e2e` up anew with clean volumes and runs the command on the host with the e2e addresses
+ * in `TASK_ENV_*` variables; `down` takes both stacks of a task down with their volumes — `task close` calls it. A stack
+ * that didn't come up — each failed service with its state and the end of its log.
+ *
  * `check` holds the project's compose file to the isolation rules: Compose keeps two stacks of one project apart by the
  * project name — containers, volumes and networks get its prefix — and four entries bypass the prefix and break
  * isolation silently: `container_name`, a fixed host port, a volume or a network with `name:` or `external`, an
@@ -28,11 +35,21 @@
  * and `docker compose` into `sandbox.excludedCommands` (SKILL.md).
  */
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const USAGE = `Usage: task-env proxy <up | down | status> | check [<dir>]
+const USAGE = `Usage: task-env up [--profile <p>]... | e2e [--profile <p>]... [-- <command>...] | down [<N>]
+       task-env proxy <up | down | status> | check [<dir>]
+
+  task-env up             bring the task's stack up — the Compose project <project>-<N> by the branch <type>/<N>-slug,
+                          <project> without a number — and print its addresses: env.http services of
+                          .agents/ai-dev.json through the proxy, published ports on 127.0.0.1; --profile — Compose
+                          profiles; 0 — up, 1 — a service failed (its state and log), 2 — not tried
+  task-env e2e            the e2e stack <project>-<N>-e2e anew with clean volumes, then the command with its addresses
+                          in TASK_ENV_PROJECT, TASK_ENV_<SERVICE>_URL, TASK_ENV_<SERVICE>_<PORT>; the exit code is the
+                          command's; the stack stays until the next run
+  task-env down [<N>]     take the stacks of task N (default — the branch's) down with their volumes: dev and e2e
 
   task-env check [<dir>]  holds the compose file in <dir> (default — the current directory) to the task isolation
                           rules: no container_name, no fixed host port, volumes and networks without name and
@@ -106,6 +123,7 @@ function why(r: ReturnType<typeof spawnSync>) {
 function hint(reason: string, env: NodeJS.ProcessEnv) {
   if (/already allocated|address already in use|bind/i.test(reason)) return ` — port 127.0.0.1:${proxyPort(env)} is busy: free it or set AI_DEV_PROXY_PORT (the addresses then carry the port)`;
   if (/docker\.sock|not permitted|permission denied/i.test(reason)) return " — an agent's sandbox? Docker runs outside it: sandbox.excludedCommands (SKILL.md)";
+  if (/address pools/i.test(reason)) return " — Docker is out of network subnets: take down stacks nobody needs or widen default-address-pools (SKILL.md, «Network subnets»)";
   return "";
 }
 
@@ -258,11 +276,329 @@ function check(dir: string): number {
   return 1;
 }
 
+// ----------------------------------------------------------------------------
+// The task's stack — up, e2e, down
+// ----------------------------------------------------------------------------
+
+// canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts (and in skills/github/scripts/github.ts):
+// there's no shared module (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
+const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
+const TASK_BRANCH_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + TASK_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
+
+/** A task branch by the canon — `[<area>/]<type>/<N>-<slug>`: the type (lowercased) and the number, otherwise null. */
+export function taskBranch(branch: string): { type: string; issue: number } | null {
+  const m = TASK_BRANCH_RE.exec(branch);
+  return m ? { type: m[1]!.toLowerCase(), issue: parseInt(m[2]!, 10) } : null;
+}
+
+/**
+ * Override files Compose takes next to the compose file by itself, in its order (checked on Compose 5.6). With
+ * explicit `-f` it takes none — the script passes the project's one along with the task's override.
+ */
+const OVERRIDE_FILES = ["compose.override.yml", "compose.override.yaml", "docker-compose.override.yml", "docker-compose.override.yaml"];
+/** `docker compose up` output with an image build can be long; the default buffer would cut the run. */
+const MAX_BUFFER = 64 * 1024 * 1024;
+/** How long `up --wait` waits for healthchecks: a service that isn't healthy by then failed. */
+const WAIT_TIMEOUT = "300";
+/** Log lines of a failed service the report shows. */
+const LOG_TAIL = "20";
+
+/** A DNS label and a Compose project name at once: lowercase letters, digits and `-`. */
+const dnsLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+const git = (dir: string, ...args: string[]) => {
+  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  return r.status === 0 ? r.stdout.trim() : "";
+};
+
+/**
+ * `<project>` of stacks and addresses: the repository of `origin` (the last part of its URL without `.git`), without a
+ * remote — the main checkout's directory. Not the directory Compose takes by default: a worktree's is random
+ * (`session-379-…`), and stacks of one project would get different names (#393, question 6).
+ */
+export function projectName(root: string): string {
+  const url = git(root, "remote", "get-url", "origin").replace(/\/+$/, "");
+  const common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
+  const name = url ? url.split(/[/:]/).at(-1)!.replace(/\.git$/, "") : common ? path.basename(path.dirname(common)) : path.basename(root);
+  return dnsLabel(name) || "project";
+}
+
+export interface Stack {
+  /** The Compose project: `<project>-<N>`, `<project>-<N>-e2e`, `<project>` without a task. */
+  name: string;
+  /** A service's address host: `<service>.<N>.<project>.localhost`, e2e — `<service>.e2e.<N>.<project>.localhost`. */
+  host: (service: string) => string;
+}
+
+/** The stack of task `task` of `project`; without a task — the main checkout's. */
+export function stackOf(project: string, task: number | undefined, e2e = false): Stack {
+  const n = task === undefined ? [] : [String(task)];
+  const kind = e2e ? ["e2e"] : [];
+  return { name: [project, ...n, ...kind].join("-"), host: (service) => [dnsLabel(service), ...kind, ...n, project, "localhost"].join(".") };
+}
+
+/** A service's address through the machine's proxy: its port is in the address when it isn't 80. */
+const urlOf = (host: string, env: NodeJS.ProcessEnv) => `http://${host}${proxyPort(env) === "80" ? "" : `:${proxyPort(env)}`}`;
+
+/** The variable of a service for the e2e command: `TASK_ENV_<SERVICE>_<suffix>` (#393, question 7). */
+const varOf = (service: string, suffix: string | number) => `TASK_ENV_${service.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_${suffix}`;
+
+/**
+ * HTTP services of the project's stack and their ports inside the container — `env.http` of `.agents/ai-dev.json`
+ * (#393, question 4): in a compose file a database's port doesn't differ from an app's. No file or no field — none;
+ * a broken one — the reason.
+ */
+function httpServices(root: string): Record<string, number> | string {
+  const file = path.join(root, ".agents/ai-dev.json");
+  if (!existsSync(file)) return {};
+  let http: unknown;
+  try {
+    http = (JSON.parse(readFileSync(file, "utf8")) as { env?: { http?: unknown } }).env?.http ?? {};
+  } catch (e) {
+    return `.agents/ai-dev.json: ${(e as Error).message}`;
+  }
+  const bad = `env.http of .agents/ai-dev.json: a service → its HTTP port in the container expected, like {"web": 3000}`;
+  if (typeof http !== "object" || !http || Array.isArray(http)) return bad;
+  const ports = http as Record<string, unknown>;
+  return Object.values(ports).every((p) => Number.isInteger(p) && (p as number) > 0 && (p as number) < 65536) ? (ports as Record<string, number>) : bad;
+}
+
+/** Where the task's stack lives: the worktree's root, its compose files, the project's name, the task and HTTP services. */
+interface Project {
+  root: string;
+  /** `-f` of the compose file and of the project's override file, if there is one. */
+  files: string[];
+  name: string;
+  task: number | undefined;
+  http: Record<string, number>;
+}
+
+function projectOf(cwd: string): Project | string {
+  const root = git(cwd, "rev-parse", "--show-toplevel") || cwd;
+  const file = COMPOSE_FILES.find((f) => existsSync(path.join(root, f)));
+  if (!file) return `no compose file in ${root} (${COMPOSE_FILES.join(", ")}) — the task's stack is the project's Compose`;
+  const extra = OVERRIDE_FILES.find((f) => existsSync(path.join(root, f)));
+  const http = httpServices(root);
+  if (typeof http === "string") return http;
+  const files = [file, ...(extra ? [extra] : [])].flatMap((f) => ["-f", f]);
+  return { root, files, name: projectName(root), task: taskBranch(git(root, "branch", "--show-current"))?.issue, http };
+}
+
+const dc = (args: string[], cwd: string, input?: string) => spawnSync("docker", ["compose", ...args], { cwd, input, encoding: "utf8", maxBuffer: MAX_BUFFER });
+
+/**
+ * The task stack's override — the only thing the script adds to the project's Compose: the proxy's labels and network
+ * for HTTP services of the settings, nothing to the others (a database isn't published). A service's networks are its
+ * own as Compose normalized them (one without `networks` is in `default`) plus the proxy's: listed networks replace
+ * the implicit `default`, and a key with null merges with the project's keeping its aliases. The override goes to
+ * Compose's stdin (`-f -`), not into a file: a `compose.override.yaml` would be the project's, and `check` would name
+ * its external network. No HTTP service in the compose file — no override.
+ */
+function overrideOf(config: Config, http: Record<string, number>, stack: Stack, proxy: string): object | undefined {
+  const services: Record<string, object> = {};
+  for (const [service, port] of Object.entries(http)) {
+    const s = config.services?.[service];
+    if (!s) continue;
+    const networks = Object.fromEntries([...Object.keys(s.networks ?? { default: null }), proxy].map((n) => [n, null]));
+    services[service] = { networks, labels: proxyLabels({ stack: stack.name, service: dnsLabel(service), host: stack.host(service), port }) };
+  }
+  if (!Object.keys(services).length) return undefined;
+  return { services, networks: { [proxy]: { external: true } } };
+}
+
+/** A container of `docker compose ps --format json`. */
+interface Container {
+  Name: string;
+  Service: string;
+  State: string;
+  Health?: string;
+  ExitCode?: number;
+  Publishers?: { URL?: string; TargetPort: number; PublishedPort: number; Protocol?: string }[] | null;
+}
+
+/** Containers of a stack by its Compose project, from any directory — Compose finds them by labels; all — stopped too. */
+function containers(stack: string, all = false): Container[] {
+  const r = dc(["-p", stack, "ps", ...(all ? ["--all"] : []), "--format", "json"], "/");
+  const out = r.status === 0 ? r.stdout.trim() : "";
+  if (!out) return [];
+  // Compose prints a container per line; before 2.21 — one JSON array
+  return out.startsWith("[") ? (JSON.parse(out) as Container[]) : out.split("\n").map((l) => JSON.parse(l) as Container);
+}
+
+/** Did a container fail: not running, not healthy; a one-shot that exited with 0 did its job. */
+const failed = (c: Container) => (c.State !== "running" && !(c.State === "exited" && c.ExitCode === 0)) || c.Health === "unhealthy" || c.Health === "starting";
+
+/** The last healthcheck's output of a container: why it isn't healthy. */
+function healthOf(container: string): string {
+  const r = spawnSync("docker", ["inspect", "--format", "{{json .State.Health}}", container], { encoding: "utf8" });
+  try {
+    const last = (JSON.parse(r.stdout) as { Log?: { ExitCode: number; Output: string }[] }).Log?.at(-1);
+    return last ? `exit ${last.ExitCode}${last.Output.trim() ? ` — ${last.Output.trim().split("\n").slice(-3).join(" ")}` : ""}` : "no result yet";
+  } catch {
+    return why(r);
+  }
+}
+
+/**
+ * A stack that didn't come up: each failed service — its state and the last lines of its log (#393, question 5); no
+ * container failed (an image isn't pulled, a build broke) — Compose's own answer.
+ */
+function report(stack: string, r: ReturnType<typeof spawnSync>, env: NodeJS.ProcessEnv): string[] {
+  const out = [`stack ${stack}: not up — ${why(r)}${hint(why(r), env)}`];
+  for (const c of containers(stack, true).filter(failed)) {
+    const state = [c.State === "exited" ? `exited (exit ${c.ExitCode})` : c.State, c.Health].filter(Boolean).join(", ");
+    out.push(`✗ ${c.Service}: ${state}`);
+    if (c.Health === "unhealthy") out.push(`    healthcheck: ${healthOf(c.Name)}`);
+    const logs = dc(["-p", stack, "logs", "--no-color", "--no-log-prefix", "--tail", LOG_TAIL, c.Service], "/");
+    for (const l of `${logs.stdout}${logs.stderr}`.trimEnd().split("\n").filter(Boolean)) out.push(`    | ${l}`);
+  }
+  // Compose's progress lines (a resource and its step) say nothing about the failure
+  const progress = /^\s*(?:Network|Volume|Container|Image)\s+\S+\s+(?:Creat|Start|Wait|Pull|Build|Healthy|Running|Recreat)\w*\s*$/;
+  if (out.length === 1) for (const l of `${r.stderr ?? ""}`.trimEnd().split("\n").filter((l) => l.trim() && !progress.test(l)).slice(-15)) out.push(`    | ${l}`);
+  return out;
+}
+
+/** An address of a stack's service: a URL through the proxy or a published port on the loopback, with its variable. */
+interface Address {
+  service: string;
+  value: string;
+  name: string;
+  note?: string;
+}
+
+/** Addresses of the running services: HTTP ones of the settings through the proxy, every published port on 127.0.0.1. */
+function addressesOf(project: Project, stack: Stack, env: NodeJS.ProcessEnv): Address[] {
+  const out: Address[] = [];
+  const running = containers(stack.name).filter((c) => c.State === "running");
+  for (const service of [...new Set(running.map((c) => c.Service))].sort()) {
+    if (project.http[service]) out.push({ service, value: urlOf(stack.host(service), env), name: varOf(service, "URL") });
+    const seen = new Set<string>();
+    for (const p of running.find((c) => c.Service === service)!.Publishers ?? []) {
+      const proto = p.Protocol && p.Protocol !== "tcp" ? `/${p.Protocol}` : "";
+      if (!p.PublishedPort || seen.has(`${p.TargetPort}${proto}`)) continue;
+      seen.add(`${p.TargetPort}${proto}`);
+      const ip = !p.URL || p.URL === "0.0.0.0" || p.URL === "::" ? "127.0.0.1" : p.URL;
+      out.push({ service, value: `${ip}:${p.PublishedPort}`, name: varOf(service, `${p.TargetPort}${proto ? `_${p.Protocol!.toUpperCase()}` : ""}`), note: `→ ${p.TargetPort}${proto}` });
+    }
+  }
+  return out;
+}
+
+/**
+ * Brings the stack up: the project's compose files plus the override, `up --wait` with a build — the stack runs the
+ * worktree's code, not an image from another task's run. The proxy goes up first when the override joins its network
+ * and it isn't running (#393, question 8); a running one isn't touched.
+ */
+function upStack(project: Project, stack: Stack, profiles: string[], env: NodeJS.ProcessEnv): { code: number; lines: string[] } {
+  const config = dc([...project.files, "--profile", "*", "config", "--format", "json"], project.root);
+  if (config.error || config.status !== 0) return { code: 2, lines: [`stack ${stack.name}: not started — docker compose config: ${why(config)}${hint(why(config), env)}`] };
+  const parsed = JSON.parse(config.stdout) as Config;
+  const lines = Object.keys(project.http)
+    .filter((s) => !parsed.services?.[s])
+    .map((s) => `! env.http: service ${s} isn't in the compose file — no address for it`);
+  const override = overrideOf(parsed, project.http, stack, proxyName(env));
+  if (override) {
+    const running = proxyRunning(env);
+    if (typeof running === "string") return { code: 2, lines: [...lines, `stack ${stack.name}: not started — Docker unavailable: ${running}${hint(running, env)}`] };
+    if (!running) {
+      const p = up(env);
+      if (p.code) return { code: 2, lines: [...lines, p.out] };
+    }
+  }
+  const args = ["-p", stack.name, ...project.files, ...(override ? ["-f", "-"] : []), ...profiles.flatMap((p) => ["--profile", p])];
+  const r = dc([...args, "--progress", "plain", "up", "--detach", "--wait", "--wait-timeout", WAIT_TIMEOUT, "--build", "--remove-orphans", "--quiet-pull"], project.root, override ? JSON.stringify(override) : undefined);
+  if (r.error || r.status !== 0) return { code: r.error ? 2 : 1, lines: [...lines, ...report(stack.name, r, env)] };
+  return { code: 0, lines };
+}
+
+/**
+ * Takes a stack down with its volumes — by the Compose project from `/`, without the compose file: it may be gone
+ * already (`task close` after the worktree), and a compose file found by Compose would hide services of other profiles.
+ */
+function downStack(stack: string): { ok: boolean; line: string } {
+  const r = dc(["-p", stack, "down", "--volumes", "--remove-orphans"], "/");
+  const ok = !r.error && r.status === 0;
+  return { ok, line: ok ? `stack ${stack}: down, with its volumes` : `stack ${stack}: not removed — ${why(r)}` };
+}
+
+/** Address lines: the service column aligned; withVar — the variable the e2e command gets it in. */
+function shown(addresses: Address[], withVar: boolean): string[] {
+  const width = Math.max(0, ...addresses.map((a) => a.service.length));
+  return addresses.map((a) => `  ${a.service.padEnd(width)}  ${a.value}${a.note ? ` ${a.note}` : ""}${withVar ? `  ${a.name}` : ""}`);
+}
+
+/** `up`: the dev stack of the branch's task (without one — the main checkout's) and its addresses. */
+function stackUp(project: Project, profiles: string[], env: NodeJS.ProcessEnv): number {
+  const stack = stackOf(project.name, project.task);
+  const r = upStack(project, stack, profiles, env);
+  if (r.code) return console.log(r.lines.join("\n")), r.code;
+  const addresses = addressesOf(project, stack, env);
+  console.log([...r.lines, `stack ${stack.name}: up${addresses.length ? "" : " — no HTTP service in env.http and no published port"}`, ...shown(addresses, false)].join("\n"));
+  console.log(`logs: docker compose -p ${stack.name} logs <service>; down: bun ${fileURLToPath(import.meta.url)} down${project.task === undefined ? "" : ` ${project.task}`}`);
+  return 0;
+}
+
+/**
+ * `e2e`: the task's e2e stack anew — with clean volumes, apart from the dev stack — then the run command on the host
+ * with the e2e addresses in variables; the exit code is the command's. The stack stays until the next run: a failed
+ * run is examined on it.
+ */
+function stackE2e(project: Project, profiles: string[], command: string[], env: NodeJS.ProcessEnv): number {
+  const stack = stackOf(project.name, project.task, true);
+  const clean = downStack(stack.name);
+  if (!clean.ok) return console.log(clean.line), 2;
+  const r = upStack(project, stack, profiles, env);
+  if (r.code) return console.log(r.lines.join("\n")), r.code;
+  const addresses = addressesOf(project, stack, env);
+  console.log([...r.lines, `stack ${stack.name}: up, clean volumes — TASK_ENV_PROJECT=${stack.name}`, ...shown(addresses, true)].join("\n"));
+  if (!command.length) return 0;
+  const vars = Object.fromEntries([["TASK_ENV_PROJECT", stack.name], ...addresses.map((a) => [a.name, a.value])]);
+  const run = spawnSync(command[0]!, command.slice(1), { stdio: "inherit", env: { ...env, ...vars } });
+  if (run.error) return console.log(`e2e: ${command[0]} not started — ${run.error.message}`), 2;
+  return run.status ?? 1;
+}
+
+/** `down`: the task's stacks — dev and e2e — with their volumes; stacks of other tasks aren't touched. */
+function stackDown(name: string, task: number | undefined): number {
+  const done = [stackOf(name, task), stackOf(name, task, true)].map((s) => downStack(s.name));
+  console.log(done.map((d) => d.line).join("\n"));
+  return done.every((d) => d.ok) ? 0 : 2;
+}
+
+/** `--profile <name>` options of `up` and `e2e` before the command: the profiles and what follows them. */
+function profilesOf(args: string[]): { profiles: string[]; rest: string[] } | undefined {
+  const profiles: string[] = [];
+  let i = 0;
+  for (; i < args.length && args[i] !== "--"; i++) {
+    if (args[i] !== "--profile" || !args[i + 1]) return undefined;
+    profiles.push(args[++i]!);
+  }
+  return { profiles, rest: args.slice(i + 1) };
+}
+
+/** The stack commands: undefined — not one of them or wrong arguments. */
+function stackCommand(group: string, args: string[], env: NodeJS.ProcessEnv): number | undefined {
+  if (group !== "up" && group !== "e2e" && group !== "down") return undefined;
+  if (group === "down") {
+    if (args.length > 1 || (args[0] && !/^\d+$/.test(args[0]))) return undefined;
+    // no compose file is needed: the stacks are found by the Compose project
+    const root = git(process.cwd(), "rev-parse", "--show-toplevel") || process.cwd();
+    return stackDown(projectName(root), args[0] ? Number(args[0]) : taskBranch(git(root, "branch", "--show-current"))?.issue);
+  }
+  const opts = profilesOf(args);
+  if (!opts || (group === "up" && opts.rest.length)) return undefined;
+  const project = projectOf(process.cwd());
+  if (typeof project === "string") return console.log(`task-env ${group}: ${project}`), 2;
+  return group === "up" ? stackUp(project, opts.profiles, env) : stackE2e(project, opts.profiles, opts.rest, env);
+}
+
 const COMMANDS: Record<string, (env: NodeJS.ProcessEnv) => Result> = { up, down, status };
 
 function main(argv: string[]): number {
   const [group, cmd = "", ...rest] = argv;
   if (group === "check" && !rest.length && !cmd.startsWith("-")) return check(path.resolve(cmd || "."));
+  const stack = group ? stackCommand(group, argv.slice(1), process.env) : undefined;
+  if (stack !== undefined) return stack;
   const fn = group === "proxy" && !rest.length ? COMMANDS[cmd] : undefined;
   if (!fn) {
     process.stderr.write(USAGE);

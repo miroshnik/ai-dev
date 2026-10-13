@@ -1777,8 +1777,8 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   return 0;
 }
 
-// canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts: there's no shared module
-// (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
+// canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts (and in skills/task-env/scripts/task-env.ts):
+// there's no shared module (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
 const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
 const TASK_BRANCH_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + TASK_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 
