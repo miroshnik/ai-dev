@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -420,6 +420,101 @@ describe("Проверить нечего или нечем — проверка
 // Стек задачи — up, e2e, down
 // ----------------------------------------------------------------------------
 
+/**
+ * Подставной docker: пишет аргументы в журнал FAKE_DOCKER_LOG; списки контейнеров, томов и сетей — пустые, FAKE_DOCKER=down
+ * — демон не отвечает.
+ */
+const FAKE_DOCKER = [
+  "#!/bin/sh",
+  'printf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"',
+  'if [ "$FAKE_DOCKER" = down ]; then echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; exit 1; fi',
+  "",
+].join("\n");
+
+/**
+ * Подставной gh: `gh api repos/<репозиторий>/issues/<N>` — состояние задачи из FAKE_GH_STATES («41=closed 42=open»),
+ * другого номера нет — 404; аргументы — в журнал FAKE_GH_LOG.
+ */
+const FAKE_GH = [
+  "#!/bin/sh",
+  'printf \'%s\\n\' "$*" >> "$FAKE_GH_LOG"',
+  'n="${2##*/}"',
+  "for s in $FAKE_GH_STATES; do",
+  '  if [ "${s%%=*}" = "$n" ]; then echo "{\\"number\\": $n, \\"state\\": \\"${s#*=}\\"}"; exit 0; fi',
+  "done",
+  'echo "gh: Not Found (HTTP 404)" >&2',
+  "exit 1",
+  "",
+].join("\n");
+
+/** Журнал подставной команды: строки вызовов. */
+const calls = (log: string) => readFileSync(log, "utf8").split("\n").filter(Boolean);
+
+describe("Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной", () => {
+  projectPerTest();
+  let bin: string;
+  let log: string;
+  let ghLog: string;
+  beforeEach(() => {
+    bin = noDockerPath();
+    log = path.join(project.dir, "docker.log");
+    ghLog = path.join(project.dir, "gh.log");
+    writeFileSync(log, "");
+    writeFileSync(ghLog, "");
+    writeFileSync(path.join(bin, "gh"), FAKE_GH, { mode: 0o755 });
+  });
+  const fakeDocker = () => writeFileSync(path.join(bin, "docker"), FAKE_DOCKER, { mode: 0o755 });
+  /** task-env в проекте proj (не репозиторий git: проект — «proj»); PATH — подставные docker и gh впереди. */
+  function taskEnvIn(args: string[], env: Record<string, string> = {}) {
+    const r = spawnSync(process.execPath, [SCRIPT, ...args], {
+      cwd: proj,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_DOCKER_LOG: log, FAKE_GH_LOG: ghLog, ...env },
+    });
+    return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr };
+  }
+
+  it("в чекауте без compose-файла down Docker не зовёт — строка ○, код 0", () => {
+    fakeDocker();
+    const r = taskEnvIn(["down", "42"]);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toBe(`○ no compose file in ${realpathSync(proj)} — the project has no task stacks\n`);
+    expect(calls(log)).toEqual([]);
+  });
+
+  it("у задачи нет стеков на машине — строка ○, Compose ничего не снимает", () => {
+    composeFile("services:\n  db:\n    image: postgres\n");
+    fakeDocker();
+    const r = taskEnvIn(["down", "42"]);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toBe("○ stacks proj-42, proj-42-e2e: none on the machine\n");
+    expect(calls(log).filter((c) => c.startsWith("compose"))).toEqual([]);
+  });
+
+  it("без Docker на машине — строка ○, код 0", () => {
+    composeFile("services:\n  db:\n    image: postgres\n");
+    const r = taskEnvIn(["down", "42"], { PATH: bin });
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toBe("○ no Docker on the machine — no task stacks\n");
+  });
+
+  it("Docker не отвечает — строка ! с причиной, код 2", () => {
+    composeFile("services:\n  db:\n    image: postgres\n");
+    fakeDocker();
+    const r = taskEnvIn(["down", "42"], { FAKE_DOCKER: "down" });
+    expect(r.code).toBe(2);
+    expect(r.stdout).toStartWith("! stacks proj-42, proj-42-e2e: not removed — Docker unavailable: Cannot connect to the Docker daemon");
+  });
+
+  it("prune: стеков задач проекта на машине нет — строка ○, GitHub не спрашивает", () => {
+    fakeDocker();
+    const r = taskEnvIn(["prune"]);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toBe("○ no stacks of proj tasks on the machine\n");
+    expect(calls(ghLog)).toEqual([]);
+  });
+});
+
 describe("Имя проекта стеков и адресов — из репозитория, а не из каталога", () => {
   let repo: { dir: string; cleanup: () => void };
   beforeEach(() => (repo = tmpDir()));
@@ -473,6 +568,17 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
   const services = (stack: string) =>
     dockerOut("ps", "--all", "--filter", byProject(stack), "--format", '{{.Label "com.docker.compose.service"}}').split("\n").filter(Boolean).sort();
   const volumes = (stack: string) => dockerOut("volume", "ls", "--quiet", "--filter", byProject(stack)).split("\n").filter(Boolean);
+  /** Стеки теста на машине — по метке проекта Compose у контейнеров, томов и сетей: от стека бывают одни тома. */
+  const testStacks = () => {
+    const names = new Set<string>();
+    for (const list of [["ps", "--all"], ["volume", "ls"], ["network", "ls"]]) {
+      const out = dockerOut(...list, "--filter", "label=com.docker.compose.project", "--format", '{{.Label "com.docker.compose.project"}}');
+      for (const name of out.split("\n")) if (name === PROJECT || name.startsWith(`${PROJECT}-`)) names.add(name);
+    }
+    return [...names];
+  };
+  /** Стек, от которого остались одни тома: контейнеры удалены, `down` без `-v`. */
+  const volumeOnly = (stack: string) => dockerOut("volume", "create", "--label", `com.docker.compose.project=${stack}`, "--label", "com.docker.compose.volume=data", `${stack}_data`);
   const containerId = (stack: string, service: string) => dockerOut("ps", "--quiet", "--filter", byProject(stack), "--filter", `label=com.docker.compose.service=${service}`);
 
   /** Запрос через прокси теста с заголовком Host — так приходит браузер по адресу `*.localhost`. */
@@ -543,8 +649,7 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
    * у Docker Desktop по умолчанию, SKILL.md, «Network subnets»): стеки всех тестов разом их бы исчерпали.
    */
   afterEach(() => {
-    const stacks = run("docker", ["compose", "ls", "--all", "--quiet", "--filter", `name=${PROJECT}`], env).stdout.split("\n").filter(Boolean);
-    for (const stack of stacks) run("docker", ["compose", "-p", stack, "down", "--volumes", "--remove-orphans"], env);
+    for (const stack of testStacks()) run("docker", ["compose", "-p", stack, "down", "--volumes", "--remove-orphans"], env);
   });
   afterAll(() => {
     run("bun", [SCRIPT, "proxy", "down"], env);
@@ -654,21 +759,90 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
     expect(missing.stdout).toMatch(/stack [^\n]+: not up — [^\n]*no-such-image/);
   });
 
-  it("снятие убирает контейнеры и тома только своей задачи", () => {
+  /** `task close` снимает стеки задачи этой командой (скилл github). */
+  it("снятие убирает контейнеры и тома только своей задачи — стеки другой задачи и основного чекаута остаются", () => {
     on("feat/42-checkout");
     expect(taskEnv("up").code).toBe(0);
     expect(taskEnv("e2e").code).toBe(0);
     on("feat/43-other");
     expect(taskEnv("up").code).toBe(0);
-    for (const stack of [`${PROJECT}-42`, `${PROJECT}-42-e2e`, `${PROJECT}-43`]) expect(volumes(stack), stack).toHaveLength(1);
+    // основной чекаут — одними томами: подсетей у Docker немного (SKILL.md, «Network subnets»), а стек без контейнеров
+    // снятие находит так же
+    volumeOnly(PROJECT);
+    for (const stack of [`${PROJECT}-42`, `${PROJECT}-42-e2e`, `${PROJECT}-43`, PROJECT]) expect(volumes(stack), stack).toHaveLength(1);
     const r = taskEnv("down", "42");
     expect(r.code, r.out).toBe(0);
-    expect(r.stdout).toBe(`stack ${PROJECT}-42: down, with its volumes\nstack ${PROJECT}-42-e2e: down, with its volumes\n`);
+    expect(r.stdout).toBe(`+ stack ${PROJECT}-42: down, with its volumes\n+ stack ${PROJECT}-42-e2e: down, with its volumes\n`);
     for (const stack of [`${PROJECT}-42`, `${PROJECT}-42-e2e`]) {
       expect(services(stack), stack).toEqual([]);
       expect(volumes(stack), stack).toEqual([]);
     }
     expect(services(`${PROJECT}-43`)).toEqual(["db", "web"]);
-    expect(volumes(`${PROJECT}-43`)).toHaveLength(1);
+    for (const stack of [`${PROJECT}-43`, PROJECT]) expect(volumes(stack), stack).toHaveLength(1);
+  });
+
+  it("снятие убирает и стек, от которого остались одни тома", () => {
+    volumeOnly(`${PROJECT}-46`);
+    const r = taskEnv("down", "46");
+    expect(r.code, r.out).toBe(0);
+    expect(r.stdout).toBe(`+ stack ${PROJECT}-46: down, with its volumes\n`);
+    expect(volumes(`${PROJECT}-46`)).toEqual([]);
+  });
+
+  /** gh — подставной (FAKE_GH): состояние задач — из states, журнал вызовов — ghLog. */
+  let ghLog = "";
+  function prune(states: Record<number, string>) {
+    const bin = path.join(repo.dir, "bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(path.join(bin, "gh"), FAKE_GH, { mode: 0o755 });
+    ghLog = path.join(repo.dir, "gh.log");
+    writeFileSync(ghLog, "");
+    const FAKE_GH_STATES = Object.entries(states).map(([n, state]) => `${n}=${state}`).join(" ");
+    const r = spawnSync(process.execPath, [SCRIPT, "prune"], { cwd: root, encoding: "utf8", env: { ...env, PATH: `${bin}:${env.PATH}`, FAKE_GH_STATES, FAKE_GH_LOG: ghLog } });
+    return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, out: r.stdout + r.stderr };
+  }
+
+  it("поиск сирот находит только стеки закрытых задач: снимает их с томами, стеки открытых задач, основного чекаута и номеров, которых нет в GitHub, не трогает", () => {
+    on("feat/41-done");
+    expect(taskEnv("up").code).toBe(0);
+    on("feat/42-checkout");
+    expect(taskEnv("up").code).toBe(0);
+    // от стеков остались одни тома: e2e закрытой задачи, стек номера, которого в GitHub нет, и основной чекаут — так
+    // меньше сетей (SKILL.md, «Network subnets»)
+    for (const stack of [`${PROJECT}-41-e2e`, `${PROJECT}-7`, PROJECT]) volumeOnly(stack);
+    const r = prune({ 41: "closed", 42: "open" });
+    expect(r.code, r.out).toBe(0);
+    expect(r.stdout).toBe(
+      [
+        `○ stack ${PROJECT}-7: no task #7 in acme/Shop-T${process.pid} — left`,
+        `+ stack ${PROJECT}-41: down, with its volumes — task #41 is closed`,
+        `+ stack ${PROJECT}-41-e2e: down, with its volumes — task #41 is closed`,
+        `○ stack ${PROJECT}-42: task #42 is open — left`,
+        "",
+      ].join("\n"),
+    );
+    for (const stack of [`${PROJECT}-41`, `${PROJECT}-41-e2e`]) {
+      expect(services(stack), stack).toEqual([]);
+      expect(volumes(stack), stack).toEqual([]);
+    }
+    expect(services(`${PROJECT}-42`)).toEqual(["db", "web"]);
+    for (const stack of [`${PROJECT}-7`, PROJECT]) expect(volumes(stack), stack).toHaveLength(1);
+    // состояние каждой задачи — один запрос к её репозиторию
+    expect(calls(ghLog)).toEqual([7, 41, 42].map((n) => `api repos/acme/Shop-T${process.pid}/issues/${n}`));
+  });
+
+  /** Имя проекта — из репозитория: у репозитория `shop-2` основной стек `shop-2` — как стек задачи #2 проекта `shop`. */
+  it("стек другого репозитория с именем `<проект>-<N>` prune не трогает, даже если задача N закрыта", () => {
+    const other = path.join(repo.dir, "other");
+    mkdirSync(other, { recursive: true });
+    writeTree(other, { "compose.yaml": `services:\n  db:\n    image: ${BUSYBOX}\n    command: [sleep, "86400"]\n    stop_signal: SIGKILL\n` });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: other });
+    execFileSync("git", ["remote", "add", "origin", `git@github.com:acme/Shop-T${process.pid}-9.git`], { cwd: other });
+    const up = spawnSync("docker", ["compose", "-p", `${PROJECT}-9`, "up", "--detach", "--wait"], { cwd: other, encoding: "utf8", env });
+    expect(exitOf(up), up.stderr).toBe(0);
+    const r = prune({ 9: "closed" });
+    expect(r.code, r.out).toBe(0);
+    expect(r.stdout).toMatch(new RegExp(`^○ stack ${PROJECT}-9: its containers are from \\S*/other — another project, left\n$`));
+    expect(services(`${PROJECT}-9`)).toEqual(["db"]);
   });
 });

@@ -1,6 +1,6 @@
 ---
 name: task-env
-description: "A task's environment on the machine — the task's Docker Compose stack `<project>-<N>` (`task-env up`, the e2e stack with clean volumes and the run command — `task-env e2e -- <command>`, `task-env down <N>`) and the machine's proxy (Traefik in Docker) that gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without host ports: different hosts — different cookies, parallel sessions don't log each other out. `task-env proxy up | down | status`; `check -g` names whether the proxy runs; `task-env check` holds the project's compose file to the task isolation rules — no `container_name`, no fixed host port, volumes and networks without `name:` and `external`, code by relative paths — and the project's `check` names each violation. When — you run the task's app, its services or e2e locally; a task needs a database, a queue or another service of the project; `check -g` or the session start says the proxy isn't running; the project's `check` printed ❌ or ○ lines about the compose file; an address `*.localhost` of a task doesn't open (404, connection refused); you add Traefik labels to a container, write a task stack's override or edit a compose file; two sessions of one project fight over a port, a container or a volume; port 80 is busy; asked how task addresses work, whether Secure cookies work over http://*.localhost, how to reach them from the Claude Code sandbox, whether a project's Compose setup lets tasks run side by side — even if the words 'proxy' or 'isolation' weren't said."
+description: "A task's environment on the machine — the task's Docker Compose stack `<project>-<N>` (`task-env up`, the e2e stack with clean volumes and the run command — `task-env e2e -- <command>`, `task-env down <N>` — `task close` of the `github` skill calls it, `task-env prune` — stacks of closed tasks left on the machine) and the machine's proxy (Traefik in Docker) that gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without host ports: different hosts — different cookies, parallel sessions don't log each other out. `task-env proxy up | down | status`; `check -g` names whether the proxy runs; `task-env check` holds the project's compose file to the task isolation rules — no `container_name`, no fixed host port, volumes and networks without `name:` and `external`, code by relative paths — and the project's `check` names each violation. When — you run the task's app, its services or e2e locally; a task needs a database, a queue or another service of the project; stacks of closed tasks hang on the machine or Docker is out of network subnets; `check -g` or the session start says the proxy isn't running; the project's `check` printed ❌ or ○ lines about the compose file; an address `*.localhost` of a task doesn't open (404, connection refused); you add Traefik labels to a container, write a task stack's override or edit a compose file; two sessions of one project fight over a port, a container or a volume; port 80 is busy; asked how task addresses work, whether Secure cookies work over http://*.localhost, how to reach them from the Claude Code sandbox, whether a project's Compose setup lets tasks run side by side — even if the words 'proxy' or 'isolation' weren't said."
 allowed-tools: Bash(bun *skills/task-env/scripts/task-env.ts *)
 ---
 
@@ -19,6 +19,7 @@ no host port per app, no port search. The scheme and the reasons — epic
 bun <skill dir>/scripts/task-env.ts up [--profile <p>]...                  # the task's stack by the branch, its addresses
 bun <skill dir>/scripts/task-env.ts e2e [--profile <p>]... [-- <command>]  # the e2e stack anew, the command with its addresses
 bun <skill dir>/scripts/task-env.ts down [<N>]                             # the task's stacks with their volumes
+bun <skill dir>/scripts/task-env.ts prune                                  # stacks of the project's closed tasks
 bun <skill dir>/scripts/task-env.ts proxy up       # start it (or bring it to the compose file), wait until healthy
 bun <skill dir>/scripts/task-env.ts proxy status   # 0 — running, 1 — not running (the start command), 2 — no Docker
 bun <skill dir>/scripts/task-env.ts proxy down     # stop and remove it with its network
@@ -76,7 +77,37 @@ with the addresses of the e2e stack:
 
 **down** — `down --volumes --remove-orphans` of `<project>-<N>` and `<project>-<N>-e2e` by the Compose project, from
 `/` without the compose file: the worktree may be gone already, and other profiles' services go too. Other tasks'
-stacks and the main checkout's aren't touched. `down` without a number — the branch's task.
+stacks and the main checkout's aren't touched. `down` without a number — the branch's task. `task close` of the
+`github` skill calls it in the task's checkout. A line per stack:
+
+```
++ stack shop-42: down, with its volumes
+○ stacks shop-42, shop-42-e2e: none on the machine
+! stack shop-42: not removed — <Docker's reason>
+```
+
+Only the stacks that are on the machine are taken down — found by the label of containers, volumes and networks
+(`com.docker.compose.project`), not by `docker compose ls`: a stack left with volumes only (`down` without `-v`,
+containers removed by hand) isn't in its list. No compose file in the checkout — `○ no compose file … — the project
+has no task stacks`, Docker isn't called: `task close` of a project without Compose doesn't depend on Docker running.
+No docker on the machine — an `○` line; Docker doesn't answer — a `!` line with the reason.
+
+**prune** — the stacks of the project's closed tasks left on the machine (orphans: a task closed without `task
+close`, a close that couldn't reach Docker, a task that removed the compose file): every stack `<project>-<N>` and
+`<project>-<N>-e2e` on the machine, the task's state by GitHub (`gh api repos/<owner>/<repo>/issues/<N>`, the
+repository — the checkout's `origin`). Closed — the stacks go with their volumes right away, without a question: a
+closed task's stack is nobody's.
+
+```
+○ stack shop-7: no task #7 in acme/shop — left
++ stack shop-41: down, with its volumes — task #41 is closed
+○ stack shop-42: task #42 is open — left
+○ stack shop-9: its containers are from /work/shop-9 — another project, left
+```
+
+Left: an open task's stack, the main checkout's (`<project>`, `<project>-e2e`), a number that isn't an issue (a PR
+or none), a state that couldn't be checked (a `!` line), and a stack whose containers ran in an existing directory of
+another project — the repository `shop-9` has the main stack `shop-9`, the same name as task #9's stack of `shop`.
 
 **A stack that didn't come up** — code 1 and what failed: the first line is Compose's reason, then each failed service
 (not running, exited not with 0, unhealthy) with its state, the last healthcheck's output and the last 20 lines of its
@@ -89,14 +120,16 @@ stack shop-42: not up — container shop-42-api-1 exited (3)
 ```
 
 Exit codes: `up` — 0 up, 1 not up, 2 not tried (no compose file, broken settings, Docker unavailable, `docker compose
-config` fails); `e2e` — the command's, otherwise as `up`; `down` — 0, 2 if a stack isn't removed.
+config` fails); `e2e` — the command's, otherwise as `up`; `down` and `prune` — 0, 2 if a stack isn't removed, Docker
+is unavailable or (`prune`) a task's state isn't checked.
 
 ### Network subnets
 
 Every stack is a network of its own, and Docker Desktop's default address pools hold about 30 networks on the
 machine: stacks of other projects (worktrees named by the directory) and forgotten task stacks use them up, and `up`
-fails with `all predefined address pools have been fully subnetted`. The fix — take down stacks nobody needs (`docker
-compose ls`) or give Docker smaller subnets, the owner's step: Docker Desktop → Settings → Docker Engine,
+fails with `all predefined address pools have been fully subnetted`. The fix — take down stacks nobody needs
+(`task-env prune` — the project's closed tasks, other stacks — `docker compose ls`) or give Docker smaller subnets, the
+owner's step: Docker Desktop → Settings → Docker Engine,
 
 ```json
 { "default-address-pools": [{ "base": "172.16.0.0/12", "size": 24 }] }
