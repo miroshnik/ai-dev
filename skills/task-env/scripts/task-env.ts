@@ -21,8 +21,8 @@
  *
  * The name (Compose project and network) and the port come from AI_DEV_PROXY and AI_DEV_PROXY_PORT, by default
  * `ai-dev-proxy` and 80: a test runs its own proxy next to the machine's one, a machine with port 80 busy takes
- * another. The same name is in `name:` of the compose file and in `proxyLines` of bin/ai-dev.mjs (`check -g`): a
- * change goes into all three.
+ * another. The default name is also the default of `${AI_DEV_PROXY:-…}` in the compose file and a copy in
+ * bin/ai-dev.mjs (`check -g`) — tests/standards/installer-mirror holds them to `PROXY`.
  *
  * Docker runs outside the Claude Code sandbox (the sandbox denies its socket): the owner puts this script's command
  * and `docker compose` into `sandbox.excludedCommands` (SKILL.md).
@@ -52,8 +52,14 @@ const SERVICE = "traefik";
 /** The entry point routers of task stacks attach to: HTTP on the proxy's port. */
 export const ENTRY_POINT = "web";
 
+/**
+ * The proxy's default name. The installer under Node holds a copy (tests/standards/installer-mirror), a script under
+ * Bun imports it.
+ */
+export const PROXY = "ai-dev-proxy";
+
 /** The proxy's name — its Compose project and network; the same expression as in the compose file and `check -g`. */
-export const proxyName = (env: NodeJS.ProcessEnv = process.env) => env.AI_DEV_PROXY || "ai-dev-proxy";
+export const proxyName = (env: NodeJS.ProcessEnv = process.env) => env.AI_DEV_PROXY || PROXY;
 
 /** The proxy's port on 127.0.0.1. */
 export const proxyPort = (env: NodeJS.ProcessEnv = process.env) => env.AI_DEV_PROXY_PORT || "80";
@@ -151,10 +157,10 @@ function down(env: NodeJS.ProcessEnv): Result {
 // ----------------------------------------------------------------------------
 
 /**
- * Compose files Docker Compose looks for, in its order. Mirrored in bin/ai-dev.mjs (COMPOSE_FILES): `check` doesn't
- * start bun in a project without a compose file.
+ * Compose files Docker Compose looks for, in its order. The installer holds a copy — `check` doesn't start bun in a
+ * project without a compose file; tests/standards/installer-mirror holds the copy to this list.
  */
-const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+export const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 
 /**
  * Sources of a bind mount that are the machine's resources, not code — the Docker socket, `/etc/localtime`, devices:
