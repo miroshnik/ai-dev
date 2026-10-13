@@ -1,6 +1,6 @@
 ---
 name: task-env
-description: "A task's environment on the machine — the task's Docker Compose stack `<project>-<N>` and the machine's proxy (Traefik in Docker) that gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without host ports: different hosts — different cookies, parallel sessions don't log each other out. `task-env proxy up | down | status`; `check -g` names whether the proxy runs; `task-env check` holds the project's compose file to the task isolation rules — no `container_name`, no fixed host port, volumes and networks without `name:` and `external`, code by relative paths — and the project's `check` names each violation. When — `check -g` or the session start says the proxy isn't running; the project's `check` printed ❌ or ○ lines about the compose file; an address `*.localhost` of a task doesn't open (404, connection refused); you add Traefik labels to a container, write a task stack's override or edit a compose file; two sessions of one project fight over a port, a container or a volume; port 80 is busy; asked how task addresses work, whether Secure cookies work over http://*.localhost, how to reach them from the Claude Code sandbox, whether a project's Compose setup lets tasks run side by side — even if the words 'proxy' or 'isolation' weren't said."
+description: "A task's environment on the machine — the task's Docker Compose stack `<project>-<N>` (`task-env up`, the e2e stack with clean volumes and the run command — `task-env e2e -- <command>`, `task-env down <N>`) and the machine's proxy (Traefik in Docker) that gives containers of task stacks the addresses `http://<service>.<N>.<project>.localhost` by their labels, without host ports: different hosts — different cookies, parallel sessions don't log each other out. `task-env proxy up | down | status`; `check -g` names whether the proxy runs; `task-env check` holds the project's compose file to the task isolation rules — no `container_name`, no fixed host port, volumes and networks without `name:` and `external`, code by relative paths — and the project's `check` names each violation. When — you run the task's app, its services or e2e locally; a task needs a database, a queue or another service of the project; `check -g` or the session start says the proxy isn't running; the project's `check` printed ❌ or ○ lines about the compose file; an address `*.localhost` of a task doesn't open (404, connection refused); you add Traefik labels to a container, write a task stack's override or edit a compose file; two sessions of one project fight over a port, a container or a volume; port 80 is busy; asked how task addresses work, whether Secure cookies work over http://*.localhost, how to reach them from the Claude Code sandbox, whether a project's Compose setup lets tasks run side by side — even if the words 'proxy' or 'isolation' weren't said."
 allowed-tools: Bash(bun *skills/task-env/scripts/task-env.ts *)
 ---
 
@@ -16,6 +16,9 @@ no host port per app, no port search. The scheme and the reasons — epic
 "Environment" in ai-dev (`tests/capabilities/task-env/task-env.md`).
 
 ```bash
+bun <skill dir>/scripts/task-env.ts up [--profile <p>]...                  # the task's stack by the branch, its addresses
+bun <skill dir>/scripts/task-env.ts e2e [--profile <p>]... [-- <command>]  # the e2e stack anew, the command with its addresses
+bun <skill dir>/scripts/task-env.ts down [<N>]                             # the task's stacks with their volumes
 bun <skill dir>/scripts/task-env.ts proxy up       # start it (or bring it to the compose file), wait until healthy
 bun <skill dir>/scripts/task-env.ts proxy status   # 0 — running, 1 — not running (the start command), 2 — no Docker
 bun <skill dir>/scripts/task-env.ts proxy down     # stop and remove it with its network
@@ -26,6 +29,80 @@ The skill's `check -g` line: `proxy *.localhost: running (ai-dev-proxy)`,
 `not running — start: …` or `Docker unavailable — <reason>`; no Docker on the
 machine — no line. It doesn't change the code of `check`: the proxy isn't the
 flow falling behind.
+
+## The task's stack
+
+The task's apps, databases, queues and mail live in the project's compose file; `up` brings a copy of it up as the
+task's own Compose project, and nothing of it is shared with other tasks.
+
+| what | value |
+|---|---|
+| task | the number from the branch `[<area>/]<type>/<N>-<slug>`; no number (`main`, a worktree branch before the rename) — the main checkout's stack |
+| `<project>` | the repository of `origin` (the last part of its URL without `.git`), no remote — the main checkout's directory; lowercase letters, digits and `-`. Not the directory Compose takes by default — a worktree's is random |
+| stack | Compose project `<project>-<N>`, e2e — `<project>-<N>-e2e`, without a task — `<project>`, `<project>-e2e` |
+| compose files | the project's (`compose.yaml` … `docker-compose.yml`, Compose's names), its override file (`compose.override.yml` … — Compose takes none of them by itself once `-f` is given) and the task's override on Compose's stdin (`-f -`) |
+| up | `up --detach --wait --build --remove-orphans`: built images are the worktree's code, `--wait` returns when services are running and healthy (at most 300 s) |
+| profiles | `--profile <name>` (repeated) goes to Compose: a heavy service in `profiles` runs only in a task that asks for it |
+| addresses | HTTP services of `env.http` — `http://<service>.<N>.<project>.localhost` (the proxy's port when it isn't 80); a published port — `127.0.0.1:<host port> → <port>` |
+
+The settings — `env.http` in the project's `.agents/ai-dev.json`, a service → its HTTP port inside the container
+(`install` and `update` keep the field): in a compose file a database's port doesn't differ from an app's.
+
+```json
+{ "env": { "http": { "web": 3000, "admin": 5173 } } }
+```
+
+A service of `env.http` that isn't in the compose file — a `!` line, not an error. No `env.http` — no labels, no
+proxy, only published ports.
+
+**The override** is the only thing the script adds and it isn't a file: the proxy's labels and network for the
+`env.http` services (below, section "Labels of a task stack's service"), nothing to the others — a database isn't published.
+A `compose.override.yaml` would be the project's own, and `check` would name its external network. The proxy creates
+the network, so `up` starts the proxy first if it isn't running (as `proxy up`); a running one isn't touched.
+
+**e2e** — `<project>-<N>-e2e`, apart from the dev stack of the task: `down --volumes` and `up` again on every run, so
+the run starts on clean volumes; then the command runs on the host (the current directory, the script's environment)
+with the addresses of the e2e stack:
+
+| variable | value |
+|---|---|
+| `TASK_ENV_PROJECT` | the e2e stack's Compose project: `docker compose -p "$TASK_ENV_PROJECT" exec db …` |
+| `TASK_ENV_<SERVICE>_URL` | the HTTP service's address: `http://web.e2e.42.shop.localhost` |
+| `TASK_ENV_<SERVICE>_<PORT>` | a published port: `TASK_ENV_DB_5432=127.0.0.1:55012`; not tcp — `_<PORT>_UDP` |
+
+`<SERVICE>` — the service in capitals, other characters `_`. The exit code is the command's; without a command
+`e2e` only brings the stack up. The stack stays until the next run: a failed run is examined on it
+(`docker compose -p <project>-<N>-e2e logs`).
+
+**down** — `down --volumes --remove-orphans` of `<project>-<N>` and `<project>-<N>-e2e` by the Compose project, from
+`/` without the compose file: the worktree may be gone already, and other profiles' services go too. Other tasks'
+stacks and the main checkout's aren't touched. `down` without a number — the branch's task.
+
+**A stack that didn't come up** — code 1 and what failed: the first line is Compose's reason, then each failed service
+(not running, exited not with 0, unhealthy) with its state, the last healthcheck's output and the last 20 lines of its
+log; nothing failed in containers (an image isn't pulled, a build broke) — the end of Compose's output.
+
+```
+stack shop-42: not up — container shop-42-api-1 exited (3)
+✗ api: exited (exit 3)
+    | Error: connect ECONNREFUSED db:5432
+```
+
+Exit codes: `up` — 0 up, 1 not up, 2 not tried (no compose file, broken settings, Docker unavailable, `docker compose
+config` fails); `e2e` — the command's, otherwise as `up`; `down` — 0, 2 if a stack isn't removed.
+
+### Network subnets
+
+Every stack is a network of its own, and Docker Desktop's default address pools hold about 30 networks on the
+machine: stacks of other projects (worktrees named by the directory) and forgotten task stacks use them up, and `up`
+fails with `all predefined address pools have been fully subnetted`. The fix — take down stacks nobody needs (`docker
+compose ls`) or give Docker smaller subnets, the owner's step: Docker Desktop → Settings → Docker Engine,
+
+```json
+{ "default-address-pools": [{ "base": "172.16.0.0/12", "size": 24 }] }
+```
+
+— 4096 networks of 254 addresses.
 
 ## The proxy
 
@@ -49,7 +126,7 @@ file.
 
 The task stack's override (not the project's compose file) gives each HTTP
 service the labels and the proxy network; `proxyLabels` of the script builds
-them:
+them, `up` and `e2e` pass them to Compose on stdin:
 
 ```yaml
 services:
@@ -76,7 +153,10 @@ networks:
 - The port — the service's HTTP port inside the container; nothing is
   published on the host.
 - The network is `external`: the proxy creates it, so `proxy up` goes before
-  the task stack.
+  the task stack — `up` and `e2e` start it themselves.
+- Networks: the service's own as Compose normalized them (one without
+  `networks` is in `default`) plus the proxy's — listed networks replace the
+  implicit `default`, and a key with null keeps the project's aliases.
 
 ## Compose file isolation rules
 
@@ -149,6 +229,13 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   `sandbox.network.allowLocalBinding: true` lets sandboxed commands connect
   to any port on localhost — the owner's setting, not checked here.
 
+- **HMR of an app in a container with the worktree's code** — works: Vite 8.3
+  (`node:24-alpine`, the worktree bind-mounted to `/app`, `node_modules` in a
+  volume) on Docker Desktop (engine 29.8) through the proxy on port 80 — a CSS
+  change on the host reached the page in Chromium without a reload: file
+  events of the bind mount reach the container, the HMR WebSocket passes
+  Traefik, and Vite allows `*.localhost` hosts by default.
+
 ## Docker and the sandbox
 
 Docker doesn't work inside the Claude Code sandbox: the sandbox denies its
@@ -161,5 +248,7 @@ socket. The owner takes Docker and this script out of it in
 ```
 
 A command outside the sandbox goes through the regular permissions, and
-access to Docker is access to the whole machine. Without the exclusion —
+access to Docker is access to the whole machine. The e2e command is a child
+of the script and runs outside the sandbox with it — the addresses
+`*.localhost` aren't reachable from inside. Without the exclusion —
 `proxy status` exits with code 2 and names the sandbox.

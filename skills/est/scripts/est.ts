@@ -158,8 +158,8 @@ export function usageCost(model: string, vals: [number, number, number, number, 
 // Task types = conventional commit types + research (a spike without code). The same words are
 // branch prefixes: <type>/<issue>-<slug> (an area prefix is allowed: <area>/<type>/<issue>-<slug>).
 export const EST_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"] as const;
-// the same copy — TASK_TYPES and TASK_BRANCH_RE in skills/github/scripts/github.ts: there's no shared module (a skill
-// is installed alone), the standard tests/standards/task-branch keeps the parsing identical
+// the same copy — TASK_TYPES and TASK_BRANCH_RE in skills/github/scripts/github.ts and skills/task-env/scripts/task-env.ts:
+// there's no shared module (a skill is installed alone), the standard tests/standards/task-branch keeps the parsing identical
 const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 const PR_PAGE = 50;
 const PR_MAX = 500;

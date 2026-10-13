@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
+import { projectName, proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
 import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
@@ -413,5 +413,262 @@ describe("Проверить нечего или нечем — проверка
     const r = composeCheck();
     expect(r.code).toBe(2);
     expect(r.stdout).toMatch(/^○ compose\.yaml: not checked — docker compose config: [^\n]*DB_IMAGE[^\n]*\n$/);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// Стек задачи — up, e2e, down
+// ----------------------------------------------------------------------------
+
+describe("Имя проекта стеков и адресов — из репозитория, а не из каталога", () => {
+  let repo: { dir: string; cleanup: () => void };
+  beforeEach(() => (repo = tmpDir()));
+  afterEach(() => repo.cleanup());
+
+  const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+
+  it("имя проекта — из репозитория, а не из каталога worktree", () => {
+    const main = path.join(repo.dir, "Shop.App");
+    mkdirSync(main);
+    git(main, "init", "-q", "-b", "main");
+    git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
+    const worktree = path.join(repo.dir, "session-379-499083");
+    git(main, "worktree", "add", "-q", "-b", "feat/42-x", worktree);
+    // без remote — каталог основного чекаута, и из worktree тоже
+    expect(projectName(worktree)).toBe("shop-app");
+    // с remote — имя репозитория origin, в любой записи URL
+    for (const url of ["git@github.com:acme/Shop_Front.git", "https://github.com/acme/Shop_Front", "https://github.com/acme/Shop_Front.git/"]) {
+      spawnSync("git", ["remote", "remove", "origin"], { cwd: main });
+      git(main, "remote", "add", "origin", url);
+      expect(projectName(worktree), url).toBe("shop-front");
+    }
+  });
+});
+
+describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси", () => {
+  /** Свой прокси и свой проект теста: стеки машины и параллельных прогонов он не задевает. */
+  const PROXY = `${NAME}-stack`;
+  const PROJECT = `shop-t${process.pid}`;
+  const BUSYBOX = "busybox:1.37";
+  let env: NodeJS.ProcessEnv;
+  let port = "";
+  let repo: { dir: string; cleanup: () => void };
+  /** Корень проекта — каталог с именем как у worktree приложения: имя проекта берётся не из него. */
+  let root = "";
+
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  /** Ветка проекта; все ветки — на одном коммите. */
+  const on = (branch: string) => git("switch", "-q", "-C", branch);
+  const taskEnv = (...args: string[]) => {
+    const r = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8", env });
+    return { code: exitOf(r), stdout: r.stdout, stderr: r.stderr, out: r.stdout + r.stderr };
+  };
+  const dockerOut = (...args: string[]) => {
+    const r = run("docker", args, env);
+    if (r.status !== 0) throw new Error(`docker ${args.join(" ")}: ${r.stderr.trim()}`);
+    return r.stdout.trim();
+  };
+  const byProject = (stack: string) => `label=com.docker.compose.project=${stack}`;
+  /** Сервисы контейнеров стека, отсортированные. */
+  const services = (stack: string) =>
+    dockerOut("ps", "--all", "--filter", byProject(stack), "--format", '{{.Label "com.docker.compose.service"}}').split("\n").filter(Boolean).sort();
+  const volumes = (stack: string) => dockerOut("volume", "ls", "--quiet", "--filter", byProject(stack)).split("\n").filter(Boolean);
+  const containerId = (stack: string, service: string) => dockerOut("ps", "--quiet", "--filter", byProject(stack), "--filter", `label=com.docker.compose.service=${service}`);
+
+  /** Запрос через прокси теста с заголовком Host — так приходит браузер по адресу `*.localhost`. */
+  async function get(host: string) {
+    const r = await fetch(`http://127.0.0.1:${port}/`, { headers: { Host: host }, signal: AbortSignal.timeout(PATIENCE) });
+    return { status: r.status, body: await r.text() };
+  }
+  /** Прокси узнаёт о контейнере из событий Docker, а не сразу: ждём ответа status. */
+  async function until(host: string, status: number) {
+    const deadline = Date.now() + PATIENCE;
+    let last = { status: 0, body: "" };
+    while (Date.now() < deadline) {
+      last = await get(host);
+      if (last.status === status) return last;
+      await Bun.sleep(100);
+    }
+    throw new Error(`${host}: за ${PATIENCE / 1000} с не дождались ${status}, последний ответ ${last.status} ${last.body.slice(0, 200)}`);
+  }
+
+  beforeAll(() => {
+    // прокси на порту, который выдаёт Docker; стек получает этот порт — он в адресах
+    const proxyEnv = { ...process.env, AI_DEV_PROXY: PROXY, AI_DEV_PROXY_PORT: "0" };
+    const up = run("bun", [SCRIPT, "proxy", "up"], proxyEnv);
+    expect(exitOf(up), up.stdout + up.stderr).toBe(0);
+    port = run("docker", ["compose", "-f", COMPOSE, "port", "traefik", "80"], proxyEnv).stdout.trim().split(":").at(-1)!;
+    env = { ...process.env, AI_DEV_PROXY: PROXY, AI_DEV_PROXY_PORT: port };
+    for (const image of [WHOAMI, BUSYBOX]) dockerOut("pull", "--quiet", image);
+    repo = tmpDir();
+    root = path.join(repo.dir, "session-379-499083");
+    mkdirSync(root);
+    // db — «база»: порт опубликован на loopback, данные в томе; sleep не ловит SIGTERM — SIGKILL, чтобы down не ждал 10 с
+    const db = `    image: ${BUSYBOX}\n    command: [sleep, "86400"]\n    stop_signal: SIGKILL\n`;
+    writeTree(root, {
+      "compose.yaml": [
+        "services:",
+        "  web:",
+        `    image: ${WHOAMI}`,
+        "  db:",
+        db + '    ports: ["127.0.0.1::5432"]',
+        "    volumes: [data:/data]",
+        "  search:",
+        `    image: ${WHOAMI}`,
+        "    profiles: [heavy]",
+        "  crash:",
+        `    image: ${BUSYBOX}`,
+        '    command: [sh, -c, "echo boom-before-exit; exit 3"]',
+        "    profiles: [crash]",
+        "  sick:",
+        db + "    healthcheck: { test: [CMD, sh, -c, 'echo sick-check; exit 1'], interval: 1s, retries: 1 }",
+        "    profiles: [sick]",
+        "  missing:",
+        "    image: ai-dev-task-env-test/no-such-image:0",
+        "    profiles: [missing]",
+        "volumes:",
+        "  data: {}",
+        "",
+      ].join("\n"),
+      ".agents/ai-dev.json": JSON.stringify({ env: { http: { web: 80, search: 80, ghost: 3000 } } }) + "\n",
+    });
+    git("init", "-q", "-b", "main");
+    git("remote", "add", "origin", `git@github.com:acme/Shop-T${process.pid}.git`);
+    git("add", "-A");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+  }, 300_000);
+
+  /**
+   * Стеки теста снимаются после каждого: тест поднимает то, что ему нужно, сам. И подсетей у Docker немного (около 30
+   * у Docker Desktop по умолчанию, SKILL.md, «Network subnets»): стеки всех тестов разом их бы исчерпали.
+   */
+  afterEach(() => {
+    const stacks = run("docker", ["compose", "ls", "--all", "--quiet", "--filter", `name=${PROJECT}`], env).stdout.split("\n").filter(Boolean);
+    for (const stack of stacks) run("docker", ["compose", "-p", stack, "down", "--volumes", "--remove-orphans"], env);
+  });
+  afterAll(() => {
+    run("bun", [SCRIPT, "proxy", "down"], env);
+    repo?.cleanup();
+  });
+
+  it("номер задачи берётся из ветки `<type>/<N>-slug`", () => {
+    on("feat/42-checkout");
+    const r = taskEnv("up");
+    expect(r.code, r.out).toBe(0);
+    expect(r.stdout).toContain(`stack ${PROJECT}-42: up\n`);
+    expect(services(`${PROJECT}-42`)).toEqual(["db", "web"]);
+  });
+
+  it("адрес сервиса — `<сервис>.<N>.<проект>.localhost`", async () => {
+    on("feat/42-checkout");
+    const r = taskEnv("up");
+    expect(r.code, r.out).toBe(0);
+    expect(r.stdout).toContain(`  web  http://web.42.${PROJECT}.localhost:${port}\n`);
+    expect(r.stdout).toMatch(/\n {2}db {3}127\.0\.0\.1:\d+ → 5432\n/);
+    const answer = await until(`web.42.${PROJECT}.localhost`, 200);
+    expect(answer.body).toContain(`Hostname: ${containerId(`${PROJECT}-42`, "web")}`);
+  });
+
+  it("без номера в ветке — стек и адреса основного чекаута", async () => {
+    for (const branch of ["main", "claude/frosty-lovelace-5b8ba2"]) {
+      on(branch);
+      const r = taskEnv("up");
+      expect(r.code, r.out).toBe(0);
+      expect(r.stdout).toContain(`stack ${PROJECT}: up\n`);
+      expect(r.stdout).toContain(`  web  http://web.${PROJECT}.localhost:${port}\n`);
+    }
+    expect(services(PROJECT)).toEqual(["db", "web"]);
+    expect((await until(`web.${PROJECT}.localhost`, 200)).body).toContain(`Hostname: ${containerId(PROJECT, "web")}`);
+  });
+
+  /** Метки — в override на stdin Compose: в проекте файла нет, и `check` не видит внешней сети прокси. */
+  it("override добавляет метки только HTTP-сервисам из настройки", async () => {
+    on("feat/42-checkout");
+    const r = taskEnv("up");
+    expect(r.code, r.out).toBe(0);
+    const field = (service: string, format: string) => JSON.parse(dockerOut("inspect", "--format", format, containerId(`${PROJECT}-42`, service))) as Record<string, unknown>;
+    const inspect = (service: string) => [field(service, "{{json .Config.Labels}}"), field(service, "{{json .NetworkSettings.Networks}}")] as const;
+    const [webLabels, webNets] = inspect("web");
+    expect(webLabels).toMatchObject(proxyLabels({ stack: `${PROJECT}-42`, service: "web", host: `web.42.${PROJECT}.localhost`, port: 80 }));
+    expect(Object.keys(webNets).sort()).toEqual([PROXY, `${PROJECT}-42_default`].sort());
+    const [dbLabels, dbNets] = inspect("db");
+    expect(Object.keys(dbLabels).filter((k) => k.startsWith("traefik."))).toEqual([]);
+    expect(Object.keys(dbNets)).toEqual([`${PROJECT}-42_default`]);
+    expect((await get(`db.42.${PROJECT}.localhost`)).status).toBe(404);
+    // сервис настройки, которого нет в compose-файле, — строка, а не ошибка
+    expect(r.stdout).toContain("! env.http: service ghost isn't in the compose file — no address for it\n");
+    expect(git("status", "--porcelain")).toBe("");
+    expect(taskEnv("check").code).toBe(0);
+  });
+
+  it("профиль (`--profile`) поднимает сервисы профиля, без него их нет", async () => {
+    on("feat/44-search");
+    const plain = taskEnv("up");
+    expect(plain.code, plain.out).toBe(0);
+    expect(services(`${PROJECT}-44`)).toEqual(["db", "web"]);
+    expect(plain.stdout).not.toContain("search");
+    const heavy = taskEnv("up", "--profile", "heavy");
+    expect(heavy.code, heavy.out).toBe(0);
+    expect(services(`${PROJECT}-44`)).toEqual(["db", "search", "web"]);
+    expect(heavy.stdout).toContain(`  search  http://search.44.${PROJECT}.localhost:${port}\n`);
+    await until(`search.44.${PROJECT}.localhost`, 200);
+  });
+
+  it("у e2e свой стек с чистыми томами, отличный от dev той же задачи", async () => {
+    on("feat/42-checkout");
+    expect(taskEnv("up").code).toBe(0);
+    dockerOut("compose", "-p", `${PROJECT}-42`, "exec", "-T", "db", "touch", "/data/dev-marker");
+    const write = taskEnv("e2e", "--", "sh", "-c", 'docker compose -p "$TASK_ENV_PROJECT" exec -T db touch /data/e2e-run-marker');
+    expect(write.code, write.out).toBe(0);
+    expect(write.stdout).toContain(`stack ${PROJECT}-42-e2e: up, clean volumes`);
+    const list = taskEnv("e2e", "--", "sh", "-c", 'echo "files:"; docker compose -p "$TASK_ENV_PROJECT" exec -T db ls -A /data');
+    expect(list.code, list.out).toBe(0);
+    expect(list.stdout).toMatch(/files:\n$/);
+    expect(dockerOut("compose", "-p", `${PROJECT}-42`, "exec", "-T", "db", "ls", "/data")).toBe("dev-marker");
+    const e2eWeb = await until(`web.e2e.42.${PROJECT}.localhost`, 200);
+    expect(e2eWeb.body).toContain(`Hostname: ${containerId(`${PROJECT}-42-e2e`, "web")}`);
+    expect(containerId(`${PROJECT}-42-e2e`, "web")).not.toBe(containerId(`${PROJECT}-42`, "web"));
+  });
+
+  it("команда прогона e2e получает адреса e2e в переменных, код выхода — её", async () => {
+    on("feat/42-checkout");
+    const r = taskEnv("e2e", "--", "sh", "-c", 'echo "url=$TASK_ENV_WEB_URL db=$TASK_ENV_DB_5432 project=$TASK_ENV_PROJECT"; exit 7');
+    expect(r.code, r.out).toBe(7);
+    const url = `http://web.e2e.42.${PROJECT}.localhost:${port}`;
+    expect(r.stdout).toMatch(new RegExp(`\nurl=${url.replace(/\./g, "\\.")} db=127\\.0\\.0\\.1:\\d+ project=${PROJECT}-42-e2e\n`));
+    expect(r.stdout).toContain(`  web  ${url}  TASK_ENV_WEB_URL\n`);
+    await until(new URL(url).hostname, 200);
+  });
+
+  it("стек не поднялся (образ, сборка, контейнер упал, healthcheck не прошёл) — скрипт называет сервис, его состояние и последние строки лога, код 1", () => {
+    on("feat/45-broken");
+    const crash = taskEnv("up", "--profile", "crash");
+    expect(crash.code, crash.out).toBe(1);
+    expect(crash.stdout).toContain(`stack ${PROJECT}-45: not up — `);
+    expect(crash.stdout).toContain("✗ crash: exited (exit 3)\n    | boom-before-exit\n");
+    const sick = taskEnv("up", "--profile", "sick");
+    expect(sick.code, sick.out).toBe(1);
+    expect(sick.stdout).toContain("✗ sick: running, unhealthy\n    healthcheck: exit 1 — sick-check\n");
+    const missing = taskEnv("up", "--profile", "missing");
+    expect(missing.code, missing.out).toBe(1);
+    expect(missing.stdout).toMatch(/stack [^\n]+: not up — [^\n]*no-such-image/);
+  });
+
+  it("снятие убирает контейнеры и тома только своей задачи", () => {
+    on("feat/42-checkout");
+    expect(taskEnv("up").code).toBe(0);
+    expect(taskEnv("e2e").code).toBe(0);
+    on("feat/43-other");
+    expect(taskEnv("up").code).toBe(0);
+    for (const stack of [`${PROJECT}-42`, `${PROJECT}-42-e2e`, `${PROJECT}-43`]) expect(volumes(stack), stack).toHaveLength(1);
+    const r = taskEnv("down", "42");
+    expect(r.code, r.out).toBe(0);
+    expect(r.stdout).toBe(`stack ${PROJECT}-42: down, with its volumes\nstack ${PROJECT}-42-e2e: down, with its volumes\n`);
+    for (const stack of [`${PROJECT}-42`, `${PROJECT}-42-e2e`]) {
+      expect(services(stack), stack).toEqual([]);
+      expect(volumes(stack), stack).toEqual([]);
+    }
+    expect(services(`${PROJECT}-43`)).toEqual(["db", "web"]);
+    expect(volumes(`${PROJECT}-43`)).toHaveLength(1);
   });
 });
