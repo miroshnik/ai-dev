@@ -242,7 +242,7 @@ Mechanics the canon refers to; the agent reads them as needed.
 - [`docs/ci-concurrency.md`](docs/ci-concurrency.md) — CI for parallel tasks: the full rule and workflow fragments — parallel branches, a non-cancellable `main`, a deploy queue.
 - [`docs/testing.md`](docs/testing.md) — how to test: a run's result by the runner's summary, the environment, e2e without flakes, UI state in the agent's browser — by the DOM, not a screenshot.
 - [`docs/judgment.md`](docs/judgment.md) — judgment and edits: a mistake disguised as an outcome, a label is a claim, editing exactly what was named, "it doesn't reproduce for me".
-- [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — parallel worktrees: the full rule, own port and own database for the server and e2e, a shared `.git/config` — no `git config` in copies.
+- [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — parallel worktrees: the full rule, the task's Compose stack and what the compose file holds, callbacks of external services, the runner config, a shared `.git/config` — no `git config` in copies.
 - [`docs/cloud-sessions.md`](docs/cloud-sessions.md) — the Claude Code cloud session: what it can't access and how to close a task from there.
 
 ## Repository layout

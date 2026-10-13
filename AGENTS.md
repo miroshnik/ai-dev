@@ -352,10 +352,12 @@ in `tests/standards/`. The full canon and how to wire each mechanism — the
   subagent assignments lead into the worktree: a path "from memory" goes to
   the main checkout, and the edit lands on `main`. Before and after an edit —
   `git -C <worktree> status`.
-- **Parallel checkouts share ports, databases and `.git/config`:** the server
-  and e2e of each worktree run on their own port and database from
-  environment variables; I don't kill someone else's busy port; the rule, a
-  config fragment and the "what moves" checklist — `docs/parallel-checkouts.md`.
+- **Parallel checkouts share ports, databases and `.git/config`:** the
+  task's apps, databases and e2e run in its own Docker Compose stack (the
+  `task-env` skill: `up`, `e2e -- <command>`) at the addresses
+  `<service>.<N>.<project>.localhost`, not on a port of the host; I don't
+  touch other tasks' stacks or someone else's busy port; the rule, what the
+  compose file must hold and the runner config — `docs/parallel-checkouts.md`.
 - **A subagent gets a unit of ~50 turns** (one decision's folder, one file,
   one spec), not a 200-turn zone: a subagent carries the same preamble and
   costs like a session, and the price ≈ N×P + N²×r/2 is quadratic in the

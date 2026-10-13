@@ -1,120 +1,183 @@
-# Parallel checkouts: own port, own database, shared `.git/config` — for "Subagents and worktrees"
+# Parallel checkouts: the task's Compose stack, addresses through the proxy, shared `.git/config` — for "Subagents and worktrees"
 
 Reference for the "Subagents and worktrees" section of `AGENTS.md`: the full
-rule, fragments and checks. Shared git config — the "Shared `.git/config`"
-section at the end.
+rule, what the project's compose file holds, what moves with the address,
+callbacks of external services, the runner config and the sandbox. The stack
+itself — its names, the e2e stack and its variables, profiles, taking it
+down — is the `task-env` skill; here are links to it, not a copy. Shared git
+config — the "Shared `.git/config`" section at the end.
 
 ## Rule
 
-**Parallel checkouts share ports and databases.** The server and e2e of each
-worktree run on their own port and their own database; the port and the
-database connection come from environment variables, not hard-coded in the
-runner config: a fixed port with `reuseExistingServer` silently picks up the
-neighbor's server, and the tests run against someone else's code and
-database. Everything that builds absolute links moves with the port: the
-app's base URL, callbacks of external services and emulators. I don't kill a
-busy port: first its owner — `lsof -ti tcp:<port> -sTCP:LISTEN` and the
-process's cwd; someone else's — I take another port. The config fragment,
-the "what moves" checklist and a database of your own — below.
+**Parallel checkouts share ports, databases and cookies.** Two sessions of
+one project on ports of the host fight over a port, migrate one database to
+different branches and share Redis, queues and mail; on `localhost` they share
+cookies too — cookies don't tell ports apart, and the agent's browser and the
+owner's log each other out. So the task's apps, databases, queues, mail and
+e2e run in its own Docker Compose stack — a copy of the project's compose
+file, the `task-env` skill:
 
-The behavior of `webServer` is checked against the Playwright docs ("Web
-server", `TestConfig.webServer`): `reuseExistingServer: false` fails if
-something is already listening on `url`; `env` is layered over `process.env`.
+```bash
+bun <skill dir>/scripts/task-env.ts up                           # the task's stack by the branch, its addresses
+bun <skill dir>/scripts/task-env.ts e2e -- npx playwright test   # the e2e stack anew, the run with its addresses
+```
 
-## Runner config: port from the environment
+- **The stack** — Compose project `<project>-<N>` by the number from the
+  branch, e2e — `<project>-<N>-e2e` on clean volumes, the main checkout —
+  `<project>`; the e2e variables `TASK_ENV_*`, heavy services in `profiles`,
+  `env.http` in `.agents/ai-dev.json`, taking it down and the limit of
+  Docker's subnets — the `task-env` skill, section "The task's stack".
+- **The addresses** — `http://<service>.<N>.<project>.localhost`, e2e —
+  `http://<service>.e2e.<N>.<project>.localhost`: one proxy per machine
+  (Traefik) routes them to containers by their labels, nothing is published
+  on the host, a different host has its own cookies — the `task-env` skill,
+  section "The proxy". A database or a queue has no address: inside the
+  stack it is reached by the service name (`db:5432`), from the host — by a
+  published `127.0.0.1::5432` (`docker compose -p <stack> port db 5432`, in
+  e2e — `TASK_ENV_DB_5432`).
+- **Other stacks aren't mine.** A stack is taken down only by `task-env down`
+  of my own task (`task close` of the `github` skill calls it); `docker
+  compose down`, `stop` or `rm` of another stack — never: the stack's name
+  carries the task number (`docker compose ls`). A bare `docker compose down
+  -v` without `-p` goes to the project Compose picks by itself — the
+  directory or the file's `name:` — and may wipe the main checkout's stack.
+- **A busy port of the host** (the proxy's 80, an app outside the stack) —
+  first its owner: `lsof -nP -iTCP:<port> -sTCP:LISTEN` and the process's cwd
+  (`lsof -a -p <PID> -d cwd -Fn`). Someone else's — I don't kill it: `kill`
+  by port breaks someone else's run; the proxy takes another port
+  (`AI_DEV_PROXY_PORT`, the `task-env` skill, section "Settings").
+
+## Everything in the compose file
+
+The task's environment is the project's compose file and nothing else: what
+runs outside it — an app started on the host, a shared database container,
+the machine's Redis — is shared by all tasks again, with its port and data.
+
+- **Every app and everything it reaches** — databases, queues, cache, mail,
+  storage, emulators of external services — is a service of the compose
+  file. Apps reach them by the service name, as in the project
+  (`postgres://db:5432/app`): no host variables, no names per task.
+- **HTTP services** and their ports in the container — `env.http` in
+  `.agents/ai-dev.json` (`{"env": {"http": {"web": 3000}}}`): only they get an
+  address; in a compose file a database's port doesn't differ from an app's.
+- **The code** — the worktree's: a build (`build: .`) or a bind mount by a
+  relative path (`./src:/app/src`); the dev server's HMR in a container works
+  (the `task-env` skill, section "Checked on the machine").
+- **A heavy service** (ClickHouse, Elasticsearch, Kafka) — in `profiles`:
+  every task gets its own copy, hundreds of MB, so only the tasks that need it
+  start it (`up --profile <name>`).
+- **The isolation rules** — no `container_name`, no fixed host port, volumes
+  and networks without `name:` and `external`, code by relative paths: each
+  of the four breaks isolation silently. The project's `check` (and the
+  session start hook) names each violation; after editing the compose file —
+  `task-env check` before the commit. The table with the fixes — the
+  `task-env` skill, section "Compose file isolation rules".
+
+## What moves with the address
+
+The task's app lives at `http://web.<N>.<project>.localhost`, not at
+`localhost:3000`: everything that builds absolute links follows the address.
+
+- **The app's base URL** (`APP_URL`, `NEXTAUTH_URL` / `AUTH_URL`, `ORIGIN`) —
+  from the request: the proxy passes the client's `Host` on (Traefik's
+  `passHostHeader` is on by default), and the app builds links by it — Auth.js
+  behind a proxy with `AUTH_TRUST_HOST=true` and without `AUTH_URL`. A value
+  written in the compose file is the same for every task, and a public
+  variable baked in at build (`NEXT_PUBLIC_*_URL`, `VITE_*_URL`) is fixed by
+  the build: the task's address isn't in either.
+- **Links in emails** — the stack's own mail catcher (Mailpit as a service of
+  the compose file) shows them with the task's address.
+- **Callbacks of external services** — the next section.
+- **Check:** no host port of the app is left —
+  `grep -rn "localhost:3000" *compose*.y*ml .env* playwright.config.*`.
+
+## Callbacks of external services
+
+- **OAuth redirect URI** — the task's address:
+  `http://web.<N>.<project>.localhost/api/auth/callback/<provider>`. The
+  redirect goes through the user's browser, and the browser resolves
+  `*.localhost` itself. Providers match the URI exactly: Google doesn't take
+  wildcards, takes plain `http` only for localhost and wants a host on the
+  public suffix list — whether it takes a `*.localhost` subdomain, its docs
+  don't say: check in the console; GitHub matches exactly, with wildcard
+  matching on — by the host without subdomains and the port, so the callback
+  `http://<project>.localhost/…` covers every task's address. A dev OAuth app
+  of its own, not the production one; what a provider doesn't take — a stub in
+  e2e (`docs/testing.md`, "e2e").
+- **Webhooks** come from the internet and don't reach `*.localhost`: the
+  forwarder is a service of the task's stack and delivers by the service
+  name. Stripe — its CLI:
+
+  ```yaml
+  services:
+    stripe:
+      image: stripe/stripe-cli
+      profiles: [stripe]
+      command: listen --api-key ${STRIPE_SECRET_KEY:-} --forward-to http://web:3000/api/webhooks/stripe
+  ```
+
+  The signing secret doesn't change between runs of `listen` (the Stripe CLI
+  docs): `stripe listen --print-secret` once — and it goes into the app's
+  `STRIPE_WEBHOOK_SECRET`. The key is a test-mode one, from the environment or
+  the project's `.env`, not from the compose file. Every running `listen`
+  receives every event of the account: one task's app also gets the other
+  tasks' events and answers `2xx` to an object it doesn't have rather than
+  failing. A tunnel (ngrok, cloudflared) is the same — one per stack, its
+  address in the provider's settings.
+
+## Runner config: the e2e stack's address
 
 ```ts
-// playwright.config.ts — without PORT (CI) everything stays on 3000
+// playwright.config.ts — `task-env e2e -- npx playwright test` gives the e2e stack's address;
+// without it (CI, a run not through task-env) everything stays as before
 import { defineConfig } from '@playwright/test';
 
-const port = Number(process.env.PORT ?? 3000);
-const baseURL = `http://localhost:${port}`;
+const stack = process.env.TASK_ENV_WEB_URL;      // http://web.e2e.42.shop.localhost
+const baseURL = stack ?? 'http://localhost:3000';
 
 export default defineConfig({
   use: { baseURL },
-  webServer: {
-    command: `npm run dev -- --port ${port}`,
+  webServer: stack ? undefined : {              // the stack serves the app: the runner starts no server
+    command: 'npm run build && npm run start',
     url: baseURL,
-    reuseExistingServer: false,   // a busy port is an error, not someone else's server
-    env: {
-      APP_URL: baseURL,           // everything that builds absolute links —
-      NEXTAUTH_URL: baseURL,      // on the same port (checklist below)
-    },
+    reuseExistingServer: false,                 // a busy port is an error, not someone else's server
   },
 });
 ```
 
-`reuseExistingServer: !process.env.CI` from the Playwright template, outside
-CI, silently picks up the neighbor's server on the same port: the tests run
-against someone else's code and database. My own server, started by hand, is
-already on the port — the runner fails: kill it, and the runner starts its
-own.
+- The address is `TASK_ENV_<SERVICE>_URL` of the HTTP service: `web` →
+  `TASK_ENV_WEB_URL`. The stack's database for factories and seeds —
+  `TASK_ENV_DB_5432` (`127.0.0.1:<port>`) when its `db` publishes
+  `127.0.0.1::5432`: the run builds **all** its connection variables from it
+  (`DATABASE_URL`, `DIRECT_URL`, `PG*`) — one forgotten variable sends seeds
+  into another database.
+- The e2e stack is created anew with clean volumes on every run and stays
+  until the next one: a failed run is examined on it (`docker compose -p
+  <project>-<N>-e2e logs`).
+- Without the variable — the runner's own server on its port, as in CI.
+  `reuseExistingServer: !process.env.CI` from the Playwright template, outside
+  CI, silently picks up the neighbor's server on the same port: the tests run
+  against someone else's code and database. The behavior of `webServer` is
+  checked against the Playwright docs ("Web server", `TestConfig.webServer`):
+  `reuseExistingServer: false` fails if something is already listening on
+  `url`.
 
-## A free port
+## The sandbox
 
-```bash
-for p in $(seq 3000 3099); do lsof -ti tcp:$p -sTCP:LISTEN >/dev/null || { echo $p; break; }; done
-```
+Docker doesn't work inside the Claude Code sandbox, and the addresses
+`*.localhost` aren't reachable from it — the `task-env` skill, sections
+"Docker and the sandbox" and "Checked on the machine".
 
-Two checkouts took the same port at once — the second runner fails on
-`reuseExistingServer: false` instead of going to someone else's server.
-
-## What moves with the port
-
-- `use.baseURL`, `webServer.url` and the port in the server start command.
-- The app's base URL: `APP_URL`, `NEXTAUTH_URL` / `AUTH_URL`, `ORIGIN`
-  (SvelteKit), public `NEXT_PUBLIC_*_URL`, `VITE_*_URL`, `NUXT_PUBLIC_*`.
-  Public variables are baked in at build time: a run against a built app —
-  rebuild with the new port (what each framework bakes in — `docs/testing.md`,
-  "Framework: three questions").
-- Callbacks and redirects: OAuth redirect URI, webhooks, links in emails.
-- Emulators and helper services the run starts (mail, payments, storage):
-  each on its own port, with its address in the app's variables.
-- Check: the old port is left nowhere —
-  `grep -rn "localhost:3000" .env* playwright.config.*`.
-
-## Whose server is on the port
-
-```bash
-lsof -nP -iTCP:3000 -sTCP:LISTEN                    # PID and command
-lsof -a -p <PID> -d cwd -Fn | sed -n 's/^n//p'      # cwd — whose checkout it is
-```
-
-cwd is my own worktree — it can be killed. Someone else's — don't touch it
-(`kill` by port breaks someone else's run), take another port.
-
-## A database per run
-
-The shared dev database sits at the migration of whoever applied last, and
-neighbors restart its container. A run gets its own container on a random
-port:
-
-```bash
-docker run -d --name e2e-db-<task> -e POSTGRES_PASSWORD=postgres -p 127.0.0.1::5432 postgres:17-alpine
-docker port e2e-db-<task> 5432                      # → 127.0.0.1:55261
-until docker exec e2e-db-<task> pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
-```
-
-`pg_isready` — over TCP (`-h 127.0.0.1`): over the socket it answers "ready"
-while initdb is still running, and the migration fails when the server
-restarts.
-
-- The address goes into **all** connection variables: `DATABASE_URL`,
-  `DIRECT_URL`, `SHADOW_DATABASE_URL`, `PG*` — whichever the project reads.
-  One forgotten variable sends migrations or seeds into the shared database.
-- Migrations and seeds — from your own branch, onto this database, before the
-  server starts.
-- After the run or the merge — `docker rm -fv e2e-db-<task>` (the `github`
-  skill, "Git, PRs and merging — mechanics": the session's temporary
-  resources). `-v` also removes the
-  anonymous volume with the database's data: without it the volume is left
-  dangling.
-- **Don't run `docker compose down -v`.** Compose volumes are shared by all
-  checkouts if the project name isn't set by the directory (`name:` in the
-  compose file, `COMPOSE_PROJECT_NAME` in a copied `.env`) or the volume has
-  an explicit `name:` / `external`: `down -v` in your own worktree wipes the
-  database of the main checkout and of the neighbors. A clean database — your
-  own container, as above.
+- **The `task-env` script** — a separate Bash call outside the sandbox: no
+  `excludedCommands` entry takes out a script run by `bun`; inside the sandbox
+  it exits with code 2 and says so.
+- **The e2e run** is the script's child and runs outside the sandbox with it.
+- **Docker itself** (`docker compose -p <stack> logs`, `exec`, `ps`) — the
+  owner's step: `sandbox.excludedCommands` in `~/.claude/settings.json`
+  (`docker compose *`, `docker ps *`), a call without pipes and redirections.
+  Access to Docker is access to the whole machine.
+- **The agent's browser pane** is outside the sandbox and opens the task's
+  addresses itself.
 
 ## Shared `.git/config`
 
