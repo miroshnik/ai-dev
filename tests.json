@@ -5915,6 +5915,83 @@
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "container_name — нарушение: строка с сервисом и именем, код 1"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "абсолютный путь к коду в volumes и build — нарушение, ~ тоже; относительный путь, именованный том и ресурс машины (сокет Docker, /etc/localtime) — нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "сервис в profiles и правка из compose.override.yaml проверяются наравне с остальными"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "строка называет compose-файл под тем именем, что лежит в проекте: docker-compose.yml"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "том или сеть с name: или external — нарушение с сервисами, которые их берут; имя, которое Compose даёт сам (proj_<ключ>), — нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "фиксированный порт хоста — нарушение, и с IP хоста; порт, выданный Docker (127.0.0.1::5433, 5434), и сервис без ports — нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "чистый compose-файл — код 0, ни одной строки ❌"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
+  ],
+  "name": "config не разбирает файл (незаданная обязательная переменная) — «not checked» с ответом Compose, код 2"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
+  ],
+  "name": "docker без плагина compose — «not checked» с ответом docker, код 2"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
+  ],
+  "name": "без Docker — строка ○ «not checked» с причиной, код 2"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
+  ],
+  "name": "проект без compose-файла — код 0, ни строки ❌ и ○, docker не нужен"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
    "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
   ],
   "name": "proxy status: работает — код 0; после proxy down — не запущен, код 1, с командой запуска; сети прокси нет"
@@ -5939,6 +6016,34 @@
    "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
   ],
   "name": "остановленный контейнер пропадает из маршрутов"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
+  ],
+  "name": "без Docker — строка ○ «not checked» с причиной, код по-прежнему 0; без bun — так же"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
+  ],
+  "name": "нарушения — строки ❌ скрипта task-env, код 1 и при актуальном флоу; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
+  ],
+  "name": "проект без compose-файла — ни строки сверх обычных, bun не запускается; чистый compose-файл — тоже ни строки; код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
+  ],
+  "name": "флоу отстал — строки ❌ compose-файла идут вместе со списком изменений, код 1"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -5974,6 +6079,13 @@
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
   "name": "вывод хука называет игнорируемый файл флоу и что update допишет исключения в .gitignore"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "вывод хука называет нарушения compose-файла и что их правка — отдельная задача проекта; без нарушений подсказки нет"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -10739,6 +10851,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: подкоманда github task status названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда task-env check названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
