@@ -293,9 +293,9 @@ describe("Проверки проекта идут очередью машины
   };
   const pkgFile = () => path.join(proj, "package.json");
   const scripts = () => JSON.parse(read(pkgFile())).scripts;
-  const slot = (cmd: string) => `bun .agents/skills/slot/scripts/slot.ts '${cmd}'`;
+  const slot = (cmd: string) => `bun --no-env-file .agents/skills/slot/scripts/slot.ts '${cmd}'`;
 
-  it("установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет", () => {
+  it("установка оборачивает lint, typecheck, test и test:* в slot без env-файлов проекта, build и watch — нет", () => {
     writeTree(proj, { "package.json": JSON.stringify({ name: "app", scripts: SCRIPTS }, null, 2) + "\n" });
     const r = install();
     expect(r.code).toBe(0);
@@ -318,6 +318,23 @@ describe("Проверки проекта идут очередью машины
     expect(r.stdout).toBe("it's|a b|");
   });
 
+  /**
+   * Bun сам подгружает env-файлы рабочего каталога, а slot передаёт своё окружение команде: прод-ключи `.env.local`
+   * дошли бы до раннера тестов, который без обёртки их не видел (tests/standards/no-env-file). Окружение песочницы — без
+   * `CI`: команда идёт через слот, очередь — в её домашнем каталоге.
+   */
+  it("команда под slot не видит ключей env-файлов рабочего каталога", () => {
+    writeTree(proj, {
+      "package.json": JSON.stringify({ scripts: { test: `echo "[$AI_DEV_DOTENV|$AI_DEV_DOTENV_LOCAL]"` } }),
+      ".env": "AI_DEV_DOTENV=dotenv\n",
+      ".env.local": "AI_DEV_DOTENV_LOCAL=prod-key\n",
+    });
+    install();
+    const r = spawnSync("sh", ["-c", scripts().test], { cwd: proj, env, encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toBe("[|]\n");
+  });
+
   it("повторная установка не оборачивает дважды, отступ и конец package.json — как были", () => {
     writeTree(proj, { "package.json": `{\n\t"name": "app",\n\t"scripts": {\n\t\t"test": "vitest run"\n\t}\n}` });
     install();
@@ -332,6 +349,20 @@ describe("Проверки проекта идут очередью машины
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: "node .agents/skills/slot/scripts/slot.ts 'vitest run'", lint: "eslint ." } }) });
     install();
     expect(scripts()).toEqual({ test: slot("vitest run"), lint: slot("eslint .") });
+  });
+
+  it("check называет обёртку slot без отключения env-файлов несоответствием, update ставит отключение", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "vitest run" } }) });
+    install();
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: "bun .agents/skills/slot/scripts/slot.ts 'vitest run'" } }) });
+    const c = aiDev(sb, ["check"]);
+    expect(c.code).toBe(1);
+    expect(c.stdout).toMatch(/~ package\.json — [^\n]*without --no-env-file[^\n]*\btest\b/);
+    expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
+    const u = aiDev(sb, ["update"]);
+    expect(u.code).toBe(0);
+    expect(scripts()).toEqual({ lint: slot("eslint ."), test: slot("vitest run") });
+    expect(aiDev(sb, ["check"]).code).toBe(0);
   });
 
   it("check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json", () => {
