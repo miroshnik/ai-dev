@@ -5964,6 +5964,13 @@
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
+   "Имя проекта стеков и адресов — из репозитория, а не из каталога"
+  ],
+  "name": "имя проекта — из репозитория, а не из каталога worktree"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
    "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
   ],
   "name": "config не разбирает файл (незаданная обязательная переменная) — «not checked» с ответом Compose, код 2"
@@ -6016,6 +6023,69 @@
    "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
   ],
   "name": "остановленный контейнер пропадает из маршрутов"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "override добавляет метки только HTTP-сервисам из настройки"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "адрес сервиса — `<сервис>.<N>.<проект>.localhost`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "без номера в ветке — стек и адреса основного чекаута"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "команда прогона e2e получает адреса e2e в переменных, код выхода — её"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "номер задачи берётся из ветки `<type>/<N>-slug`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "профиль (`--profile`) поднимает сервисы профиля, без него их нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "снятие убирает контейнеры и тома только своей задачи"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "стек не поднялся (образ, сборка, контейнер упал, healthcheck не прошёл) — скрипт называет сервис, его состояние и последние строки лога, код 1"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "у e2e свой стек с чистыми томами, отличный от dev той же задачи"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6240,6 +6310,13 @@
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
   "name": "старая установка без SHA — check по git; update -g пишет SHA клона"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "`install` и `update` сохраняют `env` в `.agents/ai-dev.json`"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -10832,6 +10909,14 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет",
    "примеры"
   ],
+  "name": "цифра в слове подкоманды — его часть: `e2e` из справки — подкоманда `e2e`, названная в перечне"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет",
+   "примеры"
+  ],
   "name": "якорь на переименованный раздел AGENTS.md — нарушение"
  },
  {
@@ -10987,6 +11072,20 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: подкоманда task-env down названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда task-env e2e названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: подкоманда task-env proxy down названа"
  },
  {
@@ -11002,6 +11101,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: подкоманда task-env proxy up названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда task-env up названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -11703,6 +11809,48 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Labels of a task stack's service» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "tests/capabilities/task-env/task-env.md: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "tests/standards/task-branch/task-branch.md: AGENTS.md, «Session and branch» — есть такой раздел"
  },
  {
@@ -12009,6 +12157,13 @@
    "Ветка задачи разбирается одинаково во всех скиллах"
   ],
   "name": "github разбирает ветку задачи по таблице канона"
+ },
+ {
+  "path": "tests/standards/task-branch/task-branch.test.ts",
+  "describes": [
+   "Ветка задачи разбирается одинаково во всех скиллах"
+  ],
+  "name": "task-env разбирает ветку задачи по таблице канона"
  },
  {
   "path": "tests/standards/task-branch/task-branch.test.ts",
