@@ -100,7 +100,9 @@ const USAGE = `Usage: ai-dev <command> [-g]
                      ignores flow files, 2 — the check is unavailable; a copy is compared with the latest release, a
                      --link clone — with origin/main; for a project names the mode (auto) and the language and warns
                      (!) if a script in slot calls turbo and turbo.json doesn't pass the queue variables to tasks
-                     (the exit code stays the same)
+                     (the exit code stays the same); for the machine names the task-env proxy of *.localhost
+                     addresses — running or not, with the start command (with Docker on the machine; the exit code
+                     stays the same)
   check --hook       the machine and the project at once for the Claude Code SessionStart hook: the exit code is
                      always 0, errors go to the output
   update [-g]        bring it up to date: a --link clone — git pull --ff-only, a copy — install of the latest
@@ -1103,6 +1105,38 @@ function unreleased(clone) {
 }
 
 /**
+ * The machine's proxy for task addresses (the task-env skill): one Traefik per machine gives containers of task stacks
+ * the addresses `<service>.<N>.<project>.localhost` by their labels. Its Compose project is `$AI_DEV_PROXY`, by default
+ * `ai-dev-proxy` — the same expression as `name:` of skills/task-env/proxy/compose.yaml and `proxyName` in its script:
+ * a change goes into all three. A line for `check -g` and the hook: running, not running — with the start command,
+ * Docker unavailable — with the reason. No task-env skill or no docker on the machine — no line: without Docker there
+ * are no task stacks, and a line in every session would be noise. Asks docker itself: the installer runs under Node,
+ * Bun isn't guaranteed. Doesn't change the check's code — the proxy isn't the flow falling behind.
+ * @param {string} home @returns {string[]}
+ */
+function proxyLines(home) {
+  if (!existsSync(path.join(home, ".agents/skills/task-env/scripts/task-env.ts"))) return [];
+  const name = process.env.AI_DEV_PROXY || "ai-dev-proxy";
+  const filters = ["--filter", `label=com.docker.compose.project=${name}`, "--filter", "label=com.docker.compose.service=traefik"];
+  const r = spawnSync("docker", ["ps", "--all", ...filters, "--format", "{{.State}}"], { encoding: "utf8", timeout: 10_000 });
+  const err = /** @type {NodeJS.ErrnoException | undefined} */ (r.error);
+  if (err?.code === "ENOENT") return [];
+  if (err || r.status !== 0) return [`  proxy *.localhost: Docker unavailable — ${err ? (err.code === "ETIMEDOUT" ? "docker didn't answer in 10 s" : err.message) : String(r.stderr).trim().split("\n")[0]}`];
+  if (r.stdout.split("\n").includes("running")) return [`  proxy *.localhost: running (${name})`];
+  return ["  proxy *.localhost: not running — start: bun ~/.agents/skills/task-env/scripts/task-env.ts proxy up"];
+}
+
+/**
+ * The check's result plus the proxy line for the machine (`proxyLines`): installed or not, behind or not.
+ * @param {boolean} global @param {Result} r @returns {Result}
+ */
+function withProxy(global, r) {
+  if (!global || r.absent) return r;
+  const lines = proxyLines(os.homedir());
+  return lines.length ? { ...r, text: [r.text, ...lines].join("\n") } : r;
+}
+
+/**
  * The hook runs outside the Bash sandbox and doesn't see it, but the agent runs the commands it names inside: npx
  * there can't write its cache `~/.npm` (EPERM mkdtemp), the install — `.claude/skills` (`denied`).
  */
@@ -1118,9 +1152,9 @@ function hook(failed) {
   const results = [];
   for (const global of [true, false]) {
     try {
-      results.push(failed && target(global).installed ? unavailable(global, failed) : check(global));
+      results.push(withProxy(global, failed && target(global).installed ? unavailable(global, failed) : check(global)));
     } catch (e) {
-      results.push(unavailable(global, e));
+      results.push(withProxy(global, unavailable(global, e)));
     }
   }
   const shown = results.filter((r) => !r.absent);
@@ -1390,6 +1424,7 @@ function main(/** @type {string[]} */ argv) {
     } catch (e) {
       r = unavailable(global, e);
     }
+    r = withProxy(global, r);
     (r.code === 2 ? process.stderr : process.stdout).write(r.text + "\n");
     return r.code;
   }

@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
+import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -13,6 +16,9 @@ const COMPOSE = fileURLToPath(new URL("../../../skills/task-env/proxy/compose.ya
 const WHOAMI = "traefik/whoami:v1.12.0";
 /** Ждать события дольше этого — ошибка с объяснением, а не таймаут теста без него. */
 const PATIENCE = 30_000;
+
+/** Имя прокси по умолчанию — из compose-файла скилла: `name: ${AI_DEV_PROXY:-<имя>}`. */
+const DEFAULT_NAME = /^name: \$\{AI_DEV_PROXY:-([a-z0-9_-]+)\}$/m.exec(readFileSync(COMPOSE, "utf8"))?.[1];
 
 /** Docker отвечает — сценарии с настоящим прокси идут; в CI без Docker они падают, а не пропускаются. */
 const dockerUp = spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8", timeout: 20_000 }).status === 0;
@@ -124,5 +130,77 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     expect(exitOf(stopped)).toBe(1);
     expect(stopped.stdout).toContain(`proxy ${NAME}: not running — start: bun ${SCRIPT} proxy up`);
     expect(docker("network", "ls", "--quiet", "--filter", `name=^${NAME}$`)).toBe("");
+  });
+});
+
+describe("check -g называет прокси на машине: работает или не запущен — с командой запуска; код check прокси не меняет", () => {
+  let sb: Sandbox;
+  let log: string;
+
+  /**
+   * docker песочницы — подставной: отвечает по FAKE_DOCKER как `docker ps` (running — контейнер прокси работает,
+   * exited — остановлен, none — его нет, down — демон не отвечает) и пишет свои аргументы в журнал.
+   */
+  beforeEach(() => {
+    sb = sandbox();
+    log = path.join(sb.tmp, "docker.log");
+    const script = [
+      "#!/bin/sh",
+      'printf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"',
+      'case "$FAKE_DOCKER" in',
+      "  running) echo running ;;",
+      "  exited) echo exited ;;",
+      "  down) echo 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?' >&2; exit 1 ;;",
+      "esac",
+    ].join("\n");
+    writeFileSync(path.join(sb.bin, "docker"), script + "\n", { mode: 0o755 });
+    expect(aiDev(sb, ["install", "-g"]).code).toBe(0);
+  });
+  afterEach(() => sb.cleanup());
+
+  const check = (state: string, extra: Record<string, string> = {}) => aiDev(sb, ["check", "-g"], { env: { FAKE_DOCKER: state, FAKE_DOCKER_LOG: log, ...extra } });
+  const START = "start: bun ~/.agents/skills/task-env/scripts/task-env.ts proxy up";
+
+  it("`check -g` называет незапущенный прокси и команду его запуска", () => {
+    for (const state of ["none", "exited"]) {
+      const r = check(state);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(`  proxy *.localhost: not running — ${START}`);
+    }
+  });
+
+  it("прокси работает — строка «running» с его именем", () => {
+    const r = check("running");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`  proxy *.localhost: running (${DEFAULT_NAME})`);
+  });
+
+  it("Docker не отвечает — строка «Docker unavailable» с причиной", () => {
+    const r = check("down");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("  proxy *.localhost: Docker unavailable — Cannot connect to the Docker daemon");
+  });
+
+  it("на машине нет docker — строки о прокси нет", () => {
+    spawnSync("rm", [path.join(sb.bin, "docker")]);
+    const r = check("running");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("ai-dev on the machine: up to date");
+    expect(r.stdout).not.toContain("proxy");
+  });
+
+  it("ищет тот же проект Compose, что поднимает скилл: имя — из его compose-файла, AI_DEV_PROXY его меняет", () => {
+    expect(DEFAULT_NAME).toBeTruthy();
+    check("running");
+    check("running", { AI_DEV_PROXY: "other-proxy" });
+    const calls = readFileSync(log, "utf8");
+    expect(calls).toContain(`label=com.docker.compose.project=${DEFAULT_NAME} `);
+    expect(calls).toContain("label=com.docker.compose.project=other-proxy ");
+  });
+
+  it("хук SessionStart показывает строку прокси вместе с машиной", () => {
+    const r = aiDev(sb, ["check", "--hook"], { env: { FAKE_DOCKER: "none", FAKE_DOCKER_LOG: log } });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/ai-dev on the machine: up to date[^\n]*\n {2}proxy \*\.localhost: not running/);
   });
 });
