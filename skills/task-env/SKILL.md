@@ -222,13 +222,22 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
   connection to the loopback is denied (`Operation not permitted`), and
   `*.localhost` falls under `localhost` in the sandbox's `NO_PROXY` (curl
   matches it as a suffix), so the request doesn't go through the sandbox
-  proxy either. What works: the command outside the sandbox
-  (`sandbox.excludedCommands`, below); the agent's browser pane — it is
+  proxy either. What works: the command outside the sandbox (below,
+  section "Docker and the sandbox"); the agent's browser pane — it is
   outside the sandbox; through the sandbox proxy with an empty `NO_PROXY` and
   the host in the allowlist (`200` measured). By the Claude Code docs,
   `sandbox.network.allowLocalBinding: true` lets sandboxed commands connect
   to any port on localhost — the owner's setting, not checked here.
-
+- **`sandbox.excludedCommands`** (Claude Code in the desktop app): an edit
+  of `~/.claude/settings.json` applies to the running session without a
+  restart; an entry takes a Bash call out of the sandbox only when it covers
+  every command in it — `docker ps | head`, `…; echo` or a redirection to a
+  file keep the call sandboxed (the Claude Code docs say the same).
+  `docker compose *`, `docker ps *` and `gh *` work. An entry for this
+  script doesn't: `bun ~/.agents/skills/task-env/scripts/task-env.ts proxy
+  status` stayed sandboxed with the entry written with `~` and with the
+  absolute path, the call's text matching it exactly; the docs don't say
+  why.
 - **HMR of an app in a container with the worktree's code** — works: Vite 8.3
   (`node:24-alpine`, the worktree bind-mounted to `/app`, `node_modules` in a
   volume) on Docker Desktop (engine 29.8) through the proxy on port 80 — a CSS
@@ -239,16 +248,23 @@ its order: `compose.yaml`, `compose.yml`, `docker-compose.yaml`,
 ## Docker and the sandbox
 
 Docker doesn't work inside the Claude Code sandbox: the sandbox denies its
-socket. The owner takes Docker and this script out of it in
-`~/.claude/settings.json` — `sandbox.excludedCommands`, entries in the
-`Bash(...)` rule syntax, matched against the whole command text:
+socket (`permission denied while trying to connect to the docker API`).
+
+- **This script** — an unsandboxed Bash call (`dangerouslyDisableSandbox`):
+  an `excludedCommands` entry doesn't take it out (above, section "Checked
+  on the machine"). In the sandbox the script exits with code 2
+  and names it — the cue to run the command again outside.
+- **Docker itself**, which the agent calls directly (`docker compose -p
+  <stack> logs`, `exec`, `ps`), — the owner takes it out in
+  `~/.claude/settings.json`: `sandbox.excludedCommands`, entries in the
+  `Bash(...)` rule syntax; each command of the call must be covered, so a
+  call without pipes and redirections.
 
 ```json
-{ "sandbox": { "excludedCommands": ["docker compose *", "docker ps *", "bun ~/.agents/skills/task-env/scripts/task-env.ts *"] } }
+{ "sandbox": { "excludedCommands": ["docker compose *", "docker ps *"] } }
 ```
 
-A command outside the sandbox goes through the regular permissions, and
-access to Docker is access to the whole machine. The e2e command is a child
-of the script and runs outside the sandbox with it — the addresses
-`*.localhost` aren't reachable from inside. Without the exclusion —
-`proxy status` exits with code 2 and names the sandbox.
+A command outside the sandbox goes through the regular permissions (in auto
+mode — the classifier), and access to Docker is access to the whole machine.
+The e2e command is a child of the script and runs outside the sandbox with
+it — the addresses `*.localhost` aren't reachable from inside.

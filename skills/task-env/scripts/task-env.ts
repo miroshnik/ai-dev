@@ -31,8 +31,8 @@
  * another. The default name is also the default of `${AI_DEV_PROXY:-…}` in the compose file and a copy in
  * bin/ai-dev.mjs (`check -g`) — tests/standards/installer-mirror holds them to `PROXY`.
  *
- * Docker runs outside the Claude Code sandbox (the sandbox denies its socket): the owner puts this script's command
- * and `docker compose` into `sandbox.excludedCommands` (SKILL.md).
+ * Docker runs outside the Claude Code sandbox (the sandbox denies its socket): the agent runs this script as an
+ * unsandboxed call — an `excludedCommands` entry for it doesn't take it out (SKILL.md, «Docker and the sandbox»).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -128,7 +128,7 @@ function why(r: ReturnType<typeof spawnSync>) {
 /** A hint for a docker failure: what to do about it. */
 function hint(reason: string, env: NodeJS.ProcessEnv) {
   if (/already allocated|address already in use|bind/i.test(reason)) return ` — port 127.0.0.1:${proxyPort(env)} is busy: free it or set AI_DEV_PROXY_PORT (the addresses then carry the port)`;
-  if (/docker\.sock|not permitted|permission denied/i.test(reason)) return " — an agent's sandbox? Docker runs outside it: sandbox.excludedCommands (SKILL.md)";
+  if (/docker\.sock|not permitted|permission denied/i.test(reason)) return " — an agent's sandbox? Docker doesn't work in it: run this command outside the sandbox (SKILL.md, «Docker and the sandbox»)";
   if (/address pools/i.test(reason)) return " — Docker is out of network subnets: take down stacks nobody needs or widen default-address-pools (SKILL.md, «Network subnets»)";
   return "";
 }
