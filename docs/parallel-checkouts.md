@@ -25,16 +25,19 @@ bun <skill dir>/scripts/task-env.ts e2e -- npx playwright test   # the e2e stack
 - **The stack** — Compose project `<project>-<N>` by the number from the
   branch, e2e — `<project>-<N>-e2e` on clean volumes, the main checkout —
   `<project>`; the e2e variables `TASK_ENV_*`, heavy services in `profiles`,
-  `env.http` in `.agents/ai-dev.json`, taking it down and the limit of
-  Docker's subnets — the `task-env` skill, section "The task's stack".
+  `env.http` in `.agents/ai-dev.json`, taking it down (`task-env down`;
+  stacks of closed tasks left on the machine — `task-env prune`) and the
+  limit of Docker's subnets — the `task-env` skill,
+  section "The task's stack".
 - **The addresses** — `http://<service>.<N>.<project>.localhost`, e2e —
   `http://<service>.e2e.<N>.<project>.localhost`: one proxy per machine
   (Traefik) routes them to containers by their labels, nothing is published
   on the host, a different host has its own cookies — the `task-env` skill,
-  section "The proxy". A database or a queue has no address: inside the
-  stack it is reached by the service name (`db:5432`), from the host — by a
-  published `127.0.0.1::5432` (`docker compose -p <stack> port db 5432`, in
-  e2e — `TASK_ENV_DB_5432`).
+  section "The proxy". The addresses of the tasks in progress are on the
+  dashboard's Sessions tab (the `dashboard` skill). A database or a queue has
+  no address: inside the stack it is reached by the service name
+  (`db:5432`), from the host — by a published `127.0.0.1::5432` (`docker
+  compose -p <stack> port db 5432`, in e2e — `TASK_ENV_DB_5432`).
 - **Other stacks aren't mine.** A stack is taken down only by `task-env down`
   of my own task (`task close` of the `github` skill calls it); `docker
   compose down`, `stop` or `rm` of another stack — never: the stack's name
@@ -170,8 +173,8 @@ export default defineConfig({
 ## The sandbox
 
 Docker doesn't work inside the Claude Code sandbox, and the addresses
-`*.localhost` aren't reachable from it — the `task-env` skill, sections
-"Docker and the sandbox" and "Checked on the machine".
+`*.localhost` aren't reachable from it by default — the `task-env` skill,
+sections "Docker and the sandbox" and "Checked on the machine".
 
 - **The `task-env` script** — a separate Bash call outside the sandbox: no
   `excludedCommands` entry takes out a script run by `bun`; inside the sandbox
@@ -181,6 +184,11 @@ Docker doesn't work inside the Claude Code sandbox, and the addresses
   owner's step: `sandbox.excludedCommands` in `~/.claude/settings.json`
   (`docker compose *`, `docker ps *`), a call without pipes and redirections.
   Access to Docker is access to the whole machine.
+- **The task's addresses from sandboxed commands** (curl, a test runner) —
+  with `sandbox.network.allowLocalBinding: true`, the owner's setting: it
+  opens the loopback only, Docker stays outside — the `task-env` skill,
+  section "Local ports and task addresses". Without it — only an unsandboxed
+  command.
 - **The agent's browser pane** is outside the sandbox and opens the task's
   addresses itself.
 
