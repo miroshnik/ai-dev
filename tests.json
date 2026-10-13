@@ -4655,6 +4655,22 @@
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
   "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании",
+   "bun test: хук describe — testcase «(unnamed)» без строки"
+  ],
+  "name": "пропущенный хук `(unnamed)` в отчёте JUnit bun — не тест: `spec-doc --strict` его не требует назвать и в спеку не выводит"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
+   "Отчёты Vitest, Playwright и bun test — в любом сочетании",
+   "bun test: хук describe — testcase «(unnamed)» без строки"
+  ],
+  "name": "тест без имени, который выполнялся, — по-прежнему ошибка `--strict`"
+ },
+ {
+  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
+  "describes": [
    "Отчёты Vitest, Playwright и bun test — в любом сочетании"
   ],
   "name": "Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, --strict ловит не-утверждение"
