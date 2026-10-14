@@ -3217,6 +3217,27 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task new ставит метку «вопросы», когда в описании есть открытый вопрос"
+  ],
+  "name": "task new без раздела вопросов или со всеми отвеченными вопросами метку не ставит"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит метку «вопросы», когда в описании есть открытый вопрос"
+  ],
+  "name": "task new с открытым вопросом в описании ставит задаче метку «вопросы»"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит метку «вопросы», когда в описании есть открытый вопрос"
+  ],
+  "name": "метки «вопросы» в репозитории нет — task new создаёт её и ставит"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
   ],
   "name": "est не установлен рядом — задача заведена, «○ no estimate: est is not installed», код 0"
@@ -10308,6 +10329,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название labels.questions скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labels.questionsDescription скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
