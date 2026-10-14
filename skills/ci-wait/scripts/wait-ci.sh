@@ -29,12 +29,14 @@
 # An empty list of checks — pending; PASS counts when a snapshot without pending repeats
 # two polls in a row (late-registering checks don't slip through) and there are no fewer checks
 # than --expect. The first failed check — FAIL right away; --wait-all — FAIL when all have finished.
-# REST only: the GraphQL quota is shared by all sessions; a REST rate limit — waiting until the reset. A gh failure
-# (also in requests before the first poll) — retry, ERROR after five in a row; "not found" — only on 404/422.
+# --interval is the first interval: it grows with the wait — a tenth of the elapsed time, up to 5 min.
+# REST only: the GraphQL quota is shared by all sessions; a REST rate limit — waiting until the reset, and that wait
+# doesn't count toward --timeout (up to an hour). A gh failure (also in requests before the first poll) — retry, ERROR
+# after five in a row; "not found" — only on 404/422.
 #
-# Output: stdout — only events ("CHECK <name>: <bucket>") and the final line
-#         "RESULT: PASS|FAIL|TIMEOUT|ERROR …"; stderr — a heartbeat on every poll.
-# Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call.
+# Output: stdout — a state line only when the state changes ("<time> +<elapsed> <what>: 3/5 done; waiting: …")
+#         and the final line "RESULT: PASS|FAIL|TIMEOUT|ERROR …"; stderr — gh errors and notes.
+# Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call. The outcome is the exit code.
 set -uo pipefail
 
 usage() { awk 'NR > 2 && !/^#/ { exit } NR > 2' "$0" >&2; exit 3; }
@@ -251,11 +253,44 @@ rate_limit_wait() {
   echo "$w"
 }
 
-deadline=$(( $(date +%s) + timeout ))
-prev_snapshot=""; prev_terminal=""; errors=0; pending=""; missing=""; unrun=""
+# state <max>: the last poll's checks ($out) in words — how many are done and what we wait for: pending ones, required
+# ones not registered yet, workflows due on the PR without a run at the head; failed ones (--wait-all). A list longer
+# than <max> names is cut ("+N more"), 0 — the whole list.
+state() {
+  jq -r --argjson req "$required" --argjson due "$expected" --argjson ran "$ran" --argjson max "$1" '
+    def names: sort | if $max > 0 and length > $max then .[:$max] + ["+\(length - $max) more"] else . end | join(", ");
+    map(select(.bucket == "pending") | .name) as $wait
+    | [ if length == 0 then "no checks yet" else "\(length - ($wait | length))/\(length) done" end,
+        ($wait | select(. != []) | "waiting: \(names)"),
+        ($req - map(.name) | select(. != []) | "missing required: \(names)"),
+        ($due - $ran | select(. != []) | "no run of workflow: \(names)"),
+        (map(select(.bucket == "fail" or .bucket == "cancel") | .name) | select(. != []) | "failed: \(names)") ]
+    | join("; ")' <<<"$out"
+}
+
+# dur <seconds>: 45s, 3m05s, 1h20m
+dur() {
+  if [ "$1" -lt 60 ]; then echo "${1}s"
+  elif [ "$1" -lt 3600 ]; then printf '%dm%02ds\n' $(($1 / 60)) $(($1 % 60))
+  else printf '%dh%02dm\n' $(($1 / 3600)) $(($1 % 3600 / 60)); fi
+}
+
+# say <state>: a state line — only when it differs from the previous one: the output file of a background wait shows
+# what we wait for and since when, not a heartbeat per poll (#432)
+said=""
+say() {
+  [ "$label: $1" == "$said" ] && return
+  said="$label: $1"
+  echo "$(ts) +$(dur $(( $(date +%s) - start ))) $label: $1"
+}
+
+start=$(date +%s); deadline=$(( start + timeout ))
+prev_terminal=""; errors=0; quota_wait=0; full="no checks yet"
 while :; do
-  nap=$interval
   poll; rc=$?
+  # the interval grows with the wait — a tenth of the elapsed time, up to 5 min: a long deploy is polled several times
+  # less often, the REST quota shared by parallel sessions lasts, and the outcome comes at most a tenth of the wait late
+  nap=$(( ($(date +%s) - start) / 10 )); [ "$nap" -gt 300 ] && nap=300; [ "$nap" -lt "$interval" ] && nap=$interval
   if [ "$rc" -eq 0 ]; then
     errors=0
     snapshot=$(printf '%s' "$out" | jq -r 'sort_by(.name) | .[] | "\(.name)\t\(.bucket)"')
@@ -265,12 +300,8 @@ while :; do
     missing=$(printf '%s' "$out" | jq -r --argjson req "$required" '$req - map(.name) | join(", ")')
     # a workflow that by its `on:` fires on the PR but produced no run at the head is not final, like a required check
     unrun=$(jq -rn --argjson e "$expected" --argjson r "$ran" '$e - $r | join(", ")')
-    if [ "$snapshot" != "$prev_snapshot" ]; then
-      comm -13 <(printf '%s\n' "$prev_snapshot") <(printf '%s\n' "$snapshot") \
-        | awk -F'\t' 'NF==2 { print "CHECK " $1 ": " $2 }'
-      prev_snapshot=$snapshot
-    fi
-    echo "$(ts) $label total=$total pending=$pending failed=[${failed}]${missing:+ missing=[$missing]}${unrun:+ no-run=[$unrun]}" >&2
+    full=$(state 0)
+    say "$(state 5)"
     # a failed check — the outcome is known: long checks alongside it (a preview deploy) won't change it
     [ -n "$failed" ] && [ -z "$wait_all" ] && finish "FAIL $failed" 1
     if [ "$total" -gt 0 ] && [ "$total" -ge "$expect" ] && [ "$pending" -eq 0 ] && [ -z "$missing" ] && [ -z "$unrun" ]; then
@@ -279,22 +310,28 @@ while :; do
         finish "PASS ($total checks)" 0
       fi
       prev_terminal=$snapshot
+      # the confirming poll — at the first interval: everything has finished, a grown interval would only delay PASS
+      nap=$interval
     else
       prev_terminal=""
     fi
   elif [ "$rc" -eq 2 ]; then
     finish "ERROR $out" 3
   elif rate_limited "$out"; then
-    # a rate limit is not a call error: the checks go on by themselves, we wait for the quota
+    # a rate limit is not a call error: the checks go on by themselves, we wait for the quota. That wait doesn't count
+    # toward --timeout — the quota resets within an hour, and a reset 40 min away under a 30 min timeout gave TIMEOUT
+    # without a single poll after it; at most an hour in total, so a limit that never lifts still ends the wait
     nap=$(rate_limit_wait)
-    echo "$(ts) $label: rate limit, next poll in ${nap}s" >&2
+    extra=$nap; [ $((quota_wait + extra)) -gt 3600 ] && extra=$((3600 - quota_wait))
+    quota_wait=$((quota_wait + extra)); deadline=$((deadline + extra))
+    say "API rate limit — next poll in $(dur "$nap")"
   else
     errors=$((errors + 1))
     echo "$(ts) $label: gh error ($errors): ${out:0:200}" >&2
     [ "$errors" -ge 5 ] && finish "ERROR gh: ${out:0:200}" 3
   fi
   now=$(date +%s)
-  [ "$now" -ge "$deadline" ] && finish "TIMEOUT after ${timeout}s (pending=${pending:-?}${missing:+, missing required: $missing}${unrun:+, no run of workflow: $unrun})" 2
+  [ "$now" -ge "$deadline" ] && finish "TIMEOUT after $(dur $((now - start))) ($full)" 2
   [ "$nap" -gt $((deadline - now)) ] && nap=$((deadline - now))
   sleep "$nap"
 done
