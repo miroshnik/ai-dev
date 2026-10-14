@@ -8823,6 +8823,13 @@
   "describes": [
    "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
+  "name": "скрипт test не повторяет test:spec: стандарты ai-dev идут только скриптом test:spec"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
   "name": "скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт AI_DEV_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют"
  },
  {
