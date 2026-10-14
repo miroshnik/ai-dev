@@ -14,12 +14,14 @@ loads them whatever the project's `CLAUDE.md`.
   (branch, diff to `main`, "Create PR") reads git, not GitHub: after a merge
   it is accurate once the checkout is on `origin/main` (`github task close`
   moves it).
-- The app's CI monitor wakes the session only on failed checks, conflicts and
-  reviews, and only with Auto-fix on; it doesn't report success. Wait for
-  green checks before a merge and for the deploy after it with the `ci-wait`
-  skill as a background command: its completion wakes the session — no
-  `Monitor`, watcher loop or `ScheduleWakeup` on top: an armed wakeup keeps
-  `archive_session` refused even after `stop`.
+- Auto-fix (CI monitor) — off: its conflict event wants the base merged in,
+  breaking the rebase merge. After `gh pr create` — `set_monitor` with
+  `auto_fix: false` and the PR's url; a conflict — rebase onto a fresh
+  `origin/main`; an executor's PR — its executor's (`docs/pr-checks.md`,
+  "Auto-fix"). Checks and the deploy — `ci-wait` as a background command,
+  its completion wakes the session; no `Monitor`, watcher loop or
+  `ScheduleWakeup` on top: an armed wakeup keeps `archive_session` refused
+  even after `stop`.
 - Merge in auto mode — `gh pr merge <N> --rebase` as a separate call, without
   `cd`, `|`, `;`: otherwise the `Bash(gh pr merge *)` rule (set by the owner)
   won't match and the classifier rejects the merge.

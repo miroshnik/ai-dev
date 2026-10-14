@@ -2,9 +2,9 @@
 
 The principle is in `AGENTS.md` ("Git, PRs and merging": merge only with all
 checks green); the `ci-wait` skill does the waiting with a script. Here are the
-waiting and merging rules in full, then the polling mechanics. Rebase, the
-check before a push and cleaning up the merged branch — the `github` skill,
-section "Git, PRs and merging — mechanics".
+waiting and merging rules in full, the app's Auto-fix, then the polling
+mechanics. Rebase, the check before a push and cleaning up the merged branch —
+the `github` skill, section "Git, PRs and merging — mechanics".
 
 ## Rules
 
@@ -44,6 +44,33 @@ section "Git, PRs and merging — mechanics".
   challenge instead of the page — to the agent, or even to everyone from the
   same address. Need to see the page — one request after a green status, not
   a loop.
+
+## Auto-fix — off
+
+Auto-fix of the Claude Code app's CI monitor wakes the session with a
+`<ci-monitor-event>` on failed checks, a conflict and review comments, and on
+a conflict tells it to merge the base branch in, never rebase or force-push.
+The flow merges by rebase only (`github project fix` turns the other merge
+methods off): a merge commit in the PR's branch brings the conflict back at
+the rebase merge. In pilot #471 the event about an executor's PR came to the
+dispatcher session while the executor was in the middle of a rebase in its
+worktree: `main` merged in there would have broken it (#529).
+
+- **Off for the flow's PRs:** the app binds each new PR of the session with
+  Auto-fix on, so right after `gh pr create` — `get_status` (the newest PR is
+  the bound one, earlier ones go to `otherBoundPrs`); Auto-fix on for my PR —
+  `set_monitor` with `auto_fix: false` and the PR's url. Nothing is lost: red checks and a conflict come from
+  `ci-wait` (FAIL; ERROR "rebase onto origin/main"), and its completion
+  wakes the session.
+- **An event came anyway** (Auto-fix was on): a conflict — `git fetch
+  origin`, `git rebase origin/main`, `git push --force-with-lease`, then
+  `ci-wait` again; red checks — the root cause, as on FAIL; the base is never
+  merged in. Then Auto-fix off, as above.
+- **A dispatcher session:** the app binds the executors' PRs to it, and their
+  events come to it. An executor's PR isn't the dispatcher's step: the
+  executor drives it, the dispatcher doesn't touch its branch or worktree; an
+  executor that stopped (a limit, a dropped session) is continued with
+  `SendMessage`.
 
 ## Polling mechanics
 

@@ -269,7 +269,7 @@ A task's stack is the Docker Compose project `<project>-<N>`: parallel sessions 
 
 Mechanics the canon refers to; the agent reads them as needed.
 
-- [`docs/pr-checks.md`](docs/pr-checks.md) — waiting for PR and commit checks: polling, `bucket`, empty-list traps; a deploy — by the commit status, not by polling the site.
+- [`docs/pr-checks.md`](docs/pr-checks.md) — waiting for PR and commit checks: polling, `bucket`, empty-list traps; a deploy — by the commit status, not by polling the site; the app's Auto-fix — off: a conflict is a rebase, not a merge of the base.
 - [`docs/ci-concurrency.md`](docs/ci-concurrency.md) — CI for parallel tasks: the full rule and workflow fragments — parallel branches, a non-cancellable `main`, a deploy queue.
 - [`docs/testing.md`](docs/testing.md) — how to test: a run's result by the runner's summary, the environment, e2e without flakes, UI state in the agent's browser — by the DOM, not a screenshot.
 - [`docs/judgment.md`](docs/judgment.md) — judgment and edits: a mistake disguised as an outcome, a label is a claim, editing exactly what was named, "it doesn't reproduce for me".
