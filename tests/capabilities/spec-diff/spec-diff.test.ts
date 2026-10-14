@@ -811,7 +811,7 @@ describe("Тесты харнесса — в диффе спеки: назван
       [
         `_Тесты харнесса — по отчёту; база — ветка spec (исходник ${base.slice(0, 12)})._`,
         "",
-        "⚠️ **Отчёт неполный:** в нём нет тестов харнесса из `tests/standards/naming` — их тесты не сравнивались (1 в ветке spec) и в «Удалены» не попали; полный дифф — с отчётом прогона всех тестов.",
+        "⚠️ **Отчёт неполный:** в нём нет тестов из `tests/standards/naming`, чьи названия знает только прогон, — их тесты не сравнивались (1 в ветке spec) и в «Удалены» не попали; полный дифф — с отчётом прогона всех тестов.",
       ].join("\n"),
     );
     // файл папки audit в отчёте есть — снятый элемент реестра удалён; вызова в legacy больше нет — её тесты удалены
@@ -820,6 +820,27 @@ describe("Тесты харнесса — в диффе спеки: назван
     const j = JSON.parse(diffFrom(base, "--report", "r.json", "--spec-branch", "spec", "--json").stdout);
     expect(j.unreported).toEqual([{ file: NAMING, folder: "tests/standards/naming", describes: [], name: "нельзя: x" }]);
     expect(j.removed.map((x: { name: string }) => x.name)).toEqual(["b пишет аудит", "старое пишет аудит"]);
+  });
+
+  // название-шаблон с подстановкой в цикле статически не вычислить: тесты файла, как и тесты харнесса, знает только
+  // отчёт (#498); снятыми их делает голова без такого теста — файл удалён
+  it("отчёт без тестов файла, чьи названия вычисляет только прогон, — не удаление, а пометка о неполном отчёте", () => {
+    const WAIT = "tests/capabilities/ci-wait/ci-wait.test.ts";
+    const OLD = "tests/capabilities/legacy/legacy.test.ts";
+    const loop = ts('for (const title of ["a", "b"]) it(`ждёт (${title})`, () => {});');
+    const base = repo.commit({ [STD]: registry, [WAIT]: loop, [OLD]: loop });
+    const named = (p: string, n: string) => ({ path: p, describes: [], name: n });
+    publishSpec(base, [t("a пишет аудит"), named(WAIT, "ждёт (a)"), named(WAIT, "ждёт (b)"), named(OLD, "ждёт (a)")]);
+    repo.commit({ [STD]: registry + "// реестр сменился\n", [OLD]: null });
+    report(["a пишет аудит"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(
+      "⚠️ **Отчёт неполный:** в нём нет тестов из `tests/capabilities/ci-wait`, чьи названия знает только прогон, — их тесты не сравнивались (2 в ветке spec) и в «Удалены» не попали; полный дифф — с отчётом прогона всех тестов.",
+    );
+    expect(r.stdout).toContain("**Удалены (1):**\n\n- `tests/capabilities/legacy` · ждёт (a)\n");
+    const j = JSON.parse(diffFrom(base, "--report", "r.json", "--spec-branch", "spec", "--json").stdout);
+    expect(j.unreported.map((x: { name: string }) => x.name)).toEqual(["ждёт (a)", "ждёт (b)"]);
   });
 
   // публикация на мерж отставшего PR пропускается: ближайшая публикация-предок — до чужих PR, влитых после неё

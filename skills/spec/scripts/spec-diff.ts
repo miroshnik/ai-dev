@@ -123,17 +123,19 @@ const unnamedSeen = new Set<string>();
 export type Check = L.HarnessCall & { path: string };
 
 /**
- * Tests and harness checks of files; a file that can't be parsed and a test whose name can't be computed statically —
- * a line in stderr.
+ * Tests and harness checks of files; `unnamed` — files with a test or describe whose name can't be computed statically
+ * (its tests only a run names). A file that can't be parsed and such a name — a line in stderr.
  */
-function parseFiles(files: Map<string, string>, label: string): { tests: Test[]; checks: Check[] } {
+function parseFiles(files: Map<string, string>, label: string): { tests: Test[]; checks: Check[]; unnamed: string[] } {
   const tests: Test[] = [];
   const checks: Check[] = [];
+  const unnamed: string[] = [];
   for (const file of [...files.keys()].sort()) {
     try {
       const scan = L.scanJs(file, files.get(file)!);
       tests.push(...scan.tests);
       checks.push(...scan.checks.map((c) => ({ ...c, path: file })));
+      if (scan.unnamed.length) unnamed.push(file);
       for (const u of scan.unnamed) {
         const key = JSON.stringify([file, u.kind, u.name]);
         if (unnamedSeen.has(key)) continue;
@@ -144,7 +146,7 @@ function parseFiles(files: Map<string, string>, label: string): { tests: Test[];
       console.error(`spec-diff: ${label}: ${file}: ${(e as Error).message}`);
     }
   }
-  return { tests, checks };
+  return { tests, checks, unnamed };
 }
 
 /** Test files changed outside tests/ (including untracked ones with --worktree), except the flow copy. */
@@ -741,7 +743,7 @@ export function render(
   return lines.join("\n").trimEnd() + "\n";
 }
 
-/** `unreported` — base harness tests of files a partial report didn't run: not compared (`unreportedTests`). */
+/** `unreported` — base tests only a run names, of files a partial report didn't run: not compared (`unreportedTests`). */
 function asJson(
   baseLabel: string,
   removed: Test[],
@@ -900,15 +902,16 @@ function union(a: Test[], b: Test[], harness: Set<Test>): Test[] {
 }
 
 /**
- * Base harness tests a partial report can't confirm or deny (#486): their file in the head has a harness call — the
- * check is in the sources — but no test in the report: the run skipped it (`bun test <one folder>`), the spec branch
- * still has its tests, and without this they'd all be "removed". A file without the call in the head — the check is
- * removed, its tests are honestly removed; a test the head has anyway (in the sources) isn't removed either way and
- * stays in the comparison. `files` — the head's harness files absent from the report.
+ * Base tests only a run names that a partial report can't confirm or deny: their file in the head has a harness call
+ * (#486) or a test whose name can't be computed statically — a template with a substitution in a loop (#498) — but no
+ * test in the report: the run skipped it (`bun test <one folder>`), the spec branch still has its tests, and without
+ * this they'd all be "removed". A file without such a call or test in the head — the check is removed, its tests are
+ * honestly removed; a test the head has anyway (in the sources) isn't removed either way and stays in the comparison.
+ * `runNamed` — the head's files whose tests only a run names; `files` — those of them absent from the report.
  */
-export function unreportedTests(base: Test[], head: Test[], harness: Set<Test>, checks: Check[], reported: Test[]): { files: string[]; tests: Test[] } {
+export function unreportedTests(base: Test[], head: Test[], harness: Set<Test>, runNamed: string[], reported: Test[]): { files: string[]; tests: Test[] } {
   const ran = new Set(reported.map((t) => t.path));
-  const files = [...new Set(checks.map((c) => c.path))].filter((p) => !ran.has(p)).sort();
+  const files = [...new Set(runNamed)].filter((p) => !ran.has(p)).sort();
   const unrun = new Set(files);
   const inHead = new Set(head.map(L.keyOf));
   return { files, tests: base.filter((t) => harness.has(t) && unrun.has(t.path) && !inHead.has(L.keyOf(t))) };
@@ -1012,8 +1015,10 @@ export async function main(argv: string[]): Promise<number> {
         const baseSha = gitText(["rev-parse", `${base}^{commit}`], top).trim();
         const gap = specBase.source === baseSha ? "" : locale.fill(N.spec.diff.harnessGap, { sha: baseSha.slice(0, 12) });
         harnessNote = locale.fill(N.spec.diff.harnessNote, { branch, source: specBase.source.slice(0, 12), gap });
-        // a partial run's report: the harness files it skipped aren't compared — a line under the base, not "removed"
-        const partial = unreportedTests(baseTests, headTests, harness, headScan.checks, reported);
+        // a partial run's report: the files it skipped whose tests only a run names (harness calls, names not computable
+        // statically) aren't compared — a line under the base, not "removed"
+        const runNamed = [...headScan.checks.map((c) => c.path), ...headScan.unnamed];
+        const partial = unreportedTests(baseTests, headTests, harness, runNamed, reported);
         if (partial.files.length) {
           const out = new Set(partial.tests);
           baseTests = baseTests.filter((t) => !out.has(t));
