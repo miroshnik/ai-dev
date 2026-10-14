@@ -45,17 +45,21 @@ const scripts = (JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"
 /** Тест проекта-образца: проходит и пишет свой файл в журнал $LEVELS_LOG — так видно, какие файлы прогнала команда. */
 const probe = (name: string) => `import { appendFileSync } from "node:fs";\nimport { it } from "bun:test";\nit("${name}", () => appendFileSync(process.env.LEVELS_LOG!, "${name}\\n"));\n`;
 
+/** Стандарт проекта-образца — тест в `tests/standards`. */
+const STANDARD = { "tests/standards/s/s.test.ts": probe("s.test.ts") };
+
 /**
- * Проект-образец со скриптами `package.json` ai-dev, быстрым и медленным тестом; скилы — клона (скрипты зовут slot и
- * spec-doc по относительным путям). → прогон команд в нём: какие из двух файлов прошли.
+ * Проект-образец со скриптами `package.json` ai-dev, быстрым и медленным тестом (и файлами `extra`); скилы — клона
+ * (скрипты зовут slot и spec-doc по относительным путям). → прогон команд в нём: какие из файлов прошли.
  */
-function sample(commands: string[][]): string[] {
+function sample(commands: string[][], extra: Record<string, string> = {}): string[] {
   const { dir, cleanup } = tmpDir();
   try {
     writeTree(dir, {
       "package.json": JSON.stringify({ private: true, scripts }),
       "tests/capabilities/x/x.test.ts": probe("x.test.ts"),
       "tests/capabilities/x/x.slow.test.ts": probe("x.slow.test.ts"),
+      ...extra,
       "ran.log": "",
     });
     symlinkSync(path.join(ROOT, "skills"), path.join(dir, "skills"));
@@ -114,6 +118,12 @@ describe("Локальный test — быстрый уровень: тесты 
   it("скрипт test не запускает тесты, которым нужен Docker или живой сервер: файлы *.slow.test.ts идут скриптом test:slow", () => {
     expect(sample([["bun", "run", "test"]])).toEqual(["x.test.ts"]);
     expect(sample([["bun", "run", "test:slow"]])).toEqual(["x.slow.test.ts"]);
+  });
+
+  /** Стандарты — статические проверки, им хватает одного прогона: перед коммитом идут test:spec, затем test (#479). */
+  it("скрипт test не повторяет test:spec: стандарты ai-dev идут только скриптом test:spec", () => {
+    const runsStandard = (script: string) => sample([["bun", "run", script]], STANDARD).includes("s.test.ts");
+    expect(["test", "test:slow", "test:spec"].filter(runsStandard)).toEqual(["test:spec"]);
   });
 
   it("CI запускает и быстрый, и медленный уровень", () => {
