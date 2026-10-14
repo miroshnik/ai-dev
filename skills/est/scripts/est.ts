@@ -165,9 +165,10 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // how many closed issues the index of closing commits keeps
-const SESSION_CACHE_V = 18; // transcript cache format version (changed — reparse); 11 = session name history
+const SESSION_CACHE_V = 19; // transcript cache format version (changed — reparse); 11 = session name history
 // (title_hist), 12 = cloud sessions, 13 = all session directories (cwds), 14 = PR repository on pr-link, 16 = git and
-// gh listing hashes — only own ones, 17 = shell keywords in a listing, 18 = agent number on a record (task fan-out)
+// gh listing hashes — only own ones, 17 = shell keywords in a listing, 18 = agent number on a record (task fan-out),
+// 19 = a subagent's branch in its own worktree — from that checkout, not gitBranch
 const PROJECT_META_TTL = 86400; // a day: reread the cache of project/field ids
 const OPEN_PRS_TTL = 3600; // an hour: the list of open PRs (their branches are someone else's)
 // Long-lived branches: "neutral" — by themselves they don't link a task, but inside an anchor window they count.
@@ -525,6 +526,8 @@ export interface Session {
   title_urls: string[];
   title_hist?: [number, string][]; // (rename time, name) — in transcript order
   n_subagents: number;
+  agents?: string[]; // ids of subagents by number (agent k — agents[k - 1]): the transcript's file name, in the cloud —
+  // the call that started the subagent
   source: string;
   routine: boolean;
   mtime?: number;
@@ -1105,9 +1108,55 @@ interface Acc {
   mids: Set<string>;
   title: string;
   titles: [number, string][];
+  topCwds: Set<string>; // directories of the session's own (top-level) records
+  checkouts: Map<string, string>; // a subagent's directory outside them → the branch of its checkout
 }
 
-const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [] });
+const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map() });
+
+/**
+ * The branch checked out in the checkout containing dir — from its git files, without running git: `.git` is a
+ * directory (the main checkout) or a `gitdir:` file (a linked worktree). A detached HEAD — "HEAD"; no such directory
+ * (the worktree is already removed) — "" (no branch, neutral).
+ */
+function checkoutBranch(dir: string): string {
+  if (!existsSync(dir)) return "";
+  for (let d = dir; ; d = path.dirname(d)) {
+    const dotGit = path.join(d, ".git");
+    let gitDir: string | null = null;
+    try {
+      if (statSync(dotGit).isDirectory()) gitDir = dotGit;
+      else {
+        const m = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, "utf8"));
+        if (m) gitDir = path.resolve(d, m[1]!);
+      }
+    } catch {
+      /* no .git here — look higher */
+    }
+    if (gitDir !== null) {
+      try {
+        const head = readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+        return /^ref:\s*refs\/heads\/(.+)$/.exec(head)?.[1] ?? "HEAD";
+      } catch {
+        return "";
+      }
+    }
+    if (path.dirname(d) === d) return "";
+  }
+}
+
+/**
+ * A record's branch. A subagent working in its own worktree (its directory isn't one of the session's) — the branch of
+ * that worktree: Claude Code writes into a subagent record's gitBranch the branch of another checkout (#490). The rest
+ * — gitBranch as written.
+ */
+function recordBranch(r: Any, acc: Acc, subagent: boolean): string {
+  const cwd: string | undefined = r.cwd;
+  if (!subagent || !cwd || acc.topCwds.has(cwd)) return r.gitBranch || "";
+  let b = acc.checkouts.get(cwd);
+  if (b === undefined) acc.checkouts.set(cwd, (b = checkoutBranch(cwd)));
+  return b;
+}
 
 function* jsonlRecords(file: string): Generator<Any> {
   const text = readFileSync(file, "utf8");
@@ -1218,6 +1267,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
     const ts = r.timestamp ? parseTs(r.timestamp) : null;
     if (acc.cwd === null && r.cwd) acc.cwd = r.cwd;
     if (r.cwd && !acc.cwds.includes(r.cwd)) acc.cwds.push(r.cwd);
+    if (r.cwd && !subagent) acc.topCwds.add(r.cwd);
     if (t === "custom-title" && !subagent) {
       // the session name by the "#<number> <task name>" convention links records to the task from the moment of the
       // rename (the first one — from the session start); Claude Code writes it without a time
@@ -1275,7 +1325,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         acc.usage.push([mid.slice(-12), acc.models.indexOf(model), Math.trunc(u.input_tokens || 0), Math.trunc(u.output_tokens || 0), cw5, cw1, Math.trunc(u.cache_read_input_tokens || 0), u.speed === "fast" ? 1 : 0]);
       }
     }
-    acc.ev.push([ts, r.gitBranch || "", human ? 1 : 0, hint, uidx, agent]);
+    acc.ev.push([ts, recordBranch(r, acc, subagent), human ? 1 : 0, hint, uidx, agent]);
     if (human && acc.first_refs === null) {
       const txt = promptText(content);
       acc.first_refs = refsIn(txt);
@@ -1351,6 +1401,7 @@ export function parseSessionFile(file: string): Session {
     title_urls: urlsIn(acc.title),
     title_hist: acc.titles,
     n_subagents: subs.length,
+    agents: subs.map((f) => path.basename(f, ".jsonl")),
     source: "claude",
     routine: acc.n_human < 3 && !acc.prlinks.length && !acc.commits.length,
   };
@@ -1549,6 +1600,7 @@ export function parseCloudFile(file: string): Session {
     title_urls: urlsIn(acc.title),
     title_hist: acc.titles,
     n_subagents: subs.size,
+    agents: [...subs.keys()],
     source: "cloud",
     routine: acc.n_human < 3 && !acc.commits.length,
   };
@@ -1567,6 +1619,16 @@ function gitBranchIn(txt: string): string | null {
  * key).
  */
 export const sidKey = (sid: string) => sid.replace(/^session_/, "").slice(0, 8);
+
+/**
+ * Key of an agent's intervals in the "Actual" marker: the session itself — sidKey, a subagent — `sidKey:<the end of
+ * its id>`. Parallel subagents of one session work at the same time, so double counting is within one agent (#490);
+ * a marker written before that has one key for the whole session.
+ */
+export function agentKey(s: Pick<Session, "sid" | "agents">, agent: number): string {
+  if (!agent) return sidKey(s.sid);
+  return `${sidKey(s.sid)}:${(s.agents?.[agent - 1] ?? String(agent)).slice(-8)}`;
+}
 
 /** Path of a cloud session export in the state directory: by repository, the file is the session id. */
 export const cloudPath = (repoFull: string, session: string) => path.join(CLOUD_DIR, ...repoFull.split("/"), `${session}.json`);
@@ -2141,6 +2203,21 @@ export interface Fact {
 type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, share)
 
 /**
+ * For each record of the timeline — the index of the previous record of the same agent (the session itself or one
+ * subagent), -1 — none. An interval of active time pairs records of one agent: parallel subagents' records interleave
+ * in the session's timeline, and a neighbor there is usually another agent's (#490).
+ */
+function prevOfSameAgent(ev: Any[][]): number[] {
+  const last = new Map<number, number>();
+  return ev.map((e, i) => {
+    const agent: number = e[5] ?? 0;
+    const prev = last.get(agent) ?? -1;
+    last.set(agent, i);
+    return prev;
+  });
+}
+
+/**
  * Time window for linking: [a, z] (z exclusive if zOpen), only branch br (null — any one that isn't foreign)
  * or a neutral one; rule — "anchor" (own PR/commit) or "title" / "prompt" (the task is named in the session
  * name or in the first prompt — a weak link: it yields to an already recorded actual of another task).
@@ -2271,7 +2348,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   const iv: Record<string, [number, number][]> = {};
   const takenS = new Map<number, number>(); // task → seconds given to its recorded actual
   const overlapS = new Map<number, number>();
-  const recorded = repo.recorded?.() ?? new Map();
+  const recorded: Recorded = repo.recorded?.() ?? new Map();
   const sharedWith = new Set(shared.flatMap((x) => x.with)); // a shared PR/commit: an overlap is a share, not an error
   const ourKey = `${repo.full}#${number}`;
   const cmpAnchor = (a: Anchor, b: Anchor) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0) || a[3] - b[3];
@@ -2444,33 +2521,53 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // A record already counted in a recorded actual of another task of this session (the marker stores intervals):
     // linked only by the name or the first prompt — not counted again; linked by pinning,
     // a branch, a subagent or its own commit — stays, but the overlap is printed (the other actual is probably wrong).
+    // Intervals are compared within one agent of the session: parallel subagents work at the same time (agentKey).
     const sid8 = sidKey(s.sid);
-    const others: [number, [number, number][]][] = [];
-    for (const [n, bySid] of recorded) if (n !== number && bySid[sid8]?.length) others.push([n, bySid[sid8]]);
-    if (others.length) {
+    const prev = prevOfSameAgent(ev);
+    const keyOf = (i: number) => agentKey(s, ev[i]![5] ?? 0);
+    const othersBy = new Map<string, [number, [number, number][]][]>(); // agent key → (task, its recorded intervals)
+    for (const [n, bySid] of recorded) {
+      if (n === number) continue;
+      for (const [k, ivs] of Object.entries(bySid)) {
+        if ((k === sid8 || k.startsWith(sid8 + ":")) && ivs?.length) othersBy.set(k, [...(othersBy.get(k) ?? []), [n, ivs]]);
+      }
+    }
+    if (othersBy.size) {
       const orig = [...attributed];
+      // the hours given to another actual — the union of the records' intervals
+      const sTaken = new Map<number, [number, number][]>();
+      const sOverlap = new Map<number, [number, number][]>();
+      const add = (m: Map<number, [number, number][]>, n: number, a: number, b: number) => m.set(n, [...(m.get(n) ?? []), [a, b]]);
       for (let i = 0; i < ev.length; i++) {
         if (!orig[i]) continue;
+        const others = othersBy.get(keyOf(i));
+        if (!others) continue;
         const t = ev[i]![0] as number;
-        const pair = i > 0 && t - ev[i - 1]![0] <= gap && (orig[i - 1]! > 0 || !!ev[i - 1]![2]);
-        const x = pair ? (ev[i - 1]![0] + t) / 2 : t; // a record's interval — by the midpoint, a single one — by time
+        const j = prev[i]!;
+        const pair = j >= 0 && t - ev[j]![0] <= gap && (orig[j]! > 0 || !!ev[j]![2]);
+        const x = pair ? (ev[j]![0] + t) / 2 : t; // a record's interval — by the midpoint, a single one — by time
         const tol = pair ? 0 : 1; // marker boundaries are rounded to a second
         const hit = others.find(([, ivs]) => ivs.some(([a, b]) => a - tol <= x && x <= b + tol));
         if (!hit) continue;
-        const d = pair ? t - ev[i - 1]![0] : 0;
+        const a = pair ? (ev[j]![0] as number) : t;
         const rule = weak[i]!;
         if (rule) {
           attributed[i] = 0;
-          takenS.set(hit[0], (takenS.get(hit[0]) ?? 0) + d);
+          add(sTaken, hit[0], a, t);
           if (--rules[rule]! <= 0) delete rules[rule];
         } else if (!sharedWith.has(hit[0])) {
-          overlapS.set(hit[0], (overlapS.get(hit[0]) ?? 0) + d);
+          add(sOverlap, hit[0], a, t);
         }
       }
+      const union = (ivs: [number, number][]) => mergeIntervals(ivs).reduce((acc, [a, b]) => acc + (b - a), 0);
+      for (const [n, ivs] of sTaken) takenS.set(n, (takenS.get(n) ?? 0) + union(ivs));
+      for (const [n, ivs] of sOverlap) overlapS.set(n, (overlapS.get(n) ?? 0) + union(ivs));
     }
     if (!attributed.some((w) => w > 0)) continue;
-    // the interval to the previous record counts only if that one is ours too
+    // the interval to the previous record of the same agent counts only if that one is ours too
     // or it's the human prompt our segment started with
+    const next = new Array<number>(ev.length).fill(-1);
+    for (let i = 0; i < ev.length; i++) if (prev[i]! >= 0) next[prev[i]!] = i;
     let sessRaw = 0.0;
     let sessW = 0.0;
     let prompts = 0;
@@ -2478,6 +2575,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     let sLast: number | null = null;
     const brs: Record<string, number> = {};
     const sessIv: [number, number][] = [];
+    const ivBy = new Map<string, [number, number][]>(); // the same intervals by agent key — into the marker
     const sessAgents = new Set<number>();
     const sessUsage: [Any[], number, boolean][] = []; // (usage record, share, whether a subagent) for linked model responses
     const sUsage = s.usage ?? [];
@@ -2486,17 +2584,21 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       const e = ev[i]!;
       const [ts, b, human] = [e[0] as number, e[1] as string, e[2] as number];
       const w = attributed[i]!;
-      if (human && !w && i + 1 < ev.length && attributed[i + 1]! && ev[i + 1]![0] - ts <= gap) prompts++;
+      const k = next[i]!;
+      if (human && !w && k >= 0 && attributed[k]! && ev[k]![0] - ts <= gap) prompts++;
       if (!w) continue;
       if (e.length > 4 && e[4] >= 0 && e[4] < sUsage.length) sessUsage.push([sUsage[e[4]]!, w, e[5] > 0]);
       if (e[5] > 0) sessAgents.add(e[5]);
       prompts += human;
       sFirst = sFirst === null ? ts : sFirst;
       sLast = ts;
-      if (i > 0 && ts - ev[i - 1]![0] <= gap && (attributed[i - 1]! || ev[i - 1]![2])) {
-        const d = ts - ev[i - 1]![0];
-        intervals.push([ev[i - 1]![0], ts]);
-        sessIv.push([ev[i - 1]![0], ts]);
+      const j = prev[i]!;
+      if (j >= 0 && ts - ev[j]![0] <= gap && (attributed[j]! || ev[j]![2])) {
+        const d = ts - ev[j]![0];
+        intervals.push([ev[j]![0], ts]);
+        sessIv.push([ev[j]![0], ts]);
+        const ak = keyOf(i);
+        ivBy.set(ak, [...(ivBy.get(ak) ?? []), [ev[j]![0], ts]]);
         sessRaw += d;
         sessW += d * w;
         const key = b || "?";
@@ -2504,7 +2606,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       }
     }
     if (sessRaw < 60 && prompts === 0) continue; // less than a minute and no prompts (a random hash in output) — not counted as a session
-    if (sessIv.length) iv[sid8] = mergeIntervals([...(iv[sid8] ?? []), ...sessIv]).map(([a, b]) => [Math.floor(a), Math.ceil(b)]);
+    for (const [k, list] of ivBy) iv[k] = mergeIntervals([...(iv[k] ?? []), ...list]).map(([a, b]) => [Math.floor(a), Math.ceil(b)]);
     nSessions++;
     nPrompts += prompts;
     nAgents += sessAgents.size;
@@ -2541,9 +2643,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     lastTs = lastTs === null ? sLast : Math.max(lastTs, sLast!);
     if (sFirstTop !== null && (preAt === null || sFirst! < preAt)) (preAt = sFirst!), (preamble = sFirstTop);
     if (sLastTop !== null && (endAt === null || sLast! > endAt)) (endAt = sLast!), (ctxEnd = sLastTop);
+    // intervals of parallel agents overlap: the session's hours and their split by branch — by the union, like the total
+    const sessUnion = mergeIntervals(sessIv).reduce((acc, [a, b]) => acc + (b - a), 0);
+    const par = sessRaw > 0 ? sessUnion / sessRaw : 0;
     const branches: Record<string, number> = {};
-    for (const [k, v] of Object.entries(brs).sort((a, b) => b[1] - a[1])) branches[k] = round2(v);
-    details.push({ sid: s.sid, src: s.source ?? "claude", start: sFirst!, hours: round2(sessW / 3600), prompts, rules, branches });
+    for (const [k, v] of Object.entries(brs).sort((a, b) => b[1] - a[1])) branches[k] = round2(v * par);
+    details.push({ sid: s.sid, src: s.source ?? "claude", start: sFirst!, hours: round2((sessW * par) / 3600), prompts, rules, branches });
   }
 
   // Cloud parts (computed by the cloud session itself) — as one more session; a session with an imported export
@@ -2695,9 +2800,9 @@ function tokensTxt(res: Fact, language = locale.projectLanguage()): string {
 
 /**
  * Sweep warning about double counting: the sum of task hours against the union of their intervals within each
- * session (the key is like iv in the "Actual" marker), summed over sessions. Parallel sessions legitimately run at the
- * same time — an overlap between them isn't double counting; double counting is when records of one session went into
- * the actuals of two tasks.
+ * session's agent (the key is like iv in the "Actual" marker — agentKey), summed over the keys. Parallel sessions and
+ * parallel subagents legitimately run at the same time — an overlap between them isn't double counting; double
+ * counting is when records of one agent went into the actuals of two tasks.
  */
 export function sweepOverlapWarning(facts: { h: number; iv?: Record<string, [number, number][]> }[]): string | null {
   const total = facts.reduce((s, f) => s + f.h, 0);

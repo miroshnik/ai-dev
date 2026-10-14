@@ -187,17 +187,28 @@ command to retry, exit code 1.
 
 ## Double counting and shared commits
 
-One record — one task: the `<!-- fact … -->` marker stores intervals per session
-(`iv`), and a record linked only by the session name or the first prompt but
-already included in a recorded actual of another task of the same session isn't
-counted again — the comment says so: «Not counted again: N h already in the actual of #M».
+Active time is the intervals between neighboring records of one agent — the
+session itself or one of its subagents — no longer than the gap: a dispatcher
+session's executors write at the same time, and the neighbor in the session's
+common timeline is usually another agent's. Intervals of parallel agents
+overlap, so the session's hours, its split by branch and the total are their
+union.
+
+One record — one task: the `<!-- fact … -->` marker stores intervals per agent
+of a session (`iv`: the key is the session id's 8 characters, for a subagent —
+with `:` and the end of its id), and a record linked only by the session name or
+the first prompt but already included in a recorded actual of another task by
+the same agent isn't counted again — the comment says so: «Not counted again: N h already in the actual of #M».
 If that actual is the
 wrong one — `est fact M --write`, then this task again. A record linked by
 pinning, a branch, a subagent or its own commit stays its own; the overlap is
-printed («Overlap with the actual of #M … — recompute #M»). Actuals recorded before `iv` appeared aren't checked.
+printed («Overlap with the actual of #M … — recompute #M»). Actuals recorded before `iv` appeared aren't checked;
+a marker recorded before the per-agent keys has one key for the whole session
+and is compared with the session's own records.
 `--sweep` at the end checks the sum of hours against the union of intervals
-within each session: parallel sessions at the same time aren't double counting; a
-warning comes only when records of one session went into the actuals of two tasks.
+within each agent of a session: parallel sessions and parallel subagents at the
+same time aren't double counting; a warning comes only when records of one agent
+went into the actuals of two tasks.
 
 The number is the **issue** number, not a PR's: given a PR number the script
 warns and computes the actual for the PR itself. A shared commit/PR that closed
@@ -286,7 +297,12 @@ compare periods longer than a typical task.
   «epic» isn't the task; two numbers without these markers
   (`look at #263 and #261`) give no hint.
 - A transcript record's branch is the branch of the session's folder, so work
-  in a neighboring worktree from the same session is on a "foreign" branch.
+  in a neighboring worktree from the same session is on a "foreign" branch. A
+  subagent working in its own worktree (its folder isn't one of the session's)
+  gets that worktree's branch, read from its git files: Claude Code writes into
+  such a record's `gitBranch` the branch of another checkout. A worktree
+  already removed gives no branch (neutral) — its records are linked by the
+  task number in the assignment.
 - A hash in a listing's output (`git worktree list`, `git branch`, `git log`,
   `git fetch`, reading via `gh` other than `gh pr view`; a command made only of
   these and utilities like `head`, `grep`, including inside a `for` or `while`
