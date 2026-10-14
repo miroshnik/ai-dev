@@ -142,8 +142,8 @@ describe("Коммит ждут до исхода всех его чеков —
   it("поздно зарегистрированный чек не проскакивает: финал — два опроса подряд без pending", () => {
     const r = waitCommit([
       { runs: [ok("tests")] },
-      { runs: [ok("tests"), run("spec-publish", "queued")] },
-      { runs: [ok("tests"), ok("spec-publish")] },
+      { runs: [ok("tests"), run("deploy", "queued")] },
+      { runs: [ok("tests"), ok("deploy")] },
     ]);
     expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
   });
@@ -309,7 +309,7 @@ describe("PR с конфликтом с базой не ждут — CI на н�
 describe("Коммит мержа ждут по номеру PR — SHA мержа скрипт берёт сам", () => {
   it("влитый PR — ждут чеки коммита мержа: SHA скрипт берёт из PR сам", () => {
     write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
-    writeChecks([{ runs: [run("spec-publish", "queued")] }, { runs: [ok("spec-publish")] }]);
+    writeChecks([{ runs: [run("deploy", "queued")] }, { runs: [ok("deploy")] }]);
     const r = ciWait(["merged", "7", "--timeout", "5"]);
     expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
     expect(calls()).toContain(`repos/{owner}/{repo}/commits/${MERGE}/status`);
@@ -322,6 +322,31 @@ describe("Коммит мержа ждут по номеру PR — SHA мерж
     const r = ciWait(["merged", "7", "--timeout", "5"]);
     expect(r.code).toBe(3);
     expect(r.result).toStartWith("ERROR PR #7 not merged");
+  });
+});
+
+/**
+ * Публикация спеки — выкладка документации, а не проверка (#443): за три недели в проектах ни одной находки, а её
+ * гонка пуша делала ожидание после мержа FAIL — деплой и чеки main ждутся без неё.
+ */
+describe("Публикация спеки — не проверка: её исход и незавершённость не решают ожидание", () => {
+  it("упавшая публикация спеки не делает ожидание после мержа FAIL", () => {
+    write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
+    // публикация ещё идёт, когда деплой уже зелёный, — её не ждут; затем падает — и тот же job в реюзабельном workflow
+    writeChecks([
+      { runs: [ok("tests"), run("deploy", "in_progress"), run("spec-publish", "in_progress")] },
+      { runs: [ok("tests"), ok("deploy"), failed("spec-publish"), failed("ci / spec-publish")] },
+    ]);
+    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
+    expect(r.stdout).not.toContain("spec-publish");
+  });
+
+  it("публикацию спеки, названную в --context, ждут, как любой чек", () => {
+    write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
+    writeChecks([{ runs: [ok("tests"), failed("spec-publish")] }]);
+    const r = ciWait(["merged", "7", "--timeout", "5", "--context", "spec-publish"]);
+    expect([r.code, r.result]).toEqual([1, "FAIL spec-publish"]);
   });
 });
 
