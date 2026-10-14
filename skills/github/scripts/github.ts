@@ -1960,8 +1960,9 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
  * recent PRs); order — Priority, then the number. Marks the session as a dispatcher (`dispatcherFile`).
  */
 export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
-  const pin = pinnedTask(io);
-  if (pin) throw new GhError(`the session runs ${pin} — a dispatcher is a separate session: the request goes into a new one`);
+  // a line that isn't a pin leaves the session free, as for est and the dashboard (tests/standards/session-pin)
+  const held = pinnedTask(io)?.task;
+  if (held) throw new GhError(`the session runs ${held.slug}#${held.number} — a dispatcher is a separate session: the request goes into a new one`);
   const want = o.type === undefined ? undefined : typeAliases()[o.type.toLowerCase()];
   if (o.type !== undefined && (!want || want === N.issueTypes.epic)) throw new GhError(`--type: ${N.issueTypes.task} or ${N.issueTypes.bug}`);
   const bad = (o.priority ?? []).filter((p) => !(PRIORITIES as readonly string[]).includes(p));
