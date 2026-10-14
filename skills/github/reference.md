@@ -343,7 +343,8 @@ description is rewritten.
     or classic protection) with a non-empty list of required checks. None —
     `fix` sets the `ai-dev` ruleset: `~DEFAULT_BRANCH`, without strict (the
     rule doesn't require an up-to-date branch), required — the checks green on
-    each of the last 10 merged PRs, bypass — the admin role (the owner's direct
+    each of the last 10 merged PRs (by the latest run; skipped or neutral
+    isn't green here), bypass — the admin role (the owner's direct
     push). Its own ruleset keeps being checked: disabled, with strict or
     without bypass — fixed; a required check that the fresh head lacks (the
     last merged PR, an open PR with finished checks) leaves the list —
@@ -494,7 +495,9 @@ title and link; the type, the state if closed, `Status`, the estimate and the
 actual, `Priority`, milestone and labels in one line; the epic with its open
 questions and other open tasks (`- question k. …`, `- task #M «…»`); an
 epic's open subtasks; open blockers; each PR with its state and its head's
-checks (`checks: 2 ✅, 1 ⏳ (e2e), 1 ❌ (lint)`; GitHub hasn't linked the PR yet
+checks (`checks: 2 ✅, 1 ⏳ (e2e), 1 ❌ (lint)`; skipped and neutral — ✅,
+cancelled — ❌, of a check's reruns — the latest, as `ci-wait` reads it:
+standard `check-run-state`; GitHub hasn't linked the PR yet
 — found by the branch or «Closes #N», as `task close` does; an epic has no PR
 line); the questions — open and answered numbers with the `task answer`
 command; then the description as is. Read-only, one GraphQL query (plus the
