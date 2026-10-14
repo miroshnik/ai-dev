@@ -72,11 +72,12 @@ const BLOCK = [
 ].join("\n");
 
 /**
- * Claude Code's SessionStart hook: at the start of a session — `check --hook` (machine and project). Claude Code adds
- * the output of a hook with code 0 to the context, with any other code — doesn't, so the code is always 0: both
- * `check --hook` and the fallback `echo` if bunx didn't start. `--silent` — the first install of the package prints
- * bunx's progress to stderr, and the hook's output goes into the context. The timeout keeps the network from holding
- * up the start; an error doesn't block the session — the "First step of a session" rule in AGENTS.md is the safety net.
+ * Claude Code's SessionStart hook: at the start of a session — `check --hook` (machine and project) and the agent's Bash
+ * environment (`writeAgentShell`). Claude Code adds the output of a hook with code 0 to the context, with any other
+ * code — doesn't, so the code is always 0: both `check --hook` and the fallback `echo` if bunx didn't start.
+ * `--silent` — the first install of the package prints bunx's progress to stderr, and the hook's output goes into the
+ * context. The timeout keeps the network from holding up the start; an error doesn't block the session — the "First
+ * step of a session" rule in AGENTS.md is the safety net.
  */
 const HOOK_COMMAND = `bunx --silent github:${SOURCE} check --hook 2>&1 || echo "ai-dev check unavailable (exit $?): work by the current flow and say so"`;
 const HOOK = { matcher: "startup|resume|clear", hooks: [{ type: "command", command: HOOK_COMMAND, timeout: 60 }] };
@@ -118,9 +119,11 @@ const USAGE = `Usage: ai-dev <command> [-g]
                      violation, ○ — not checked: no docker compose; the task-env skill) and warns (!) if a script in
                      slot calls turbo and turbo.json doesn't pass the queue variables to tasks (the exit code stays
                      the same); for the machine names the task-env proxy of *.localhost addresses — running or not,
-                     with the start command (with Docker on the machine; the exit code stays the same)
+                     with the start command (with Docker on the machine; the exit code stays the same), and, run from
+                     the agent's Bash in Claude Code, a session without the agent's Bash environment
   check --hook       the machine and the project at once for the Claude Code SessionStart hook: the exit code is
-                     always 0, errors go to the output
+                     always 0, errors go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE —
+                     zsh without errors on a glob without matches and on =word, timeout from bin/shims
   update [-g]        bring it up to date: a --link clone — git pull --ff-only, a copy — install of the latest
                      release (the project's mode and language are kept; an install of a previous version without a
                      language gets ru: before the field the flow worked in Russian); in a project install and update
@@ -580,7 +583,9 @@ function claudeRules(root: string) {
 
 /**
  * The SessionStart hook in `~/.claude/settings.json` (HOOK): the user's own settings and hooks stay in place, a hook
- * of a previous version (with npx too) is replaced, a repeated install doesn't duplicate it.
+ * of a previous version (with npx too) is replaced, a repeated install doesn't duplicate it. A dry run names what the
+ * hook gives: from a terminal `check -g` can't see the agent's shell, a missing hook is how it names a missing Bash
+ * environment (tests/capabilities/agent-shell).
  */
 function claudeHook(home: string) {
   const file = path.join(home, ".claude/settings.json");
@@ -596,7 +601,7 @@ function claudeHook(home: string) {
   const groups = settings.hooks?.SessionStart ?? [];
   const count = groups.flatMap((g) => g.hooks ?? []).filter(ours).length;
   if (count === 1 && groups.some((g) => JSON.stringify(g) === JSON.stringify(HOOK))) return;
-  if (dry) return change(existsSync(file) ? "~" : "+", file);
+  if (dry) return change(existsSync(file) ? "~" : "+", file, { note: "the SessionStart hook: the flow check and the agent's Bash environment" });
   const rest = groups.map((g) => ({ ...g, hooks: (g.hooks ?? []).filter((h) => !ours(h)) })).filter((g) => g.hooks.length);
   settings.hooks = { ...settings.hooks, SessionStart: [...rest, HOOK] };
   mkdirSync(path.dirname(file), { recursive: true });
@@ -1123,10 +1128,67 @@ function proxyLines(home: string): string[] {
   return ["  proxy *.localhost: not running — start: bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up"];
 }
 
-/** The check's result plus the proxy line for the machine (`proxyLines`): installed or not, behind or not. */
-function withProxy(global: boolean, r: Result): Result {
+/**
+ * The agent's Bash environment (tests/capabilities/agent-shell). Claude Code's Bash tool — the user's zsh on macOS —
+ * puts the text of the files SessionStart hooks write to `$CLAUDE_ENV_FILE` into every call, after the user's shell
+ * snapshot and before the command's `eval` (checked on Claude Code 2.1.295): shell options and PATH from there hold
+ * in the command itself, in subagents too. zsh breaks commands written for bash: a glob without matches is an error
+ * (`no matches found: --include=*.ts`, and grep in a pipe reads it as "nothing found"), a word starting with `=` is a
+ * command's path (`echo ====`, `[ a == b ]`), and macOS has no `timeout`. So: NO_NOMATCH and NO_EQUALS in zsh, this
+ * package's `bin/shims` (`timeout`) at the end of PATH — a real `timeout` wins — and the AGENT_SHELL mark `check -g`
+ * recognises the environment by.
+ */
+const AGENT_SHELL = "AI_DEV_AGENT_SHELL";
+
+/** A word for sh: in single quotes. */
+const shQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
+
+function agentShellScript() {
+  return [
+    `# ai-dev: the agent's Bash environment, written by the SessionStart hook (${RUN} check --hook)`,
+    `export ${AGENT_SHELL}=1`,
+    'if [ -n "${ZSH_VERSION-}" ]; then setopt NO_NOMATCH NO_EQUALS; fi',
+    `export PATH="\${PATH:+$PATH:}"${shQuote(path.join(SRC, "bin/shims"))}`,
+    "",
+  ].join("\n");
+}
+
+/** Without the environment the zsh pitfalls are back: what the agent does by hand meanwhile. */
+const SHELL_FALLBACK = "meanwhile in zsh quote globs ('*.ts') and words starting with = ('===='), use the Bash tool's timeout instead of timeout";
+
+/**
+ * The SessionStart hook: the agent's Bash environment into `$CLAUDE_ENV_FILE` — the file Claude Code gives this hook
+ * (`~/.claude/session-env/<session>/sessionstart-hook-<N>.sh`); rewritten on every start, resume and clear, a repeat
+ * doesn't add a second copy. Written — no line: the hook's output is read in every session.
+ */
+function writeAgentShell(): string[] {
+  const file = process.env.CLAUDE_ENV_FILE;
+  if (!file) return [`  agent Bash: not set up — Claude Code gave the hook no CLAUDE_ENV_FILE; ${SHELL_FALLBACK}`];
+  try {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, agentShellScript());
+    return [];
+  } catch (e) {
+    return [`  agent Bash: not set up — can't write CLAUDE_ENV_FILE ${file}: ${reason(e)}; ${SHELL_FALLBACK}`];
+  }
+}
+
+/**
+ * `check -g` from the agent's Bash (Claude Code sets CLAUDECODE=1 in it): no AGENT_SHELL mark — the session didn't get
+ * the environment. From a terminal the agent's shell can't be seen — no line.
+ */
+function agentShellLines(): string[] {
+  if (process.env.CLAUDECODE !== "1" || process.env[AGENT_SHELL]) return [];
+  return [`  agent Bash: not set up — this session got no environment from the ai-dev SessionStart hook (its output at the session start says why); ${SHELL_FALLBACK}`];
+}
+
+/**
+ * The check's result plus the machine's lines, installed or not, behind or not: the proxy (`proxyLines`) and the
+ * agent's Bash environment — the hook passes what writing it gave, `check -g` asks `agentShellLines`.
+ */
+function withMachine(global: boolean, r: Result, shell = agentShellLines()): Result {
   if (!global || r.absent) return r;
-  const lines = proxyLines(os.homedir());
+  const lines = [...proxyLines(os.homedir()), ...shell];
   return lines.length ? { ...r, text: [r.text, ...lines].join("\n") } : r;
 }
 
@@ -1183,17 +1245,18 @@ function resumeLines(): string[] {
 }
 
 /**
- * The SessionStart hook: the machine and the project in one output to the session context, then the wait a resumed
- * session restarts; the code is always 0, errors go to stdout. failed — the latest release couldn't be found: what's
- * installed is "check unavailable".
+ * The SessionStart hook: the agent's Bash environment, then the machine and the project in one output to the session
+ * context, then the wait a resumed session restarts; the code is always 0, errors go to stdout. failed — the latest
+ * release couldn't be found: what's installed is "check unavailable", the environment is written all the same.
  */
 function hook(failed?: unknown) {
+  const shell = writeAgentShell();
   const results: Result[] = [];
   for (const global of [true, false]) {
     try {
-      results.push(withProxy(global, failed && target(global).installed ? unavailable(global, failed) : check(global)));
+      results.push(withMachine(global, failed && target(global).installed ? unavailable(global, failed) : check(global), shell));
     } catch (e) {
-      results.push(withProxy(global, unavailable(global, e)));
+      results.push(withMachine(global, unavailable(global, e), shell));
     }
   }
   const shown = results.filter((r) => !r.absent);
@@ -1527,7 +1590,7 @@ function main(argv: string[]) {
     } catch (e) {
       r = unavailable(global, e);
     }
-    r = withProxy(global, r);
+    r = withMachine(global, r);
     (r.code === 2 ? process.stderr : process.stdout).write(r.text + "\n");
     return r.code;
   }

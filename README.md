@@ -167,7 +167,7 @@ bunx github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a 
 bunx github:miroshnik/ai-dev update -g   # bring it to the latest release
 ```
 
-Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session; a session resumed after the app restarted also gets the wait of its task to restart — background waits die with the app's process. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
+Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session; a session resumed after the app restarted also gets the wait of its task to restart — background waits die with the app's process. The same hook sets up the agent's Bash: in zsh a glob without matches and `====` go to the command as is, as in bash, and `timeout` works on macOS without coreutils (`bin/shims`); `check -g` run from the agent's Bash names it if the session didn't get that. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
 
 An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun/install/cache` — prefix the command with `BUN_INSTALL_CACHE_DIR="$TMPDIR/bun"` — nor the install write `.claude/skills`: then run the command in your own terminal — the refusal names it, and a repeat run finishes a cut-off install.
 
@@ -285,6 +285,7 @@ docs/              references the canon links to
 skills/<name>/     SKILL.md + scripts/ — TypeScript under Bun, no dependencies
 tests/             ai-dev's own spec: capabilities/ and standards/
 bin/ai-dev.ts      the installer — TypeScript under Bun too: bunx runs it from node_modules by its shebang
+bin/shims/         commands the SessionStart hook adds to the end of the agent's Bash PATH: timeout
 ```
 
 **A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description`; body < 500 lines) and `scripts/` for the deterministic part; `reference.md` if needed. Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in ai-dev's `tests/` over the same tree. The installer `bin/ai-dev.ts` is the same TypeScript under Bun and imports skill modules instead of copying their values. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.

@@ -1,0 +1,113 @@
+#!/usr/bin/env -S bun --no-env-file
+/**
+ * timeout — GNU coreutils `timeout` for a machine without it (macOS without coreutils). The SessionStart hook puts this
+ * directory at the end of the agent's Bash PATH (bin/ai-dev.ts, `agentShellScript`), so a real `timeout` wins;
+ * tests/capabilities/agent-shell.
+ *
+ *   timeout [-s SIGNAL] [-k DURATION] [--preserve-status] [--foreground] [-v] DURATION COMMAND [ARG]...
+ *
+ * DURATION — a number with an optional suffix s, m, h, d; 0 — no limit. On expiry the command's process group gets
+ * SIGNAL (TERM by default): a grandchild that outlived the command would hold the call's output until its own end;
+ * with -k — KILL after DURATION more. Exit code: 124 — timed out (137 if KILL ended the command, as GNU), the
+ * command's own with --preserve-status; 125 — timeout itself failed; 126 — the command can't run; 127 — not found;
+ * otherwise the command's (128 + N for signal N). INT, TERM, HUP and QUIT that timeout gets go to the command.
+ * The `--no-env-file` flag in the shebang: Bun would load the project's env files and pass them to the command.
+ */
+import { spawn } from "node:child_process";
+import { constants } from "node:os";
+
+const USAGE = "Usage: timeout [-s SIGNAL] [-k DURATION] [--preserve-status] [--foreground] [-v] DURATION COMMAND [ARG]...";
+const SIGNALS: Record<string, number> = constants.signals;
+/** setTimeout fires at once past 2^31 - 1 ms (24.8 days): a longer limit waits that long — no agent call lasts it. */
+const MAX_DELAY = 2 ** 31 - 1;
+const UNITS: Record<string, number> = { "": 1, s: 1, m: 60, h: 3600, d: 86400 };
+
+function fail(message: string): never {
+  process.stderr.write(`timeout: ${message}\n`);
+  process.exit(125);
+}
+
+/** DURATION in milliseconds. */
+function duration(text: string) {
+  const m = /^(\d+(?:\.\d*)?|\.\d+)([smhd]?)$/.exec(text);
+  if (!m) fail(`invalid time interval '${text}'\n${USAGE}`);
+  return Math.min(Number(m[1]) * (UNITS[m[2] ?? ""] ?? 1) * 1000, MAX_DELAY);
+}
+
+/** A signal by name (KILL, SIGKILL, kill) or number. */
+function signal(text: string): NodeJS.Signals {
+  const name = /^\d+$/.test(text) ? Object.keys(SIGNALS).find((k) => SIGNALS[k] === Number(text)) : `SIG${text.toUpperCase().replace(/^SIG/, "")}`;
+  if (!name || !Object.hasOwn(SIGNALS, name)) fail(`${text}: invalid signal`);
+  return name as NodeJS.Signals;
+}
+
+const args = process.argv.slice(2);
+
+/** The value of an option before DURATION: `-s KILL`, `-sKILL`, `--signal KILL`, `--signal=KILL`; not it — undefined. */
+function value(short: string, long: string) {
+  const a = args[0] ?? "";
+  const inline = a.startsWith(`${long}=`) ? a.slice(long.length + 1) : a.startsWith(short) && a.length > short.length ? a.slice(short.length) : undefined;
+  if (inline !== undefined) return args.shift(), inline;
+  if (a !== short && a !== long) return undefined;
+  args.shift();
+  return args.shift() ?? fail(`option requires an argument -- '${short.slice(1)}'\n${USAGE}`);
+}
+
+let sig: NodeJS.Signals = "SIGTERM";
+let killAfter = 0;
+let preserve = false;
+let foreground = false;
+let verbose = false;
+// options go before DURATION, as with GNU: what follows belongs to the command
+for (let a = args[0]; a?.startsWith("-") && a !== "-"; a = args[0]) {
+  let v;
+  if (a === "--") {
+    args.shift();
+    break;
+  } else if ((v = value("-s", "--signal")) !== undefined) sig = signal(v);
+  else if ((v = value("-k", "--kill-after")) !== undefined) killAfter = duration(v);
+  else if (a === "--preserve-status") (preserve = true), args.shift();
+  else if (a === "--foreground") (foreground = true), args.shift();
+  else if (a === "-v" || a === "--verbose") (verbose = true), args.shift();
+  else if (a === "--help") process.stdout.write(USAGE + "\n"), process.exit(0);
+  else fail(`unrecognized option '${a}'\n${USAGE}`);
+}
+const [limitText, cmd, ...rest] = args;
+if (limitText === undefined || cmd === undefined) fail(`missing operand\n${USAGE}`);
+const limit = duration(limitText);
+
+// its own process group (a session) — the signal reaches the command's children too; --foreground — the command only
+const child = spawn(cmd, rest, { stdio: "inherit", detached: !foreground });
+let timedOut = false;
+const timers: ReturnType<typeof setTimeout>[] = [];
+
+function send(s: NodeJS.Signals) {
+  if (verbose && timedOut) process.stderr.write(`timeout: sending signal ${s.slice(3)} to command '${cmd}'\n`);
+  try {
+    if (foreground || child.pid === undefined) child.kill(s);
+    else process.kill(-child.pid, s);
+  } catch {
+    // the group is already gone
+  }
+}
+
+if (limit > 0) {
+  timers.push(
+    setTimeout(() => {
+      timedOut = true;
+      send(sig);
+      if (killAfter > 0) timers.push(setTimeout(() => send("SIGKILL"), killAfter));
+    }, limit),
+  );
+}
+for (const s of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const) process.on(s, () => send(s));
+
+child.on("error", (e: NodeJS.ErrnoException) => {
+  process.stderr.write(`timeout: failed to run command '${cmd}': ${e.code === "ENOENT" ? "No such file or directory" : e.message}\n`);
+  process.exit(e.code === "ENOENT" ? 127 : 126);
+});
+child.on("exit", (code, signalName) => {
+  for (const t of timers) clearTimeout(t);
+  const status = signalName ? 128 + (SIGNALS[signalName] ?? 0) : (code ?? 0);
+  process.exit(timedOut && !preserve && signalName !== "SIGKILL" ? 124 : status);
+});
