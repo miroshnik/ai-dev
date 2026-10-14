@@ -44,11 +44,28 @@ if [[ "$r" == '"'* ]]; then jq -r . <<<"$r" >&2; exit 1; fi
 printf '%s\\n' "$r"
 `;
 
+/**
+ * Часы скрипта — тоже подделка: `sleep` не ждёт, а двигает время, которое отдаёт `date +%s` (остальные форматы —
+ * настоящий `date`); паузы пишутся в sleeps. Исход не зависит от скорости машины: на реальных часах `--timeout` истекал
+ * под нагрузкой параллельных сессий раньше, чем приходил нужный опрос, а долгое ожидание не проверить без долгого теста.
+ */
+const CLOCK = 1_800_000_000;
+const REAL_DATE = Bun.which("date");
+function fakeClock() {
+  writeFileSync(path.join(sb.dir, "clock"), String(CLOCK));
+  writeFileSync(path.join(sb.dir, "date"), `#!/usr/bin/env bash\n[ "$1" == "+%s" ] && exec cat "$FAKE_GH/clock"\nexec ${REAL_DATE} "$@"\n`);
+  writeFileSync(path.join(sb.dir, "sleep"), `#!/usr/bin/env bash\necho "$1" >> "$FAKE_GH/sleeps"\necho $(( $(cat "$FAKE_GH/clock") + $1 )) > "$FAKE_GH/clock"\n`);
+  for (const f of ["date", "sleep"]) chmodSync(path.join(sb.dir, f), 0o755);
+}
+const sleeps = () => readFileSync(path.join(sb.dir, "sleeps"), "utf8").trim().split("\n").map(Number);
+const lines = (s: string) => s.split("\n").filter(Boolean);
+
 let sb: { dir: string; cleanup: () => void };
 beforeEach(() => {
   sb = tmpDir();
   writeFileSync(path.join(sb.dir, "gh"), FAKE_GH);
   chmodSync(path.join(sb.dir, "gh"), 0o755);
+  fakeClock();
 });
 afterEach(() => sb.cleanup());
 
@@ -79,13 +96,14 @@ const unparsed = () => wfRun("failure", { name: CI, event: "push", check_suite_i
 const write = (kind: string, v: unknown[]) => writeFileSync(path.join(sb.dir, `${kind}.json`), JSON.stringify(v));
 const calls = () => readFileSync(path.join(sb.dir, "calls"), "utf8").split("\n");
 
+
 function ciWait(args: string[]) {
-  const r = spawnSync("bash", [SCRIPT, ...args, "--interval", "0"], {
+  const r = spawnSync("bash", [SCRIPT, ...args], {
     encoding: "utf8",
     env: { ...process.env, PATH: `${sb.dir}:${process.env.PATH}`, FAKE_GH: sb.dir },
   });
   if (r.error) throw r.error;
-  return { code: r.status, result: /^RESULT: (.*)$/m.exec(r.stdout)?.[1] ?? `(нет RESULT) ${r.stdout}${r.stderr}`, stdout: r.stdout };
+  return { code: r.status, result: /^RESULT: (.*)$/m.exec(r.stdout)?.[1] ?? `(нет RESULT) ${r.stdout}${r.stderr}`, stdout: r.stdout, stderr: r.stderr };
 }
 
 interface Poll { statuses?: Status[]; runs?: CheckRun[]; workflowRuns?: WorkflowRun[] }
@@ -104,14 +122,14 @@ function workflow(yaml: string, state = "active") {
 /** Коммит: на каждый опрос — его статусы и check-runs. */
 function waitCommit(polls: Poll[], args: string[] = []) {
   writeChecks(polls);
-  return ciWait(["status", SHA, "--timeout", "5", ...args]);
+  return ciWait(["status", SHA, ...args]);
 }
 
 /** PR: на каждый опрос — `mergeable` (по умолчанию true) и чеки его головы. */
 function waitPr(polls: (Poll & { mergeable?: boolean | null })[], args: string[] = []) {
   write("pull", polls.map((p) => ({ head: { sha: HEAD }, base: { ref: "main" }, mergeable: p.mergeable === undefined ? true : p.mergeable })));
   writeChecks(polls);
-  return ciWait(["pr", "1", "--timeout", "5", ...args]);
+  return ciWait(["pr", "1", ...args]);
 }
 
 describe("Коммит ждут до исхода всех его чеков — и статусов, и check-runs GitHub Actions", () => {
@@ -126,7 +144,7 @@ describe("Коммит ждут до исхода всех его чеков —
       { statuses: [status("deploy", "success")], runs: [ok("tests")] },
     ]);
     expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
-    expect(r.stdout).toContain("CHECK deploy: pending");
+    expect(r.stdout).toContain("1/2 done; waiting: deploy");
   });
 
   it("чеков на коммите ещё нет — ожидание, а не PASS", () => {
@@ -156,7 +174,7 @@ describe("Коммит ждут до исхода всех его чеков —
   it("чеки не завершились к сроку — TIMEOUT", () => {
     const r = waitCommit([{ runs: [run("tests", "in_progress")] }], ["--timeout", "0"]);
     expect(r.code).toBe(2);
-    expect(r.result).toStartWith("TIMEOUT");
+    expect(r.result).toBe("TIMEOUT after 0s (0/1 done; waiting: tests)");
   });
 });
 
@@ -199,7 +217,7 @@ describe("Упавший чек завершает ожидание сразу �
       ["--wait-all"],
     );
     expect([r.code, r.result]).toEqual([1, "FAIL tests"]);
-    expect(r.stdout).toContain("CHECK preview: pass");
+    expect(r.stdout).toContain("2/2 done; failed: tests");
   });
 });
 
@@ -236,15 +254,67 @@ describe("PR ждут по SHA его головы, пока чеки не за�
     const r = waitRequiredTests();
     expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
   });
+});
 
-  it("лимит API — ожидание до сброса, а не ERROR", () => {
-    // шесть отказов подряд: порог ERROR — пять ошибок gh
+/**
+ * Ожидание CI — главный расход времени сессии (#432): медиана 25 мин на сессию в одном проекте, 86 — в другом, а владелец
+ * не видел, чего ждём. Пульс на каждый опрос давал в выходном файле простыню, и агент читал его — до уведомления и после.
+ */
+describe("Ожидание показывает, чего ждёт, и не рвётся на лимите API", () => {
+  it("ожидание печатает строку только при смене состояния чеков", () => {
+    const pending = { runs: [run("tests", "in_progress")] };
+    const r = waitCommit([pending, pending, pending, pending, { runs: [ok("tests")] }]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    // фоновое ожидание пишет stdout и stderr в один файл: шесть опросов — две строки состояния и итог
+    expect([...lines(r.stdout), ...lines(r.stderr)]).toEqual([
+      expect.stringMatching(/ commit@e6dba3b: 0\/1 done; waiting: tests$/),
+      expect.stringMatching(/ commit@e6dba3b: 1\/1 done$/),
+      "RESULT: PASS (1 checks)",
+    ]);
+  });
+
+  it("строка состояния называет ожидаемые чеки и прошедшее время", () => {
+    write("rules", [[{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "e2e" }] } }]]);
+    const r = waitPr(
+      [
+        { statuses: [status("preview", "pending")], runs: [run("tests", "in_progress")] },
+        { statuses: [status("preview", "success")], runs: [run("tests", "in_progress")] },
+        { statuses: [status("preview", "success")], runs: [ok("tests"), ok("e2e")] },
+      ],
+      ["--interval", "30"],
+    );
+    expect([r.code, r.result]).toEqual([0, "PASS (3 checks)"]);
+    expect(lines(r.stdout)).toEqual([
+      expect.stringMatching(/^\d\d:\d\d:\d\d \+0s pr#1@4270c1c: 0\/2 done; waiting: preview, tests; missing required: e2e$/),
+      expect.stringMatching(/ \+30s pr#1@4270c1c: 1\/2 done; waiting: tests; missing required: e2e$/),
+      expect.stringMatching(/ \+1m00s pr#1@4270c1c: 3\/3 done$/),
+      "RESULT: PASS (3 checks)",
+    ]);
+  });
+
+  it("исчерпанный лимит GitHub API — ожидание ждёт сброса и продолжается", () => {
+    // шесть отказов подряд — больше порога ERROR в пять ошибок gh; квота сбросится через 10 минут — позже срока ожидания
     const limit = "gh: API rate limit exceeded for user ID 1. (HTTP 403)";
     write("pull", [limit, limit, limit, limit, limit, limit, { head: { sha: HEAD }, base: { ref: "main" }, mergeable: true }]);
-    write("rate_limit", [{ resources: { core: { limit: 5000, remaining: 0, reset: 0 } } }]);
+    write("rate_limit", [{ resources: { core: { limit: 5000, remaining: 0, reset: CLOCK + 600 } } }]);
     writeChecks([{ runs: [ok("tests")] }]);
-    const r = ciWait(["pr", "1", "--timeout", "5"]);
+    const r = ciWait(["pr", "1", "--timeout", "300"]);
     expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    expect(sleeps()[0]).toBe(601);
+    expect(r.stdout).toContain("pr#1: API rate limit — next poll in 10m01s");
+  });
+
+  it("интервал опроса растёт с длиной ожидания", () => {
+    const pending = { runs: [run("deploy", "in_progress")] };
+    const r = waitCommit([...Array(40).fill(pending), { runs: [ok("deploy")] }], ["--timeout", "7200"]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    const naps = sleeps();
+    // первые 200 с — начальный интервал, дальше десятая доля прошедшего, не больше 5 минут
+    expect(naps.slice(0, 10)).toEqual(Array(10).fill(20));
+    expect(naps.slice(10, -1)).toEqual([...naps.slice(10, -1)].sort((a, b) => a - b));
+    expect(Math.max(...naps)).toBe(300);
+    // подтверждающий опрос перед PASS — снова начальный: выросший интервал только задержал бы итог
+    expect(naps.at(-1)).toBe(20);
   });
 });
 
@@ -310,7 +380,7 @@ describe("Коммит мержа ждут по номеру PR — SHA мерж
   it("влитый PR — ждут чеки коммита мержа: SHA скрипт берёт из PR сам", () => {
     write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
     writeChecks([{ runs: [run("deploy", "queued")] }, { runs: [ok("deploy")] }]);
-    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    const r = ciWait(["merged", "7"]);
     expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
     expect(calls()).toContain(`repos/{owner}/{repo}/commits/${MERGE}/status`);
     expect(calls().filter((c) => c.includes(HEAD))).toEqual([]);
@@ -319,7 +389,7 @@ describe("Коммит мержа ждут по номеру PR — SHA мерж
   it("невлитый PR — ERROR сразу, а не ожидание чеков", () => {
     write("pull", [{ state: "open", merged: false, merge_commit_sha: HEAD, head: { sha: HEAD }, base: { ref: "main" } }]);
     writeChecks([{ runs: [run("tests", "in_progress")] }]);
-    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    const r = ciWait(["merged", "7"]);
     expect(r.code).toBe(3);
     expect(r.result).toStartWith("ERROR PR #7 not merged");
   });
@@ -337,7 +407,7 @@ describe("Публикация спеки — не проверка: её исх
       { runs: [ok("tests"), run("deploy", "in_progress"), run("spec-publish", "in_progress")] },
       { runs: [ok("tests"), ok("deploy"), failed("spec-publish"), failed("ci / spec-publish")] },
     ]);
-    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    const r = ciWait(["merged", "7"]);
     expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
     expect(r.stdout).not.toContain("spec-publish");
   });
@@ -345,7 +415,7 @@ describe("Публикация спеки — не проверка: её исх
   it("публикацию спеки, названную в --context, ждут, как любой чек", () => {
     write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
     writeChecks([{ runs: [ok("tests"), failed("spec-publish")] }]);
-    const r = ciWait(["merged", "7", "--timeout", "5", "--context", "spec-publish"]);
+    const r = ciWait(["merged", "7", "--context", "spec-publish"]);
     expect([r.code, r.result]).toEqual([1, "FAIL spec-publish"]);
   });
 });
@@ -368,7 +438,7 @@ describe("Прогон Actions, не ставший чеком, — не PASS: w
   it("ci-wait merged: прогон Actions с ошибкой разбора workflow на SHA мержа — FAIL с путём файла", () => {
     write("pull", [{ state: "closed", merged: true, merge_commit_sha: MERGE, head: { sha: HEAD }, base: { ref: "main" } }]);
     writeChecks([{ statuses: [preview], workflowRuns: [unparsed()] }]);
-    const r = ciWait(["merged", "7", "--timeout", "5"]);
+    const r = ciWait(["merged", "7"]);
     expect(r.code).toBe(1);
     expect(r.result).toStartWith(`FAIL workflow not parsed: ${CI}`);
     expect(calls()).toContain(`repos/{owner}/{repo}/actions/runs?head_sha=${MERGE}&per_page=100`);
@@ -448,7 +518,7 @@ describe("Прогон Actions, ещё не давший check-runs, — ожи�
     const done = { statuses: [preview], runs: [ok("tests")], workflowRuns: [wfRun("success")] };
     const r = waitPr([queued, queued, queued, done]);
     expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
-    expect(r.stdout).toContain(`CHECK workflow queued: ${CI}`);
+    expect(r.stdout).toContain(`waiting: workflow queued: ${CI}`);
   });
 });
 
@@ -459,14 +529,14 @@ describe("Прогон Actions, ещё не давший check-runs, — ожи�
 describe("Issue ждут до закрытия — баг на красный main будит сессию, когда его закрыли", () => {
   it("открытый issue — ожидание, закрытый — PASS с причиной закрытия", () => {
     write("issue", [{ state: "open" }, { state: "open" }, { state: "closed", state_reason: "completed" }]);
-    const r = ciWait(["issue", "41", "--timeout", "5"]);
+    const r = ciWait(["issue", "41"]);
     expect([r.code, r.result]).toEqual([0, "PASS issue #41 closed (completed)"]);
     expect(calls().filter((c) => c === "repos/{owner}/{repo}/issues/41")).toHaveLength(3);
   });
 
   it("issue нет — ERROR сразу, а не ожидание до таймаута", () => {
     write("issue", ["gh: Not Found (HTTP 404)"]);
-    const r = ciWait(["issue", "41", "--timeout", "5"]);
+    const r = ciWait(["issue", "41"]);
     expect(r.code).toBe(3);
     expect(r.result).toStartWith("ERROR issue #41 not found");
   });
