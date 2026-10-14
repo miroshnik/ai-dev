@@ -2529,6 +2529,13 @@
   "describes": [
    "task actualize делает механику актуализации блока и печатает задание субагенту"
   ],
+  "name": "blocked by на issue другого репозитория: закрытый снимается и назван с репозиторием, открытый с номером влитой задачи — остаётся"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
   "name": "blocked by на влитой, но ещё открытой задаче — её PR влит — снимается тоже"
  },
  {
@@ -3205,6 +3212,13 @@
   "describes": [
    "task queue раздаёт задачи эпика или фильтра исполнителям"
   ],
+  "name": "блокер снят — задача снова среди готовых"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue раздаёт задачи эпика или фильтра исполнителям"
+  ],
   "name": "в сессии с закреплённой задачей — отказ (код 2) до чтения очереди: диспетчер — отдельная сессия"
  },
  {
@@ -3227,6 +3241,13 @@
    "task queue раздаёт задачи эпика или фильтра исполнителям"
   ],
   "name": "задание исполнителю по задаче в «Бэклоге» без ветки не говорит, что задача уже в работе"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue раздаёт задачи эпика или фильтра исполнителям"
+  ],
+  "name": "задача с внешним блокером — строка `○` с причиной, а не среди готовых"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3318,6 +3339,13 @@
    "task show печатает задачу одним выводом"
   ],
   "name": "`task show` печатает задачу, её открытые вопросы, эпик и PR одним выводом"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task show печатает задачу одним выводом"
+  ],
+  "name": "блокер — issue другого репозитория: в «Blocked by» — с именем репозитория, а не номером, похожим на задачу этого"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -9565,6 +9593,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название comments.externalBlocker скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название est.answer скрипты читают из словаря"
  },
  {
@@ -10077,6 +10112,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название labels.epicDescription скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название labels.externalBlocker скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -14538,6 +14580,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/github/SKILL.md: AGENTS.md, «Task tracking» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/SKILL.md: skills/github/reference.md, «Dependencies» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
