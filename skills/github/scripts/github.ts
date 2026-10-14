@@ -1776,8 +1776,10 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
       `the last line of the answer is one of three: ${q(N.lastLine.done)}; ` +
       `the owner has something to decide — ${q(`${N.lastLine.questions} …`)} with the questions themselves, without ${q(N.lastLine.done)}; ` +
       `something remains — ${q(`${N.lastLine.remaining} …`)}. ` +
-      // the command doesn't read the mode (auto): the session knows it, the condition is spelled out in words
-      `In auto mode after ${q(N.lastLine.done)} — archive the session where the agent has the tool; after the other two lines — don't. ` +
+      // the command doesn't read the mode (auto) or the session's background tasks: the session knows them, the step is spelled out in words
+      `In auto mode after ${q(N.lastLine.done)} — archive the session where the agent has the tool, ` +
+      `first stopping its own background tasks still running (a wait, a watcher over its output, a subagent): a live one blocks archiving; ` +
+      `after the other two lines — don't. ` +
       `Information without a decision (an observation, a deadline, a warning) isn't a question: the line and archiving are as with ${q(N.lastLine.done)}`,
   );
   return 0;
