@@ -36,12 +36,11 @@ const FILES: Record<string, string> = {
   // ключ из `vercel env pull`: проверки его не видят — CI, где файла нет, их не видит тоже
   ".env.local": "PAYMENTS_KEY=live-key\n",
   "bunfig.toml": '[test]\npreload = ["./tests/lib/journal.ts"]\n',
-  // тесты bun test и preload knip берёт входами по скрипту `bun test`, но в обёртке slot его не видит (#452): пока они
-  // названы явно, исправление их снимает
+  // тесты bun test и preload knip берёт входами сам — по скрипту `bun test`, обёрнутому в slot (#452)
   "knip.json": json({
     workspaces: {
       ".": {
-        entry: ["src/server.ts", "tests/standards/entry-points/entries.ts", "tests/**/*.test.ts", "tests/lib/journal.ts"],
+        entry: ["src/server.ts", "tests/standards/entry-points/entries.ts"],
         project: ["src/**/*.ts", "tests/**/*.ts"],
       },
       "packages/*": { project: ["src/**/*.ts"] },
