@@ -744,6 +744,34 @@
  {
   "path": "tests/capabilities/dashboard/sessions.test.ts",
   "describes": [
+   "Решено авто — ответы «✅ авто» в задачах, изменённых за сутки"
+  ],
+  "name": "вопрос и ответ — из пункта раздела вопросов с пометкой autoAnswer любого языка словаря в любом месте пункта"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Решено авто — ответы «✅ авто» в задачах, изменённых за сутки"
+  ],
+  "name": "нет решений авто за сутки — блока нет"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Решено авто — ответы «✅ авто» в задачах, изменённых за сутки"
+  ],
+  "name": "ответ владельца без пометки авто в блок не попадает"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
+   "Решено авто — ответы «✅ авто» в задачах, изменённых за сутки"
+  ],
+  "name": "ответ с пометкой ✅ авто в задаче, изменённой за сутки, — строка в блоке «Decided auto» со ссылкой на задачу"
+ },
+ {
+  "path": "tests/capabilities/dashboard/sessions.test.ts",
+  "describes": [
    "Строка задачи «В работе» — её сессия и чего она ждёт"
   ],
   "name": "задача «В работе» без закреплённой сессии — строкой «no session»; облачная (трейлер Claude-Session в PR) — «cloud, state not visible»"
@@ -7912,13 +7940,6 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "вне охвата: autoAnswer"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
-  ],
   "name": "вне охвата: comments.state"
  },
  {
@@ -8095,6 +8116,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название actualize.unlabeled скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название autoAnswer скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -10265,6 +10293,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «Cost, $» из skills/est/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Decided auto» из skills/dashboard/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
