@@ -212,9 +212,10 @@ line `○ refresh not needed`, no subagent. Five checks:
    Statuses and milestones match: the set's last task is closed — I close the
    milestone.
 2. **Answered questions are marked.** Every already answered question in
-   `## Questions` (comments, another task, code) is marked ✅ with the answer;
-   the numbering doesn't change — it is referenced. None open — I remove the
-   `questions` label.
+   `## Questions` (comments, another task, code) is marked ✅ with the answer
+   (`github task answer <N> <k> "<answer>"`); the numbering doesn't change —
+   it is referenced. None open — the `questions` label goes (`task answer`
+   and `task actualize` remove it).
 3. **Descriptions don't lie.** The wording of open tasks is checked against
    the code and specs: what doesn't exist after the rollout (fields, tables,
    routes, permissions) is removed. After **a reversal of an accepted

@@ -1,6 +1,6 @@
 ---
 name: github
-description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task status`, `task drop`; `task actualize` does the epic refresh's mechanics and prints the subagent's prompt right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
+description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task show` prints a task with its epic, blockers, PR checks and questions in one output (not `gh issue view`), `task answer` puts ✅ and the answer at a question (not `gh issue edit`); `task status`, `task drop`; `task actualize` does the epic refresh's mechanics and prints the subagent's prompt right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, reading, finishing, reopening or cancelling a task; an answer to a task's question; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
 allowed-tools: Bash(bun *skills/github/scripts/github.ts *) Bash(git remote get-url *)
 ---
 
@@ -202,6 +202,8 @@ description is rewritten.
 bun --no-env-file <skill dir>/scripts/github.ts task new --title "…" --branch-type <type> [--body-file F | --body "…"] [--type Task|Bug|Epic] \
     [--epic N] [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] \
     [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
+bun --no-env-file <skill dir>/scripts/github.ts task show <N>                    # the task, its epic, blockers, PRs and questions — read-only
+bun --no-env-file <skill dir>/scripts/github.ts task answer <N> <k> "<answer>" [--auto]   # ✅ and the answer at question k
 bun --no-env-file <skill dir>/scripts/github.ts task status <N> "In progress" [--branch <type>/<N>-<slug>]   # Backlog | In progress | Done
 bun --no-env-file <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
 bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the epic refresh's mechanics and the subagent's prompt
@@ -214,7 +216,8 @@ bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               #
 | Moment | Action |
 |---|---|
 | New task, an epic's subtask, an epic | first — whether one already exists (`gh issue list --search`); `task new --branch-type <type>` — it sets the estimate itself (an epic isn't estimated: its estimate is the sum of its subtasks, `reference.md`) |
-| Took into work · reopened | a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress" --branch <type>/N-<slug>` — a separate call, no pipeline (`tail` hides the refusal code): it renames the worktree tool's branch into the task branch |
+| Took into work · reopened | `task show N` — the task, its epic's open questions and tasks, the PR, in one call; a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress" --branch <type>/N-<slug>` — a separate call, no pipeline (`tail` hides the refusal code): it renames the worktree tool's branch into the task branch |
+| An answer to a question (chat, a comment, the code; in auto mode — the recommendation) | `task answer N k "<answer>"` (auto — `--auto`), before the code it changes |
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed two-line prompt; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Session resumed after the app restarted | the `SessionStart` hook runs `task resume` itself — its line is in the context: run the named command, a background wait died with the process |
@@ -261,6 +264,29 @@ one; est is missing — the line `○ no estimate`, failed — its error as a `!
 line; the task is created anyway (code 0). In a session with a
 pinned task (`task status` below) — a second line «Next:»:
 `the session runs owner/repo#N — #M in a new session, first prompt: #M`.
+
+**`task show`** — the task in one output instead of `gh issue view` per piece
+(the description, then the epic, its subtasks, the PR and its checks): the
+title and link; the type, the state if closed, `Status`, the estimate and the
+actual, `Priority`, milestone and labels in one line; the epic with its open
+questions and other open tasks (`- question k. …`, `- task #M «…»`); an
+epic's open subtasks; open blockers; each PR with its state and its head's
+checks (`checks: 2 ✅, 1 ⏳ (e2e), 1 ❌ (lint)`; GitHub hasn't linked the PR yet
+— found by the branch or «Closes #N», as `task close` does; an epic has no PR
+line); the questions — open and answered numbers with the `task answer`
+command; then the description as is. Read-only, one GraphQL query (plus the
+recent PRs when none is linked).
+
+**`task answer`** — the answer at question `k` of the questions section, not
+a rewrite of the description by hand (`gh issue edit --body-file`): ✅ (with
+`--auto` — the auto mark, `✅ auto` in `en`) after the item's number and
+`**Answer:** …` at its end — on the same line for a one-line item, otherwise
+on a line of its own; est strips the answer from the description size. The
+numbering and the rest of the description don't change; the answer's line
+breaks become spaces. Open questions left — an `○` line with their numbers;
+none — the questions label is removed. Refused before any change (code 2): no
+questions section, no question `k`, the question already has ✅ (a changed
+answer is edited by hand), an empty answer.
 
 **`task status`** — sets `Status` (a task outside the project is added). A
 subtask going In progress moves its epic from Backlog to In progress too.

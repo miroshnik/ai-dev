@@ -71,8 +71,8 @@ A cloud session that can't write hands the work over as files: the branch —
 to questions — in the PR text or the final message. A local session, by the
 task number:
 
-1. Answers from the cloud — into the task's questions section (✅ and the
-   answer), before code.
+1. Answers from the cloud — into the task's questions section
+   (`github task answer`), before code.
 2. The branch — from a fresh `origin/main`:
    `git fetch <file>.bundle <branch>:<branch>` or `git am <file>.mbox`; if the
    cloud didn't start from it — rebase.
