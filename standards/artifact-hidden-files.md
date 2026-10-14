@@ -23,7 +23,7 @@
 
 ## Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true
 
-<details><summary>✅ 12 тестов</summary>
+<details><summary>✅ 14 тестов</summary>
 
 - ✅ реестр «шаги actions/upload-artifact в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» не пуст
 - ✅ реестр «шаги actions/upload-artifact в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» находит .github/workflows/ci.yml artifact «docs-spec», skills/spec/ci.md artifact «spec-journal-unit-${{ matrix.shard }}», skills/spec/ci.md artifact «spec-reports»
@@ -34,9 +34,11 @@
 - ✅ skills/spec/ci.md artifact «playwright-blob-${{ matrix.shard }}» не теряет скрытые файлы
 - ✅ skills/spec/ci.md artifact «spec-journal-e2e-${{ matrix.shard }}» не теряет скрытые файлы
 - ✅ skills/spec/ci.md artifact «spec-journal-unit-${{ matrix.shard }}» не теряет скрытые файлы
+- ✅ skills/spec/ci.md artifact «spec-meta-spec» не теряет скрытые файлы
 - ✅ skills/spec/ci.md artifact «spec-meta-unit-${{ matrix.shard }}» не теряет скрытые файлы
 - ✅ skills/spec/ci.md artifact «spec-reports» не теряет скрытые файлы
 - ✅ skills/spec/ci.md artifact «vitest-blob-${{ matrix.shard }}» не теряет скрытые файлы
+- ✅ skills/spec/ci.md artifact «vitest-blob-spec» не теряет скрытые файлы
 
 </details>
 

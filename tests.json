@@ -7028,6 +7028,13 @@
   "describes": [
    "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
   ],
+  "name": "skills/spec/ci.md artifact «spec-meta-spec» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
   "name": "skills/spec/ci.md artifact «spec-meta-unit-${{ matrix.shard }}» не теряет скрытые файлы"
  },
  {
@@ -7043,6 +7050,13 @@
    "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
   ],
   "name": "skills/spec/ci.md artifact «vitest-blob-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «vitest-blob-spec» не теряет скрытые файлы"
  },
  {
   "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
@@ -12717,6 +12731,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/spec/checks.md: skills/spec/SKILL.md, «Checks» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/checks.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
