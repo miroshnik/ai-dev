@@ -2097,6 +2097,7 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
     writeFileSync(file, `bun --no-env-file ${import.meta.path} task queue ${args ? `${args} ` : ""}--repo ${slug}\n`);
   } else io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — not marked as a dispatcher: task status in the executors would pin their tasks");
+  pruneAgentWorktrees(io, slug);
   const scope = [o.epic !== undefined ? `epic #${o.epic}` : "open tasks", want && `type ${q(want)}`, o.priority?.length && `Priority ${o.priority.join("|")}`].filter(Boolean).join(", ");
   io.out(`Queue ${slug} (${scope}): ready ${ready.length}, ${q(N.status.inProgress)} ${running.length}, not ready ${waiting.length}`);
   for (const i of ready) {
@@ -2113,6 +2114,125 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   } else if (running.length) io.out("Next: no ready tasks — wait for the executors' answers; after each — task queue again.");
   else io.out(`Queue is empty: nothing ready, nothing ${q(N.status.inProgress)} — the dispatcher's summary (merged, questions, the not ready ones above) and the last line.`);
   return 0;
+}
+
+/** A Claude Code agent's worktree (`isolation: "worktree"`): `<checkout>/.claude/worktrees/agent-<id>`, branch `worktree-agent-<id>`. */
+const AGENT_WORKTREE = /[\\/]\.claude[\\/]worktrees[\\/]agent-[^\\/]+$/;
+const AGENT_BRANCH = /^worktree-agent-/;
+
+interface Worktree {
+  path: string;
+  head: string;
+  /** The checked out branch; detached — null. */
+  branch: string | null;
+  /** The lock's reason ("" — locked without one); not locked — null. */
+  locked: string | null;
+  /** The directory is gone — `git worktree prune` business, not ours. */
+  prunable: boolean;
+}
+
+/** `git worktree list --porcelain`: a block per worktree, an attribute per line (`worktree <path>`, `HEAD`, `branch`, `locked [reason]`). */
+function worktreeList(text: string): Worktree[] {
+  return text
+    .split(/\n\s*\n/)
+    .map((block) => {
+      const lines = block.split("\n");
+      const attr = (key: string) => {
+        const line = lines.find((l) => l === key || l.startsWith(`${key} `));
+        return line === undefined ? null : line.slice(key.length + 1);
+      };
+      return { path: attr("worktree") ?? "", head: attr("HEAD") ?? "", branch: attr("branch")?.replace(/^refs\/heads\//, "") ?? null, locked: attr("locked"), prunable: attr("prunable") !== null };
+    })
+    .filter((w) => w.path);
+}
+
+/**
+ * Whether a lock still holds: Claude Code locks a running agent's worktree — `claude agent agent-<id> (pid N start …)`
+ * — and unlocks it when the agent finishes. Its process is gone (the app restarted, the agent died with it) — the lock
+ * is stale. A lock without a pid is someone else's — it holds.
+ */
+function lockHolds(reason: string): boolean {
+  const pid = /\bpid (\d+)\b/.exec(reason)?.[1];
+  if (!pid) return true;
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Executors' worktrees go away with the dispatcher's next queue (#515): an executor can't remove its own — it works in it,
+ * and `task close` leaves it detached on origin/<base>; its subagents leave theirs on `worktree-agent-*` branches.
+ * Only agents' worktrees (`AGENT_WORKTREE`), detached or on a `worktree-agent-*` branch, not locked by a live process
+ * (a running agent): clean and without commits outside origin/<base> (`git cherry` — a rebase merge gives new SHAs) —
+ * removed with their branch, a `+` line each; uncommitted changes or unmerged commits — left, a `○` line with the
+ * reason. A `worktree-agent-*` branch without a worktree — the same by its commits. A session's worktree, an agent's on
+ * a task branch (its task isn't closed) — not touched, no line. The directory isn't a checkout of the repository — nothing.
+ */
+function pruneAgentWorktrees(io: Io, slug: string): void {
+  if (!checkoutOf(originUrl(io), slug)) return;
+  const git = (cwd: string | undefined, ...args: string[]) => (io.run ?? realRun)("git", args, cwd);
+  const listed = git(io.cwd, "worktree", "list", "--porcelain");
+  if (listed.status !== 0) return;
+  const all = worktreeList(listed.stdout);
+  const here = git(io.cwd, "rev-parse", "--show-toplevel").stdout.trim();
+  const base = git(io.cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD").stdout.trim().replace(/^origin\//, "") || "main";
+  const upstream = `origin/${base}`;
+  const why = (r: RunResult) => r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`;
+  /** Commits of the ref outside origin/<base> by patch (`git cherry`), or why they couldn't be counted. */
+  const unmerged = (ref: string): string | null => {
+    const r = git(io.cwd, "cherry", upstream, ref);
+    if (r.status !== 0) return `git cherry ${upstream}: ${why(r)}`;
+    const n = r.stdout.split("\n").filter((l) => l.startsWith("+")).length;
+    return n ? `${plural(n, "commit", "commits")} not in ${upstream}` : null;
+  };
+  const deleteBranch = (branch: string) => {
+    const d = git(io.cwd, "branch", "-D", branch);
+    if (d.status !== 0) io.out(`! git branch -D ${branch}: ${why(d)}`);
+    return d.status === 0;
+  };
+  const agents = all
+    .filter((w) => AGENT_WORKTREE.test(w.path) && w.path !== here && !w.prunable && (w.branch === null || AGENT_BRANCH.test(w.branch)))
+    .filter((w) => w.locked === null || !lockHolds(w.locked))
+    .sort((a, b) => a.path.localeCompare(b.path));
+  for (const w of agents) {
+    const status = git(w.path, "status", "--porcelain");
+    if (status.status !== 0) {
+      io.out(`! worktree ${w.path}: git status: ${why(status)}`);
+      continue;
+    }
+    const dirty = status.stdout.split("\n").filter((l) => l.trim()).length;
+    const reasons = [dirty ? `${plural(dirty, "uncommitted file", "uncommitted files")}` : null, unmerged(w.head)].filter((r): r is string => r !== null);
+    if (reasons.length) {
+      io.out(`○ worktree ${w.path} left: ${reasons.join(", ")}`);
+      continue;
+    }
+    // a stale lock: its process is gone, and a locked worktree isn't removed without double force — which would drop the dirty check too
+    if (w.locked !== null) git(io.cwd, "worktree", "unlock", w.path);
+    const removed = git(io.cwd, "worktree", "remove", w.path);
+    if (removed.status !== 0) {
+      io.out(`! git worktree remove ${w.path}: ${why(removed)}`);
+      continue;
+    }
+    const withBranch = w.branch !== null && deleteBranch(w.branch) ? ` with branch ${w.branch}` : "";
+    io.out(`+ worktree ${w.path} removed${withBranch}: clean, nothing outside ${upstream}`);
+  }
+  // a branch checked out anywhere — a locked worktree's included — isn't loose
+  const checkedOut = new Set(all.map((w) => w.branch).filter(Boolean));
+  const loose = git(io.cwd, "for-each-ref", "--format=%(refname:short)", "refs/heads/worktree-agent-*")
+    .stdout.split("\n")
+    .map((b) => b.trim())
+    .filter((b) => b && !checkedOut.has(b))
+    .sort();
+  for (const branch of loose) {
+    const reason = unmerged(branch);
+    if (reason) io.out(`○ branch ${branch} left: ${reason}`);
+    else if (deleteBranch(branch)) io.out(`+ branch ${branch} deleted: nothing outside ${upstream}`);
+  }
 }
 
 /**
@@ -2725,7 +2845,10 @@ function cleanupBranches(io: Io, number: number, prs: { head: string; base: stri
   }
   const top = git("rev-parse", "--show-toplevel").stdout.trim();
   const common = git("rev-parse", "--git-common-dir").stdout.trim();
-  if (top && common && path.resolve(io.cwd ?? process.cwd(), common) !== path.join(top, ".git")) io.out(`Next: remove worktree ${top} from the main checkout: git worktree remove ${top}`);
+  if (!top || !common || path.resolve(io.cwd ?? process.cwd(), common) === path.join(top, ".git")) return;
+  // an agent's worktree — an executor's: it can't remove the worktree it works in, the dispatcher's queue does (#515)
+  if (AGENT_WORKTREE.test(top)) io.out(`○ agent worktree ${top}: the dispatcher's next task queue removes it`);
+  else io.out(`Next: remove worktree ${top} from the main checkout: git worktree remove ${top}`);
 }
 
 // ----------------------------------------------------------------------------
@@ -3347,9 +3470,11 @@ too —, no external blocker label) by Priority, then number, each with its exec
 progress, an open PR with its link, handed out to an executor of this session) and ○ lines with the reason (the
 label's — from the latest «External blocker: …» comment). Marks the session as a dispatcher
 (dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the executors are subagents
-with the session's id; refused in a session with a pinned task. --type and --priority — in an organization.
---assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a dispatcher session it
-records the task as handed out (dispatchers/<id>.tasks).
+with the session's id; refused in a session with a pinned task. Before the queue, in the repository's checkout —
+finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-agent-*, not locked by a live process):
+clean and merged (git cherry) — removed with the branch (+), otherwise left (○ with the reason); loose worktree-agent-*
+branches — the same. --type and --priority — in an organization. --assignment N (the executor's first call; read-only
+on GitHub) — its whole assignment; in a dispatcher session it records the task as handed out (dispatchers/<id>.tasks).
 
 Examples:
   github task queue --epic 40

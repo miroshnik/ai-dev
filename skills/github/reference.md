@@ -670,7 +670,16 @@ line — its executor's prompt, «Task #N …» in the project language (`est` l
 the subagent's work by it); then `=` lines — in work: In progress, an open PR
 (linked, or by the task branch and "Closes #N" among recent PRs) with its link,
 handed out to an executor of this session; `○` lines — not ready
-with the reason, and `Next:`. `--epic N` — the epic's open sub-issues,
+with the reason, and `Next:`. Before the queue, in the repository's checkout,
+it removes what finished executors left (#515): an agent's worktree
+(`.claude/worktrees/agent-*`) detached or on a `worktree-agent-*` branch, not
+locked by a live process (Claude Code locks a running agent's worktree; a lock
+whose pid is gone doesn't hold), clean and without commits outside
+`origin/<base>` by `git cherry` — removed with its branch, a `+` line;
+uncommitted changes or unmerged commits — left, an `○` line with the reason; a
+`worktree-agent-*` branch without a worktree — the same by its commits. A
+session's worktree and an agent's on a task branch — untouched, no line.
+`--epic N` — the epic's open sub-issues,
 otherwise the repository's open tasks (the first 100 of the search);
 `--type`, `--priority` — only in an organization. It marks the session as a
 dispatcher — `dispatchers/<CLAUDE_CODE_SESSION_ID>` in the configuration
@@ -799,7 +808,9 @@ isn't a checkout of the repository — neither stacks nor branches are touched
 `owner/repo` of its `origin` equals the task's repository, case aside, not a
 URL substring: `ai-dev-tools` isn't a checkout of `ai-dev` (standard
 `origin-repo`, the same for `pr premerge`). The command doesn't delete the
-session's worktree — the `Next` hint. `--no-git` — without the git step, the
+session's worktree — the `Next` hint; an agent's (`.claude/worktrees/agent-*`,
+a dispatcher's executor) — an `○` line: the dispatcher's next `task queue`
+removes it. `--no-git` — without the git step, the
 stacks still go. The last output line — the end-of-session steps: the
 epic has open tasks — a reminder about the epic refresh (its place is before
 close, in parallel with the deploy; if it didn't happen — a subagent with the
