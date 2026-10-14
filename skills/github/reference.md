@@ -747,7 +747,15 @@ branch `<type>/<N>-<slug>` and "Closes #N" in the body: merged — the task is
 closed with the comment «Closed by PR #M: GitHub didn't link the PR to the
 task», none — a refusal
 listing what was checked (no manual `gh issue close` needed). Order:
-close the task if the merged PR didn't; the actual — `est fact <N> --write` by
+close the task if the merged PR didn't; a task of the scripts' own repository
+(ai-dev) — the scripts' clone (the checkout the est script is in) catches up
+with the merged `main`: `git pull --ff-only origin main`, the line
+`+ clone <dir> <a> → <b>` (already there — `=`); a dispatcher's executors call
+the clone's scripts, and nothing else updates it during a session; on another
+branch or with uncommitted changes to tracked files — an `○` line, not touched
+(untracked files don't count), a failed pull — a `!` line, the actual is by
+the clone's code; another project's task, or the est script not in a git
+checkout — no step; the actual — `est fact <N> --write` by
 the est script next to it (`../est/scripts/est.ts`; missing — the line
 `○ actual unavailable`, failed — its error as a `!` line, the
 rest is done); `Status` Done; the last sub-issue closed — the epic is closed

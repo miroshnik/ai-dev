@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { descSize } from "../../../skills/est/scripts/est.ts";
 import { main, realRun } from "../../../skills/github/scripts/github.ts";
@@ -9,7 +9,7 @@ import type { Io } from "../../../skills/github/scripts/github.ts";
 import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { githubOrigin, gitRepo, tmpDir } from "../../lib/spec.ts";
+import { githubOrigin, gitRepo, tmpDir, writeTree } from "../../lib/spec.ts";
 
 // модель архитектуры скилл читает отдельным процессом bun
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -26,10 +26,16 @@ const isTaskEnv = (args: string[]) => args.some((a) => /skills\/task-env\/script
 const taskEnvArgs = (args: string[]) => args.filter((a) => !isTaskEnv([a]));
 // est — подпроцесс bun (внешний край): по умолчанию молчит и ничего не пишет, git — настоящий; тесты est подменяют его сами
 const silentEst = (cmd: string, args: string[], cwd?: string) => (cmd === "bun" ? { status: 0, stdout: "", stderr: "" } : realRun(cmd, args, cwd));
+// est по умолчанию — в каталоге вне git: рядом со скриптом лежал бы est клона, который прогоняет тесты, и task close
+// подтягивал бы его (#517) — сетью и с правкой чужого чекаута; клон скриптов тестам подставляют их тесты
+const { dir: OUTSIDE_GIT, cleanup: outsideGit } = tmpDir();
+const OUTSIDE_EST = path.join(OUTSIDE_GIT, "skills/est/scripts/est.ts");
+writeTree(OUTSIDE_GIT, { "skills/est/scripts/est.ts": "" });
+afterAll(outsideGit);
 function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, sleep: () => void pauses++, run: silentEst, ...io });
+  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), sleep: () => void pauses++, run: silentEst, ...io, env: { AI_DEV_EST: OUTSIDE_EST, ...io.env } });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const byOp = (f: FakeGitHub, op: string) => f.mutations.filter((m) => m.op === op).map((m) => m.input);
@@ -1751,6 +1757,119 @@ describe("task close снимает стеки задачи", () => {
     expect(r.calls).toEqual([]);
     expect(r.out).toContain("○ task stacks: task-env is not installed (/nowhere/task-env.ts)");
     expect(statusSet(r.f)).toEqual([[49, "Готово"]]);
+  });
+});
+
+/**
+ * Исполнители сессии-диспетчера зовут скрипты из клона машины, а клон за сессию никто не обновляет: исправления `est`,
+ * влитые ранними исполнителями, поздние не получали — `task close` считал факт старым `est`, и его переписывали руками
+ * (#517). Влитый PR меняет скрипты только у самого ai-dev — клон подтягивается перед фактом только у задачи репозитория
+ * скриптов, и только перемоткой: другая ветка или правка в клоне — чья-то работа.
+ */
+describe("task close подтягивает клон скриптов до влитого main перед фактом", () => {
+  const EST = "skills/est/scripts/est.ts";
+  // клон скриптов машины: чекаут на main, est — рядом со скриптом; в origin уже влит PR с новым est
+  function machineClone(slug = REPO) {
+    const dir = scratch();
+    const origin = path.join(dir, `${slug}.git`);
+    mkdirSync(path.dirname(origin), { recursive: true });
+    execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+    const clone = path.join(dir, "clone");
+    mkdirSync(clone);
+    const repo = gitRepo(clone);
+    repo.commit({ [EST]: "est до PR\n", "README.md": "x\n" }, "init");
+    repo.git("remote", "add", "origin", origin);
+    repo.git("push", "-q", "-u", "origin", "main");
+    const other = path.join(dir, "other");
+    execFileSync("git", ["clone", "-q", origin, other]);
+    gitRepo(other, { init: false }).commit({ [EST]: "est из влитого PR\n" }, "fix(est)");
+    execFileSync("git", ["push", "-q", "origin", "main"], { cwd: other });
+    // путь клона — как его называет git: без симлинков временного каталога (/var → /private/var на macOS)
+    return { clone: realpathSync(clone), repo, head: () => repo.git("rev-parse", "--short", "HEAD"), merged: git(other, "rev-parse", "--short", "HEAD") };
+  }
+  // est — подпроцесс bun (внешний край): записывает код est, которым считается факт, — файл в момент вызова; git — настоящий
+  function close(clone: string) {
+    const codes: string[] = [];
+    const run = githubOrigin((cmd: string, args: string[], cwd?: string) => {
+      if (cmd !== "bun") return realRun(cmd, args, cwd);
+      if (!isTaskEnv(args)) codes.push(readFileSync(args[1]!, "utf8").trim());
+      return { status: 0, stdout: "", stderr: "" };
+    });
+    const f = new FakeGitHub(REC);
+    f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run, env: { AI_DEV_EST: path.join(clone, EST) } });
+    return { ...r, codes, f };
+  }
+
+  it("task close задачи ai-dev считает факт кодом из влитого main, а не из отставшего клона", () => {
+    const m = machineClone();
+    const before = m.head();
+    const r = close(m.clone);
+    expect(r.code).toBe(0);
+    expect(r.codes).toEqual(["est из влитого PR"]);
+    expect(m.head()).toBe(m.merged);
+    expect(r.out).toContain(`+ clone ${m.clone} ${before} → ${m.merged}`);
+    expect(statusSet(r.f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("клон уже на влитом main — строка =, ничего не меняется", () => {
+    const m = machineClone();
+    m.repo.git("pull", "-q", "--ff-only", "origin", "main");
+    const r = close(m.clone);
+    expect(r.codes).toEqual(["est из влитого PR"]);
+    expect(r.out).toContain(`= clone ${m.clone} ${m.merged}`);
+  });
+
+  // в клоне живут worktree сессий (.claude/worktrees) — неотслеживаемые файлы перемотку не держат
+  it("неотслеживаемые файлы в клоне перемотке не мешают", () => {
+    const m = machineClone();
+    writeTree(m.clone, { ".claude/worktrees/x/a.txt": "a\n" });
+    const r = close(m.clone);
+    expect(r.codes).toEqual(["est из влитого PR"]);
+    expect(m.head()).toBe(m.merged);
+  });
+
+  it("клон не на main — не трогается, строка ○; факт — его кодом", () => {
+    const m = machineClone();
+    m.repo.git("switch", "-q", "-c", "feat/1-x");
+    const before = m.head();
+    const r = close(m.clone);
+    expect(r.code).toBe(0);
+    expect(r.codes).toEqual(["est до PR"]);
+    expect(m.head()).toBe(before);
+    expect(r.out).toContain(`○ clone ${m.clone} left alone: on branch feat/1-x, not main — the actual is by its code`);
+  });
+
+  it("в клоне правка отслеживаемого файла — не трогается, строка ○", () => {
+    const m = machineClone();
+    writeTree(m.clone, { "README.md": "правка\n" });
+    const before = m.head();
+    const r = close(m.clone);
+    expect(r.codes).toEqual(["est до PR"]);
+    expect(m.head()).toBe(before);
+    expect(r.out).toContain(`○ clone ${m.clone} left alone: uncommitted changes — the actual is by its code`);
+  });
+
+  it("main клона разошёлся с origin — перемотки нет, строка ! с ошибкой git; факт и «Готово» — как обычно", () => {
+    const m = machineClone();
+    m.repo.commit({ "local.txt": "l\n" }, "local");
+    const before = m.head();
+    const r = close(m.clone);
+    expect(r.code).toBe(0);
+    expect(r.codes).toEqual(["est до PR"]);
+    expect(m.head()).toBe(before);
+    const line = r.out.split("\n").find((l) => l.startsWith(`! clone ${m.clone}: git pull --ff-only origin main: `));
+    expect(line).toEndWith(" — the actual is by its code");
+    expect(statusSet(r.f)).toEqual([[49, "Готово"]]);
+  });
+
+  it("клон — чекаут другого репозитория: влитый PR задачи скриптов не меняет — не трогается, без строки", () => {
+    const m = machineClone("miroshnik/ai-dev-tools");
+    const before = m.head();
+    const r = close(m.clone);
+    expect(r.codes).toEqual(["est до PR"]);
+    expect(m.head()).toBe(before);
+    expect(r.out).not.toMatch(/^[+=○!] clone /m);
   });
 });
 

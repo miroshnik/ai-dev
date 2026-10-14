@@ -2352,6 +2352,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
         : `+ #${number} closed: PR ${merged.map((p) => `#${p.number}`).join(", ")} merged`,
     );
   }
+  freshClone(io, slug);
   runFact(io, slug, number);
   const item = ensureItem(io, ctx, issue);
   setStatus(io, ctx, item.id, N.status.done);
@@ -2554,6 +2555,42 @@ function runEst(io: Io, est: string, args: string[]): void {
   const r = (io.run ?? realRun)("bun", ["--no-env-file", est, ...args], io.cwd);
   for (const line of r.stdout.split("\n")) if (line.trim() && !line.startsWith("<!--")) io.out(line);
   if (r.status !== 0) io.out(`! est ${args[0]}: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`);
+}
+
+/**
+ * The scripts' clone catches up with the merged main before the actual (#517): a dispatcher's executors call the
+ * scripts of the machine's clone, and nothing updates the clone during a session — a later executor's actual was
+ * computed by the est from before the fixes earlier executors had merged. Only for a task of the scripts' own
+ * repository: another project's merge doesn't change the scripts. The clone is the checkout the est script is in (an
+ * installed copy isn't a checkout — nothing to do, no line); it moves only fast-forward, on the default branch and
+ * without uncommitted changes to tracked files — another branch or an edit is someone's work in progress. Untracked
+ * files don't count: the clone holds the sessions' worktrees, and a fast-forward that would overwrite one refuses itself.
+ */
+function freshClone(io: Io, slug: string): void {
+  const est = estScript(io);
+  if (!existsSync(est)) return;
+  const run = io.run ?? realRun;
+  const top = run("git", ["rev-parse", "--show-toplevel"], path.dirname(est));
+  if (top.status !== 0) return;
+  const dir = top.stdout.trim();
+  const git = (...args: string[]) => run("git", args, dir);
+  const origin = git("remote", "get-url", "origin");
+  if (origin.status !== 0 || !checkoutOf(origin.stdout, slug)) return;
+  const base = git("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD").stdout.trim().replace(/^origin\//, "") || "main";
+  const branch = git("branch", "--show-current").stdout.trim();
+  const left = (why: string) => io.out(`○ clone ${dir} left alone: ${why} — the actual is by its code`);
+  if (branch !== base) return left(branch ? `on branch ${branch}, not ${base}` : `HEAD is detached, not on ${base}`);
+  const status = git("status", "--porcelain", "--untracked-files=no");
+  if (status.status !== 0 || status.stdout.trim()) return left("uncommitted changes");
+  const head = () => git("rev-parse", "--short", "HEAD").stdout.trim();
+  const before = head();
+  const pull = git("pull", "--ff-only", "--no-rebase", "--quiet", "origin", base);
+  if (pull.status !== 0) {
+    const why = pull.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${pull.status}`;
+    return io.out(`! clone ${dir}: git pull --ff-only origin ${base}: ${why} — the actual is by its code`);
+  }
+  const after = head();
+  io.out(after === before ? `= clone ${dir} ${after}` : `+ clone ${dir} ${before} → ${after}`);
 }
 
 /** The actual — `task close`. */
@@ -3257,7 +3294,9 @@ Examples:
 
 After the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write), Status Done, the
 epic and the milestone, the task's stacks taken down with their volumes (task-env down), the merged branches removed
-(--no-git — without git). Docker and gh don't work in an agent's sandbox — run it outside.
+(--no-git — without git). A task of the scripts' own repository: before the actual the scripts' clone catches up with
+origin (pull --ff-only; only on the default branch, without uncommitted changes). Docker and gh don't work in an agent's
+sandbox — run it outside.
 
 Examples:
   github task close 42
