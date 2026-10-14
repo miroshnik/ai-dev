@@ -972,6 +972,13 @@ describe("task show печатает задачу одним выводом", ()
     expect(f.mutations).toHaveLength(before);
   });
 
+  // #492: из перезапусков task show брал лучший прогон — ✅ у чека, на котором ожидание ci-wait даёт FAIL
+  it("чек зелёный, потом красный на перезапуске — task show называет его красным, как ci-wait", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[80] = { files: [], closes: [47], head: "feat/47-task", base: "main", model: null, checks: { tests: ["SUCCESS", "FAILURE"], lint: ["FAILURE", "SUCCESS"] } };
+    expect(task(f, ["show", "47"]).out.split("\n")).toContain("PR #80 open — checks: 1 ✅, 1 ❌ (tests)");
+  });
+
   it("эпик: тип из метки epic, его открытые подзадачи; строки PR у эпика нет", () => {
     const f = new FakeGitHub(REC);
     f.issue(45).body = "## Вопросы\n\n1. Сроки?\n";

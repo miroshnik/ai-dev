@@ -87,16 +87,28 @@ rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 # pending | pass | fail | cancel | skipping; paths of the workflows that produced a run at the SHA — into $ran. Code 1 — a gh
 # error, the text in $out.
 # The API already reduces statuses to the latest per context, but not check-runs: the SHA holds check-runs of all
-# runs (one cancelled by a new push when the head went back to an earlier commit; a job rerun), and the outcome is
-# the last check-run of a name from the same app (the id grows with creation). An Actions run that failed without jobs
-# gives no check-run: the workflow wasn't parsed (the run's name is the file path) or didn't start (its check suite has
-# no check-runs); such a run is a failed check with the file path and a link. An unfinished run without check-runs
-# (queued) — pending with the path: there is a run at the SHA, and without this line the outcome came down to hosting
-# statuses (#360).
+# runs (one cancelled by a new push when the head went back to an earlier commit; a job rerun) — CHECK_STATES below
+# reads them. An Actions run that failed without jobs gives no check-run: the workflow wasn't parsed (the run's name is
+# the file path) or didn't start (its check suite has no check-runs); such a run is a failed check with the file path
+# and a link. An unfinished run without check-runs (queued) — pending with the path: there is a run at the SHA, and
+# without this line the outcome came down to hosting statuses (#360).
 # The spec publish job (the spec skill, ci.md; "<job> / spec-publish" — the same job in a reusable workflow) — publishing
 # the documentation, not a check: it is neither awaited nor a FAIL, only by --context (#443). A copy — in the github
 # skill's premerge (SPEC_PUBLISH): its red isn't a red main; both answer by one table, tests/standards/spec-publish-job.
 SPEC_PUBLISH='^(.+ / )?spec-publish$'
+# The state of each check-run name (jq check_states over REST check-runs): not completed — pending; success — pass;
+# neutral, skipped — skipping; cancelled — cancel; any other conclusion — fail. Reruns of one name — the last check-run
+# of each app (the id grows with creation), not the best one and not the order of the response; several apps — the
+# worst of their states. A copy — in the github skill (checkStates: task show, project check): both answer by one table,
+# tests/standards/check-run-state.
+CHECK_STATES='def check_states:
+  group_by([.name, .app.id]) | map(max_by(.id))
+  | map({ name, bucket: (if .status != "completed" then "pending"
+                         elif .conclusion == "success" then "pass"
+                         elif .conclusion == "neutral" or .conclusion == "skipped" then "skipping"
+                         elif .conclusion == "cancelled" then "cancel"
+                         else "fail" end) })
+  | group_by(.name) | map(min_by(.bucket as $b | ["fail", "cancel", "pending", "skipping", "pass"] | index($b)));'
 ran='[]'
 checks() {
   local statuses runs wruns
@@ -104,15 +116,10 @@ checks() {
   runs=$(gh api "repos/{owner}/{repo}/commits/$1/check-runs?per_page=100" 2>&1) || { out=$runs; return 1; }
   wruns=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$1&per_page=100" 2>&1) || { out=$wruns; return 1; }
   ran=$(jq -c '[(.workflow_runs // [])[].path] | unique' <<<"$wruns")
-  out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --argjson w "$wruns" --arg ctx "$context" --arg publish "$SPEC_PUBLISH" '
+  out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --argjson w "$wruns" --arg ctx "$context" --arg publish "$SPEC_PUBLISH" "$CHECK_STATES"'
     [ $s.statuses[] | { name: .context,
         bucket: (if .state == "success" then "pass" elif .state == "pending" then "pending" else "fail" end) } ]
-    + [ $r.check_runs | group_by([.name, .app.id]) | map(max_by(.id)) | .[] | { name,
-        bucket: (if .status != "completed" then "pending"
-                 elif .conclusion == "success" or .conclusion == "neutral" then "pass"
-                 elif .conclusion == "skipped" then "skipping"
-                 elif .conclusion == "cancelled" then "cancel"
-                 else "fail" end) } ]
+    + ($r.check_runs | check_states)
     + [ [$r.check_runs[].check_suite.id] as $suites
         | ($w.workflow_runs // []) | group_by([.path, .event]) | map(max_by(.id)) | .[]
         | (.check_suite_id as $id | any($suites[]; . == $id) | not) as $nojobs

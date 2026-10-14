@@ -241,11 +241,14 @@ export interface Decisions {
   names: Record<DecisionKind, string[]>;
   modelError: string | null;
 }
-/** A PR head's check: green, still running, or otherwise (red, skipped, cancelled). */
-type CheckState = "success" | "pending" | "other";
+/**
+ * A PR head's check state — the buckets of `gh pr checks`: green, skipped or neutral, still running, cancelled, red
+ * (`checkStates`).
+ */
+type CheckBucket = "pass" | "skipping" | "pending" | "cancel" | "fail";
 interface Head {
   number: number;
-  checks: Record<string, CheckState>;
+  checks: Record<string, CheckBucket>;
 }
 interface Ruleset {
   id: string;
@@ -322,9 +325,14 @@ const OPEN_SHOWN = 10;
  * the PR is among them.
  */
 const RECENT_PRS = 50;
+/**
+ * A PR head's checks for `checkStates` — the one selection of every query that reads them (`PR_SHOW`, `MergeRules`):
+ * without the run's id and its app reruns can't be told apart (`tests/standards/check-run-state`).
+ */
+export const HEAD_CHECKS = `commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion databaseId checkSuite { app { databaseId } } } ... on StatusContext { context state } } } } } } }`;
 /** A PR for task show: its state and the checks of its head. */
 const PR_SHOW = `number state merged isDraft headRefName
-        commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }`;
+        ${HEAD_CHECKS}`;
 export const Q = {
   RepoState: `query RepoState($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -463,7 +471,7 @@ export const Q = {
 fragment StatusChecks on RuleParameters { ... on RequiredStatusChecksParameters { strictRequiredStatusChecksPolicy requiredStatusChecks { context } } }
 fragment Head on PullRequest {
   number baseRefName
-  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
+  ${HEAD_CHECKS}
 }`,
   // The task's PR that GitHub didn't link to it (task close): the latest open and merged ones, newest first
   RecentPrs: `query RecentPrs($owner: String!, $name: String!) {
@@ -675,18 +683,40 @@ export function loadState(io: Io, slug: string): State {
 const statusChecks = (rule: Any): { strict: boolean; contexts: string[] } | null =>
   rule?.type === "REQUIRED_STATUS_CHECKS" ? { strict: !!rule.parameters?.strictRequiredStatusChecksPolicy, contexts: (rule.parameters?.requiredStatusChecks ?? []).map((c: Any) => c.context) } : null;
 
-/** A PR head's checks by name; a rerun of the same check is green if any of its runs is green. */
-function headChecks(pr: Any): Record<string, CheckState> {
-  const out: Record<string, CheckState> = {};
-  for (const c of pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []) {
-    if (!c) continue;
-    const run = c.__typename === "CheckRun";
-    const name: string = run ? c.name : c.context;
-    const state: CheckState = run ? (c.status !== "COMPLETED" ? "pending" : c.conclusion === "SUCCESS" ? "success" : "other") : c.state === "SUCCESS" ? "success" : c.state === "PENDING" || c.state === "EXPECTED" ? "pending" : "other";
-    if (out[name] !== "success") out[name] = state;
+/** From the worst: a name reported by several apps gets the worst of their states. */
+const WORST: CheckBucket[] = ["fail", "cancel", "pending", "skipping", "pass"];
+
+/**
+ * The state of each check of a PR head by name, from the `statusCheckRollup` contexts (`HEAD_CHECKS`) — the one rule
+ * of `task show` and `project check`. A check-run: not completed — pending; success — pass; neutral, skipped —
+ * skipping; cancelled — cancel; any other conclusion — fail. Reruns of one name — the last check-run of each app (the
+ * largest `databaseId`), not the best one and not the order of the response; several apps — the worst of their states.
+ * A commit status — GitHub already keeps the latest of a context: success — pass, pending and expected — pending,
+ * otherwise fail. The copy — `CHECK_STATES` in ci-wait's `wait-ci.sh` (REST check-runs): both answer by one table,
+ * `tests/standards/check-run-state`.
+ */
+export function checkStates(nodes: Any[]): Map<string, CheckBucket> {
+  const app = (c: Any) => JSON.stringify([c.name, c.checkSuite?.app?.databaseId ?? null]);
+  const last = new Map<string, Any>();
+  for (const c of nodes) {
+    if (c?.__typename === "CheckRun" && (!last.has(app(c)) || (last.get(app(c)).databaseId ?? 0) <= (c.databaseId ?? 0))) last.set(app(c), c);
+  }
+  const out = new Map<string, CheckBucket>();
+  const put = (name: string, state: CheckBucket) => {
+    const was = out.get(name);
+    if (!was || WORST.indexOf(state) < WORST.indexOf(was)) out.set(name, state);
+  };
+  // in the order of the response: task show lists the names as GitHub gives them
+  for (const c of nodes) {
+    if (c?.__typename === "StatusContext") put(c.context, c.state === "SUCCESS" ? "pass" : c.state === "PENDING" || c.state === "EXPECTED" ? "pending" : "fail");
+    if (c?.__typename !== "CheckRun" || last.get(app(c)) !== c) continue;
+    const s = c.status !== "COMPLETED" ? "pending" : c.conclusion === "SUCCESS" ? "pass" : c.conclusion === "NEUTRAL" || c.conclusion === "SKIPPED" ? "skipping" : c.conclusion === "CANCELLED" ? "cancel" : "fail";
+    put(c.name, s);
   }
   return out;
 }
+
+const rollupOf = (pr: Any): Any[] => pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
 
 /** A private repository on Free: GraphQL silently returns empty rules, REST — 403 "Upgrade to GitHub Pro…". */
 function rulesetsUnavailable(io: Io, slug: string): string | null {
@@ -706,7 +736,7 @@ function loadMerge(io: Io, slug: string): Merge | null {
   const b = r?.defaultBranchRef;
   if (!b) return null;
   const heads = (nodes: Any[]): Head[] =>
-    (nodes ?? []).filter((p) => p && p.baseRefName === b.name).map((p) => ({ number: p.number, checks: headChecks(p) })).filter((h) => Object.keys(h.checks).length);
+    (nodes ?? []).filter((p) => p && p.baseRefName === b.name).map((p) => ({ number: p.number, checks: Object.fromEntries(checkStates(rollupOf(p))) })).filter((h) => Object.keys(h.checks).length);
   const bp = b.branchProtectionRule;
   const rules = (b.rules?.nodes ?? []).flatMap((x: Any) => {
     const sc = statusChecks(x);
@@ -1187,7 +1217,8 @@ function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...
   const fresh = [...m.merged.slice(-1), ...m.open];
   const gone = (c: string) => fresh.find((h) => !(c in h.checks));
   const stable = Object.keys(m.merged[0]?.checks ?? {})
-    .filter((c) => m.merged.every((h) => h.checks[c] === "success") && !gone(c))
+    // stricter than task show: a check skipped by a condition or neutral checked nothing — only pass makes it required
+    .filter((c) => m.merged.every((h) => h.checks[c] === "pass") && !gone(c))
     .sort();
   const enforced = m.rules.some((r) => r.contexts.length);
   const list = (cs: string[]) => cs.map(q).join(", ");
@@ -1783,21 +1814,11 @@ interface ShownPr {
   why?: string;
 }
 
-/** The head's checks by name: green (success, neutral, skipped), still running, red; a rerun — by its best run. */
+/** The head's checks by name (`checkStates`): green (pass, skipping), still running, red (cancel, fail). */
 function shownPr(p: Any, why?: string): ShownPr {
-  const nodes: Any[] = p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
-  const rank = { red: 0, pending: 1, green: 2 } as const;
-  const by = new Map<string, keyof typeof rank>();
-  for (const c of nodes.filter(Boolean)) {
-    const run = c.__typename === "CheckRun";
-    const state: keyof typeof rank = run
-      ? c.status !== "COMPLETED" ? "pending" : ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(c.conclusion) ? "green" : "red"
-      : c.state === "SUCCESS" ? "green" : c.state === "PENDING" || c.state === "EXPECTED" ? "pending" : "red";
-    const name: string = run ? c.name : c.context;
-    if (rank[state] > rank[by.get(name) ?? "red"] || !by.has(name)) by.set(name, state);
-  }
-  const of = (s: keyof typeof rank) => [...by].filter(([, v]) => v === s).map(([k]) => k);
-  return { number: p.number, state: p.state ?? "", merged: Boolean(p.merged), draft: Boolean(p.isDraft), checks: by.size ? { green: of("green").length, pending: of("pending"), red: of("red") } : null, why };
+  const by = [...checkStates(rollupOf(p))];
+  const of = (...states: CheckBucket[]) => by.filter(([, v]) => states.includes(v)).map(([k]) => k);
+  return { number: p.number, state: p.state ?? "", merged: Boolean(p.merged), draft: Boolean(p.isDraft), checks: by.length ? { green: of("pass", "skipping").length, pending: of("pending"), red: of("cancel", "fail") } : null, why };
 }
 
 function prLine(p: ShownPr): string {
