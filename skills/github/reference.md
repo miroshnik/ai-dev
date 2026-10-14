@@ -654,9 +654,15 @@ deploys, then `task close N`; no PR or the task is closed — an `○` line; no 
 an `○` line with the file path, code 0. Read-only. The Claude Code
 `SessionStart` hook runs it with the session id from its input (`check
 --hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's. In a
-dispatcher session it first names the queue command and drops the hand-outs
-(`dispatchers/<id>.tasks`, "task queue"): the executors died with the app's
-process too, their tasks not In progress are ready again.
+dispatcher session it first says to continue the stopped executors (#528):
+they stopped with the app's process, their transcripts are intact, and the
+app names them in its notification — each is continued with `SendMessage` by
+its id, with its context in its own worktree (the task branch, uncommitted
+work), then the queue command; the hand-outs (`dispatchers/<id>.tasks`, "task
+queue") stay. A new executor — only for one that can't be continued, with the
+same prompt: a task In progress it continues in the worktree of its branch
+(the assignment's restart line), not in a new one — git won't give the branch
+to a second worktree.
 
 ### task queue
 
@@ -689,11 +695,14 @@ one task. A session with a pinned task — a refusal (code 2): the dispatcher is
 a separate session, named by meaning, without a number. `--assignment N` —
 read-only on GitHub, the executor's first call; in a dispatcher session it
 records the task as handed out — a line `owner/repo#N` in
-`dispatchers/<id>.tasks`, `=` in the queue till the session restarts (an
+`dispatchers/<id>.tasks`, `=` in the queue for the whole session (an
 executor's answer leaves the task not ready either: merged closes it, a question
-waits for the owner, failed isn't restarted). The assignment: the task by the canon in auto mode, a
+waits for the owner, failed isn't restarted; after the app restarts the executor
+is continued, "task resume"). The assignment: the task by the canon in auto mode, a
 restart line only for an In progress task with a branch `*/N-*` in the
-checkout or on its origin (it names the branch), and what a subagent does
+checkout or on its origin (it names the branch; the branch checked out in
+another worktree — work there, in Claude Code `EnterWorktree` with its path,
+not in a new one), and what a subagent does
 otherwise — doesn't rename or archive the session and writes no last line,
 waits for CI and the deploy with regular calls
 (`wait-ci.sh … --timeout 540`: a background command doesn't wake a subagent, a

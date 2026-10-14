@@ -152,7 +152,9 @@ limit`. After each executor's answer — `task queue` again: it also removes
 finished executors' worktrees (`+`), dirty or unmerged ones stay (`○`) — no
 manual `git worktree remove`. A question — to the
 owner in text; the answer — ✅ in the task's questions section and to the same
-executor with `SendMessage`. Failed — a comment in the task with what
+executor with `SendMessage`. After the app restarts — each stopped executor
+is continued with `SendMessage` by its id from the app's notification, not a
+new one (`task resume`). Failed — a comment in the task with what
 stopped, no restart; on an external blocker — *blocked by* on its issue or
 the `external blocker` label with the reason (`reference.md`,
 "Dependencies"): the queue shows it as `○`. Queue empty and nothing running — the summary, the last
