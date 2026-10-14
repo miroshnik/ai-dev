@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { chartSvg, page, points, trend, view } from "../../../skills/dashboard/scripts/dashboard.ts";
 import { calib, historyTable, median, waitsHistoryLine } from "../../../skills/est/scripts/est.ts";
-import type { Row } from "../../../skills/est/scripts/est.ts";
+import type { Row, Waits } from "../../../skills/est/scripts/est.ts";
 
 const DAY = 86400;
 // полдень UTC: локальная дата та же в любом часовом поясе
@@ -108,17 +108,100 @@ describe("Ожидания задач — в est history и на дашборд�
   });
 });
 
+/** Факт с разбивкой по ожиданиям, минуты (#518). */
+const split = (w: Partial<Waits>) => ({ cov: "full", tok: { total: 5_000_000 }, usd: 4.5, type: "feat", waits: { ci: 0, merged: 0, checks: 0, slot: 0, rest: 0, ...w } });
+/** Столбик задачи на панели разбивки: верх каждого сегмента по классу; низ первого — нулевая линия шкалы. */
+const bar = (svg: string, i: number) => {
+  const g = new RegExp(`<g class="bar" data-i="${i}">([\\s\\S]*?)</g>`).exec(panel(svg, "waits"))?.[1];
+  if (g === undefined) return null;
+  const segs = [...g.matchAll(/<rect class="seg (\w+)" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)].map((m) => ({ part: m[1]!, top: Number(m[2]), bottom: Number(m[2]) + Number(m[3]) }));
+  return { parts: segs.map((s) => s.part), top: Object.fromEntries(segs.map((s) => [s.part, s.top])), base: segs[0]!.bottom };
+};
+/** Данные подсказки страницы: строки по задачам. */
+const hover = (html: string) => JSON.parse(/<script id="pts" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!) as { pts: { rows: [string, string][] }[] };
+/** Линия тренда панели (последняя: первая — образец в легенде): точки пути и подпись на её конце. */
+const trendOf = (svg: string) => {
+  const p = panel(svg, "waits");
+  const d = [...p.matchAll(/<path class="trend" d="([^"]+)"/g)].pop()?.[1] ?? "";
+  return { ys: [...d.matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((m) => Number(m[1])), end: /class="end-label"[^>]*>([^<]+)</.exec(p)?.[1] };
+};
+/** Высота доли на правой шкале панели разбивки — по подписям «0 %» и «100 %». */
+const shareY = (svg: string, share: number) => {
+  const at = (label: string) => Number(new RegExp(`class="y-tick-r" x="[\\d.]+" y="([\\d.]+)">${label}<`).exec(panel(svg, "waits"))?.[1]) - 4;
+  return at("0 %") + (at("100 %") - at("0 %")) * share;
+};
+
+/**
+ * Из чего складывается факт задачи и как это меняется со временем (#532): столбик на задачу из частей разбивки
+ * факта на линейной шкале и скользящая медиана доли ожиданий на второй шкале, в процентах.
+ */
+describe("Панель разбивки факта по задачам во времени", () => {
+  it("панель разбивки факта показывает по каждой закрытой задаче ожидание CI на PR, после мержа, проверки и остальное", () => {
+    const rs = [row(1, { fact: 1, fact_marker: split({ ci: 10, merged: 5, checks: 15, slot: 5, rest: 30 }) }), row(2, { fact: 0.5, fact_marker: split({ ci: 6, checks: 4, rest: 20 }) })];
+    const svg = chartSvg(points("o/r", rs));
+    expect([...svg.matchAll(/<g class="panel" data-panel="(\w+)"/g)].map((m) => m[1])).toEqual(["h", "ratio", "tok", "usd", "waits"]);
+    const b1 = bar(svg, 0)!;
+    // снизу вверх: ожидания — от нулевой линии, сравнимы между задачами; проверки без очереди slot — отдельно от неё
+    expect(b1.parts).toEqual(["ci", "merged", "checks", "slot", "rest"]);
+    // шкала линейная: высота от нуля до верха каждого сегмента пропорциональна минутам до него — 10, 15, 25, 30, 60
+    const cum: Record<string, number> = { ci: 10, merged: 15, checks: 25, slot: 30, rest: 60 };
+    const perMin = (b1.base - b1.top.rest!) / 60;
+    for (const [part, m] of Object.entries(cum)) expect(Math.abs(b1.base - b1.top[part]! - m * perMin)).toBeLessThan(0.2);
+    // части без минут не рисуются; столбик задачи 2 — вдвое ниже: 30 минут против 60
+    const b2 = bar(svg, 1)!;
+    expect(b2.parts).toEqual(["ci", "checks", "rest"]);
+    expect(Math.abs(b2.base - b2.top.rest! - 30 * perMin)).toBeLessThan(0.2);
+    expect([...panel(svg, "waits").matchAll(/class="y-tick"[^>]*>([^<]+)</g)].map((m) => m[1])[0]).toBe("0");
+    // подсказка и таблица называют каждую часть
+    const html = model(rs);
+    expect(hover(html).pts[0]!.rows).toContainEqual(["Waits, min", "CI 10 min · after the merge 5 · checks 15 (slot queue 5) · rest 30"]);
+    expect(hover(html).pts[0]!.rows).toContainEqual(["Waits share", "50 %"]);
+    expect(html).toMatch(/data-task="o\/r#1"[\s\S]*?<td>10<\/td><td>5<\/td><td>15 \(5\)<\/td><td>30<\/td>/);
+  });
+
+  it("задача без разбивки в маркере на панели не выглядит нулём", () => {
+    // доли ожиданий задач с разбивкой — 40, 60 и 60 %; задача 2 — факт до разбивки
+    const rs = [row(1, { fact_marker: split({ ci: 4, rest: 6 }) }), row(2), row(3, { fact_marker: split({ ci: 6, rest: 4 }) }), row(4, { fact_marker: split({ checks: 6, rest: 4 }) })];
+    const svg = chartSvg(points("o/r", rs));
+    // на её месте — пустота, а не столбик нулевой высоты
+    expect(bar(svg, 1)).toBeNull();
+    expect([0, 2, 3].map((i) => bar(svg, i) !== null)).toEqual([true, true, true]);
+    // в медиану доли она не входит: с нулём медиана была бы 50 %
+    expect(trendOf(svg).end).toBe("60 %");
+    // подсказка объясняет пустоту
+    const rows2 = hover(model(rs)).pts[1]!.rows;
+    expect(rows2.find(([label]) => label === "Waits")?.[1]).toContain("no split");
+    expect(rows2.map(([label]) => label)).not.toContain("Waits share");
+  });
+
+  it("тренд панели — скользящая медиана по последним 10 задачам, как на остальных панелях", () => {
+    // 12 задач с разбивкой, доля ожиданий задачи i — 4·i %; задача без разбивки посередине окна не сдвигает
+    const rs = Array.from({ length: 12 }, (_, i) => row(i + 1, { fact_marker: split({ ci: 4 * (i + 1), rest: 100 - 4 * (i + 1) }) }));
+    rs.splice(6, 0, row(50, { closedAt: T0 + 6.5 * DAY }));
+    const svg = chartSvg(points("o/r", rs));
+    const want = trend(Array.from({ length: 12 }, (_, i) => 0.04 * (i + 1))).filter((v): v is number => v !== null);
+    const t = trendOf(svg);
+    // до третьей задачи тренда нет; дальше — медиана последних 10: у 12-й — задач 3…12, 30 %
+    expect(t.ys.length).toBe(10);
+    t.ys.forEach((y, k) => expect(Math.abs(y - shareY(svg, want[k]!))).toBeLessThan(0.2));
+    expect(want[9]).toBeCloseTo(0.3);
+    expect(t.end).toBe("30 %");
+  });
+});
+
 describe("Страница — один график: часы, токены и стоимость на общей оси времени", () => {
-  it("четыре панели с общей осью времени, у каждой своя шкала значений", () => {
-    const svg = chartSvg(points("o/r", rows(4, (i) => i / 10).map((r, i) => ({ ...r, fact_marker: { cov: "full", tok: { total: (i + 1) * 20e6 }, usd: (i + 1) * 100 } }))));
-    expect([...svg.matchAll(/<g class="panel" data-panel="(\w+)"/g)].map((m) => m[1])).toEqual(["h", "ratio", "tok", "usd"]);
+  it("пять панелей с общей осью времени, у каждой своя шкала значений", () => {
+    const svg = chartSvg(points("o/r", rows(4, (i) => i / 10).map((r, i) => ({ ...r, fact_marker: { ...split({ ci: 5, rest: 10 }), tok: { total: (i + 1) * 20e6 }, usd: (i + 1) * 100 } }))));
+    expect([...svg.matchAll(/<g class="panel" data-panel="(\w+)"/g)].map((m) => m[1])).toEqual(["h", "ratio", "tok", "usd", "waits"]);
     expect(count(svg, /<g class="x-axis"/g)).toBe(1);
     const ticks = (name: string) => [...panel(svg, name).matchAll(/class="y-tick"[^>]*>([^<]+)</g)].map((m) => m[1]);
     expect(ticks("h")).toContain("0.1");
     expect(ticks("usd")).toContain("100");
     expect(ticks("usd")).not.toContain("0.1");
-    // одна панель — одна шкала: подписи значений только слева
-    for (const name of ["h", "ratio", "tok", "usd"]) expect(new Set([...panel(svg, name).matchAll(/class="y-tick" x="([\d.]+)"/g)].map((m) => m[1])).size).toBe(1);
+    // одна панель — одна шкала значений: подписи только слева; справа у разбивки — доля ожиданий, 0…100 %
+    for (const name of ["h", "ratio", "tok", "usd", "waits"]) expect(new Set([...panel(svg, name).matchAll(/class="y-tick" x="([\d.]+)"/g)].map((m) => m[1])).size).toBe(1);
+    expect([...panel(svg, "waits").matchAll(/class="y-tick-r"[^>]*>([^<]+)</g)].map((m) => m[1])).toEqual(["0 %", "50 %", "100 %"]);
+    for (const name of ["h", "ratio", "tok", "usd"]) expect(panel(svg, name)).not.toContain("y-tick-r");
   });
 
   it("шкала на несколько порядков — только декады: подписи ступеней не налезают друг на друга", () => {
@@ -163,7 +246,7 @@ describe("Страница — один график: часы, токены и 
     const html = model([row(7, { title: "Экспорт счетов" }), row(8, { est_marker: null })]);
     const table = /<table[\s\S]*<\/table>/.exec(html)?.[0] ?? "";
     const cells = (n: number) => [...(new RegExp(`<tr[^>]*data-task="o/r#${n}"[\\s\\S]*?</tr>`).exec(table)?.[0] ?? "").matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => m[1]!.replace(/<[^>]+>/g, ""));
-    expect(cells(7)).toEqual(["2026-09-08", "#7 Экспорт счетов", "feat", "0.5", "0.25", "×0.50", "10", "5", "$8.00", "$4.50", "—", "—", "—", "full"]);
+    expect(cells(7)).toEqual(["2026-09-08", "#7 Экспорт счетов", "feat", "0.5", "0.25", "×0.50", "10", "5", "$8.00", "$4.50", "—", "—", "—", "—", "full"]);
     expect(cells(8).slice(3, 6)).toEqual(["—", "0.25", "—"]);
     expect(table).toContain('<a href="https://github.com/o/r/issues/7">');
   });

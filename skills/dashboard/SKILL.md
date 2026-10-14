@@ -1,6 +1,6 @@
 ---
 name: dashboard
-description: A browser task dashboard served by its script, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, its stack's `*.localhost` links, the «Waiting for the owner» block (questions from session answers and from tasks with the «questions» label) and the «Decided auto» block (✅ auto answers of the last day); refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual hours, their ratio, tokens, cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "what is the session waiting for", which questions await an answer or were answered by sessions, where a task's app opens; asked for a dashboard, a chart or "show it visually", how accurate the estimates are, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
+description: A browser task dashboard served by its script, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, its stack's `*.localhost` links, the «Waiting for the owner» block (questions from session answers and from tasks with the «questions» label) and the «Decided auto» block (✅ auto answers of the last day); refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual hours, their ratio, tokens, cost, waits) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "what is the session waiting for", which questions await an answer or were answered by sessions, where a task's app opens; asked for a dashboard, a chart or "show it visually", how accurate the estimates are, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
 allowed-tools: Bash(bun *skills/dashboard/scripts/dashboard.ts *)
 ---
 
@@ -19,7 +19,7 @@ up a page with two tabs:
 - **«Estimate and actual»** (`/est`) — a chart by task close date: GitHub
   project fields and the «Estimate» and «Actual» comment markers; the waits of
   each task (CI, after the merge, checks with the slot queue) and their medians
-  — a tile and table columns.
+  — a chart panel, a tile and table columns.
 
 It writes nothing to GitHub.
 
@@ -134,13 +134,18 @@ call: a regular one won't return until the timeout.
   closed tasks and the change against the previous 10. The «Cost by model»
   tile — each model's share of $ for the last 10 tasks and for the previous
   10: the model changed — the rate changed.
-- **Chart** — four panels on a shared time axis (close date): hours (ring —
+- **Chart** — five panels on a shared time axis (close date): hours (ring —
   estimate, dot — actual, the segment between them — the error), actual to
   estimate (the ×1 line — the estimate matched, the band — the ×0.5…×2
   tolerance), tokens, M, and cost, $ (ring — the forecast from the «Estimate»
-  comment). The line is a rolling median of the last 10 tasks, the number at
-  its end — the current value. The scales are logarithmic: an equal step — an
-  equal ratio.
+  comment), and the actual's split. The line is a rolling median of the last
+  10 tasks, the number at its end — the current value. The scales are
+  logarithmic: an equal step — an equal ratio.
+- **The actual's split** — a bar per task, minutes on a linear scale: CI on
+  the PR, after the merge and the deploy, checks, the slot queue (bottom-up)
+  and the rest on top; the line — the median share of the waits, % on the
+  right scale. A task whose actual predates the split is a gap, not a zero,
+  and stays out of the median; the tooltip over the gap says so.
 - **Table** — the same values per task, newest on top; hovering over a point
   highlights the row.
 
@@ -157,6 +162,9 @@ no ring and no ratio.
 - A task gets cheaper — the cost and token trend goes down with the same task
   size: check against the hours panel and the task types in the table,
   otherwise "cheaper" means "tasks got smaller".
+- Waits shrink — the share line of the split panel goes down; what a faster
+  CI or a shorter slot queue gave — the height of its part of the bars before
+  and after the change.
 - The $ trend mixes the flow with the model's rate: a model change changes
   the cost several-fold under the same flow. The «Cost by model» tile
   shows whether the model changed; the flow's effect — by tokens and hours.
