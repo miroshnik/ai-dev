@@ -578,7 +578,9 @@ and without a merge queue the branch moves ahead. Didn't move — `✅ merge`,
 nothing is built. Moved — the PR head (`refs/pull/<N>/head`) merged
 with a fresh `origin/<base>` in a temporary worktree (`git merge`, like
 GitHub's merge-ref; the worktree is always removed), dependencies by the
-merge's lockfile (`packageManager`, otherwise the lockfile:
+merge's lockfile (the manager — `packageManager`, otherwise the lockfile,
+otherwise `.yarnrc.yml` — Yarn, otherwise npm,
+`tests/standards/package-manager`; the install —
 `bun install --frozen-lockfile`, `pnpm install --frozen-lockfile`,
 `yarn install --frozen-lockfile`, `npm ci`; no lockfile — no install) and the
 project's fast checks — the `package.json` scripts that exist, in CI order
