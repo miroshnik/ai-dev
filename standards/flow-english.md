@@ -114,7 +114,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 170 тестов</summary>
+<details><summary>✅ 171 тест</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -148,6 +148,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «CI running» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Changed» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Closed by PR #M: GitHub didn't link the PR to the task» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Closes #N» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cloud session … not imported — est cloud-import» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cost by model» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cost, $» из skills/est/SKILL.md печатает или пишет скрипт
@@ -280,7 +281,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «working» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «workspace package \<path> is in the code roots» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «…» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «…» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ вне охвата: api/DATABASE_URL is declared
   > пример названия с подставленным элементом: шаблон «{name} is declared» — в en.json
 - ✅ вне охвата: host \<h> is only in adapter \<a>

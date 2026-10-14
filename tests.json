@@ -2506,6 +2506,66 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task answer ставит ответ у вопроса задачи",
+   "ошибка до изменений — описание не тронуто"
+  ],
+  "name": "вопрос уже с ✅ — ответ меняют руками"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи",
+   "ошибка до изменений — описание не тронуто"
+  ],
+  "name": "вопроса с таким номером нет — ошибка называет номера вопросов"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи",
+   "ошибка до изменений — описание не тронуто"
+  ],
+  "name": "ответ пустой"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи",
+   "ошибка до изменений — описание не тронуто"
+  ],
+  "name": "раздела вопросов нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи"
+  ],
+  "name": "`task answer --auto` помечает ответ «✅ авто»"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи"
+  ],
+  "name": "`task answer` ставит ✅ и ответ у вопроса, нумерация не меняется"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи"
+  ],
+  "name": "вопрос в несколько строк — ответ отдельной строкой в конце пункта, следующий раздел не тронут"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task answer ставит ответ у вопроса задачи"
+  ],
+  "name": "ответ на последний открытый вопрос снимает метку вопросов"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task close закрывает задачу одной командой"
   ],
   "name": "PR задачи влит: задача закрыта, факт записан est, Status «Готово» — в выводе всё сделанное и следующий шаг"
@@ -3003,6 +3063,34 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task show печатает задачу одним выводом"
+  ],
+  "name": "GitHub ещё не связал PR с задачей — PR находится по ветке задачи; вопросов нет — «Questions: none»"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task show печатает задачу одним выводом"
+  ],
+  "name": "PR у задачи нет — «PR: none»; задачи нет — ошибка, код 2"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task show печатает задачу одним выводом"
+  ],
+  "name": "`task show` печатает задачу, её открытые вопросы, эпик и PR одним выводом"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task show печатает задачу одним выводом"
+  ],
+  "name": "эпик: тип из метки epic, его открытые подзадачи; строки PR у эпика нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task status --branch переименовывает ветку worktree в ветку задачи"
   ],
   "name": "--branch не ветка этой задачи по канону — ошибка до изменений"
@@ -3223,6 +3311,13 @@
    "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
   ],
   "name": "манифест без поля language — каркас на русском, как раньше"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "проект на en: task answer пишет ответ «**Answer:**», est не считает его в размер описания"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -10548,6 +10643,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «Closes #N» из skills/github/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «Cloud session … not imported — est cloud-import» из skills/est/SKILL.md печатает или пишет скрипт"
  },
  {
@@ -11472,7 +11574,7 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «…» из skills/spec/SKILL.md печатает или пишет скрипт"
+  "name": "цитату «…» из skills/github/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -12319,6 +12421,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: подкоманда github task answer названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: подкоманда github task close названа"
  },
  {
@@ -12341,6 +12450,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: подкоманда github task resume названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task show названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",

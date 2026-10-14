@@ -13,7 +13,7 @@ README читают первым, а правят последним: новый
 
 ## README называет всё, что ставит флоу, и не ссылается на то, чего нет
 
-<details><summary>✅ 61 тест</summary>
+<details><summary>✅ 63 теста</summary>
 
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, ai-dev install, ai-dev release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
@@ -62,10 +62,12 @@ README читают первым, а правят последним: новый
 - ✅ README: подкоманда github project check названа
 - ✅ README: подкоманда github project fix названа
 - ✅ README: подкоманда github task actualize названа
+- ✅ README: подкоманда github task answer названа
 - ✅ README: подкоманда github task close названа
 - ✅ README: подкоманда github task drop названа
 - ✅ README: подкоманда github task new названа
 - ✅ README: подкоманда github task resume названа
+- ✅ README: подкоманда github task show названа
 - ✅ README: подкоманда github task status названа
 - ✅ README: подкоманда task-env check названа
 - ✅ README: подкоманда task-env down названа
