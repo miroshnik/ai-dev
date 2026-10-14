@@ -2,6 +2,24 @@
 
 Reference for the "Checks" section in `SKILL.md`: how to wire each mechanical check into the project's tests.
 
+Which check for what:
+
+| What to check | With what | Where in `tests/` |
+|---|---|---|
+| A convention on every item of a registry from the code ("every mutation writes an audit record") | `invariant` | `standards/<name>/` |
+| A lint rule: «not allowed», «allowed», «outside scope» | `examples`, `eslintLinter` | `standards/<name>/` + an `eslint.ts` fragment |
+| An ESLint rule in a standard's folder | `collectEslint` in `eslint.config.*` | the tree's `eslint.ts` fragments |
+| Out of scope and an item's exception with its own file | `fileOf` in `invariant`; a mark `spec-outside(<decision>)` / `spec-exception(<decision>) #N` in the file (`marksIn`), in JSON — the value of the `"//"` key | the item's file (a route, a script, a migration, a workspace package's `package.json`) |
+| Exceptions with a ratchet | `exceptionsIn()` → `exceptions` in `invariant`; a disable `-- #N reason` + `lintExceptions` | the decision folder's `exceptions/<item>.json`; migration — `spec-exceptions` |
+| Architecture model: module boundaries, directories, packages | `boundariesConfig`, `architecture` | `architecture/model.ts`, `architecture/<name>/` |
+| External systems (C1): hosts, packages, keys and headers — only in adapters, a perimeter without an adapter, network in tests, CSP | `externals` in the model, `architecture`, `networkGuard`, `cspConnectSrc` | `architecture/model.ts`, test setup |
+| Containers (C2): modules and libraries, links, deploy configs (compose, Supabase, Vercel, Terraform), storage clients | `containers` in the model, `architecture`, `deployUnits` | `architecture/model.ts` |
+| Monorepo workspace packages — in the model's roots; dev tools outside the model — out of scope with a reason | `architecture` (`outside`), `workspacePackages` | `architecture/model.ts`, a mark in the package's `package.json` |
+| Interaction order in a scenario, a sequence diagram | `trace` in boundary wrappers, `sequence` | a capability test |
+| Every entry point is called by a capability test | `journal` + `spec-claims` after the run | `standards/entry-points/` |
+| No code without a consumer (files, exports, dependencies, knip config; production mode) | `deadCode` from the knip report, the `knip-hints.cjs` reporter | `standards/dead-code/` |
+| Environment variables are declared and read (monorepo — per app) | `envVars`, `dotenvNames`, `configGet` in `readers` | `standards/env/` |
+
 
 A mechanical check is runner tests: they are in the report, and so in
 `docs/spec` and in `spec-diff`. The harness doesn't depend on the runner — you
