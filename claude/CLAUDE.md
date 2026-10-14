@@ -16,7 +16,9 @@ project's `CLAUDE.md`.
 - The app's CI monitor wakes the session only on failed checks, conflicts and
   reviews, and only with Auto-fix on; it doesn't report success. Wait for
   green checks before a merge and for the deploy after it with the `ci-wait`
-  skill as a background command: its completion wakes the session.
+  skill as a background command: its completion wakes the session — no
+  `Monitor`, watcher loop or `ScheduleWakeup` on top: an armed wakeup keeps
+  `archive_session` refused even after `stop`.
 - Merge in auto mode — `gh pr merge <N> --rebase` as a separate call, without
   `cd`, `|`, `;`: otherwise the `Bash(gh pr merge *)` rule (set by the owner)
   won't match and the classifier rejects the merge.
@@ -30,7 +32,9 @@ project's `CLAUDE.md`.
   hook output in context — run `check` by hand.
 - `set_session_title` renames the session; in auto mode `archive_session`
   with `self` archives it: as the last action, after the "can be closed" line
-  — the conversation ends with it.
+  — the conversation ends with it. Before it — `TaskStop` for each own
+  background task still running: a live one gives "still has live work".
+  Refused after that — don't retry: the owner archives from the sidebar.
 - Skills — in the project's `.claude/skills/<name>` and
   `~/.claude/skills/<name>` (symlinks to `.agents/skills/<name>`), the skill
   directory is `${CLAUDE_SKILL_DIR}`; a same-named machine skill wins over the
