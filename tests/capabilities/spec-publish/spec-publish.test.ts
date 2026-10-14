@@ -164,25 +164,29 @@ describe("Документация публикуется в ветку spec, а
 });
 
 // `git` — обёртка: перед N-м пушем выполняет push-N из своего каталога, если он есть (параллельная публикация или
-// сбой хостинга), затем настоящий git
+// сбой хостинга), затем настоящий git; after-push-N — сразу после удавшегося N-го пуша (следующая публикация)
 const FAKE_GIT = `#!/usr/bin/env bash
 if [ "$1" = push ]; then
   n=$(( $(cat "$FAKE_GIT/n" 2>/dev/null || echo 0) + 1 )); echo $n > "$FAKE_GIT/n"
   [ -f "$FAKE_GIT/push-$n" ] && . "$FAKE_GIT/push-$n"
+  if [ -f "$FAKE_GIT/after-push-$n" ]; then "$REAL_GIT" "$@" || exit; . "$FAKE_GIT/after-push-$n"; exit 0; fi
 fi
 exec "$REAL_GIT" "$@"
 `;
 const OUTAGE = `echo "remote: Internal Server Error" >&2; echo "fatal: the remote end hung up unexpectedly" >&2; exit 1\n`;
 const race = (commit: string) => `"$REAL_GIT" push -q origin ${commit}:refs/heads/spec\n`;
+/** Следующая публикация: дерево tree из source — коммит поверх только что запушенной головы ветки spec. */
+const following = (tree: string, source: string) =>
+  `"$REAL_GIT" fetch -q origin spec && c=$(GIT_AUTHOR_NAME=ci GIT_AUTHOR_EMAIL=ci@localhost GIT_COMMITTER_NAME=ci GIT_COMMITTER_EMAIL=ci@localhost "$REAL_GIT" commit-tree ${tree} -p FETCH_HEAD -m "spec: next" -m "Source: ${source}") && "$REAL_GIT" push -q origin "$c:refs/heads/spec"\n`;
 
-/** spec-publish, у которого перед пушами случается то, что в pushes (по порядку пушей). */
-function publishAmid(pushes: string[], ...args: string[]) {
+/** spec-publish, у которого вокруг пушей случается то, что в pushes (по порядку пушей): строка — до пуша, after — после. */
+function publishAmid(pushes: (string | { after: string })[], ...args: string[]) {
   const bin = path.join(dir, "bin");
   rmSync(bin, { recursive: true, force: true });
   mkdirSync(bin);
   writeFileSync(path.join(bin, "git"), FAKE_GIT);
   chmodSync(path.join(bin, "git"), 0o755);
-  pushes.forEach((sh, i) => writeFileSync(path.join(bin, `push-${i + 1}`), sh));
+  pushes.forEach((sh, i) => writeFileSync(path.join(bin, typeof sh === "string" ? `push-${i + 1}` : `after-push-${i + 1}`), typeof sh === "string" ? sh : sh.after));
   return runScript("spec-publish", ["--interval", "0", ...args], work, { PATH: `${bin}:${process.env.PATH}`, FAKE_GIT: bin, REAL_GIT: Bun.which("git")! });
 }
 
@@ -261,6 +265,43 @@ describe("Отклонённый пуш — повтор поверх новой
     );
     git(work, "fetch", "-q", "origin", "spec");
     expect(git(work, "rev-parse", "origin/spec")).toBe(published);
+  });
+});
+
+/**
+ * Сверка после пуша читает ветку с «GitHub»: между пушем и чтением поверх могла лечь следующая публикация (прогоны на
+ * мерж параллельны), и сверка дерева с каталогом давала ложное «не совпадает», код 1. Наш коммит в истории ветки —
+ * опубликован: поверх него — только публикация не старше, более старая пропускается «already newer».
+ */
+describe("Следующая публикация поверх нашей до сверки — не расхождение", () => {
+  let first: string;
+  let second: string;
+  beforeEach(() => {
+    docs({ "README.md": "# v0\n" });
+    expect(publish().code).toBe(0);
+    first = repo.commit({ "a.ts": "a\n" }, "first");
+    second = repo.commit({ "b.ts": "b\n" }, "second");
+  });
+
+  it("пуш прошёл, а до сверки поверх легла следующая публикация — код 0, наш коммит в истории ветки", () => {
+    const next = git(work, "rev-parse", `${parallel(second, { "README.md": "# v2\n" })}^{tree}`);
+    docs({ "README.md": "# v1\n" });
+    const r = publishAmid([{ after: following(next, second) }], "--source", first);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("spec-publish: published docs/spec → origin/spec ");
+    expect(r.stderr).toMatch(/spec-publish: origin\/spec has moved on since — a later publish on top: [0-9a-f]{12}\n$/);
+    git(work, "fetch", "-q", "origin", "spec");
+    expect(git(work, "show", "origin/spec:README.md")).toBe("# v2");
+    expect(git(work, "show", "origin/spec^:README.md")).toBe("# v1");
+    expect(git(work, "log", "-1", "--format=%B", "origin/spec^")).toContain(`Source: ${first}`);
+  });
+
+  it("после пуша в ветке нет нашего коммита — код 1: опубликовано не то, что собрано", () => {
+    const other = parallel(second, { "README.md": "# v2\n" });
+    docs({ "README.md": "# v1\n" });
+    const r = publishAmid([{ after: `"$REAL_GIT" push -q --force origin ${other}:refs/heads/spec\n` }], "--source", first);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toEndWith("spec-publish: after the push origin/spec doesn't match docs/spec\n");
   });
 });
 
