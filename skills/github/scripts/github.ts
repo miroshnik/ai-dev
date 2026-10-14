@@ -2371,6 +2371,14 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
  */
 export const PREMERGE_SCRIPTS = ["typecheck", "test:spec"];
 /**
+ * Spec roots whose checks `test:spec` runs — standards and architecture (the spec skill): there two green PRs break
+ * main. A tree with them and without the script — premerge names what isn't checked on the merge, the project's
+ * `check` (bin/ai-dev.ts) requires the script (#442).
+ */
+export const SPEC_ROOTS = ["tests/standards", "tests/architecture"];
+/** The spec roots the tree in dir has. */
+export const specRoots = (dir: string) => SPEC_ROOTS.filter((d) => statSync(path.join(dir, d), { throwIfNoEntry: false })?.isDirectory());
+/**
  * GitHub builds the merge-ref before the event that creates the check suite: main moving within this minute counts as
  * having moved.
  */
@@ -2580,14 +2588,18 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     return dir;
   };
   const ON_MERGE = "on the merge";
+  /** The tree's package.json scripts; no package.json — none. */
+  const scriptsOf = (dir: string): Record<string, unknown> => {
+    const pkg = path.join(dir, "package.json");
+    return existsSync(pkg) ? (JSON.parse(readFileSync(pkg, "utf8")).scripts ?? {}) : {};
+  };
   type Red = { script: string; cmd: string; result: RunResult; failed: string[] };
   /**
    * The tree's fast checks (`scripts` — those that exist) with dependencies from its lockfile, up to the first red one;
    * none — null.
    */
   const checks = (dir: string, where: string, scripts: string[]): { ran: string[]; red: Red | null } | null => {
-    const pkg = path.join(dir, "package.json");
-    const defined = existsSync(pkg) ? (JSON.parse(readFileSync(pkg, "utf8")).scripts ?? {}) : {};
+    const defined = scriptsOf(dir);
     const present = scripts.filter((s) => defined[s]);
     if (!present.length) return null;
     const cmds = projectCommands(dir);
@@ -2621,6 +2633,9 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
       return 1;
     }
     io.out(`+ merge of ${head.slice(0, 7)} with origin/${base} ${short("HEAD^1")} — no conflicts`);
+    // standards without test:spec don't stop the merge: the project's check holds the script, here — that they weren't run
+    const roots = specRoots(dir);
+    if (roots.length && !scriptsOf(dir)["test:spec"]) io.out(`○ ${roots.join(", ")} aren't checked on the merge: the merge's package.json has no test:spec script — the project's check names the line to add (bunx github:miroshnik/ai-dev check)`);
     const merged = checks(dir, ON_MERGE, PREMERGE_SCRIPTS);
     if (!merged) {
       io.out(`○ no fast checks: the merge's package.json has no ${PREMERGE_SCRIPTS.join(" or ")} scripts — step skipped`);
