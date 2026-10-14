@@ -30,7 +30,8 @@
  * The copy in a project is committed — the flow files the project's git ignores (the `CLAUDE.md` template, the
  * `.claude/` directory) the install un-ignores with exceptions in an ai-dev block at the end of `.gitignore`, `check`
  * reports them as a mismatch (`gitignoreFlow`). A project's compose file `check` holds to the task isolation rules
- * with the task-env skill's command (`composeCheck`): a violation is a mismatch too, `update` doesn't fix it. The
+ * with the task-env skill's command (`composeCheck`): a violation is a mismatch too, `update` doesn't fix it; so is a
+ * project with standards or architecture without a `test:spec` script — `check` names the lines (`specScript`). The
  * project's checks — the `package.json` scripts `lint`, `typecheck`, `test`, `test:*` — the install wraps in the
  * machine queue, the slot skill (`slotScripts`); if such a script calls turbo and turbo.json doesn't pass the queue
  * variables to tasks, it warns with a ready-made line (`turboEnv`).
@@ -55,6 +56,7 @@ import path from "node:path";
 import { isatty } from "node:tty";
 import { fileURLToPath } from "node:url";
 
+import { specRoots } from "../skills/github/scripts/github.ts";
 import locale from "../skills/github/scripts/locale.ts";
 import { COMPOSE_FILES, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
@@ -482,6 +484,8 @@ const yarnShell = (root: string, pkg: { packageManager?: unknown }) =>
  * Docker run it, where the skill's copy may be missing; not watch — long-running, it would hold a slot for long.
  */
 const slotted = (name: string) => /^(?:lint|typecheck|test)$|^test:/.test(name) && !name.includes("watch");
+/** A package.json script's command through the machine queue: `. SLOT_SH && <command>`, on Yarn 2+ — a string of slot.ts. */
+const slotWrap = (yarn: boolean) => (cmd: string) => (yarn ? `bun --no-env-file ${SLOT_TS} '${cmd.replaceAll("'", "'\\''")}'` : `. ${SLOT_SH} && ${cmd}`);
 
 /**
  * The project's checks — through the machine queue (the slot skill): `slotted` scripts in the root package.json are
@@ -508,7 +512,7 @@ function slotScripts(root: string, skills: string[]) {
   const scripts = pkg.scripts;
   if (!scripts || typeof scripts !== "object") return false;
   const yarn = yarnShell(root, pkg);
-  const wrap = (cmd: string) => (yarn ? `bun --no-env-file ${SLOT_TS} '${cmd.replaceAll("'", "'\\''")}'` : `. ${SLOT_SH} && ${cmd}`);
+  const wrap = slotWrap(yarn);
   const outside: string[] = [];
   const previous: string[] = [];
   for (const [name, cmd] of Object.entries(scripts)) {
@@ -972,8 +976,9 @@ function changeLines(changes: Change[], root: string, global: boolean) {
 
 /**
  * behind — falls behind: update will install something new; ignored — the project's git ignores flow files: update
- * will add exceptions; compose — the project's compose file breaks task isolation: update won't fix it; run — the text
- * names a command to run.
+ * will add exceptions; compose — the project's compose file breaks task isolation: update won't fix it; spec — the
+ * project has standards or architecture without a `test:spec` script: update won't add it; run — the text names a
+ * command to run.
  */
 interface Result {
   code: 0 | 1 | 2;
@@ -982,6 +987,7 @@ interface Result {
   behind?: boolean;
   ignored?: boolean;
   compose?: boolean;
+  spec?: boolean;
   run?: boolean;
 }
 
@@ -1012,6 +1018,54 @@ function composeCheck(root: string): { lines: string[]; violations: boolean } {
  */
 const updateTaskLine = (root: string) =>
   `The task — one per project, an open one is named by the refusal: bun --no-env-file ${githubScript(false)} task new --title "${locale.names(languageOf(root)).updateTask}" --branch-type chore`;
+
+/**
+ * Test runners of a package.json command — called directly or by the package manager: the `test:spec` command over the
+ * spec roots and the filter that excludes a root from `test` (Vitest `--exclude` adds to the config's; Jest's
+ * `--testPathIgnorePatterns` replaces the config's list; `bun test --path-ignore-patterns` repeats).
+ */
+const RUNNERS = {
+  vitest: { re: /^(?:(?:npx|bunx|yarn|pnpm(?: exec)?) )?vitest\b/, spec: "vitest run", exclude: (dir: string) => `--exclude '${dir}/**'` },
+  jest: { re: /^(?:(?:npx|bunx|yarn|pnpm(?: exec)?) )?jest\b/, spec: "jest", exclude: (dir: string) => `--testPathIgnorePatterns=${dir}/` },
+  bun: { re: /^bun test\b/, spec: "bun test", exclude: (dir: string) => `--path-ignore-patterns='${dir}/**'` },
+};
+
+/**
+ * The project's fast checks: with standards or architecture (`specRoots` of the github skill) the root package.json
+ * needs a `test:spec` script — without it `github pr premerge` checks the merge with a moved main by typecheck alone
+ * or by nothing, and a standard broken by two green PRs reaches main (#442). A mismatch that update doesn't fix — the
+ * commands are the project's: a `❌` line with the ready scripts, in the slot wrapper `slotScripts` puts (its
+ * `slotWrap`). `test:spec` — the runner of the `test` command, otherwise by the dependencies (Vitest, Jest, `bun test`
+ * in a project on Bun, otherwise Vitest — the spec skill's example), over the roots the project has; next to it —
+ * `test` with the same roots excluded by the runner's filter, added to the command under the wrapper (`unslot`): the
+ * roots run once, in `test:spec` (the spec skill, "Wiring into a repository"). `test` doesn't run them (names them
+ * already) or there is none — `test:spec` alone; `test` isn't a single runner call — the exclusion in words.
+ */
+function specScript(root: string): { lines: string[]; missing: boolean } {
+  const roots = specRoots(root);
+  let pkg: { scripts?: Record<string, unknown>; dependencies?: object; devDependencies?: object; packageManager?: unknown } = {};
+  try {
+    pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) ?? {};
+  } catch {
+    // no package.json or not JSON — no scripts
+  }
+  if (!roots.length || pkg.scripts?.["test:spec"]) return { lines: [], missing: false };
+  const test = typeof pkg.scripts?.test === "string" ? unslot(pkg.scripts.test) : undefined;
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const bun = String(pkg.packageManager ?? "").startsWith("bun@") || ["bun.lock", "bun.lockb"].some((f) => existsSync(path.join(root, f)));
+  const byTest = Object.values(RUNNERS).find((r) => test !== undefined && r.re.test(test));
+  const runner = byTest ?? ("vitest" in deps ? RUNNERS.vitest : "jest" in deps ? RUNNERS.jest : bun ? RUNNERS.bun : RUNNERS.vitest);
+  const wrap = existsSync(path.join(root, SLOT_TS)) ? slotWrap(yarnShell(root, pkg)) : (cmd: string) => cmd;
+  const spec = `"test:spec": ${JSON.stringify(wrap([runner.spec, ...roots].join(" ")))}`;
+  const lead = `  ❌ package.json: no test:spec script — pr premerge doesn't run ${roots.join(", ")} on the merge with a moved main`;
+  // the roots test runs too — they would run twice, in test and in test:spec
+  const twice = test === undefined ? [] : roots.filter((dir) => !test.includes(dir));
+  if (test === undefined || !twice.length) return { lines: [`${lead}; add to "scripts": ${spec}`], missing: true };
+  // a filter goes to a single runner call only: after `&&` or a pipe it would reach another command
+  if (!byTest || /[;&|<>`$()]/.test(test)) return { lines: [`${lead}; add to "scripts": ${spec}; exclude ${twice.join(", ")} from test with the runner's filter — they don't run twice`], missing: true };
+  const pair = `${spec}, "test": ${JSON.stringify(wrap([test, ...twice.map(runner.exclude)].join(" ")))}`;
+  return { lines: [`${lead}; put in "scripts" — test without them, they don't run twice: ${pair}`], missing: true };
+}
 
 /** The check failed: what and why. */
 const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `ai-dev ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
@@ -1059,10 +1113,12 @@ function check(global: boolean): Result {
   const warnings = changeLines(changes.filter((c) => c.op === "!"), root, global);
   // the compose file breaks task isolation — a mismatch (code 1) that update doesn't fix either; `○` — not checked
   const compose = global ? { lines: [], violations: false } : composeCheck(root);
-  const project = [...warnings, ...compose.lines, ...mode];
+  // standards without test:spec — a mismatch update doesn't add either
+  const spec = global ? { lines: [], missing: false } : specScript(root);
+  const project = [...warnings, ...compose.lines, ...spec.lines, ...mode];
   const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
   const ignored = changes.filter((c) => c.op === "❌");
-  if (!stale.length && !ignored.length) return { code: compose.violations ? 1 : 0, compose: compose.violations, text: [`ai-dev ${where}: up to date (${fresh})`, ...project].join("\n") };
+  if (!stale.length && !ignored.length) return { code: compose.violations || spec.missing ? 1 : 0, compose: compose.violations, spec: spec.missing, text: [`ai-dev ${where}: up to date (${fresh})`, ...project].join("\n") };
   const m = readManifest(root);
   const fixable = ignored.some((c) => !c.manual);
   const lost = "ignores flow files — they are missing from the commit, other checkouts and the cloud session:";
@@ -1071,6 +1127,7 @@ function check(global: boolean): Result {
     behind: stale.length > 0,
     ignored: ignored.length > 0,
     compose: compose.violations,
+    spec: spec.missing,
     run: stale.length > 0 || fixable,
     text: [
       stale.length ? `ai-dev ${where}: behind — installed ${m.tag ?? short(m.sha) ?? "without SHA"}, latest ${fresh}` : `ai-dev ${where}: up to date (${fresh}), but git ${lost}`,
@@ -1314,6 +1371,7 @@ function hook(failed?: unknown) {
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, committed with the copy in the update task; a rule outside the project — fix it yourself.");
   // the session has no task yet at its start, and one session is one task: the fix goes into a task of its own
   if (shown.some((r) => r.compose)) tail.push("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
+  if (shown.some((r) => r.spec)) tail.push("No test:spec script — pr premerge doesn't run standards and architecture on the merge; the ❌ line names the package.json scripts; adding them is a task of its own in the project.");
   if (shown.some((r) => r.code === 2)) tail.push("Check unavailable — work by the current flow and say so.");
   if (shown.some((r) => r.run)) tail.push(SANDBOX_HINT);
   note(["ai-dev flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...resume, ...tail].join("\n"));

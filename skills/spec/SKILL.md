@@ -561,7 +561,9 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
    "test:spec": "vitest run tests/standards tests/architecture"
    ```
    `github pr premerge` runs `test:spec` before a merge on the merge with a
-   fresh `main` (after `typecheck`, if there is one).
+   fresh `main` (after `typecheck`, if there is one); the flow's `check`
+   requires it once `tests/standards` or `tests/architecture` exists and names
+   both lines — `test:spec` and `test` without the same roots.
    Before `spec:doc` locally — a full run with reports (section "Reports for
    spec-doc"). In `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
    `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,

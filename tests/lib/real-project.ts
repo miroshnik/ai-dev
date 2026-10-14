@@ -22,10 +22,12 @@ const FILES: Record<string, string> = {
     private: true,
     workspaces: ["packages/*"],
     scripts: {
-      test: "bun test --reporter=junit --reporter-outfile=.spec-report.xml",
+      // пара из готовой строки check (#442): стандарты — в test:spec, test их не повторяет
+      test: "bun test --reporter=junit --reporter-outfile=.spec-report.xml --path-ignore-patterns='tests/standards/**'",
+      "test:spec": "bun test tests/standards --reporter=junit --reporter-outfile=.spec-standards.xml",
       "test:e2e": "playwright test",
       "spec:claims": `${SPEC}/spec-claims.ts --entries tests/standards/entry-points/entries.ts`,
-      "spec:doc": `${SPEC}/spec-doc.ts .spec-report.xml .spec-playwright.json .spec-claims.xml --strict`,
+      "spec:doc": `${SPEC}/spec-doc.ts .spec-report.xml .spec-standards.xml .spec-playwright.json .spec-claims.xml --strict`,
       "spec:diff": `${SPEC}/spec-diff.ts`,
     },
     dependencies: { "@shop/prices": "workspace:*" },
@@ -158,7 +160,7 @@ export interface RealProject {
 
 /**
  * Проект магазина в `sb.proj` — закоммичен, флоу ещё не стоит: workspace-пакет цен, маршруты, юниты под `bun test`,
- * e2e под Playwright, реестр точек входа, deadCode. Зависимости — ссылки на `node_modules` ai-dev (knip и Playwright —
+ * стандарты своим `test:spec`, e2e под Playwright, реестр точек входа, deadCode. Зависимости — ссылки на `node_modules` ai-dev (knip и Playwright —
  * его devDependencies), пакет workspace — ссылкой, как его кладёт менеджер пакетов; в PATH песочницы — node: на нём
  * идут knip и Playwright.
  */
