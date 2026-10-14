@@ -2124,7 +2124,7 @@ export function cmdTaskAssignment(io: Io, slug: string, number: number): number 
     questions: N.sections.questions,
     branches: restart.map((b) => `\`${b}\``).join(", "),
   };
-  const lines = [N.queue.lead, ...(restart.length ? [N.queue.resume] : []), N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.found, N.queue.question, N.queue.answer];
+  const lines = [N.queue.lead, ...(restart.length ? [N.queue.resume] : []), N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.subagents, N.queue.found, N.queue.question, N.queue.answer];
   for (const line of lines) io.out(locale.fill(line, vars));
   return 0;
 }

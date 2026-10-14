@@ -83,6 +83,7 @@
     "session": "- don't rename or archive the session and don't write the last line («{done}») — the dispatcher does;",
     "wait": "- wait for CI and the deploy with a regular call, not in the background: a background command doesn't wake a subagent, and a Bash call lives up to 10 minutes — `{waitCi} pr <PR> --timeout 540` (after the merge — `merged <PR>`), on TIMEOUT — the same call again;",
     "git": "- git — in separate calls, without `cd`, `&&` and `|`: worktree isolation refuses a compound command with git;",
+    "subagents": "- writing subagents — launch as needed, no limit: each gets its own worktree and «{task} #{number}» at the start of its prompt (`est` links its work by it); bring their commits into your branch, remove their worktrees and branches yourself after the merge — what didn't go, name in the answer;",
     "found": "- work found outside the task — `{script} task new …` (work of the task's epic — with `--epic`: the dispatcher picks it up), without a chip — name it in the answer;",
     "question": "- a question without a clear recommendation — into «{questions}» of the task; don't start the code that depends on it and answer the dispatcher: the owner's answer comes back here.",
     "answer": "The answer to the dispatcher — one line: `merged #<PR>` · `question: <the question, options, recommendation>` · `failed: <what stopped and where>`."

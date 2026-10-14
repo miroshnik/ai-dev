@@ -93,6 +93,7 @@ export interface Names {
     session: string;
     wait: string;
     git: string;
+    subagents: string;
     found: string;
     question: string;
     answer: string;
