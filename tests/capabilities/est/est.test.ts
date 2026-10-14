@@ -11,7 +11,7 @@ import {
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, Period, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { tmpDir } from "../../lib/spec.ts";
+import { gitRepo, tmpDir } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -172,6 +172,104 @@ describe("Фан-аут задачи — число её субагентов в
     expect(lines[0]).toContain(" | agents | ");
     expect(lines[1]).toMatch(/ \|\s+4 \| /);
     expect(lines[2]).toMatch(/ \|\s+— \| /);
+  });
+});
+
+/**
+ * Сессия-диспетчер ведёт задачи фоновыми исполнителями — субагентами, по одному на задачу, до трёх сразу, и их записи
+ * перемежаются в общем таймлайне сессии. Активное время — интервалы между соседними записями одного агента (сессии
+ * или субагента): соседняя запись в общем потоке у исполнителя почти всегда чужая, и его время выпадало (#490).
+ * Ветка записи субагента в своём worktree — ветка этого worktree: Claude Code пишет в gitBranch ветку чужого чекаута.
+ */
+describe("Параллельные субагенты сессии считаются каждый по своим записям", () => {
+  const SID = "44444444-5555-6666-7777-888888888888";
+  const at = (min: number, sec = 0) => ts("10:00") + min * 60 + sec;
+  const iso = (min: number, sec = 0) => new Date(at(min, sec) * 1000).toISOString();
+  const session = (ev: Session["ev"]): Session => ({
+    sid: SID, cwd: "/repo", n_human: 1, ev, prlinks: [], commits: [], first_refs: [], first_urls: [], usage: [], models: [], title: "", title_refs: [], title_urls: [], n_subagents: 2, source: "claude", routine: false,
+  });
+
+  it("субагенты сессии работают параллельно — интервалы каждого считаются по его собственным записям, а не по соседним в общем потоке сессии", () => {
+    // исполнители #42 и #43 пишут раз в две минуты со сдвигом на минуту, диспетчер — между ними
+    const ev: Session["ev"] = [];
+    for (let m = 0; m <= 20; m += 2) ev.push([at(m), "", 0, "42", -1, 1]);
+    for (let m = 1; m <= 19; m += 2) ev.push([at(m), "", 0, "43", -1, 2]);
+    for (let m = 0; m <= 20; m += 4) ev.push([at(m, 30), "", 0, "", -1, 0]);
+    ev.sort((a, b) => a[0] - b[0]);
+    const f42 = computeFact(stubRepo([session(ev)], []), 42, [], []);
+    const f43 = computeFact(stubRepo([session(ev)], []), 43, [], []);
+    expect(f42.h).toBe(0.33); // 10:00 → 10:20
+    expect(f43.h).toBe(0.3); // 10:01 → 10:19
+    expect(f42.details[0]!.hours).toBe(0.33);
+    // вся сессия — одной задаче (закрепление): параллельные интервалы агентов считаются один раз — и в сессии, и в итоге
+    const pinned = computeFact(stubRepo([session(ev)], [], {}, new Map(), new Map([[SID, "o/r#42"]])), 42, [], []);
+    expect(pinned.h).toBe(0.34); // 10:00 → 10:20:30
+    expect(pinned.details[0]!.hours).toBe(0.34);
+  });
+
+  // исполнитель #42: задание в 10:01, ответы раз в две минуты до 10:21, пауза 20 минут (≤ gap), ещё два ответа
+  const MINE = [1, ...[3, 5, 7, 9, 11, 13, 15, 17, 19, 21], 41, 43];
+
+  /** Транскрипт диспетчера: его записи раз в пять минут и два исполнителя (#42 и #43), пишущие вперемежку. */
+  function dispatcher(): Session {
+    const file = path.join(dir, SID + ".jsonl");
+    const top = [{ type: "custom-title", customTitle: "Задачи эпика #40", cwd: "/repo" }, { type: "user", timestamp: iso(0), cwd: "/repo", gitBranch: "claude/dispatcher", origin: { kind: "human" }, message: { role: "user", content: "сделай все задачи эпика #40" } }];
+    for (let m = 0; m <= 45; m += 5) top.push({ type: "assistant", timestamp: iso(m, 30), cwd: "/repo", gitBranch: "claude/dispatcher", message: { role: "assistant", content: [{ type: "text", text: "жду исполнителей" }] } } as never);
+    const worker = (task: string, mins: number[], wt: string, branch: string) =>
+      jsonl(mins.map((m, k) => (k === 0
+        ? { type: "user", timestamp: iso(m), cwd: wt, gitBranch: branch, message: { role: "user", content: `${task} в o/r: ты исполнитель сессии-диспетчера` } }
+        : { type: "assistant", timestamp: iso(m), cwd: wt, gitBranch: branch, message: { role: "assistant", content: [{ type: "text", text: "работаю" }] } })));
+    writeFileSync(file, jsonl(top));
+    mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+    // gitBranch записей исполнителя — ветка соседнего worktree; их worktree уже убраны
+    writeFileSync(path.join(dir, SID, "subagents", "agent-1.jsonl"), worker("Задача #42", MINE, path.join(dir, "wt-1"), "fix/43-other"));
+    writeFileSync(path.join(dir, SID, "subagents", "agent-2.jsonl"), worker("Задача #43", Array.from({ length: 22 }, (_, k) => 2 + 2 * k), path.join(dir, "wt-2"), "fix/42-export"));
+    return parseSessionFile(file);
+  }
+
+  it("факт задачи исполнителя диспетчера равен активному времени его транскрипта", () => {
+    const res = computeFact(stubRepo([dispatcher()], []), 42, [], []);
+    expect(res.h).toBe(0.7); // 10:01 → 10:43: все паузы исполнителя не длиннее gap
+    expect(res.details[0]!.hours).toBe(0.7);
+    expect(res.details[0]!.rules).toEqual({ subagent: MINE.length });
+  });
+
+  it("факты параллельных исполнителей одной сессии не пересекаются: интервалы в маркере — по агенту сессии", () => {
+    const s = dispatcher();
+    const f43 = computeFact(stubRepo([s], []), 43, [], []);
+    expect(Object.keys(f43.iv!)).toEqual(["44444444:agent-2"]);
+    const f42 = computeFact(stubRepo([s], [], {}, new Map([[43, f43.iv!]])), 42, [], []);
+    expect(f42.h).toBe(0.7);
+    expect(f42.overlap).toEqual([]);
+    // время того же исполнителя в чужом факте — двойной счёт: пересечение названо
+    const twice = computeFact(stubRepo([s], [], {}, new Map([[7, { "44444444:agent-1": [[at(0), at(50)]] }]])), 42, [], []);
+    expect(twice.overlap).toEqual([{ issue: 7, h: 0.7 }]);
+  });
+
+  it("ветка записи субагента в worktree — ветка его worktree, а не gitBranch записи", () => {
+    const repo = path.join(dir, "repo");
+    mkdirSync(repo);
+    const { git, commit } = gitRepo(repo);
+    commit({ "a.txt": "a\n" });
+    const wt = path.join(repo, ".claude", "worktrees", "agent-1");
+    git("worktree", "add", "-q", "-b", "fix/42-export", wt);
+    const file = path.join(dir, SID + ".jsonl");
+    const rec = (type: string, min: number, cwd: string, branch: string, content: string) => ({ type, timestamp: iso(min), cwd, gitBranch: branch, message: { role: type, content } });
+    writeFileSync(file, jsonl([{ ...rec("user", 0, repo, "main", "посмотри тесты"), origin: { kind: "human" } }, rec("assistant", 1, repo, "main", "запускаю субагентов")]));
+    mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+    // задание без номера задачи: привязка записей — только по ветке; gitBranch — ветка чужой задачи
+    const sub = (cwd: string) => jsonl([rec("user", 2, cwd, "docs/7-other", "проверь тесты"), rec("assistant", 3, cwd, "docs/7-other", "ok"), rec("assistant", 5, cwd, "docs/7-other", "готово")]);
+    writeFileSync(path.join(dir, SID, "subagents", "agent-1.jsonl"), sub(wt));
+    writeFileSync(path.join(dir, SID, "subagents", "agent-2.jsonl"), sub(path.join(repo, ".claude", "worktrees", "agent-2"))); // worktree уже убран
+    const s = parseSessionFile(file);
+    const branchesOf = (agent: number) => [...new Set(s.ev.filter((e) => (e[5] ?? 0) === agent).map((e) => e[1]))];
+    expect(branchesOf(0)).toEqual(["main"]);
+    expect(branchesOf(1)).toEqual(["fix/42-export"]);
+    expect(branchesOf(2)).toEqual([""]); // ветки нет — нейтральная, а не чужая
+    const f42 = computeFact(stubRepo([s], []), 42, [], []);
+    expect(f42.h).toBe(0.05); // 10:02 → 10:05 субагента в worktree задачи
+    expect(f42.details[0]!.branches).toEqual({ "fix/42-export": 0.05 });
+    expect(computeFact(stubRepo([s], []), 7, [], []).h).toBeNull();
   });
 });
 
