@@ -94,8 +94,8 @@ rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 # (queued) — pending with the path: there is a run at the SHA, and without this line the outcome came down to hosting
 # statuses (#360).
 # The spec publish job (the spec skill, ci.md; "<job> / spec-publish" — the same job in a reusable workflow) — publishing
-# the documentation, not a check: it is neither awaited nor a FAIL, only by --context (#443). The same names — in the
-# github skill's premerge (SPEC_PUBLISH): its red isn't a red main.
+# the documentation, not a check: it is neither awaited nor a FAIL, only by --context (#443). A copy — in the github
+# skill's premerge (SPEC_PUBLISH): its red isn't a red main; both answer by one table, tests/standards/spec-publish-job.
 SPEC_PUBLISH='^(.+ / )?spec-publish$'
 ran='[]'
 checks() {

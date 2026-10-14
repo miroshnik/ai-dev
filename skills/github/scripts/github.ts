@@ -2807,10 +2807,10 @@ const RED_STATUS = new Set(["failure", "error"]);
 
 /**
  * The spec publish job (the `spec` skill, `ci.md`; `<job> / spec-publish` — the same job in a reusable workflow) —
- * publishing the documentation, not a check of the branch: its red isn't a red main (#443). The same names — in
- * ci-wait's `wait-ci.sh` (`SPEC_PUBLISH`).
+ * publishing the documentation, not a check of the branch: its red isn't a red main (#443). A copy — in ci-wait's
+ * `wait-ci.sh` (`SPEC_PUBLISH`): both answer by one table, `tests/standards/spec-publish-job`.
  */
-const SPEC_PUBLISH = /^(?:.+ \/ )?spec-publish$/;
+export const SPEC_PUBLISH = /^(?:.+ \/ )?spec-publish$/;
 
 /**
  * Red checks of the default branch's last commit — check-runs (the last run of each name) and hosting statuses;
