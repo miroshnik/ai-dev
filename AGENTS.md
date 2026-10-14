@@ -122,14 +122,14 @@ project language and parse the names of any language there.
   my own PR on green checks — myself, no "merge?"; work found outside the
   task — a task in Backlog and a chip ("Session = task"), no "create a task
   or a chip?". I answer the task's open questions with a recorded
-  recommendation, marked ✅ auto in the issue. A question of my own that I'd
-  ask without auto goes there too, into the questions section, with the
-  decision and ✅ auto, before code: in chat the decision gets lost. I ask
-  only when there is no clear recommendation, the decision is critical or
-  must come from a human, or on a discrepancy that changes scope or approach;
-  a question whose answer would be "yes" or "as you recommend" — I don't ask,
-  I act on the recommendation. Everything else irreversible or external still
-  needs a "yes".
+  recommendation, marked ✅ auto in the issue (`task answer --auto`). A
+  question of my own that I'd ask without auto goes there too, into the
+  questions section, with the decision and ✅ auto, before code: in chat the
+  decision gets lost. I ask only when there is no clear recommendation, the
+  decision is critical or must come from a human, or on a discrepancy that
+  changes scope or approach; a question whose answer would be "yes" or "as you
+  recommend" — I don't ask, I act on the recommendation. Everything else
+  irreversible or external still needs a "yes".
 - **Secrets and bypassing protections — only with permission:** tokens, keys,
   bypass secrets, disabling checks at the host, CI or cloud — I first say
   what will appear and where. I never store a secret from chat; when done I
@@ -140,8 +140,9 @@ project language and parse the names of any language there.
 - Tasks live in the project repository's **GitHub Issues**, not in local
   lists, TODO files or the agent's task list; no repository — ask where to
   keep them. The `github` skill creates and runs tasks (`task new`, `task
-  status`, `task close`, `task drop`, `pr labels`); how tasks, the project and
-  milestones are organized — its `reference.md`.
+  show`, `task answer`, `task status`, `task close`, `task drop`, `pr
+  labels`) — not `gh issue view` and `gh issue edit` by hand; how tasks, the
+  project and milestones are organized — its `reference.md`.
 - **Every issue has a type** — exactly three: Task (one PR), Bug, Epic; a
   personal account has no types — an epic gets the `epic` label. **Decision
   labels** — the decision's name (`tests/…/<name>` or a model module), kind
@@ -202,17 +203,19 @@ project language and parse the names of any language there.
 A task's questions live in its description, in the questions section (a
 numbered list; while any are unanswered — the questions label). Taking a task
 into work, **first of all** — before the plan, code and subagents — I read the
-questions of the task and its epic and **ask the user all open ones (without
-✅)** in one message, with options and a recommendation for each: the answer
-may change scope and approach.
+questions of the task and its epic (`github task show <N>` prints both, with
+the PR) and **ask the user all open ones (without ✅)** in one message, with
+options and a recommendation for each: the answer may change scope and
+approach.
 
 - First I filter out what already has an answer (comments, code): ✅ with the
   answer. My own questions — in the same message and in the questions
   section, continuing the numbering.
 - While waiting, I do what doesn't depend on the answer; what depends on it I
   don't start, and I don't replace the answer with an assumption.
-- Answer received — straight into the issue: ✅ and the answer at the
-  question, numbering unchanged; no open ones left — I remove the label.
+- Answer received — straight into the issue: `github task answer <N> <k>
+  "<answer>"` puts ✅ and the answer at the question, numbering unchanged; no
+  open ones left — it removes the label.
 - An autonomous routine (no one to ask) doesn't take a task with open
   questions.
 
