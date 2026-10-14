@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,7 +61,7 @@ export interface Run {
   stderr: string;
   /** Внешние команды, которые он запускал: `gh api user`. */
   calls: string[];
-  /** Соединения наружу — первая строка запроса к прокси: `CONNECT api.github.com:443 HTTP/1.1`. */
+  /** Обращения к сети: `fetch https://api.github.com/user`. */
   net: string[];
   /** Файлы и каталоги, которые он создал в рабочем каталоге, HOME и TMPDIR. */
   changed: string[];
@@ -76,38 +75,39 @@ const STUBS = ["gh", "git", "docker", "curl", "wget", "bun", "bunx", "npm", "npx
 /** Скрипт не завершился за это время — зависание, а не медленный старт. */
 const RUN_TIMEOUT = 60_000;
 
+/** Preload, который записывает `fetch` дочернего bun и отказывает ему. */
+const NET_RECORDER = fileURLToPath(new URL("./cli-net.ts", import.meta.url));
+/** Прокси — закрытый порт: обращение в обход `fetch` не уйдёт в сеть, а упадёт сразу. */
+const NO_PROXY_PORT = "http://127.0.0.1:1";
+
 /**
- * Запуск скрипта с аргументами в песочнице: пустые рабочий каталог, HOME и TMPDIR, PATH из заглушек, прокси — сервер,
- * который записывает соединение и закрывает его, без кэша транспилятора Bun (он пишет в HOME). Окружение — только это:
- * переменные сессии и машины до скрипта не доходят.
+ * Запуск скрипта с аргументами в песочнице: пустые рабочий каталог, HOME и TMPDIR, PATH из заглушек, `fetch` bun —
+ * записывает обращение и отказывает (`cli-net.ts`), без кэша транспилятора Bun (он пишет в HOME). Окружение — только
+ * это: переменные сессии и машины до скрипта не доходят.
  */
 export async function isolated(cli: Cli, args: string[]): Promise<Run> {
   const base = mkdtempSync(path.join(os.tmpdir(), "cli-help-"));
-  const [bin, box, journal] = [path.join(base, "bin"), path.join(base, "box"), path.join(base, "calls")];
+  const [bin, box, journal, netLog] = ["bin", "box", "calls", "net"].map((d) => path.join(base, d)) as [string, string, string, string];
   const [cwd, home, tmp] = ["cwd", "home", "tmp"].map((d) => path.join(box, d)) as [string, string, string];
   for (const d of [bin, cwd, home, tmp]) mkdirSync(d, { recursive: true });
-  writeFileSync(journal, "");
+  for (const f of [journal, netLog]) writeFileSync(f, "");
   for (const s of STUBS) writeFileSync(path.join(bin, s), `#!/bin/sh\nprintf '%s %s\\n' "\${0##*/}" "$*" >> "$CLI_CALLS"\nexit 1\n`, { mode: 0o755 });
-  const hits: string[] = [];
-  const proxy = net.createServer((sock) => {
-    sock.once("data", (d) => (hits.push(String(d).split("\r\n")[0]!), sock.destroy()));
-    sock.on("error", () => {});
-  });
-  await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
-  const url = `http://127.0.0.1:${(proxy.address() as net.AddressInfo).port}`;
   const env: Record<string, string> = {
     PATH: bin,
     HOME: home,
     TMPDIR: tmp,
     CLI_CALLS: journal,
+    CLI_NET: netLog,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
-    ...Object.fromEntries(["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"].flatMap((k) => [[k, url], [k.toLowerCase(), url]])),
+    ...Object.fromEntries(["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"].flatMap((k) => [[k, NO_PROXY_PORT], [k.toLowerCase(), NO_PROXY_PORT]])),
     // стандарт spawn-no-jit: дочерний bun на macOS — без JIT
     ...(process.env.BUN_JSC_useJIT ? { BUN_JSC_useJIT: process.env.BUN_JSC_useJIT } : {}),
   };
+  const [cmd, ...rest] = cli.run as [string, ...string[]];
+  const argv = cmd === process.execPath ? ["--preload", NET_RECORDER, ...rest, ...args] : [...rest, ...args];
   try {
     const out = await new Promise<Pick<Run, "code" | "stdout" | "stderr">>((resolve) => {
-      const p = spawn(cli.run[0]!, [...cli.run.slice(1), ...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      const p = spawn(cmd, argv, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       let [stdout, stderr] = ["", ""];
       p.stdout.on("data", (d) => (stdout += d));
       p.stderr.on("data", (d) => (stderr += d));
@@ -115,10 +115,9 @@ export async function isolated(cli: Cli, args: string[]): Promise<Run> {
       p.on("error", (e) => (clearTimeout(timer), resolve({ code: `не запущен: ${e.message}`, stdout, stderr })));
       p.on("close", (code, signal) => (clearTimeout(timer), resolve({ code: code ?? `убит сигналом ${signal}`, stdout, stderr })));
     });
-    const calls = readFileSync(journal, "utf8").split("\n").filter(Boolean);
-    return { ...out, calls, net: hits, changed: created(box).filter((p) => !["cwd", "home", "tmp"].includes(p)) };
+    const lines = (f: string) => readFileSync(f, "utf8").split("\n").filter(Boolean);
+    return { ...out, calls: lines(journal), net: lines(netLog), changed: created(box).filter((p) => !["cwd", "home", "tmp"].includes(p)) };
   } finally {
-    proxy.close();
     rmSync(base, { recursive: true, force: true });
   }
 }

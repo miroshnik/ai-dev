@@ -165,7 +165,7 @@ describe("Скрипты флоу отвечают на --help и -h: синта
       { name: "без примеров", item: helpOf("run", clean("x run <N> [--force]\n\nRuns it.\n")) },
       { name: "пример с флагом не из синтаксиса", item: helpOf("run", clean(GOOD.replace("x run 42", "x run 42 --dry-run"))) },
       { name: "команда без справки — обзор вместо её синтаксиса", item: helpOf("run", clean("x — tools\n\n  x stop <N>\n\nx <command> --help\n")) },
-      { name: "обращение к сети", item: helpOf("run", { ...clean(GOOD), net: ["CONNECT api.github.com:443 HTTP/1.1"] }) },
+      { name: "обращение к сети", item: helpOf("run", { ...clean(GOOD), net: ["fetch https://api.github.com/user"] }) },
       { name: "внешняя команда", item: helpOf("run", { ...clean(GOOD), calls: ["gh api user"] }) },
       { name: "запись файла", item: helpOf("run", { ...clean(GOOD), changed: [".agents"] }) },
       { name: "-h не то же, что --help", item: helpOf("run", clean(GOOD), { ...clean(""), code: 2, stderr: "Unknown option '-h'" }) },
@@ -191,7 +191,7 @@ describe("Скрипты флоу отвечают на --help и -h: синта
         ].join("\n"),
       );
       const r = await isolated({ file: "x.ts", name: "x", run: [process.execPath, "--no-env-file", file] }, ["--help"]);
-      expect({ code: r.code, net: r.net, calls: r.calls, changed: r.changed }).toEqual({ code: 0, net: ["CONNECT api.github.com:443 HTTP/1.1"], calls: ["gh api user"], changed: ["cwd/.agents"] });
+      expect({ code: r.code, net: r.net, calls: r.calls, changed: r.changed }).toEqual({ code: 0, net: ["fetch https://api.github.com/user"], calls: ["gh api user"], changed: ["cwd/.agents"] });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
