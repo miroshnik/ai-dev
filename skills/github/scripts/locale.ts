@@ -41,12 +41,14 @@ export interface Plural {
 export interface Names {
   issueTypes: { task: string; bug: string; epic: string };
   sections: { questions: string; scenarios: string };
-  labels: { questions: string; epicDescription: string };
+  /** `externalBlocker` — a task waiting for something outside the repository that isn't an issue: `task queue` skips it. */
+  labels: { questions: string; epicDescription: string; externalBlocker: string };
   status: { backlog: string; inProgress: string; done: string };
   fields: { estimate: string; actual: string; tokens: string; cost: string };
   views: { board: string; table: string; roadmap: string };
   labelMarkers: { decision: string; slice: string; architecturePath: string };
-  comments: { state: string; actual: string; closedByPr: string };
+  /** `externalBlocker` — the start of the comment with the reason of the label of the same name. */
+  comments: { state: string; actual: string; closedByPr: string; externalBlocker: string };
   subagentPrompt: { task: string; epic: string };
   /** A bug about a red default branch: the title "<base> is red: <checks>". */
   mainRed: { title: string; check: string; checks: string };

@@ -151,7 +151,9 @@ no new executors, the running ones finish, then `Remaining: N tasks, the
 limit`. After each executor's answer — `task queue` again. A question — to the
 owner in text; the answer — ✅ in the task's questions section and to the same
 executor with `SendMessage`. Failed — a comment in the task with what
-stopped, no restart. Queue empty and nothing running — the summary, the last
+stopped, no restart; on an external blocker — *blocked by* on its issue or
+the `external blocker` label with the reason (`reference.md`,
+"Dependencies"): the queue shows it as `○`. Queue empty and nothing running — the summary, the last
 line and, in auto mode, archiving. The executor's side (`--assignment`) — `reference.md`,
 "task queue".
 

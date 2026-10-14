@@ -22,6 +22,9 @@ export function opOf(query: string): { kind: string; op: string } {
   return { kind: m[1]!, op: m[2]! };
 }
 
+/** Блокер из другого репозитория: GitHub отдаёт его в blocked by с этим репозиторием. */
+export interface FakeBlocker { repo: string; number: number; state: string; title: string; id: string }
+
 export class FakeGitHub {
   rec: Recording;
   mutations: { op: string; input: Any }[] = [];
@@ -47,8 +50,11 @@ export class FakeGitHub {
   issueMilestones: Record<number, string> = {};
   /** Номера milestone, закрытых REST-запросом `PATCH repos/…/milestones/<n>`. */
   closedMilestones: number[] = [];
-  /** Задача → номера задач, которыми она заблокирована (blocked by): их меняют AddBlockedBy и RemoveBlockedBy. */
-  blockedBy: Record<number, number[]> = {};
+  /**
+   * Задача → её блокеры (blocked by): номер задачи этого репозитория или issue другого репозитория — GitHub связывает и
+   * их; меняют AddBlockedBy и RemoveBlockedBy.
+   */
+  blockedBy: Record<number, (number | FakeBlocker)[]> = {};
   /** Задача → её комментарии (TaskText), старые первыми. */
   comments: Record<number, { body: string; url: string }[]> = {};
   /**
@@ -151,7 +157,7 @@ export class FakeGitHub {
     const out = structuredClone(i);
     // подзадачи с заголовком, как у GitHub: заголовок — из записи подзадачи
     out.subIssues = { nodes: i.subIssues.nodes.map((s: Any) => ({ ...s, title: this.issue(s.number)?.title ?? "" })) };
-    out.blockedBy = { nodes: (this.blockedBy[number] ?? []).map((b) => ({ number: b, state: this.issue(b).state })) };
+    out.blockedBy = { nodes: (this.blockedBy[number] ?? []).map((b) => this.blocker(b)).map(({ number, state, repository }) => ({ number, state, repository })) };
     const lag = this.issueRefLag[number] ?? 0;
     if (lag > 0) {
       this.issueRefLag[number] = lag - 1;
@@ -176,6 +182,12 @@ export class FakeGitHub {
     const open = this.allIssues().filter((x) => x.state === "OPEN" && this.issueMilestones[x.number] === mid).length;
     return { id: m.id, number: m.number, title: m.title, state: this.closedMilestones.includes(m.number) ? "CLOSED" : "OPEN", issues: { totalCount: open } };
   }
+  /** Блокер, как его отдаёт blocked by: задача этого репозитория — из записи, issue другого — как задан. */
+  private blocker(b: number | FakeBlocker): { id: string; number: number; state: string; title: string; repository: { nameWithOwner: string } } {
+    if (typeof b !== "number") return { id: b.id, number: b.number, state: b.state, title: b.title, repository: { nameWithOwner: b.repo } };
+    const i = this.issue(b);
+    return { id: i?.id, number: b, state: i?.state ?? "OPEN", title: i?.title ?? "", repository: { nameWithOwner: this.repo.nameWithOwner } };
+  }
   /** Id метки по имени: метка репозитория — её id, метка из записи — выдуманный, но постоянный. */
   labelId(name: string): string {
     return this.labels.find((l) => l.name === name)?.id ?? `LA_${name}`;
@@ -199,7 +211,7 @@ export class FakeGitHub {
             body: i.body ?? "",
             labels: { nodes: i.labels.nodes.map((l: Any) => ({ id: this.labelId(l.name), name: l.name })) },
             milestone: milestone(number),
-            blockedBy: { nodes: (this.blockedBy[number] ?? []).map((b) => ({ id: this.issue(b).id, number: b, state: this.issue(b).state })) },
+            blockedBy: { nodes: (this.blockedBy[number] ?? []).map((b) => this.blocker(b)).map(({ id, number, state, repository }) => ({ id, number, state, repository })) },
             comments: { nodes: this.comments[number] ?? [] },
             subIssues: { nodes: i.subIssues.nodes.map((s: Any) => ({ number: s.number, title: this.issue(s.number)?.title ?? "", state: s.state, milestone: milestone(s.number) })) },
           },
@@ -232,7 +244,7 @@ export class FakeGitHub {
       milestone: m && { title: m.title },
       parent: parent ? { number: parent.number, title: parent.title, body: parent.body ?? "", subIssues: subs(parent) } : null,
       subIssues: subs(i),
-      blockedBy: { nodes: (this.blockedBy[number] ?? []).map(brief) },
+      blockedBy: { nodes: (this.blockedBy[number] ?? []).map((b) => this.blocker(b)).map(({ number, state, title, repository }) => ({ number, state, title, repository })) },
       closedByPullRequestsReferences: { nodes: Object.keys(this.prs).map(Number).filter((n) => this.prs[n]!.closes.includes(number)).map((n) => this.prShow(n)) },
       projectItems: {
         nodes: items.map(({ p, it }) => ({
@@ -593,8 +605,8 @@ export class FakeGitHub {
       return { addBlockedBy: { issue: { id: issueId } } };
     },
     RemoveBlockedBy: ({ issueId, blockingIssueId }: Any) => {
-      const [i, b] = [issueId, blockingIssueId].map((id) => this.allIssues().find((x) => x.id === id).number);
-      this.blockedBy[i] = (this.blockedBy[i] ?? []).filter((x) => x !== b);
+      const i = this.allIssues().find((x) => x.id === issueId).number;
+      this.blockedBy[i] = (this.blockedBy[i] ?? []).filter((x) => this.blocker(x).id !== blockingIssueId);
       return { removeBlockedBy: { issue: { id: issueId } } };
     },
     UpdateIssue: ({ id, body }: Any) => {

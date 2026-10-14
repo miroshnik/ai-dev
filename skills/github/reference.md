@@ -65,11 +65,17 @@ milestones). When to call each command — `SKILL.md`; syntax —
   in the description: the parent — sub-issue (the epic), "is blocked by" —
   *blocked by*, "blocks" — *blocking*; on creation —
   `github task new --blocked-by`.
-  We don't write "Depends on" / "After #N" sections; a dependency that isn't
-  an issue (a client's answer, an external deadline) — we file a task for it
-  or write it in "Context". *Relates to* — only in the UI and only if the
-  link isn't "blocks". A task with a non-empty *blocked by* isn't taken into
-  work until its blockers are closed.
+  We don't write "Depends on" / "After #N" sections. **An external
+  blocker** that is an issue of another repository (an upstream bug) — also
+  *blocked by*: GitHub links issues of any owner (`gh issue edit <N>
+  --add-blocked-by <issue URL>`). A blocker that isn't an issue (a release, a
+  PR, another tracker, a client's answer, an external deadline) — the label
+  `external blocker` in the project language (`labels.externalBlocker`; not in
+  the repository yet — `gh label create`) and a comment that starts with
+  `External blocker:` (`comments.externalBlocker`) and gives the reason; the
+  blocker is lifted — the label is removed. *Relates to* — only in the UI and
+  only if the link isn't "blocks". A task with an open *blocked by* or that
+  label isn't taken into work: `task queue` shows it as `○` with the blocker.
 - Before creating a new task we check that it doesn't exist yet
   (`gh issue list --search`); before starting work — that it isn't already
   going in a parallel session (`AGENTS.md`, section "Git, PRs and merging").
@@ -656,7 +662,9 @@ the app's process too.
 A dispatcher session: "do all tasks of epic #M", "fix all
 High bugs" (`AGENTS.md`, "Session and branch — one task"). The session takes no
 task; the script prints the queue — ready tasks (open, not an epic, not In
-progress, no open blockers, no open PR: linked, or by the task branch and
+progress, no open blockers — another repository's named `owner/repo#N` —, no
+`external blocker` label — its line has the reason from the latest
+`External blocker: …` comment —, no open PR: linked, or by the task branch and
 "Closes #N" among recent PRs) by `Priority`, then number, each with an indented
 line — its executor's prompt, «Task #N …» in the project language (`est` links
 the subagent's work by it); then `=` lines — In progress, `○` lines — not ready
@@ -686,7 +694,9 @@ executors, the running ones finish, then `Remaining: N tasks, the limit`. An
 answer arrives as the subagent's notification; after each — `task queue`
 again. A question — to the owner in text; the answer — ✅ in the task's
 questions section and to the same executor with `SendMessage` (its context is
-intact). Failed — a comment in the task with what stopped, no restart. Queue
+intact). Failed — a comment in the task with what stopped, no restart; failed
+on an external blocker — it's recorded ("Dependencies" above), and the queue
+stops giving the task out until it's lifted. Queue
 empty and nothing running — the summary (merged, questions, not ready, new
 tasks outside the queue), the last line and, in auto mode, archiving. The app's
 child sessions (`start_session`) aren't given out yet (a server flag); when

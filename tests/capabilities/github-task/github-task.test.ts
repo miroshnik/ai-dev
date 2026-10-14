@@ -978,6 +978,12 @@ describe("task show печатает задачу одним выводом", ()
     expect(f.mutations).toHaveLength(before);
   });
 
+  it("блокер — issue другого репозитория: в «Blocked by» — с именем репозитория, а не номером, похожим на задачу этого", () => {
+    const f = new FakeGitHub(REC);
+    f.blockedBy[47] = [49, { repo: "acme/runtime", number: 46, state: "OPEN", title: "Падает при старте", id: "I_ext46" }];
+    expect(task(f, ["show", "47"]).out.split("\n")).toContain("Blocked by: #49 «Стандарт · облачная сессия — скрипты скиллов с Projects v2 выходят с объяснением», acme/runtime#46 «Падает при старте»");
+  });
+
   // #492: из перезапусков task show брал лучший прогон — ✅ у чека, на котором ожидание ci-wait даёт FAIL
   it("чек зелёный, потом красный на перезапуске — task show называет его красным, как ci-wait", () => {
     const f = new FakeGitHub(REC);
@@ -1153,6 +1159,17 @@ describe("task actualize делает механику актуализации 
     const r = task(f, ["actualize", "47"]);
     expect(f.blockedBy[Number(next)]).toEqual([]);
     expect(r.out).toContain(`+ #${next}: blocked by #47 (merged) removed`);
+  });
+
+  it("blocked by на issue другого репозитория: закрытый снимается и назван с репозиторием, открытый с номером влитой задачи — остаётся", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f);
+    const other = (number: number, state: string) => ({ repo: "acme/runtime", number, state, title: "Падает при старте", id: `I_ext${number}` });
+    f.blockedBy[47] = [other(7, "CLOSED"), other(46, "OPEN")];
+    const r = task(f, ["actualize", "46"]);
+    expect(byOp(f, "RemoveBlockedBy")).toEqual([{ issueId: f.issue(47).id, blockingIssueId: "I_ext7" }]);
+    expect(r.out).toContain("+ #47: blocked by acme/runtime#7 (closed) removed");
+    expect(byOp(f, "AddComment")[0].body).toContain("у #47 снят blocked by на выполненных acme/runtime#7");
   });
 
   it("метку вопросов у задачи эпика без открытых вопросов снимает сам task actualize, с открытым вопросом — оставляет", () => {
@@ -2126,6 +2143,51 @@ describe("task queue раздаёт задачи эпика или фильтр�
       `○ #${branch} «GitHub · С веткой» — open PR #201`,
       expect.stringMatching(/^Next: each ready task above/),
     ]);
+  });
+
+  /**
+   * Внешний блокер (#512): issue другого репозитория — связью blocked by, GitHub даёт её и между организациями; блокер не
+   * issue (релиз, PR, чужой трекер) — меткой «внешний блокер», причина — последний комментарий «Внешний блокер: …».
+   * Иначе блокер жил в тексте описания, и очередь до конца сессии выдавала задачу готовой.
+   */
+  it("задача с внешним блокером — строка `○` с причиной, а не среди готовых", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const linked = subtask(f, REPO, "Ждёт релиза");
+    const labeled = subtask(f, REPO, "Ждёт поставщика");
+    const silent = subtask(f, REPO, "Без причины");
+    // номер блокера совпадает с задачей этого репозитория — строка называет репозиторий
+    f.blockedBy[linked] = [{ repo: "acme/runtime", number: 47, state: "OPEN", title: "Падает при старте", id: "I_ext47" }];
+    f.labelIssue(labeled, "внешний блокер");
+    f.comments[labeled] = [
+      { body: "Внешний блокер: старая причина", url: "c1" },
+      { body: "Внешний блокер: ответ поставщика по лицензии\nподробности — в письме", url: "c2" },
+      { body: "Состояние: ждём", url: "c3" },
+    ];
+    f.labelIssue(silent, "внешний блокер");
+    const r = queue(f, ["--epic", "45"]);
+    expect(r.code).toBe(0);
+    expect(heads(r.out)).toEqual([
+      "Queue miroshnik/ai-dev (epic #45): ready 1, «В работе» 0, not ready 3",
+      `+ #47 «${f.issue(47).title}»`,
+      `○ #${linked} «GitHub · Ждёт релиза» — blocked by acme/runtime#47`,
+      `○ #${labeled} «GitHub · Ждёт поставщика» — label «внешний блокер»: ответ поставщика по лицензии`,
+      `○ #${silent} «GitHub · Без причины» — label «внешний блокер», no comment «Внешний блокер: <reason>»`,
+      expect.stringMatching(/^Next: each ready task above/),
+    ]);
+  });
+
+  // без перегиба: до #512 зелёный — красный, если очередь держит задачу по закрытому блокеру или по комментарию без метки
+  it("блокер снят — задача снова среди готовых", () => {
+    const f = new FakeGitHub(REC);
+    f.closed(47);
+    const linked = subtask(f, REPO, "Ждала релиза");
+    const labeled = subtask(f, REPO, "Ждала поставщика");
+    f.blockedBy[linked] = [{ repo: "acme/runtime", number: 7, state: "CLOSED", title: "Падает при старте", id: "I_ext7" }];
+    // метку сняли, комментарий с причиной остался — он сам задачу не держит
+    f.comments[labeled] = [{ body: "Внешний блокер: ответ поставщика по лицензии", url: "c1" }];
+    const r = queue(f, ["--epic", "45"]);
+    expect(heads(r.out).slice(0, 3)).toEqual(["Queue miroshnik/ai-dev (epic #45): ready 2, «В работе» 0, not ready 0", `+ #${linked} «GitHub · Ждала релиза»`, `+ #${labeled} «GitHub · Ждала поставщика»`]);
   });
 
   it("--type и --priority отбирают задачи в организации; в личном аккаунте — ошибка до чтения задач", () => {

@@ -10,7 +10,8 @@
   },
   "labels": {
     "questions": "вопросы",
-    "epicDescription": "Эпик: большая задача с подзадачами"
+    "epicDescription": "Эпик: большая задача с подзадачами",
+    "externalBlocker": "внешний блокер"
   },
   "status": {
     "backlog": "Бэклог",
@@ -36,7 +37,8 @@
   "comments": {
     "state": "Состояние",
     "actual": "Факт:",
-    "closedByPr": "Закрыта по PR {prs}: GitHub не связал PR с задачей"
+    "closedByPr": "Закрыта по PR {prs}: GitHub не связал PR с задачей",
+    "externalBlocker": "Внешний блокер:"
   },
   "subagentPrompt": {
     "task": "Задача",
