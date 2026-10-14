@@ -158,14 +158,28 @@
   "describes": [
    "PR с конфликтом с базой не ждут — CI на нём не запустится"
   ],
-  "name": "PR с конфликтом с базой — ERROR сразу: CI на нём не запустится"
+  "name": "mergeable ещё не вычислен — ожидание, а не ERROR"
  },
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
    "PR с конфликтом с базой не ждут — CI на нём не запустится"
   ],
-  "name": "mergeable ещё не вычислен — ожидание, а не ERROR"
+  "name": "mergeable=false прежней головы не подтверждает конфликт новой"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR с конфликтом с базой не ждут — CI на нём не запустится"
+  ],
+  "name": "конфликт текущей головы с базой — ERROR, как только повторный опрос той же головы его подтвердил"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "PR с конфликтом с базой не ждут — CI на нём не запустится"
+  ],
+  "name": "сразу после force-push устаревший mergeable=false прежней головы — ожидание, а не ERROR"
  },
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
