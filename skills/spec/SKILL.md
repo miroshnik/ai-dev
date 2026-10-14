@@ -53,7 +53,7 @@ skill directory: that is the version pinned for CI.
 | Moment | Action |
 |---|---|
 | Before a PR | 1. a test run with a JSON report (don't run e2e: for the names `playwright test --list --reporter=json > .spec-playwright.json` is enough); 2. `spec-doc --strict` with both reports — the tree and the main files are in order (`docs/spec` is in `.gitignore`, not committed); 3. `spec-diff --scenarios <task body>` → the `## Spec (tests)` section (in the project language — `locales/<language>.json` of the `github` skill) with the scenario check, into the PR body |
-| In CI on a PR | run → `spec-doc --strict` (tests outside the tree, no main file or `<folder>.md`, a header on a test file, `rule.test.ts`, a name that isn't a statement in the project language — exit code 1); `spec-diff` into the summary |
+| In CI on a PR | run → `spec-doc --strict` (tests outside the tree, no main file or `<folder>.md`, a header on a test file, `rule.test.ts` — exit code 1; a name that isn't a statement in the project language — a warning line, no exit code); `spec-diff` into the summary |
 | In CI after a merge | a run on `main` → `spec-doc` → `spec-publish`; without CI on `main` — `docs/spec` from the PR run's artifact and `spec-publish --source <merge SHA>` (`ci.md`). The `spec` branch = the built `docs/spec`, the script verifies it after the push |
 | Read a project's spec | `git fetch origin spec && git show origin/spec:README.md` (pages — `capabilities/<name>.md`…) or the tests themselves |
 | Asked for documentation, "what does the system do" | `spec-doc <report> --stdout` — one document, files aren't touched |
@@ -62,7 +62,8 @@ skill directory: that is the version pinned for CI.
 | A convention for all items (mutations, routes, files) | `invariant` in `tests/standards/<name>/<name>.test.ts` — section "Checks" |
 | Prove that a check can fail (migrating an old spec, a "covered" review) | `spec-break` — a breakage aimed at the check, one per run |
 | After running all tests and shards | `spec-claims` — every entry point is called by a capability test; its report goes to `spec-doc` together with the runner reports |
-| The harness failed «exceptions are one file per element in exceptions/, not exceptions.ts»; spec-doc says «name exceptions — a file per name in names.exceptions/» | `spec-exceptions` — section "spec-exceptions" |
+| The harness failed «exceptions are one file per element in exceptions/, not exceptions.ts» | `spec-exceptions` — section "spec-exceptions" |
+| spec-doc warns that `names.exceptions` «isn't read — names aren't exceptions any more, delete it» | delete that directory or file (#447) |
 
 ## Reports for spec-doc
 
@@ -86,7 +87,7 @@ the reports.
 ## spec-doc
 
 ```bash
-bun --no-env-file <skill dir>/scripts/spec-doc.ts .spec-report.json [more reports] [--out docs/spec | --stdout] [--strict] [--root DIR] [--names-baseline N]
+bun --no-env-file <skill dir>/scripts/spec-doc.ts .spec-report.json [more reports] [--out docs/spec | --stdout] [--strict] [--root DIR]
 ```
 
 What ends up in `docs/spec/` (the generated text is in the project language):
@@ -152,28 +153,19 @@ of `describe` and `it` are statements in the project language (`language` in
 `.agents/ai-dev.json` of the `--root` directory; `isStatement`): `ru` — a name
 with Russian words, another language — a phrase of words (two or more, or one
 whole word); an identifier (`parseScenarios`, `foo_bar`, `fooBar`), a function
-or file name, a path, a word with a number — not a statement: stderr with the
-name and file, `--strict` — exit code 1; code in backticks inside a statement
-is fine. The generated `docs/spec`, the PR section of `spec-diff` and the
-names of the harness's tests are in the project language too (the `spec` keys
-of `locales/<language>.json` of the `github` skill).
-Old names on an existing spec — as exceptions, one file per name in the
-`names.exceptions/` directory of their test's decision folder
-(`<test name>.json`: `{ file, name, issue, reason }`): parallel PRs each
-remove their own file and don't conflict. A file in the directory that isn't
-such an exception (not JSON, missing fields) and the directory in a subfolder
-of the decision folder — exit code 2 with the path. `--strict` skips
-exceptions; an unneeded one (already a statement or the test is gone —
-`delete <file>`) and one lying outside its test's folder —
-exit code 1; the debt — the table-of-contents section «Names that aren't
-statements (exceptions)». All
-current violations as one rewrite task — `spec-doc … --names-baseline <N>`: a
-file per new name into its test's folder, deletes the files of unneeded ones
-(an emptied directory too). The former array (the folder's
-`names.exceptions.ts`, the shared `tests/standards/spec-names/exceptions.ts`,
-the `--names-exceptions` flag) isn't read: stderr with a hint to run
-`spec-exceptions`, `--strict` — exit code 1, `--names-baseline` and the flag —
-exit code 2.
+or file name, a path, a word with a number — not a statement: a stderr line
+`warning: the name isn't a statement …` with the name and file, without an
+exit code — `--strict` doesn't fail on it, the PR section of `spec-diff`
+counts the PR's new ones; code in backticks inside a statement is fine. A
+measurement (#441): `--strict` failed on names 9 times in three weeks, all 9
+paperwork — thousands of renames for the check or names put into exceptions;
+the rule stays a rule, without an exit code (#447). Name exceptions are gone:
+a leftover `names.exceptions/` directory or `names.exceptions.*` file of a
+decision folder isn't read — a warning line asking to delete it; the
+`--names-baseline` and `--names-exceptions` flags are gone too (exit code 2,
+like any unknown flag). The generated `docs/spec`, the PR section of
+`spec-diff` and the names of the harness's tests are in the project language
+too (the `spec` keys of `locales/<language>.json` of the `github` skill).
 **Description** — `tests/<kind>/<name>/<name>.md`: missing — `spec-doc` names
 the file in stderr, `--strict` — exit code 1. A JSDoc header on a test file
 doesn't go into the documentation — into stderr with a hint to move it to md,
@@ -245,11 +237,10 @@ bun --no-env-file <skill dir>/scripts/spec-diff.ts [--base origin/main] [--head 
 Decisions outside test names — as separate sections «<title> — removed» and
 «<title> — added», only if they changed: «Architecture model» (modules,
 dependencies, packages from `tests/architecture/model.ts`),
-«Exceptions» (the files of the decision folders' `exceptions/`
-and `names.exceptions/` — not in a subfolder and `.json`, as the harness and
-spec-doc read them, — entries of the former `exceptions.ts` and
-`names.exceptions.ts` — the item and the harness `rule` or the file and the
-test name — and lint disables `eslint-disable … -- #N` in changed files,
+«Exceptions» (the files of the decision folders' `exceptions/` — not in a
+subfolder and `.json`, as the harness reads them, — entries of the former
+`exceptions.ts` — the item and the harness `rule` — and lint disables
+`eslint-disable … -- #N` in changed files,
 except the flow copy `.agents/` and `.claude/`; each entry
 is its own line, identical ones aren't collapsed), «Harness checks»
 (`invariant` registries and `examples` rules — the
@@ -347,7 +338,12 @@ outside capabilities/standards are marked `⚠️ outside the tree`;
 changed test files outside `tests/` are listed by name. The flow copy
 (`.agents/`, `.claude/` from the root) is not project code: `install` puts it
 there, the project's linters don't see it — neither its tests nor its lint
-disables are in the spec diff. `--json` — the same, machine-readable.
+disables are in the spec diff. After the lists — the number of the PR's new
+names that aren't statements in the project language: `it` and `describe`
+names of added and changed tests that the same file didn't have at the base
+(`⚠️ **Names that aren't statements: N** — new in this PR…`); none — no line;
+`spec-doc` names each one in a warning. `--json` — the same, machine-readable
+(the number — `not_statements`).
 
 **A big PR.** More tests in the lists (removed, changed, added) than the
 `--limit` threshold (default 100) — a per-folder summary instead of the lists:
@@ -487,21 +483,15 @@ subfolder): one file per exception (the name is the item in Latin letters,
 folder and subfolders (`import exceptions from "./exceptions.ts"`) — to
 `const exceptions = exceptionsIn()` with an import from the harness; the path
 to the old file in `package.json` and `.github/workflows/*.yml` (`spec-claims
---exceptions`) — to the directory. spec-doc name exceptions
-(`{ file, name, issue, reason }`) — the folder's `names.exceptions.ts`, the
-shared `tests/standards/spec-names/exceptions.ts` and the file of the
-`--names-exceptions` flag from `package.json` and the workflow — are laid out
-as a file per name in `names.exceptions/` of their test's decision folder (a
-test outside the tree — to the decision folder of the former file: spec-doc
-will call the exception unneeded), the flag is removed. Which file belongs to
-whom — one rule, `exceptionFile` (`speclib.ts`), for the harness, spec-doc,
-spec-diff and spec-exceptions (the ai-dev standard `exception-files`); the
+--exceptions`) — to the directory. Which file belongs to whom — one rule,
+`exceptionFile` (`speclib.ts`), for the harness, spec-diff and
+spec-exceptions (the ai-dev standard `exception-files`); the
 command doesn't touch files outside decision folders. Output
-— lines `-` (file moved), `+` (new file), `~` (import or path rewritten, flag
-removed), `!` (fix by hand: a reference from another folder, no harness
-import). Exit codes: 0 — moved or nothing to move, 1 — there is a `!`, 2 — an
-exceptions file doesn't load or isn't an array of `{ item, … }`
-(`{ file, name, … }` for names). A repeated run changes nothing.
+— lines `-` (file moved), `+` (new file), `~` (import or path rewritten), `!`
+(fix by hand: a reference from another folder, no harness import). Exit codes:
+0 — moved or nothing to move, 1 — there is a `!`, 2 — an exceptions file
+doesn't load or isn't an array of `{ item, … }`. A repeated run changes
+nothing.
 
 ## Checks — `harness.ts`, `architecture.ts`, `spec-claims.ts`
 

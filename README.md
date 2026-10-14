@@ -244,7 +244,7 @@ A browser page the script serves itself, with two tabs. Sessions (the main one) 
 - `spec-run` — for publishing on PR merge, finds a green run that checked exactly the merge commit's tree; there is none (a PR that fell behind was merged) — publishing is skipped, the `spec` branch isn't rolled back.
 - `spec-claims` — every entry point (route, page, job, command) is called by a capability test — by the call log, not by coverage.
 - `spec-break` — proves that a check catches a breakage: break the code → run the test → always revert.
-- `spec-exceptions` — moves a project's exceptions from `exceptions.ts` into the `exceptions/` directory of the decision folder, and spec-doc name exceptions into `names.exceptions/`, one file per exception: parallel PRs paying down debt don't conflict.
+- `spec-exceptions` — moves a project's exceptions from `exceptions.ts` into the `exceptions/` directory of the decision folder, one file per exception: parallel PRs paying down debt don't conflict.
 - `harness.ts` — mechanical checks: "registry + invariant" with a violator, lint-rule examples, exceptions with a ratchet (an element with its own file — a mark in it), the C1–C3 architecture model, dead code (knip, with the config-hints reporter `knip-hints.cjs`), the environment.
 
 ### [`ci-wait`](skills/ci-wait/SKILL.md) — wait for checks, don't guess
