@@ -121,8 +121,9 @@ const USAGE = `Usage: ai-dev <command> [-g]
                      the same); a project that needs update — the update in a task of its own, not in a task
                      session: the task new command of the github skill, one task per project; for the machine names
                      the task-env proxy of *.localhost addresses — running or not, with the start command (with
-                     Docker on the machine; the exit code stays the same), and, run from the agent's Bash in Claude
-                     Code, a session without the agent's Bash environment
+                     Docker on the machine; the exit code stays the same), run from the agent's Bash in Claude Code
+                     — a session without the agent's Bash environment, for a --link clone run from an ai-dev clone
+                     — flow commits not in a release yet
   check --hook       the machine and the project at once for the Claude Code SessionStart hook: the exit code is
                      always 0, errors go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE —
                      zsh without errors on a glob without matches and on =word, timeout from bin/shims
@@ -1109,10 +1110,12 @@ function checkLink(home: string, clone: string): Result {
 
 /**
  * A reminder to the owner on a machine with a `--link` clone: origin/main has flow changes that aren't in the latest
- * release — projects won't get them until it's cut. Not falling behind: it doesn't change the check's code. Can't
- * tell — no line.
+ * release — projects won't get them until it's cut. Only in an ai-dev clone's session: a release is the owner's step
+ * there, in a project's session the line is noise at every start. Not falling behind: it doesn't change the check's
+ * code. Can't tell — no line.
  */
 function unreleased(clone: string): string[] {
+  if (!isAiDevClone(projectRoot())) return [];
   const cmd = `release it: bun --no-env-file ${path.join(clone, "bin/ai-dev.ts")} release`;
   try {
     const last = releases("origin", clone).at(-1);

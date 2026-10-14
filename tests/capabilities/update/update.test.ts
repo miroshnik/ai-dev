@@ -750,25 +750,42 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.stdout).toContain("up to date");
   });
 
-  /** Напоминание владельцу: без релиза проекты этих правок не получат. Отставанием не считается — код тот же. */
-  it("в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0", () => {
+  /**
+   * Напоминание владельцу в сессии клона ai-dev: без релиза проекты этих правок не получат. Отставанием не считается —
+   * код тот же.
+   */
+  it("в клоне ai-dev: в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0", () => {
     const { up, clone } = linkedClone();
     up.repo.git("tag", "v2026.10.05");
     up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });
     up.repo.commit({ "tests/x.test.ts": "// тест\n" });
     up.repo.commit({ "bin/ai-dev.ts": read(path.join(up.dir, "bin/ai-dev.ts")) + "// правка установщика\n" });
     expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
-    const r = aiDev(sb, ["check", "-g"]);
+    const r = aiDev(sb, ["check", "-g"], { cwd: clone });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("not in a release: flow commits after v2026.10.05 — 2");
     expect(r.stdout).toContain(`${path.join(clone, "bin/ai-dev.ts")} release`);
   });
 
-  it("всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано", () => {
-    const { up } = linkedClone();
-    expect(aiDev(sb, ["check", "-g"]).stdout).toContain("not in a release: no releases yet");
+  it("в клоне ai-dev: всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано", () => {
+    const { up, clone } = linkedClone();
+    expect(aiDev(sb, ["check", "-g"], { cwd: clone }).stdout).toContain("not in a release: no releases yet");
     up.repo.git("tag", "v2026.10.05");
     up.repo.commit({ "tests/x.test.ts": "// тест\n" });
+    expect(aiDev(sb, ["check", "-g"], { cwd: clone }).stdout).not.toContain("not in a release");
+  });
+
+  /** Релиз — шаг владельца в клоне ai-dev; в сессии проекта строка о нём — шум в каждом старте. */
+  it("в проекте вывод хука не содержит строки о невыпущенных коммитах ai-dev", () => {
+    const { up, clone } = linkedClone();
+    up.repo.git("tag", "v2026.10.05");
+    up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });
+    expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
+    expect(aiDev(sb, ["check", "--hook"], { cwd: clone }).stdout).toContain("not in a release: flow commits after v2026.10.05 — 1");
+    const r = aiDev(sb, ["check", "--hook"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("ai-dev on the machine (clone");
+    expect(r.stdout).not.toContain("not in a release");
     expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("not in a release");
   });
 
