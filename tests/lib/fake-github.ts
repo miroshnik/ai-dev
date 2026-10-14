@@ -40,7 +40,9 @@ export class FakeGitHub {
    * задачи, с которыми GitHub связал PR (`closes`; тело может называть и другие), голова, модель архитектуры в ней (ModelAt);
    * `merged`, `state`, `base` — для `task close`.
    */
-  prs: Record<number, { files: (string | FakePrFile)[]; closes: number[]; body?: string; head: string; model: string | null; merged?: boolean; state?: string; base?: string }> = {};
+  prs: Record<number, { files: (string | FakePrFile)[]; closes: number[]; body?: string; head: string; model: string | null; merged?: boolean; state?: string; base?: string; draft?: boolean; checks?: Record<string, string> }> = {};
+  /** Задача → числовые поля проекта по имени поля (IssueShow): оценка, факт. */
+  numbers: Record<number, Record<string, number>> = {};
   /** Задача → id milestone (IssueRef.milestone); открытые задачи milestone считаются по состоянию записей. */
   issueMilestones: Record<number, string> = {};
   /** Номера milestone, закрытых REST-запросом `PATCH repos/…/milestones/<n>`. */
@@ -100,6 +102,8 @@ export class FakeGitHub {
     }
     if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
     if (op === "TaskText") return JSON.stringify(this.taskText(variables.number));
+    if (op === "IssueShow") return JSON.stringify(this.issueShow(variables.number));
+    if (op === "PrShow") return JSON.stringify({ data: { repository: { pullRequest: this.prs[variables.number] ? this.prShow(Number(variables.number)) : null } } });
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
     if (op === "RepoLabels") {
       // у метки — её открытые задачи, как issues(states: OPEN) у GitHub
@@ -202,6 +206,58 @@ export class FakeGitHub {
       },
     };
   }
+  /**
+   * Задача для `task show` и `task answer`: описание, метки с id, эпик с его описанием и подзадачами, blocked by, PR с
+   * чеками головы, Status и числовые поля проекта.
+   */
+  private issueShow(number: number): Any {
+    const i = this.issue(number);
+    if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
+    const brief = (n: number) => ({ number: n, state: this.issue(n)?.state ?? "OPEN", title: this.issue(n)?.title ?? "" });
+    const subs = (x: Any) => ({ nodes: x.subIssues.nodes.map((s: Any) => brief(s.number)) });
+    const parent = i.parent ? this.issue(i.parent.number) : null;
+    const m = this.milestoneOf(number);
+    const items = this.allProjects().flatMap((p) => this.items(p.id).filter((it: Any) => it.content?.id === i.id).map((it: Any) => ({ p, it })));
+    const issue = {
+      id: i.id,
+      number,
+      title: i.title,
+      state: i.state,
+      stateReason: i.stateReason ?? null,
+      url: i.url,
+      body: i.body ?? "",
+      issueType: i.issueType ?? null,
+      labels: { nodes: i.labels.nodes.map((l: Any) => ({ id: this.labelId(l.name), name: l.name })) },
+      milestone: m && { title: m.title },
+      parent: parent ? { number: parent.number, title: parent.title, body: parent.body ?? "", subIssues: subs(parent) } : null,
+      subIssues: subs(i),
+      blockedBy: { nodes: (this.blockedBy[number] ?? []).map(brief) },
+      closedByPullRequestsReferences: { nodes: Object.keys(this.prs).map(Number).filter((n) => this.prs[n]!.closes.includes(number)).map((n) => this.prShow(n)) },
+      projectItems: {
+        nodes: items.map(({ p, it }) => ({
+          project: { title: p.title },
+          fieldValues: {
+            nodes: [
+              { __typename: "ProjectV2ItemFieldRepositoryValue" },
+              ...(it.status ? [{ __typename: "ProjectV2ItemFieldSingleSelectValue", name: it.status.name, field: { name: "Status" } }] : []),
+              ...Object.entries(this.numbers[number] ?? {}).map(([name, v]) => ({ __typename: "ProjectV2ItemFieldNumberValue", number: v, field: { name } })),
+            ],
+          },
+        })),
+      },
+      issueFieldValues: i.issueFieldValues ?? { nodes: [] },
+    };
+    return { data: { repository: { issue } } };
+  }
+  /** PR с чеками последнего коммита, как их отдаёт statusCheckRollup: имя → вывод чека или IN_PROGRESS. */
+  private prShow(number: number): Any {
+    const p = this.prs[number]!;
+    return { number, state: p.state ?? (p.merged ? "MERGED" : "OPEN"), merged: Boolean(p.merged), isDraft: Boolean(p.draft), headRefName: p.head, commits: { nodes: [{ commit: { statusCheckRollup: this.rollup(p.checks ?? {}) } }] } };
+  }
+  private rollup(checks: Record<string, string>): Any {
+    const nodes = Object.entries(checks).map(([name, v]) => ({ __typename: "CheckRun", name, status: v === "IN_PROGRESS" ? "IN_PROGRESS" : "COMPLETED", conclusion: v === "IN_PROGRESS" ? null : v }));
+    return nodes.length ? { contexts: { nodes } } : null;
+  }
   // поиск GitHub по заголовку: подстрока в кавычках, is:open — только открытые
   private search(q: string): Any {
     const phrase = /"([^"]*)"/.exec(q)?.[1] ?? "";
@@ -300,10 +356,7 @@ export class FakeGitHub {
     const rulesets = m.upgrade ? [] : m.rulesets;
     const parameters = (r: Any) => ({ strictRequiredStatusChecksPolicy: r.strict, requiredStatusChecks: r.contexts.map((context: string) => ({ context })) });
     const onMain = (r: Any) => r.enforcement === "ACTIVE" && r.include.some((x: string) => x === "~DEFAULT_BRANCH" || x === "~ALL");
-    const head = (pr: { number: number; checks: Record<string, string> }) => {
-      const nodes = Object.entries(pr.checks).map(([name, v]) => ({ __typename: "CheckRun", name, status: v === "IN_PROGRESS" ? "IN_PROGRESS" : "COMPLETED", conclusion: v === "IN_PROGRESS" ? null : v }));
-      return { number: pr.number, baseRefName: "main", commits: { nodes: [{ commit: { statusCheckRollup: nodes.length ? { contexts: { nodes } } : null } }] } };
-    };
+    const head = (pr: { number: number; checks: Record<string, string> }) => ({ number: pr.number, baseRefName: "main", commits: { nodes: [{ commit: { statusCheckRollup: this.rollup(pr.checks) } }] } });
     return {
       data: {
         repository: {
@@ -529,6 +582,10 @@ export class FakeGitHub {
       const [i, b] = [issueId, blockingIssueId].map((id) => this.allIssues().find((x) => x.id === id).number);
       this.blockedBy[i] = (this.blockedBy[i] ?? []).filter((x) => x !== b);
       return { removeBlockedBy: { issue: { id: issueId } } };
+    },
+    UpdateIssue: ({ id, body }: Any) => {
+      this.allIssues().find((x) => x.id === id).body = body;
+      return { updateIssue: { issue: { id } } };
     },
     SetIssueField: ({ issueId, issueFields }: Any) => {
       const i = this.allIssues().find((x) => x.id === issueId);

@@ -8,6 +8,9 @@
  *   github project fix   — bring it to the canon: API, UI steps with links, deleting and renaming — with --confirm
  *   github task new      — a task in one command: type or label, project and Backlog, Priority, epic, blocked by,
  *                          milestone, decision labels (the decision's name, the kind by color) and the estimate (est)
+ *   github task show     — the task in one output: the description, Status, estimate, the epic, blockers, PRs and
+ *                          their checks, open questions
+ *   github task answer   — ✅ and the answer at a question of the questions section; none open — the label goes
  *   github task status   — Status in the project (and the epic's "In progress" once its first subtask is taken);
  *                          "In progress" pins the task to the session — another task in the same session is refused
  *   github task drop     — close without doing it and remove from the project
@@ -317,6 +320,9 @@ const OPEN_SHOWN = 10;
  * the PR is among them.
  */
 const RECENT_PRS = 50;
+/** A PR for task show: its state and the checks of its head. */
+const PR_SHOW = `number state merged isDraft headRefName
+        commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }`;
 export const Q = {
   RepoState: `query RepoState($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -463,6 +469,39 @@ fragment Head on PullRequest {
     pullRequests(states: [OPEN, MERGED], first: ${RECENT_PRS}, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number state merged headRefName baseRefName body } }
   }
 }`,
+  // task show and task answer: the description, the epic with its description and subtasks, blocked by, the PRs with
+  // their head's checks, Status and number fields of the project
+  IssueShow: `query IssueShow($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      id number title state stateReason url body
+      issueType { name }
+      labels(first: 20) { nodes { id name } }
+      milestone { title }
+      parent { number title body subIssues(first: 100) { nodes { number state title } } }
+      subIssues(first: 100) { nodes { number state title } }
+      blockedBy(first: 20) { nodes { number state title } }
+      closedByPullRequestsReferences(first: 20, includeClosedPrs: true) { nodes { ${PR_SHOW} } }
+      projectItems(first: 20) {
+        nodes {
+          project { title }
+          fieldValues(first: 50) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+              ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
+            }
+          }
+        }
+      }
+      issueFieldValues(first: 20) { nodes { __typename ... on IssueFieldSingleSelectValue { name field { ... on IssueFieldSingleSelect { name } } } } }
+    }
+  }
+}`,
+  // a PR that GitHub didn't link to the task yet (task show)
+  PrShow: `query PrShow($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${PR_SHOW} } }
+}`,
   IssueSearch: `query IssueSearch($q: String!) {
   search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
 }`,
@@ -511,6 +550,7 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   RemoveBlockedBy: ["removeBlockedBy", "RemoveBlockedByInput", "issue { id }"],
   SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
   CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
+  UpdateIssue: ["updateIssue", "UpdateIssueInput", "issue { id }"],
   AddComment: ["addComment", "AddCommentInput", "subject { id }"],
   CreateRuleset: ["createRepositoryRuleset", "CreateRepositoryRulesetInput", "ruleset { id }"],
   UpdateRuleset: ["updateRepositoryRuleset", "UpdateRepositoryRulesetInput", "ruleset { id }"],
@@ -1680,6 +1720,160 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 }
 
 // ----------------------------------------------------------------------------
+// Reading a task and answering its questions
+// ----------------------------------------------------------------------------
+
+/** A task's PR for task show: its state and its head's checks (none yet — null); `why` — what an unlinked one was found by. */
+interface ShownPr {
+  number: number;
+  state: string;
+  merged: boolean;
+  draft: boolean;
+  checks: { green: number; pending: string[]; red: string[] } | null;
+  why?: string;
+}
+
+/** The head's checks by name: green (success, neutral, skipped), still running, red; a rerun — by its best run. */
+function shownPr(p: Any, why?: string): ShownPr {
+  const nodes: Any[] = p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
+  const rank = { red: 0, pending: 1, green: 2 } as const;
+  const by = new Map<string, keyof typeof rank>();
+  for (const c of nodes.filter(Boolean)) {
+    const run = c.__typename === "CheckRun";
+    const state: keyof typeof rank = run
+      ? c.status !== "COMPLETED" ? "pending" : ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(c.conclusion) ? "green" : "red"
+      : c.state === "SUCCESS" ? "green" : c.state === "PENDING" || c.state === "EXPECTED" ? "pending" : "red";
+    const name: string = run ? c.name : c.context;
+    if (rank[state] > rank[by.get(name) ?? "red"] || !by.has(name)) by.set(name, state);
+  }
+  const of = (s: keyof typeof rank) => [...by].filter(([, v]) => v === s).map(([k]) => k);
+  return { number: p.number, state: p.state ?? "", merged: Boolean(p.merged), draft: Boolean(p.isDraft), checks: by.size ? { green: of("green").length, pending: of("pending"), red: of("red") } : null, why };
+}
+
+function prLine(p: ShownPr): string {
+  const done = p.merged || p.state === "CLOSED";
+  const state = p.merged ? "merged" : p.state === "CLOSED" ? "closed without a merge" : p.draft ? "open (draft)" : "open";
+  const c = p.checks;
+  const checks = done
+    ? ""
+    : !c
+      ? " — no checks yet"
+      : ` — checks: ${[c.green ? `${c.green} ✅` : "", c.pending.length ? `${c.pending.length} ⏳ (${c.pending.join(", ")})` : "", c.red.length ? `${c.red.length} ❌ (${c.red.join(", ")})` : ""].filter(Boolean).join(", ")}`;
+  return `PR #${p.number} ${state}${checks}${p.why ? ` (not linked: ${p.why})` : ""}`;
+}
+
+/**
+ * Everything needed to take a task into work in one output, instead of `gh issue view` per piece: the title, type,
+ * state, Status and estimate, the epic with its open questions and other open tasks, subtasks, open blockers, the PRs
+ * with their checks (GitHub didn't link one yet — found by the branch or «Closes #N», as task close does), the
+ * questions — open and answered, and the description as is. Read-only.
+ */
+export function cmdTaskShow(io: Io, slug: string, number: number): number {
+  const [owner, name] = slug.split("/");
+  const i = graphql(io, Q.IssueShow, { owner, name, number })?.repository?.issue;
+  if (!i) throw new GhError(`no issue #${number} in ${slug}`);
+  const labels: string[] = (i.labels?.nodes ?? []).map((l: Any) => l.name);
+  // a personal account has no issue types: an epic is the epic label
+  const type: string | null = i.issueType?.name ?? (labels.includes(EPIC_LABEL) ? N.issueTypes.epic : null);
+  const epic = type !== null && locale.every((n) => n.issueTypes.epic).includes(type);
+  const items: Any[] = i.projectItems?.nodes ?? [];
+  const values: Any[] = (items.find((it) => it.project?.title === name) ?? items[0])?.fieldValues?.nodes ?? [];
+  const num = (field: (n: Names) => string) => values.find((v) => v?.__typename === "ProjectV2ItemFieldNumberValue" && locale.every(field).includes(v.field?.name));
+  const status: string | null = values.find((v) => v?.field?.name === STATUS && v.name)?.name ?? null;
+  const estimate = num((n) => n.fields.estimate);
+  const actual = num((n) => n.fields.actual);
+  const priority: string | null = (i.issueFieldValues?.nodes ?? []).find((v: Any) => v?.field?.name === PRIORITY)?.name ?? null;
+  const reason: Record<string, string> = { NOT_PLANNED: ": not planned", DUPLICATE: ": duplicate" };
+  const shownLabels = labels.filter((l) => !(l === EPIC_LABEL && !i.issueType));
+  const facts = [
+    type,
+    i.state === "CLOSED" ? `closed${reason[i.stateReason] ?? ""}` : null,
+    !items.length ? "not in the project" : status ? `${STATUS} ${q(status)}` : `no ${STATUS}`,
+    estimate ? `${q(estimate.field.name)} ${estimate.number}` : `no ${q(N.fields.estimate)}`,
+    actual ? `${q(actual.field.name)} ${actual.number}` : null,
+    priority ? `${PRIORITY} ${priority}` : null,
+    i.milestone ? `milestone ${q(i.milestone.title)}` : null,
+    shownLabels.length ? `labels: ${shownLabels.join(", ")}` : null,
+  ];
+  const out = [`#${i.number} ${i.title} — ${i.url}`, facts.filter(Boolean).join(" · ")];
+  if (i.parent) {
+    const p = i.parent;
+    const open = questionItems(p.body ?? "").filter((x) => !x.answered);
+    const tasks: Any[] = (p.subIssues?.nodes ?? []).filter((x: Any) => x.state === "OPEN" && x.number !== number);
+    out.push(`Epic #${p.number} ${q(p.title)} — open questions: ${open.length}, other open tasks: ${tasks.length}`);
+    out.push(...open.map((x) => `- question ${x.text}`), ...tasks.map((x) => `- task #${x.number} ${q(x.title)}`));
+  }
+  const subs: Any[] = i.subIssues?.nodes ?? [];
+  if (subs.length) {
+    const open = subs.filter((x) => x.state === "OPEN");
+    out.push(`Subtasks: open ${open.length} of ${subs.length}`, ...open.map((x) => `- task #${x.number} ${q(x.title)}`));
+  }
+  const blockers: Any[] = (i.blockedBy?.nodes ?? []).filter((x: Any) => x.state === "OPEN");
+  if (blockers.length) out.push(`Blocked by: ${blockers.map((x) => `#${x.number} ${q(x.title)}`).join(", ")}`);
+  // an epic has no PR of its own
+  if (!epic) {
+    let prs: ShownPr[] = (i.closedByPullRequestsReferences?.nodes ?? []).filter(Boolean).map((p: Any) => shownPr(p));
+    if (!prs.length && i.state === "OPEN") {
+      for (const p of unlinkedPrs(io, slug, number).prs) {
+        const pr = graphql(io, Q.PrShow, { owner, name, number: p.number })?.repository?.pullRequest;
+        if (pr) prs.push(shownPr(pr, p.why));
+      }
+    }
+    out.push(...(prs.length ? prs.map(prLine) : ["PR: none"]));
+  }
+  const lines = (i.body ?? "").trimEnd().split(/\r?\n/);
+  const questions = questionItems(i.body ?? "");
+  const open = questions.filter((x) => !x.answered).map((x) => x.k);
+  const answered = questions.filter((x) => x.answered).map((x) => x.k);
+  out.push(
+    !questions.length
+      ? "Questions: none"
+      : !open.length
+        ? `Questions: all answered (${answered.join(", ")})`
+        : `Questions: open ${open.join(", ")}${answered.length ? `; answered ${answered.join(", ")}` : ""} — task answer ${number} <k> "<answer>" [--auto]`,
+  );
+  if (lines.join("").trim()) out.push("", ...lines);
+  for (const line of out) io.out(line);
+  return 0;
+}
+
+/**
+ * The answer at question k of the questions section, in place of rewriting the description by hand: ✅ (with --auto —
+ * `autoAnswer`) after the item's number and «**Answer:** …» (`est.answer`: est strips it from the description size) at
+ * its end — on the same line for a one-line item, otherwise on a line of its own; the numbering doesn't change, the
+ * rest of the description stays as is. No open questions left — the questions label is removed. An answered question
+ * is refused: a changed answer is edited by hand.
+ */
+export function cmdTaskAnswer(io: Io, slug: string, number: number, k: number, answer: string, auto: boolean): number {
+  const text = answer.trim().replace(/\s*\r?\n\s*/g, " ");
+  if (!text) throw new GhError("task answer: expected the answer text after the question number");
+  const [owner, name] = slug.split("/");
+  const i = graphql(io, Q.IssueShow, { owner, name, number })?.repository?.issue;
+  if (!i) throw new GhError(`no issue #${number} in ${slug}`);
+  const body: string = i.body ?? "";
+  const lines = body.split(/\r?\n/);
+  const questions = questionItems(body);
+  if (!questions.length) throw new GhError(`#${number}: no ${q(N.sections.questions)} section with numbered questions`);
+  const question = questions.find((x) => x.k === k);
+  if (!question) throw new GhError(`#${number}: no question ${k} in ${q(N.sections.questions)}; questions: ${questions.map((x) => x.k).join(", ")}`);
+  if (question.answered) throw new GhError(`#${number}: question ${k} is already answered (✅) — a changed answer is edited by hand`);
+  const reply = `**${N.est.answer}:** ${text}`;
+  lines[question.first] = lines[question.first]!.replace(/^(\d+\.\s+)/, `$1${auto ? N.autoAnswer : "✅"} `);
+  if (question.first === question.last) lines[question.first] += ` ${reply}`;
+  else lines.splice(question.last + 1, 0, `${" ".repeat(`${k}. `.length)}${reply}`);
+  mutate(io, { op: "UpdateIssue", input: { id: i.id, body: lines.join(body.includes("\r\n") ? "\r\n" : "\n") } });
+  io.out(`+ #${number}: question ${k} — ✅ and the answer in the description`);
+  const open = questions.filter((x) => !x.answered && x !== question).map((x) => x.k);
+  if (open.length) return io.out(`○ #${number}: open questions left: ${open.join(", ")}`), 0;
+  const label: Any[] = (i.labels?.nodes ?? []).filter((l: Any) => locale.every((n) => n.labels.questions).includes(l.name));
+  if (label.length) {
+    mutate(io, { op: "RemoveLabels", input: { labelableId: i.id, labelIds: label.map((l) => l.id) } });
+    io.out(`+ #${number}: label ${label.map((l) => q(l.name)).join(", ")} removed — no open questions left`);
+  }
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // Closing a task in one command
 // ----------------------------------------------------------------------------
 
@@ -1700,21 +1894,25 @@ const MEANING_CHECKS = [0, 2, 4];
 
 /**
  * The items of the issue's questions section ("## Questions" in any language of the dictionary): the number, the first
- * line, all the item's lines and whether it is answered — ✅ in any of its lines. The dashboard lists the open ones and
- * the answers marked auto, `task actualize` removes the questions label from a task without open ones.
+ * line, all the item's non-empty lines and whether it is answered — ✅ in any of its lines; `first` and `last` — the
+ * indexes of the item's first and last non-empty line in the description's lines. The dashboard lists the open ones and
+ * the answers marked auto, `task actualize` removes the questions label from a task without open ones, `task show`
+ * names them, `task answer` puts the answer into the item.
  */
-export function questionItems(body: string): { k: number; text: string; lines: string[]; answered: boolean }[] {
+export function questionItems(body: string): { k: number; text: string; lines: string[]; answered: boolean; first: number; last: number }[] {
   const section = new RegExp(`^(?:${locale.every((n) => n.sections.questions).map(locale.escapeRe).join("|")})\\s*$`);
   const lines = body.split(/\r?\n/);
   const from = lines.findIndex((l) => section.test(l));
   if (from < 0) return [];
-  const items: string[][] = [];
-  for (const line of lines.slice(from + 1)) {
-    if (/^##\s/.test(line)) break;
-    if (/^\d+\.\s/.test(line)) items.push([line]);
-    else if (items.length && line.trim()) items[items.length - 1]!.push(line);
+  const items: { first: number; last: number }[] = [];
+  for (let i = from + 1; i < lines.length && !/^##\s/.test(lines[i]!); i++) {
+    if (/^\d+\.\s/.test(lines[i]!)) items.push({ first: i, last: i });
+    else if (items.length && lines[i]!.trim()) items.at(-1)!.last = i;
   }
-  return items.map((it) => ({ k: parseInt(it[0]!, 10), text: it[0]!.trim(), lines: it, answered: it.some((l) => l.includes("✅")) }));
+  return items.map(({ first, last }) => {
+    const item = lines.slice(first, last + 1).filter((l) => l.trim());
+    return { k: parseInt(lines[first]!, 10), text: lines[first]!.trim(), lines: item, answered: item.some((l) => l.includes("✅")), first, last };
+  });
 }
 
 interface MilestoneRef {
@@ -2676,6 +2874,8 @@ const USAGE = `github — the repository's GitHub project and tasks by the AGENT
   github task new      --title "…" --branch-type <type> [--body "…" | --body-file F] [--type Task|Bug|Epic] [--epic N]
                        [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
                        [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
+  github task show     <N> [--repo owner/repo]
+  github task answer   <N> <k> "<answer>" [--auto] [--repo owner/repo]
   github task status   <N> <Backlog|In progress|Done> [--branch <type>/<N>-<slug>] [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github task actualize <N> [--assignment] [--repo owner/repo]
@@ -2691,6 +2891,10 @@ fix   — fixes via the API; prints UI steps with links; deleting and renaming i
         No project — links the one of the same name, otherwise copies the template (${DEFAULT_TEMPLATE}), otherwise creates one.
 task  — a task by the canon; new sets the estimate itself (est estimate --write with --branch-type: feat, fix, …;
         a bug without it is fix, an epic isn't estimated) and prints what was created and the next step.
+task show — the task in one output: title, type, Status, estimate, the epic with its open questions and tasks, subtasks,
+        open blockers, the PRs with their checks, open and answered questions, the description; read-only.
+task answer — ✅ and «**Answer:** …» at question k of the questions section (--auto — the auto mark), the numbering
+        unchanged; no open questions left — the questions label is removed; an answered question is refused.
 task status — In progress pins the task to the session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev):
         another task in the same session — a refusal (code 2), it needs a new session; a human removes the pin.
         --branch — the worktree tool's branch becomes the task branch (git branch -m with its .git/config section);
@@ -2749,9 +2953,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "actualize", "close", "resume"], pr: ["labels", "premerge"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "show", "answer", "status", "drop", "actualize", "close", "resume"], pr: ["labels", "premerge"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected project check|fix, task new|status|drop|actualize|close|resume or pr labels|premerge`);
+      io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected project check|fix, task new|show|answer|status|drop|actualize|close|resume or pr labels|premerge`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
@@ -2795,6 +2999,7 @@ export function main(argv: string[], io: Io): number {
           branch: { type: "string" },
           "no-git": { type: "boolean", default: false },
           assignment: { type: "boolean", default: false },
+          auto: { type: "boolean", default: false },
         },
       });
       // the task and its repository — from the session pin: the hook runs it from any directory
@@ -2815,7 +3020,13 @@ export function main(argv: string[], io: Io): number {
       }
       const number = issueNumber(positionals[0], `task ${cmd}`);
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "), values.branch);
+      if (cmd === "answer") {
+        const k = /^\d+$/.exec((positionals[1] ?? "").trim());
+        if (!k) throw new GhError(`task answer: expected a question number, not «${positionals[1] ?? ""}»`);
+        return cmdTaskAnswer(io, slug, number, Number(k[0]), positionals.slice(2).join(" "), values.auto!);
+      }
       if (positionals.length > 1) throw new GhError(`extra arguments: ${positionals.slice(1).join(" ")}`);
+      if (cmd === "show") return cmdTaskShow(io, slug, number);
       if (cmd === "close") return cmdTaskClose(io, slug, number, { git: !values["no-git"] });
       if (cmd === "actualize") return cmdTaskActualize(io, slug, number, { assignment: values.assignment! });
       return cmdTaskDrop(io, slug, number, values["duplicate-of"] === undefined ? undefined : issueNumber(values["duplicate-of"], "--duplicate-of"));

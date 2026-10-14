@@ -925,6 +925,125 @@ describe("Статус ставится, даже если проект ещё �
 });
 
 /**
+ * Ручного `gh` в сессиях больше, чем вызовов скриптов: `gh issue view` — ~1,1–1,2 тыс. на проект (медиана 4 на сессию),
+ * и задачу собирали по частям — описание, эпик, его подзадачи, PR и его чеки. `task show` печатает это одним выводом.
+ */
+describe("task show печатает задачу одним выводом", () => {
+  const BODY = "Задача одной командой.\n\n## Сценарии\n\n1. task new заводит задачу\n\n## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. Кодировка?\n3. Разделитель?\n";
+
+  it("`task show` печатает задачу, её открытые вопросы, эпик и PR одним выводом", () => {
+    const f = new FakeGitHub(REC);
+    task(f, ["new", "--branch-type", "feat", "--title", "Экспорт счетов", "--epic", "45"]);
+    const before = f.mutations.length;
+    f.issue(47).body = BODY;
+    f.issue(45).body = "Цель эпика.\n\n## Вопросы\n\n1. Сроки?\n2. ✅ Владелец? **Ответ:** я.\n";
+    f.numbers[47] = { "Оценка, ч": 0.5 };
+    f.blockedBy[47] = [49, 46];
+    f.prs[80] = { files: [], closes: [47], head: "feat/47-task", base: "main", model: null, checks: { tests: "SUCCESS", "spec-publish": "SKIPPED", e2e: "IN_PROGRESS", lint: "FAILURE" } };
+    const r = task(f, ["show", "47"]);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")).toEqual([
+      "#47 GitHub · Задача одной командой — github task — https://github.com/miroshnik/ai-dev/issues/47",
+      "Status «В работе» · «Оценка, ч» 0.5",
+      "Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой» — open questions: 1, other open tasks: 1",
+      "- question 1. Сроки?",
+      "- task #50 «GitHub · Экспорт счетов»",
+      // закрытый блокер уже не блокирует
+      "Blocked by: #49 «Стандарт · облачная сессия — скрипты скиллов с Projects v2 выходят с объяснением»",
+      "PR #80 open — checks: 2 ✅, 1 ⏳ (e2e), 1 ❌ (lint)",
+      'Questions: open 2, 3; answered 1 — task answer 47 <k> "<answer>" [--auto]',
+      "",
+      ...BODY.trimEnd().split("\n"),
+    ]);
+    expect(f.mutations).toHaveLength(before);
+  });
+
+  it("эпик: тип из метки epic, его открытые подзадачи; строки PR у эпика нет", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(45).body = "## Вопросы\n\n1. Сроки?\n";
+    const lines = task(f, ["show", "45"]).out.split("\n");
+    expect(lines.slice(1, 5)).toEqual(["Эпик · Status «В работе» · no «Оценка, ч»", "Subtasks: open 1 of 2", "- task #47 «GitHub · Задача одной командой — github task»", 'Questions: open 1 — task answer 45 <k> "<answer>" [--auto]']);
+    expect(lines.some((l) => l.startsWith("PR"))).toBe(false);
+  });
+
+  it("GitHub ещё не связал PR с задачей — PR находится по ветке задачи; вопросов нет — «Questions: none»", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[81] = { files: [], closes: [], head: "feat/49-cloud", base: "main", model: null };
+    const lines = task(f, ["show", "49"]).out.split("\n");
+    expect(lines).toContain("PR #81 open — no checks yet (not linked: branch feat/49-cloud)");
+    expect(lines).toContain("Questions: none");
+  });
+
+  it("PR у задачи нет — «PR: none»; задачи нет — ошибка, код 2", () => {
+    const f = new FakeGitHub(REC);
+    expect(task(f, ["show", "49"]).out.split("\n")).toContain("PR: none");
+    const r = task(f, ["show", "999"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("no issue #999 in miroshnik/ai-dev");
+  });
+});
+
+/**
+ * `gh issue edit --body-file` в сессиях — 280 раз, чаще всего ради ✅ у вопроса: агент переписывал описание целиком, чтобы
+ * поменять одну строку. `task answer` ставит ✅ и ответ у вопроса и снимает метку вопросов, когда открытых не осталось.
+ */
+describe("task answer ставит ответ у вопроса задачи", () => {
+  const BODY = "Что сделать.\n\n## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. Кодировка?\n3. Разделитель?\n   - запятая\n   - точка с запятой\n\n## Готово, когда\n\n- файл открывается\n";
+  const bodyOf = (f: FakeGitHub) => byOp(f, "UpdateIssue").at(-1)?.body;
+
+  it("`task answer` ставит ✅ и ответ у вопроса, нумерация не меняется", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(47).body = BODY;
+    const r = task(f, ["answer", "47", "2", "UTF-8."]);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    expect(bodyOf(f)).toBe(BODY.replace("2. Кодировка?", "2. ✅ Кодировка? **Ответ:** UTF-8."));
+    expect(r.out.split("\n")).toEqual(["+ #47: question 2 — ✅ and the answer in the description", "○ #47: open questions left: 3"]);
+    expect(byOp(f, "RemoveLabels")).toEqual([]);
+  });
+
+  it("вопрос в несколько строк — ответ отдельной строкой в конце пункта, следующий раздел не тронут", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(47).body = BODY;
+    task(f, ["answer", "47", "3", "запятая"]);
+    expect(bodyOf(f)).toBe(BODY.replace("3. Разделитель?\n   - запятая\n   - точка с запятой\n", "3. ✅ Разделитель?\n   - запятая\n   - точка с запятой\n   **Ответ:** запятая\n"));
+  });
+
+  it("ответ на последний открытый вопрос снимает метку вопросов", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(42).body = "## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. Кодировка?\n";
+    const r = task(f, ["answer", "42", "2", "UTF-8."]);
+    expect(r.code).toBe(0);
+    expect(byOp(f, "RemoveLabels")).toEqual([{ labelableId: f.issue(42).id, labelIds: ["LA_вопросы"] }]);
+    expect(f.issue(42).labels.nodes).toEqual([]);
+    expect(r.out.split("\n").at(-1)).toBe("+ #42: label «вопросы» removed — no open questions left");
+  });
+
+  it("`task answer --auto` помечает ответ «✅ авто»", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(47).body = BODY;
+    task(f, ["answer", "47", "2", "UTF-8:", "файлы из Excel", "--auto"]);
+    expect(bodyOf(f)).toContain("\n2. ✅ авто Кодировка? **Ответ:** UTF-8: файлы из Excel\n");
+  });
+
+  describe("ошибка до изменений — описание не тронуто", () => {
+    const refused = (args: string[], message: string, body: string | undefined = BODY) => {
+      const f = new FakeGitHub(REC);
+      f.issue(47).body = body;
+      const r = task(f, ["answer", "47", ...args]);
+      expect(r.code).toBe(2);
+      expect(r.err).toContain(message);
+      expect(f.mutations).toEqual([]);
+    };
+    it("вопрос уже с ✅ — ответ меняют руками", () => refused(["1", "TSV"], "#47: question 1 is already answered (✅)"));
+    it("вопроса с таким номером нет — ошибка называет номера вопросов", () => refused(["9", "TSV"], "#47: no question 9 in «## Вопросы»; questions: 1, 2, 3"));
+    it("раздела вопросов нет", () => refused(["1", "TSV"], "#47: no «## Вопросы» section with numbered questions", "Что сделать."));
+    it("ответ пустой", () => refused(["2"], "task answer: expected the answer text after the question number"));
+  });
+});
+
+/**
  * Закрытие после мержа шло фазами друг за другом: деплой, `task close`, актуализация блока субагентом, — медиана 8,5 мин
  * и 12 ходов на пиковом контексте, больше половины — ходы модели: прочитать справочник, собрать задание субагенту.
  * Актуализация от деплоя не зависит и идёт параллельно с ним, а задание печатает скрипт: агенту не нужен справочник.
@@ -1682,6 +1801,16 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
     expect(r.out).toContain("+ project «ai-dev»: Status «Backlog»");
     // est находит раздел: ответ, дописанный в нём после оценки, в размер описания не идёт
     expect(descSize(`${body}1. ✅ Format? **Answer:** PDF.\n`)).toBe(descSize(`${body}1. Format?\n`));
+  });
+
+  it("проект на en: task answer пишет ответ «**Answer:**», est не считает его в размер описания", () => {
+    const f = new FakeGitHub(REC);
+    const body = "## Scenarios\n\n## Questions\n\n1. Format?\n";
+    f.issue(47).body = body;
+    expect(task(f, ["answer", "47", "1", "PDF."], REPO, { cwd: checkoutWith(EN) }).code).toBe(0);
+    const answered: string = byOp(f, "UpdateIssue")[0].body;
+    expect(answered).toBe("## Scenarios\n\n## Questions\n\n1. ✅ Format? **Answer:** PDF.\n");
+    expect(descSize(answered)).toBe(descSize(body));
   });
 
   it("эпик без --body — каркас только с разделом вопросов: эпик без кода, сценариев у него нет", () => {
