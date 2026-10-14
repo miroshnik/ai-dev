@@ -55,13 +55,14 @@ exit $fail
 `;
 
 /**
- * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/ai-dev.git. Голова PR лежит в
- * `refs/pull/<N>/head`, как на GitHub; `mainAfter` — коммит, влитый в main после CI PR.
+ * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/ai-dev.git. Голова PR лежит на
+ * origin в `headRef` — по умолчанию `refs/pull/<N>/head`, как на GitHub; null — её на origin нет; `mainAfter` —
+ * коммит, влитый в main после CI PR.
  */
 // проект на русском, как ai-dev, чей проект GitHub записан: названия — из ru.json (язык — .agents/ai-dev.json чекаута)
 const RU = { ".agents/ai-dev.json": '{ "language": "ru" }\n' };
 
-function project({ pr, mainAfter, files = {} }: { pr: Record<string, string | null>; mainAfter?: Record<string, string | null>; files?: Record<string, string | null> }) {
+function project({ pr, mainAfter, files = {}, headRef = `refs/pull/${PR}/head` }: { pr: Record<string, string | null>; mainAfter?: Record<string, string | null>; files?: Record<string, string | null>; headRef?: string | null }) {
   const dir = scratch();
   const origin = path.join(dir, `${SLUG}.git`);
   mkdirSync(path.dirname(origin), { recursive: true });
@@ -74,14 +75,25 @@ function project({ pr, mainAfter, files = {} }: { pr: Record<string, string | nu
   repo.git("push", "-q", "origin", "main");
   repo.git("switch", "-q", "-c", "feat/7-x");
   const head = repo.commit(pr, "pr");
-  repo.git("push", "-q", "origin", `HEAD:refs/pull/${PR}/head`);
+  if (headRef) repo.git("push", "-q", "origin", `HEAD:${headRef}`);
   if (mainAfter) {
     repo.git("switch", "-q", "main");
     repo.commit(mainAfter, "main after CI");
     repo.git("push", "-q", "origin", "main");
     repo.git("switch", "-q", "feat/7-x");
   }
-  return { work, head, git: repo.git };
+  return { work, origin, head, git: repo.git };
+}
+
+/**
+ * Другой чекаут того же origin — только main, без головы PR (`--no-local`: локальный клон берёт объекты origin
+ * целиком, голову тоже): голову premerge может взять только с origin.
+ */
+function checkoutWithoutHead(origin: string, head: string): string {
+  const dir = path.join(scratch(), "other");
+  execFileSync("git", ["clone", "-q", "--no-local", "--single-branch", "-b", "main", origin, dir]);
+  expect(() => execFileSync("git", ["cat-file", "-e", `${head}^{commit}`], { cwd: dir, stdio: "ignore" })).toThrow();
+  return dir;
 }
 
 const MAIN_SHA = "c0ffee1" + "0".repeat(33);
@@ -208,6 +220,22 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     expect(worktrees(p.work)).toHaveLength(1);
     expect(p.git("branch", "--show-current")).toBe("feat/7-x");
     expect(r.out).toContain(`+ merge of ${p.head.slice(0, 7)} with origin/main ${p.git("rev-parse", "--short=7", "origin/main")} — no conflicts`);
+    expect(r.last).toBe("✅ merge: test:spec is green on the merge with origin/main");
+  });
+
+  /**
+   * GitHub создаёт `refs/pull/<N>/head` с задержкой — на одном PR через 15 минут после создания, когда CI уже прошёл
+   * (#505); достижимый коммит — от ветки головы или `refs/pull/<N>/merge` — он отдаёт по SHA.
+   */
+  it("premerge проверяет слияние, когда ссылки refs/pull/<N>/head на origin ещё нет, а коммит головы достижим", () => {
+    // голова — только на ветке PR в том же репозитории
+    const p = project({ pr: { "uses.txt": "a\n" }, mainAfter: { "items.txt": "a\nb\nc\n" }, headRef: "refs/heads/feat/7-x" });
+    const proc = processes();
+    const r = premerge(fakeGh(p.head, { moved: AFTER }).gh, checkoutWithoutHead(p.origin, p.head), proc.run);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    expect(proc.seen).toEqual([{ "items.txt": "a\nb\nc\n", "uses.txt": "a\n" }]);
+    expect(r.out).toContain(`+ merge of ${p.head.slice(0, 7)} with origin/main`);
     expect(r.last).toBe("✅ merge: test:spec is green on the merge with origin/main");
   });
 
@@ -555,6 +583,16 @@ describe("pr premerge: проверить нельзя — ошибка, не «
     const r = premerge(fakeGh("0".repeat(40), { moved: "2026-10-02T10:20:00Z" }).gh, scratch());
     expect(r.code).toBe(2);
     expect(r.err).toContain(`error: the merge check runs from a checkout of ${SLUG}`);
+  });
+
+  // страховка от перекоррекции #505: без головы PR слияние не проверить — не «merge» без проверки
+  it("головы PR нет ни на origin, ни в чекауте — ошибка (код 2), слияние не проверяется", () => {
+    const p = project({ pr: { "uses.txt": "a\n" }, mainAfter: { "items.txt": "a\nb\nc\n" }, headRef: null });
+    const proc = processes();
+    const r = premerge(fakeGh(p.head, { moved: "2026-10-02T10:20:00Z" }).gh, checkoutWithoutHead(p.origin, p.head), proc.run);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain(`error: PR head ${p.head} not fetched from origin`);
+    expect(proc.calls.filter((c) => c.cmd !== "git")).toEqual([]);
   });
 
   it("PR не открыт — ошибка (код 2)", () => {

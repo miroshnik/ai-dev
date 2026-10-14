@@ -578,7 +578,8 @@ task's epic gets the same labels — the union of its subtasks; same with
 Before merging a green PR, from a repository checkout: CI
 checked the merge with the default branch as it was at the time of the run,
 and without a merge queue the branch moves ahead. Didn't move — `✅ merge`,
-nothing is built. Moved — the PR head (`refs/pull/<N>/head`) merged
+nothing is built. Moved — the PR head (fetched by its SHA, not by
+`refs/pull/<N>/head`: GitHub creates that ref up to minutes late, #505) merged
 with a fresh `origin/<base>` in a temporary worktree (`git merge`, like
 GitHub's merge-ref; the worktree is always removed), dependencies by the
 merge's lockfile (the manager — `packageManager`, otherwise the lockfile,
@@ -601,7 +602,8 @@ earlier); no checks or the event wasn't read — it is checked. Codes: `0` —
 merge; `1` — don't merge: red `typecheck` (compiler errors), `test:spec`
 (lines of failed tests) or a conflict (files) — fix the root cause in the PR:
 rebase onto `origin/<base>`, edit, `push --force-with-lease`, `ci-wait` again;
-`2` — couldn't check (not a checkout, PR not open, dependency install failed) —
+`2` — couldn't check (not a checkout, PR not open, the PR head not on origin,
+dependency install failed) —
 don't merge either, investigate; `3` — **`main` is red, not this PR**.
 
 ### Red main — code 3

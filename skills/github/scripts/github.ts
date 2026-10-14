@@ -3023,11 +3023,12 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   const run = io.run ?? realRun;
   const git = (cwd: string | undefined, ...args: string[]) => run("git", args, cwd);
   if (!checkoutOf(originUrl(io), slug)) throw new GhError(`the merge check runs from a checkout of ${slug}: the current directory is not one`);
-  for (const ref of [base, `refs/pull/${number}/head`]) {
-    const f = git(io.cwd, "fetch", "-q", "origin", ref);
-    if (f.status !== 0) throw new GhError(`git fetch origin ${ref}: ${f.stderr.trim()}`);
-  }
-  if (git(io.cwd, "cat-file", "-e", `${head}^{commit}`).status !== 0) throw new GhError(`PR head ${head} not fetched from origin — was the PR updated? ci-wait again`);
+  const fetched = git(io.cwd, "fetch", "-q", "origin", base);
+  if (fetched.status !== 0) throw new GhError(`git fetch origin ${base}: ${fetched.stderr.trim()}`);
+  // the head — by its SHA, not refs/pull/<N>/head: GitHub creates that ref up to minutes after the PR, when CI has
+  // already passed (#505), while a reachable commit (the head branch, refs/pull/<N>/merge) it gives by SHA
+  const got = git(io.cwd, "fetch", "-q", "origin", head);
+  if (got.status !== 0) throw new GhError(`PR head ${head} not fetched from origin (${got.stderr.trim().split("\n").at(-1)}) — was the PR updated? ci-wait again`);
 
   const dirs: string[] = [];
   /** A temporary worktree at origin/<base>: always removed. */
