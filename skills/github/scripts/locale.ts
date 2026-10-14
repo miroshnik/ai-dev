@@ -50,8 +50,37 @@ export interface Names {
   subagentPrompt: { task: string; epic: string };
   /** A bug about a red default branch: the title "<base> is red: <checks>". */
   mainRed: { title: string; check: string; checks: string };
-  /** The assignment for the epic-refresh subagent (`github task actualize`). */
-  actualize: { lead: string; shipped: string; prs: string; noPr: string; epic: string; openTask: string; checks: string; scope: string; comment: string; answer: string };
+  /**
+   * The epic refresh (`github task actualize`): the subagent's prompt (`lead`, `fetch`), its assignment (`--assignment`)
+   * and the line of the script's own fixes in a comment on the epic (`mechanics` of `unblocked`, `unlabeled`,
+   * `milestone`). `linkWords` — phrases before `#N` that copy a dependency into text, separated by `|`; the phrases of
+   * all languages are parsed.
+   */
+  actualize: {
+    lead: string;
+    fetch: string;
+    shipped: string;
+    prs: string;
+    noPr: string;
+    files: string;
+    epic: string;
+    openTasks: string;
+    openTask: string;
+    noBody: string;
+    copies: string;
+    copy: string;
+    answers: string;
+    commentAnswer: string;
+    checks: string;
+    scope: string;
+    comment: string;
+    answer: string;
+    linkWords: string;
+    mechanics: string;
+    unblocked: string;
+    unlabeled: string;
+    milestone: string;
+  };
   /** The est skill's "Estimate" and "Actual" comments and the lines a human appends to them. */
   est: {
     answer: string;

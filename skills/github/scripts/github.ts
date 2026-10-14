@@ -11,8 +11,8 @@
  *   github task status   — Status in the project (and the epic's "In progress" once its first subtask is taken);
  *                          "In progress" pins the task to the session — another task in the same session is refused
  *   github task drop     — close without doing it and remove from the project
- *   github task actualize — after the merge, in parallel with the deploy: the epic-refresh subagent's assignment
- *                          (or "not needed")
+ *   github task actualize — after the merge, in parallel with the deploy: the epic refresh's mechanics and the
+ *                          subagent's prompt (or "not needed"); --assignment — the subagent's whole assignment
  *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the task's
  *                          stacks (task-env) and the merged branch removed
  *   github pr labels     — decision labels for the task from "Closes #N" by the PR diff, for its epic — the union
@@ -380,6 +380,19 @@ export const Q = {
     }
   }
 }`,
+  // The epic refresh (task actualize): the text, links and milestone of the epic and of each of its open tasks
+  TaskText: `query TaskText($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      id number title state body
+      labels(first: 20) { nodes { id name } }
+      milestone { number title state issues(states: OPEN) { totalCount } }
+      blockedBy(first: 50) { nodes { id number state } }
+      comments(last: 50) { nodes { body url } }
+      subIssues(first: 100) { nodes { number title state milestone { number title state issues(states: OPEN) { totalCount } } } }
+    }
+  }
+}`,
   TaskContext: `query TaskContext($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     label(name: "${EPIC_LABEL}") { id }
@@ -493,7 +506,9 @@ const M: Record<string, [field: string, inputType: string, select: string]> = {
   UpdateLabel: ["updateLabel", "UpdateLabelInput", "label { id }"],
   DeleteLabel: ["deleteLabel", "DeleteLabelInput", "clientMutationId"],
   AddLabels: ["addLabelsToLabelable", "AddLabelsToLabelableInput", "clientMutationId"],
+  RemoveLabels: ["removeLabelsFromLabelable", "RemoveLabelsFromLabelableInput", "clientMutationId"],
   AddBlockedBy: ["addBlockedBy", "AddBlockedByInput", "issue { id }"],
+  RemoveBlockedBy: ["removeBlockedBy", "RemoveBlockedByInput", "issue { id }"],
   SetIssueField: ["setIssueFieldValue", "SetIssueFieldValueInput", "issue { id }"],
   CloseIssue: ["closeIssue", "CloseIssueInput", "issue { id state }"],
   AddComment: ["addComment", "AddCommentInput", "subject { id }"],
@@ -1670,52 +1685,220 @@ export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: 
 
 /**
  * The five epic-refresh checks — from the skill's reference.md, the one place of the canon: the list between
- * "Five checks:" and "What was fixed".
+ * "Five checks:" and "What was fixed", an item per check.
  */
-function actualizeChecks(): string {
+function actualizeChecks(): string[] {
   const file = path.resolve(import.meta.dir, "../reference.md");
   const m = existsSync(file) ? /Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(readFileSync(file, "utf8")) : null;
-  if (!m) throw new GhError(`the five epic-refresh checks not found in ${file}: expected a list between «Five checks:» and «What was fixed»`);
-  return m[1]!;
+  const items = m ? m[1]!.split(/\n(?=\d\. )/) : [];
+  if (items.length !== 5) throw new GhError(`the five epic-refresh checks not found in ${file}: expected a list of five between «Five checks:» and «What was fixed»`);
+  return items;
+}
+
+/** The checks by meaning — the subagent's: 1 (whether done), 3, 5; the mechanics of 1, 2 and 4 is the script's. */
+const MEANING_CHECKS = [0, 2, 4];
+
+/**
+ * The items of the issue's questions section ("## Questions" in any language of the dictionary): the number, the first
+ * line and whether it is answered — ✅ in any of its lines. The dashboard lists the open ones, `task actualize` removes
+ * the questions label from a task without them.
+ */
+export function questionItems(body: string): { k: number; text: string; answered: boolean }[] {
+  const section = new RegExp(`^(?:${locale.every((n) => n.sections.questions).map(locale.escapeRe).join("|")})\\s*$`);
+  const lines = body.split(/\r?\n/);
+  const from = lines.findIndex((l) => section.test(l));
+  if (from < 0) return [];
+  const items: string[][] = [];
+  for (const line of lines.slice(from + 1)) {
+    if (/^##\s/.test(line)) break;
+    if (/^\d+\.\s/.test(line)) items.push([line]);
+    else if (items.length && line.trim()) items[items.length - 1]!.push(line);
+  }
+  return items.map((it) => ({ k: parseInt(it[0]!, 10), text: it[0]!.trim(), answered: it.some((l) => l.includes("✅")) }));
+}
+
+interface MilestoneRef {
+  number: number;
+  title: string;
+  state: string;
+  /** Open tasks in it. */
+  open: number;
+}
+
+/** An issue as the epic refresh reads it: the text, labels with ids, blocked by, comments, sub-issues with milestones. */
+interface TaskText {
+  id: string;
+  number: number;
+  title: string;
+  state: string;
+  body: string;
+  labels: { id: string; name: string }[];
+  milestone: MilestoneRef | null;
+  blockedBy: { id: string; number: number; state: string }[];
+  comments: { body: string; url: string }[];
+  subIssues: { number: number; title: string; state: string; milestone: MilestoneRef | null }[];
+}
+
+function loadTaskText(io: Io, slug: string, number: number): TaskText {
+  const [owner, name] = slug.split("/");
+  const i = graphql(io, Q.TaskText, { owner, name, number })?.repository?.issue;
+  if (!i) throw new GhError(`no issue #${number} in ${slug}`);
+  const milestone = (m: Any): MilestoneRef | null => (m ? { number: m.number, title: m.title, state: m.state, open: m.issues?.totalCount ?? 0 } : null);
+  return {
+    id: i.id,
+    number: i.number,
+    title: i.title,
+    state: i.state,
+    // the GitHub UI saves a description with CRLF
+    body: (i.body ?? "").replace(/\r\n/g, "\n").trim(),
+    labels: i.labels?.nodes ?? [],
+    milestone: milestone(i.milestone),
+    blockedBy: i.blockedBy?.nodes ?? [],
+    comments: i.comments?.nodes ?? [],
+    subIssues: (i.subIssues?.nodes ?? []).map((x: Any) => ({ number: x.number, title: x.title, state: x.state, milestone: milestone(x.milestone) })),
+  };
 }
 
 /**
- * The assignment for the epic-refresh subagent — right after the merge, in parallel with the deploy: the refresh
- * doesn't depend on the deploy. A session at peak context doesn't assemble the assignment or read the reference — the
- * command prints it whole: the task and its PR, the epic, its open tasks, the five checks. No epic or no open tasks in
- * it — a "not needed" line. The assignment is in the project language (the `actualize` keys), the five checks — quoted
- * from reference.md as is. The first word is `subagentPrompt.task` and the number ("Task #N"): est uses it to tie the
- * subagent's work to the task.
+ * The refresh's mechanics — what needs no judgment, so the subagent doesn't collect it (#435): blocked by on done tasks
+ * (closed ones and this task, whose PR is merged) is removed — check 4; the questions label without open questions in
+ * the section — check 2; a milestone of the epic's tasks without open tasks is closed — check 1, except the task's and
+ * the epic's own: `task close` closes them, the task may still be open. The fixes — one line in a comment on the epic.
  */
-export function cmdTaskActualize(io: Io, slug: string, number: number): number {
+function refreshMechanics(io: Io, slug: string, r: { number: number; merged: boolean; epic: TaskText; open: TaskText[] }): void {
+  const fixes: string[] = [];
+  const tasks = [r.epic, ...r.open];
+  for (const t of tasks) {
+    const done = t.blockedBy.filter((b) => b.state === "CLOSED" || (b.number === r.number && r.merged));
+    if (!done.length) continue;
+    for (const b of done) mutate(io, { op: "RemoveBlockedBy", input: { issueId: t.id, blockingIssueId: b.id } });
+    io.out(`+ #${t.number}: blocked by ${done.map((b) => `#${b.number} (${b.state === "CLOSED" ? "closed" : "merged"})`).join(", ")} removed`);
+    fixes.push(locale.fill(N.actualize.unblocked, { task: t.number, blockers: nums(done) }));
+  }
+  const questionLabels = locale.every((n) => n.labels.questions);
+  for (const t of tasks) {
+    const labels = t.labels.filter((l) => questionLabels.includes(l.name));
+    if (!labels.length || questionItems(t.body).some((x) => !x.answered)) continue;
+    mutate(io, { op: "RemoveLabels", input: { labelableId: t.id, labelIds: labels.map((l) => l.id) } });
+    for (const l of labels) {
+      io.out(`+ #${t.number}: label ${q(l.name)} removed — no open questions`);
+      fixes.push(locale.fill(N.actualize.unlabeled, { task: t.number, label: l.name }));
+    }
+  }
+  const own = r.epic.subIssues.find((x) => x.number === r.number)?.milestone?.number;
+  const seen = new Set([own, r.epic.milestone?.number]);
+  for (const { milestone: m } of r.epic.subIssues) {
+    if (!m || seen.has(m.number)) continue;
+    seen.add(m.number);
+    if (m.state !== "OPEN" || m.open > 0) continue;
+    io.gh(["api", "-X", "PATCH", `repos/${slug}/milestones/${m.number}`, "-f", "state=closed"]);
+    io.out(`+ milestone ${q(m.title)} closed: no open tasks left`);
+    fixes.push(locale.fill(N.actualize.milestone, { title: m.title }));
+  }
+  if (!fixes.length) return;
+  mutate(io, { op: "AddComment", input: { subjectId: r.epic.id, body: locale.fill(N.actualize.mechanics, { number: r.number, fixes: fixes.join("; ") }) } });
+  io.out(`+ epic #${r.epic.number}: a comment with the script's fixes`);
+}
+
+/** A quoted line of an issue or a comment in the assignment: one line, at most 200 characters. */
+const clip = (line: string) => (line.length > 200 ? `${line.slice(0, 199)}…` : line);
+
+/**
+ * Copies of links in text (check 4): in the epic — a list item that starts with the number of its sub-issue; in the
+ * epic and its open tasks — "⛔" and a dependency phrase before `#N` (`linkWords` of any language). Named, not edited:
+ * a line may carry meaning besides the copy.
+ */
+function linkCopies(epic: TaskText, open: TaskText[]): { number: number; line: string }[] {
+  const subs = new Set(epic.subIssues.map((x) => x.number));
+  const words = locale.every((n) => n.actualize.linkWords).flatMap((w) => w.split("|")).map((w) => w.trim()).filter(Boolean).map(locale.escapeRe);
+  const phrase = new RegExp(`(?<![\\p{L}\\p{N}_])(?:${words.join("|")})\\s*:?\\s*#\\d+`, "iu");
+  const item = /^\s*(?:[-*+]|\d+\.)\s+(?:\[[ xX]\]\s+)?#(\d+)(?!\d)/;
+  const out: { number: number; line: string }[] = [];
+  for (const t of [epic, ...open]) {
+    for (const raw of t.body.split("\n")) {
+      const listed = t === epic ? item.exec(raw) : null;
+      if ((listed && subs.has(Number(listed[1]))) || raw.includes("⛔") || phrase.test(raw)) out.push({ number: t.number, line: clip(raw.trim()) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Answers to open questions in comments (check 2): an item `k. ✅ …` of a comment for the open question k, the latest
+ * wins. Named, not moved: a comment's numbering may be its own (answers to a concept, not to the section).
+ */
+function commentAnswers(tasks: TaskText[]): { number: number; k: number; text: string; url: string }[] {
+  const out: { number: number; k: number; text: string; url: string }[] = [];
+  for (const t of tasks) {
+    const open = new Set(questionItems(t.body).filter((x) => !x.answered).map((x) => x.k));
+    if (!open.size) continue;
+    const found = new Map<number, { text: string; url: string }>();
+    for (const c of t.comments) for (const m of c.body.matchAll(/^\s*(\d+)\.\s*✅\s*(.+)$/gm)) if (open.has(Number(m[1]))) found.set(Number(m[1]), { text: clip(m[2]!.trim()), url: c.url });
+    for (const [k, a] of [...found].sort(([x], [y]) => x - y)) out.push({ number: t.number, k, ...a });
+  }
+  return out;
+}
+
+/** A changed PR file in the assignment: the path, the kind of change unless it's an edit, the line counts. */
+const fileLine = (f: PrFile) => `- ${f.path} (${f.changeType === "MODIFIED" ? "" : `${f.changeType.toLowerCase()}, `}+${f.additions} −${f.deletions})`;
+/** An issue's description in the assignment — in a fence: its headings don't mix with the assignment's. */
+const textBlock = (body: string) => (body ? `~~~~markdown\n${body}\n~~~~` : N.actualize.noBody);
+
+/**
+ * The epic refresh — right after the merge, in parallel with the deploy: the refresh doesn't depend on the deploy. The
+ * command does the mechanics itself (`refreshMechanics`) and prints the subagent's prompt — two lines: «Task #N (epic
+ * #M)» (`subagentPrompt.task` and the number: est ties the subagent's work to the task by it) and the command of its
+ * whole assignment. The assignment (`--assignment`, read-only) is the subagent's first call: the texts of the epic and
+ * its open tasks and the PR files run to tens of KB, and the session at peak context would copy them into the subagent
+ * call as output tokens. In it — the task and its PR with its files, the epic and its open tasks with their texts, the
+ * copies of links and the answers in comments the script found, the checks by meaning quoted from reference.md as is,
+ * what may be changed and the answer form; in the project language (the `actualize` keys). No epic, or no open tasks in
+ * it besides this one — the checks by meaning have nothing to go through: a "not needed" line, no subagent.
+ */
+export function cmdTaskActualize(io: Io, slug: string, number: number, o: { assignment: boolean } = { assignment: false }): number {
   const issue = loadIssue(io, slug, number);
   const later = `Next: task close ${number} — after the deploy, where the merge deploys.`;
   if (!issue.parent) return io.out(`○ refresh not needed: #${number} has no epic. ${later}`), 0;
-  const epic = loadIssue(io, slug, issue.parent.number);
-  const open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number);
-  if (!open.length) return io.out(`○ refresh not needed: epic #${epic.number} has no open tasks besides #${number}. ${later}`), 0;
-  const checks = actualizeChecks();
   const linked = issue.prs.filter((p) => p.merged);
   const prs = linked.length ? linked : unlinkedPrs(io, slug, number).prs.filter((p) => p.merged);
+  const epic = loadTaskText(io, slug, issue.parent.number);
+  const open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).map((x) => loadTaskText(io, slug, x.number));
+  if (!o.assignment) refreshMechanics(io, slug, { number, merged: prs.length > 0, epic, open });
+  if (!open.length) return io.out(`○ refresh not needed: epic #${epic.number} has no open tasks besides #${number}. ${later}`), 0;
+  const vars = { task: N.subagentPrompt.task, epicWord: N.subagentPrompt.epic, number, epic: epic.number, repo: slug };
+  const lead = locale.fill(N.actualize.lead, vars);
+  if (!o.assignment) {
+    io.out("Next: a subagent in the background — the two lines below are its whole prompt, pass them as is.");
+    io.out(lead);
+    io.out(locale.fill(N.actualize.fetch, { command: `bun --no-env-file ${import.meta.path} task actualize ${number} --assignment --repo ${slug}` }));
+    return 0;
+  }
+  const checks = actualizeChecks();
   const shipped = prs.length
     ? locale.fill(N.actualize.prs, { list: prs.map((p) => `#${p.number} (\`gh pr view ${p.number}\`, \`gh pr diff ${p.number}\`)`).join(", ") })
     : locale.fill(N.actualize.noPr, { command: `\`git log origin/main --grep '#${number}'\`` });
-  const vars = { task: N.subagentPrompt.task, epicWord: N.subagentPrompt.epic, number, epic: epic.number, repo: slug };
-  for (const line of [
-    locale.fill(N.actualize.lead, vars),
-    locale.fill(N.actualize.shipped, { ...vars, title: issue.title, shipped }),
-    locale.fill(N.actualize.epic, { ...vars, title: epic.title }),
-    ...open.map((x) => locale.fill(N.actualize.openTask, { number: x.number, title: x.title })),
+  const lines = [lead, locale.fill(N.actualize.shipped, { ...vars, title: issue.title, shipped })];
+  for (const p of prs) {
+    const files = loadPrChange(io, slug, p.number).files;
+    if (files.length) lines.push(locale.fill(N.actualize.files, { pr: p.number }), ...files.map(fileLine));
+  }
+  lines.push("", locale.fill(N.actualize.epic, { ...vars, title: epic.title }), textBlock(epic.body), "", N.actualize.openTasks);
+  for (const t of open) lines.push("", locale.fill(N.actualize.openTask, { number: t.number, title: t.title }), textBlock(t.body));
+  const copies = linkCopies(epic, open);
+  if (copies.length) lines.push("", N.actualize.copies, ...copies.map((c) => locale.fill(N.actualize.copy, c)));
+  const answers = commentAnswers([epic, ...open]);
+  if (answers.length) lines.push("", locale.fill(N.actualize.answers, { questions: N.sections.questions }), ...answers.map((a) => locale.fill(N.actualize.commentAnswer, a)));
+  lines.push(
     "",
     N.actualize.checks,
     "",
-    checks,
+    MEANING_CHECKS.map((i) => checks[i]!).join("\n"),
     "",
     locale.fill(N.actualize.scope, { ...vars, questions: N.sections.questions, script: `bun --no-env-file ${import.meta.path}` }),
     locale.fill(N.actualize.comment, vars),
     N.actualize.answer,
-  ])
-    io.out(line);
+  );
+  for (const line of lines) io.out(line);
   return 0;
 }
 
@@ -2112,7 +2295,8 @@ function closingInBody(body: string): number[] {
   return out;
 }
 
-export function cmdPrLabels(io: Io, slug: string, number: number): number {
+/** The PR and all its changed files (`PrChange`, page by page): `pr labels` and the epic refresh's assignment. */
+function loadPrChange(io: Io, slug: string, number: number): { head: Any; files: PrFile[] } {
   const [owner, name] = slug.split("/") as [string, string];
   let head: Any = null;
   const files = pages<PrFile>((after) => {
@@ -2121,6 +2305,12 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     head ??= pr;
     return pr.files;
   });
+  return { head, files };
+}
+
+export function cmdPrLabels(io: Io, slug: string, number: number): number {
+  const [owner, name] = slug.split("/") as [string, string];
+  const { head, files } = loadPrChange(io, slug, number);
   let closes: number[] = (head.closingIssuesReferences?.nodes ?? []).map((x: Any) => x.number);
   // right after the PR is created GitHub hasn't linked it to the task yet — the same keywords in the body
   if (!closes.length) closes = closingInBody(head.body ?? "");
@@ -2474,7 +2664,7 @@ const USAGE = `github — the repository's GitHub project and tasks by the AGENT
                        [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
   github task status   <N> <Backlog|In progress|Done> [--branch <type>/<N>-<slug>] [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
-  github task actualize <N> [--repo owner/repo]
+  github task actualize <N> [--assignment] [--repo owner/repo]
   github task close    <N> [--no-git] [--repo owner/repo]
   github task resume
   github pr labels     <N> [--repo owner/repo]
@@ -2491,8 +2681,11 @@ task status — In progress pins the task to the session (file sessions/<CLAUDE_
         another task in the same session — a refusal (code 2), it needs a new session; a human removes the pin.
         --branch — the worktree tool's branch becomes the task branch (git branch -m with its .git/config section);
         a .git/config locked by another checkout — retried ~10 s, then a ! line with the command that finishes it (code 1).
-task actualize — right after the merge, in parallel with the deploy: prints the assignment for the epic-refresh subagent
-        (the task, the epic, its open tasks, the five checks); no epic or no open tasks in it — "refresh not needed".
+task actualize — right after the merge, in parallel with the deploy: the epic refresh's mechanics (blocked by on done tasks,
+        the questions label without open questions, milestones without open tasks; a comment on the epic) and the
+        subagent's prompt; --assignment (read-only, the subagent's first call) — its whole assignment: the texts of the
+        epic and its open tasks, the PR files, copies of links and answers in comments, the checks by meaning;
+        no epic or no open tasks in it — "refresh not needed".
 task resume — the SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks,
         a merged PR of an open task — the deploy and task close; no pin — nothing (code 0).
 task close — after the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write),
@@ -2587,6 +2780,7 @@ export function main(argv: string[], io: Io): number {
           "branch-type": { type: "string" },
           branch: { type: "string" },
           "no-git": { type: "boolean", default: false },
+          assignment: { type: "boolean", default: false },
         },
       });
       // the task and its repository — from the session pin: the hook runs it from any directory
@@ -2609,7 +2803,7 @@ export function main(argv: string[], io: Io): number {
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "), values.branch);
       if (positionals.length > 1) throw new GhError(`extra arguments: ${positionals.slice(1).join(" ")}`);
       if (cmd === "close") return cmdTaskClose(io, slug, number, { git: !values["no-git"] });
-      if (cmd === "actualize") return cmdTaskActualize(io, slug, number);
+      if (cmd === "actualize") return cmdTaskActualize(io, slug, number, { assignment: values.assignment! });
       return cmdTaskDrop(io, slug, number, values["duplicate-of"] === undefined ? undefined : issueNumber(values["duplicate-of"], "--duplicate-of"));
     }
     const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, confirm: { type: "boolean", default: false }, template: { type: "string", default: DEFAULT_TEMPLATE } } });
