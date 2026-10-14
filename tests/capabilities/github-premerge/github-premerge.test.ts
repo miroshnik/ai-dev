@@ -251,6 +251,33 @@ describe("pr premerge: main ушёл — быстрые проверки на с
     expect(proc.calls.filter((c) => c.cmd !== "git")).toEqual([]);
   });
 
+  /**
+   * Без `test:spec` проект со стандартами проверяется на слиянии одним typecheck или ничем: в одном проекте 89 запусков
+   * premerge не проверили ничего, в другом стандарт покраснел на main сразу после мержа, который premerge пропустил
+   * (#442). Мерж это не останавливает: нехватку скрипта держит check проекта, premerge называет её и отсылает к нему.
+   */
+  it("premerge в проекте со стандартами без test:spec называет, что стандарты на слиянии не проверены", () => {
+    const unchecked = (roots: string) => `○ ${roots} aren't checked on the merge: the merge's package.json has no test:spec script — the project's check names the line to add (bunx github:miroshnik/ai-dev check)`;
+    const standards = { "tests/standards/registry/registry.test.ts": "" };
+    const typed = project({ files: { ...TYPED, ...standards, "package.json": PKG({ typecheck: "sh tc.sh" }) }, pr: { "calls.txt": "other\ncommentsIn\n" }, mainAfter: { "uses.txt": "a\n" } });
+    const r = premerge(fakeGh(typed.head, { moved: AFTER }).gh, typed.work);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(unchecked("tests/standards"));
+    expect(r.last).toBe("✅ merge: typecheck is green on the merge with origin/main");
+
+    const bare = project({ files: { "package.json": PKG({}), "tests/architecture/layers.test.ts": "", ...standards }, pr: { "uses.txt": "a\n" }, mainAfter: { "items.txt": "a\nb\nc\n" } });
+    const none = premerge(fakeGh(bare.head, { moved: AFTER }).gh, bare.work);
+    expect(none.code).toBe(0);
+    expect(none.out).toContain(unchecked("tests/standards, tests/architecture"));
+    expect(none.last).toBe("✅ merge: the merge with origin/main has no conflicts");
+
+    // test:spec есть — стандарты проверены, строки нет
+    const spec = project({ files: standards, pr: { "uses.txt": "a\n" }, mainAfter: { "items.txt": "a\nb\nc\n" } });
+    const checked = premerge(fakeGh(spec.head, { moved: AFTER }).gh, spec.work);
+    expect(checked.last).toBe("✅ merge: test:spec is green on the merge with origin/main");
+    expect(checked.out).not.toContain("aren't checked");
+  });
+
   it("менеджер пакетов — по packageManager, иначе по lockfile; lockfile нет — без установки", () => {
     const cases: [Record<string, string>, string | null, string][] = [
       [{ "pnpm-lock.yaml": "" }, "pnpm install --frozen-lockfile", "pnpm run test:spec"],

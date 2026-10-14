@@ -351,7 +351,10 @@ project's fast checks — the `package.json` scripts that exist, in CI order
 until the first red: `typecheck` (a semantic conflict of two PRs: one removed a
 function, the other calls it — seconds, #292), then `test:spec` — standards and
 architecture, where two green PRs break ("registry + invariant"), not the
-whole `test`. None of them — an `○` line, merge. GitHub doesn't store what CI
+whole `test`. None of them — an `○` line, merge. The merge has `tests/standards`
+or `tests/architecture` but no `test:spec` — an `○` line that they aren't
+checked on the merge, with a pointer to the project's `check` (it requires the
+script and names the line, #442); the merge isn't stopped. GitHub doesn't store what CI
 checked, so "moved" is judged by time (REST): the earliest check suite of the
 PR head against the branch's last event (Activity API); an event within a
 minute before the check suite also counts as moved (the merge-ref is built
