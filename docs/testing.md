@@ -41,6 +41,11 @@ against the Playwright, Next.js, Vite, SvelteKit and Nuxt documentation.
   command with a generous timeout (in Claude Code — up to 2 h, completion
   wakes the session) or in a terminal; wait for the process to finish, not
   for a deadline.
+- **A slow level — a script of its own.** Tests that need Docker or a live
+  server go into a separate script (`test:slow`, by file name — the runner
+  selects files, not test blocks), so `test` stays fast before every commit.
+  CI runs every level; locally a slow level runs when the change touches what
+  it checks.
 - **The result — by the runner's summary, not the exit code.** Playwright's
   summary: `passed`, `failed`, `flaky`, `skipped`, `did not run`,
   `interrupted`; Vitest — the `Test Files` and `Tests` lines; `bun test` —
