@@ -14,9 +14,9 @@ symlinks in `.claude/rules` and `.claude/skills` come with the clone (the
 ai-dev README, "Installation"). It works in the project language, just like a
 local session: `language` in `.agents/ai-dev.json`, which comes with the
 clone too. The version is the committed one: a cloud session doesn't update
-the flow even if `check` says it is behind — a local session updates it
-(`update` and committing the copy into the task branch). There is no
-`SessionStart` hook in the cloud: it is installed on the machine.
+the flow even if `check` says it is behind — a local session of the update
+task updates it (`update` and committing the copy into its branch). There is
+no `SessionStart` hook in the cloud: it is installed on the machine.
 
 Check: in a cloud session of the project, ask the agent to quote a rule from
 `AGENTS.md` and list the skills — `est`, `spec`, `ci-wait` must be there.
