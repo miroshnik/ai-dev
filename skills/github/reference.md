@@ -682,7 +682,10 @@ checkout or on its origin (it names the branch), and what a subagent does
 otherwise — doesn't rename or archive the session and writes no last line,
 waits for CI and the deploy with regular calls
 (`wait-ci.sh … --timeout 540`: a background command doesn't wake a subagent, a
-Bash call lives 10 minutes), git in separate calls, found work — `task new`
+Bash call lives 10 minutes), git in separate calls, writing subagents — as
+needed, without a limit (the limit of 3 is on executors), each in its own
+worktree with «Task #N» at the start of its prompt, their worktrees and
+branches removed by the executor after the merge, found work — `task new`
 without a chip; the answer — one line: merged, a question or failed.
 
 In Claude Code: an executor — `Agent` with `isolation: "worktree"` and

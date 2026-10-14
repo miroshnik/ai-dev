@@ -2205,13 +2205,17 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(task(f, ["queue", "--priority", "P1"], ORG).err).toBe("error: --priority: Urgent, High, Medium, Low, not P1");
   });
 
-  it("--assignment N — задание исполнителю: первая строка «Задача #N», отличия субагента, форма ответа", () => {
-    const f = new FakeGitHub(REC);
-    // каталог с языком проекта, но не чекаут: ветки задачи скрипт не ищет — тест не зависит от веток репозитория, где его запустили
+  /** Каталог с языком проекта, но не чекаут: ветки задачи скрипт не ищет — тест не зависит от веток репозитория, где его запустили. */
+  const projectDir = () => {
     const dir = scratch();
     mkdirSync(path.join(dir, ".agents"));
     writeFileSync(path.join(dir, ".agents/ai-dev.json"), '{ "language": "ru" }\n');
-    const r = task(f, ["queue", "--assignment", "47"], REPO, { cwd: dir });
+    return dir;
+  };
+
+  it("--assignment N — задание исполнителю: первая строка «Задача #N», отличия субагента, форма ответа", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["queue", "--assignment", "47"], REPO, { cwd: projectDir() });
     expect(r.code).toBe(0);
     const lines = r.out.split("\n");
     expect(lines[0]).toStartWith("Задача #47 «GitHub · Задача одной командой — github task» в miroshnik/ai-dev (эпик #45): ты исполнитель сессии-диспетчера — сделай задачу целиком по канону");
@@ -2220,6 +2224,16 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(r.out).toContain("pr <PR> --timeout 540");
     expect(lines.at(-1)).toBe("Ответ диспетчеру — одной строкой: `влито #<PR>` · `вопрос: <вопрос, варианты, рекомендация>` · `сломалось: <что и где остановилось>`.");
     expect(f.mutations).toEqual([]);
+  });
+
+  // лимит «не больше трёх» — на исполнителей диспетчера; о своих субагентах задание молчало, и исполнитель #439 гадал (#516)
+  it("задание исполнителя говорит, можно ли ему запускать пишущих субагентов", () => {
+    const r = task(new FakeGitHub(REC), ["queue", "--assignment", "47"], REPO, { cwd: projectDir() });
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")).toContain(
+      "- пишущих субагентов запускай по необходимости, без лимита: каждому — свой worktree и «Задача #47» в начале промпта (по нему `est` привяжет его работу); " +
+        "их коммиты перенеси в свою ветку, их worktree и ветки после мержа убери сам — что не убралось, назови в ответе;",
+    );
   });
 
   // строка о перезапуске — факт о задаче, а не напоминание всем: исполнитель задачи из «Бэклога» разбирал, что она неправда (#511)
