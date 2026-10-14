@@ -1714,6 +1714,29 @@ describe("task close убирает влитое", () => {
       cleanup();
     }
   });
+
+  /**
+   * Исполнитель диспетчера работает в worktree агента и убрать его сам не может — он в нём. Подсказка «убери worktree из
+   * основного чекаута» становилась просьбой к диспетчеру в конце ответа — у 16 исполнителей из 16 в пилоте #471: worktree
+   * агента убирает следующий `task queue` диспетчера (#515), worktree сессии — по-прежнему подсказкой.
+   */
+  it("task close в worktree агента не просит убрать его руками — его уберёт следующий task queue диспетчера", () => {
+    const closeIn = (name: string) => {
+      const { work, cleanup } = checkout("fix/49-x");
+      temp.push(cleanup);
+      git(work, "switch", "-q", "main");
+      const dir = path.join(realpathSync(work), ".claude/worktrees", name);
+      git(work, "worktree", "add", "-q", dir, "fix/49-x");
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
+      return { dir, out: task(f, ["close", "49"], REPO, { run: noEst, cwd: dir }).out.split("\n") };
+    };
+    const agent = closeIn("agent-a0008f7e219bfb5c5");
+    expect(agent.out).toContain(`○ agent worktree ${agent.dir}: the dispatcher's next task queue removes it`);
+    expect(agent.out.filter((l) => l.startsWith("Next: remove worktree"))).toEqual([]);
+    const session = closeIn("bold-raman-12428f");
+    expect(session.out).toContain(`Next: remove worktree ${session.dir} from the main checkout: git worktree remove ${session.dir}`);
+  });
 });
 
 /**
@@ -2097,8 +2120,12 @@ describe("task queue раздаёт задачи эпика или фильтр�
   const subtask = (f: FakeGitHub, repo: string, title: string, ...more: string[]) => created(task(f, ["new", "--branch-type", "feat", "--title", title, "--epic", "45", ...more], repo));
   /** Строки вывода без промптов исполнителей (у них отступ). */
   const heads = (out: string) => out.split("\n").filter((l) => !l.startsWith("  "));
-  /** Очередь в сессии агента: без id сессии скрипт не пометил бы её диспетчером и сказал бы об этом строкой ○. */
-  const queue = (f: FakeGitHub, args: string[], repo = REPO) => task(f, ["queue", ...args], repo, inSession(scratch()));
+  /**
+   * Сессия диспетчера: без id сессии скрипт не пометил бы её диспетчером и сказал бы об этом строкой ○. Каталог — не
+   * чекаут: в чекауте очередь убирает worktree агентов, а тест не трогает worktree репозитория, где его запустили.
+   */
+  const dispatcherIo = (config = scratch(), id = SESSION): Partial<Io> => ({ ...inSession(config, id), cwd: projectDir() });
+  const queue = (f: FakeGitHub, args: string[], repo = REPO) => task(f, ["queue", ...args], repo, dispatcherIo());
 
   it("готовые задачи эпика — по Priority, затем по номеру, у каждой — промпт исполнителя «Задача #N»", () => {
     const f = new FakeGitHub(asOrg(REC));
@@ -2172,16 +2199,16 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const f = new FakeGitHub(REC);
     f.status(47, "Бэклог");
     const config = scratch();
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
     // задание исполнитель печатает из своего worktree; каталог не чекаут — веток задачи скрипт не ищет
     expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)).toEqual([
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)).toEqual([
       "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 1, not ready 0",
       `= #47 «${f.issue(47).title}» — handed out to an executor of this session`,
       "Next: no ready tasks — wait for the executors' answers; after each — task queue again.",
     ]);
     // выдача — этой сессии: у другого диспетчера задача готова
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config, "5e1d0c9a-2b7f-4c3e-8a6d-1f0e9b8c7a65")).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config, "5e1d0c9a-2b7f-4c3e-8a6d-1f0e9b8c7a65")).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
     expect(f.mutations).toEqual([]);
   });
 
@@ -2192,7 +2219,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const config = scratch();
     expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
     expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
   });
 
   /**
@@ -2249,10 +2276,10 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = queue(f, ["--type", "bug", "--priority", "Urgent,High"], ORG);
     expect(r.code).toBe(0);
     expect(heads(r.out).slice(0, 2)).toEqual(["Queue acme/ai-dev (open tasks, type «Баг», Priority Urgent|High): ready 1, «В работе» 0, not ready 1", `+ #${bug} «Падает» (High)`]);
-    const personal = task(new FakeGitHub(REC), ["queue", "--type", "Bug"]);
+    const personal = task(new FakeGitHub(REC), ["queue", "--type", "Bug"], REPO, dispatcherIo());
     expect(personal.code).toBe(2);
     expect(personal.err).toBe("error: --type and --priority — only in an organization: a personal account has no issue types and no Priority");
-    expect(task(f, ["queue", "--priority", "P1"], ORG).err).toBe("error: --priority: Urgent, High, Medium, Low, not P1");
+    expect(task(f, ["queue", "--priority", "P1"], ORG, dispatcherIo()).err).toBe("error: --priority: Urgent, High, Medium, Low, not P1");
   });
 
   /** Каталог с языком проекта, но не чекаут: ветки задачи скрипт не ищет — тест не зависит от веток репозитория, где его запустили. */
@@ -2326,7 +2353,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
   it("сессия-диспетчер: task status «В работе» в ней задачу не закрепляет — исполнители-субагенты делят id сессии", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
-    expect(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).code).toBe(0);
+    expect(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).code).toBe(0);
     expect(readFileSync(path.join(config, "dispatchers", SESSION), "utf8")).toMatch(/ task queue --epic 45 --repo miroshnik\/ai-dev\n$/);
     const r = task(f, ["status", "47", "В работе"], REPO, inSession(config));
     expect(r.code).toBe(0);
@@ -2340,7 +2367,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const f = new FakeGitHub(REC);
     const config = scratch();
     task(f, ["status", "49", "В работе"], REPO, inSession(config));
-    const r = task(f, ["queue", "--epic", "45"], REPO, inSession(config));
+    const r = task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
     expect(r.code).toBe(2);
     expect(r.err).toBe("error: the session runs miroshnik/ai-dev#49 — a dispatcher is a separate session: the request goes into a new one");
     expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
@@ -2349,7 +2376,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
   it("task resume в сессии-диспетчере называет команду очереди: исполнители умерли с процессом приложения", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
-    task(f, ["queue", "--epic", "45"], REPO, inSession(config));
+    task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
     const r = task(f, ["resume"], REPO, inSession(config));
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/^Dispatcher session: its executors \(background subagents\) died with the app's process — re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/ai-dev; its tasks «В работе» — executors again with the same prompt/);
@@ -2360,10 +2387,10 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const f = new FakeGitHub(REC);
     f.status(47, "Бэклог");
     const config = scratch();
-    task(f, ["queue", "--epic", "45"], REPO, inSession(config));
+    task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
     task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() });
     expect(task(f, ["resume"], REPO, inSession(config)).code).toBe(0);
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
   });
 
   it("очередь пуста и в работе ничего — строка с последним шагом диспетчера", () => {
@@ -2375,5 +2402,114 @@ describe("task queue раздаёт задачи эпика или фильтр�
       "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 0, not ready 0",
       "Queue is empty: nothing ready, nothing «В работе» — the dispatcher's summary (merged, questions, the not ready ones above) and the last line.",
     ]);
+  });
+});
+
+/**
+ * Исполнитель диспетчера убрать свой worktree не может — он в нём работает, а `task close` ставит его на origin/main
+ * (#515). В пилоте #471 диспетчер 16 раз проверял `git status` и убирал worktree руками, ещё 4 worktree с ветками
+ * `worktree-agent-*` оставили субагенты исполнителя. Их убирает следующий `task queue` диспетчера — только worktree
+ * агентов (`.claude/worktrees/agent-*`, как их заводит Claude Code) на origin/main или на ветке `worktree-agent-*`.
+ */
+describe("task queue убирает worktree исполнителей закрытых задач", () => {
+  const AUTHOR = ["-c", "user.email=spec@example.test", "-c", "user.name=spec"];
+  /** Чекаут диспетчера на main; worktree агентов — в его `.claude/worktrees`, как их заводит Claude Code (`isolation: "worktree"`). */
+  function dispatcher() {
+    const c = checkout("fix/49-x");
+    temp.push(c.cleanup);
+    // путь — как его называет git: без симлинков временного каталога (/var → /private/var на macOS)
+    const work = realpathSync(c.work);
+    git(work, "switch", "-q", "main");
+    const add = (name: string, opts: string[] = ["--detach"], from = "origin/main") => {
+      const dir = path.join(work, ".claude/worktrees", name);
+      git(work, "worktree", "add", "-q", ...opts, dir, from);
+      return dir;
+    };
+    const commit = (dir: string, file: string) => {
+      writeTree(dir, { [file]: `${file}\n` });
+      git(dir, "add", "-A");
+      git(dir, ...AUTHOR, "commit", "-q", "-m", file);
+      return git(dir, "rev-parse", "HEAD");
+    };
+    /** PR влит rebase-мержем, как на GitHub: в main — копия коммита с другим SHA. */
+    const rebaseMerged = (sha: string) => {
+      git(work, ...AUTHOR, "cherry-pick", sha);
+      git(work, "push", "-q", "origin", "main");
+    };
+    const queue = () => task(new FakeGitHub(REC), ["queue", "--epic", "45"], REPO, { ...inSession(scratch()), run: noEst, cwd: work }).out.split("\n");
+    /** Строки о worktree и ветках агентов — до заголовка очереди. */
+    const cleanupLines = (out: string[]) => out.slice(0, out.findIndex((l) => l.startsWith("Queue ")));
+    const worktrees = () =>
+      git(work, "worktree", "list", "--porcelain")
+        .split("\n")
+        .filter((l) => l.startsWith("worktree "))
+        .map((l) => l.slice("worktree ".length))
+        .sort();
+    const branches = () => git(work, "branch", "--list", "worktree-agent-*", "--format=%(refname:short)").split("\n").filter(Boolean);
+    return { work, add, commit, rebaseMerged, queue, cleanupLines, worktrees, branches };
+  }
+
+  it("чистый worktree исполнителя закрытой задачи убирается со строкой о нём", () => {
+    const d = dispatcher();
+    // исполнитель закрыл задачу: task close поставил его worktree на origin/main
+    const closed = d.add("agent-a0008f7e219bfb5c5");
+    // субагент исполнителя: коммит на ветке worktree-agent-*, исполнитель перенёс его в свой PR, PR влит
+    const sub = d.add("agent-af17f6db7baf535f7", ["-b", "worktree-agent-af17f6db7baf535f7"], "main");
+    d.rebaseMerged(d.commit(sub, "budget.md"));
+    const out = d.queue();
+    expect(d.cleanupLines(out)).toEqual([
+      `+ worktree ${closed} removed: clean, nothing outside origin/main`,
+      `+ worktree ${sub} removed with branch worktree-agent-af17f6db7baf535f7: clean, nothing outside origin/main`,
+    ]);
+    expect(out[2]).toStartWith("Queue miroshnik/ai-dev (epic #45): ");
+    expect(d.worktrees()).toEqual([d.work]);
+    expect(d.branches()).toEqual([]);
+  });
+
+  it("worktree с незакоммиченными изменениями или невлитыми коммитами остаётся, строка называет причину", () => {
+    const d = dispatcher();
+    const dirty = d.add("agent-a1");
+    writeTree(dirty, { "draft.md": "черновик\n" });
+    const ahead = d.add("agent-a2", ["-b", "worktree-agent-a2"], "main");
+    d.commit(ahead, "work.md");
+    d.commit(ahead, "more.md");
+    const both = d.add("agent-a3", ["-b", "worktree-agent-a3"], "main");
+    d.commit(both, "work.md");
+    writeTree(both, { "README.md": "правка\n", "draft.md": "черновик\n" });
+    expect(d.cleanupLines(d.queue())).toEqual([
+      `○ worktree ${dirty} left: 1 uncommitted file`,
+      `○ worktree ${ahead} left: 2 commits not in origin/main`,
+      `○ worktree ${both} left: 2 uncommitted files, 1 commit not in origin/main`,
+    ]);
+    expect(d.worktrees()).toEqual([d.work, dirty, ahead, both].sort());
+    expect(readFileSync(path.join(dirty, "draft.md"), "utf8")).toBe("черновик\n");
+    expect(d.branches()).toEqual(["worktree-agent-a2", "worktree-agent-a3"]);
+  });
+
+  /**
+   * Claude Code блокирует worktree работающего агента (`git worktree lock`, причина — `claude agent … (pid N …)`) и
+   * снимает блокировку, когда агент закончил; после перезапуска приложения блокировку держит процесс, которого нет.
+   * Worktree сессии и worktree агента на ветке задачи — чужая работа: задача не закрыта, их очередь не трогает.
+   */
+  it("worktree работающего агента, сессии и агента на ветке задачи не трогаются; блокировка процесса, которого нет, не держит", () => {
+    const d = dispatcher();
+    const running = d.add("agent-a1", ["--lock", "--reason", `claude agent agent-a1 (pid ${process.pid} start Wed Oct 14 11:43:51 2026)`, "-b", "worktree-agent-a1"], "main");
+    const orphan = d.add("agent-a2", ["--detach", "--lock", "--reason", "claude agent agent-a2 (pid 99999999 start Wed Oct 14 11:43:51 2026)"]);
+    const session = d.add("bold-raman-12428f");
+    const taskBranch = d.add("agent-a3", ["-b", "feat/50-export"], "main");
+    expect(d.cleanupLines(d.queue())).toEqual([`+ worktree ${orphan} removed: clean, nothing outside origin/main`]);
+    expect(d.worktrees()).toEqual([d.work, running, session, taskBranch].sort());
+    expect(d.branches()).toEqual(["worktree-agent-a1"]);
+  });
+
+  it("ветка worktree-agent-* без worktree: без невлитых коммитов удаляется, с невлитыми — остаётся строкой ○", () => {
+    const d = dispatcher();
+    // исполнитель завёл ветку задачи от свежего origin/main, ветка worktree-agent-* осталась без worktree
+    git(d.work, "branch", "worktree-agent-a1", "main");
+    const left = d.add("agent-a2", ["-b", "worktree-agent-a2"], "main");
+    d.commit(left, "work.md");
+    git(d.work, "worktree", "remove", left);
+    expect(d.cleanupLines(d.queue())).toEqual(["+ branch worktree-agent-a1 deleted: nothing outside origin/main", "○ branch worktree-agent-a2 left: 1 commit not in origin/main"]);
+    expect(d.branches()).toEqual(["worktree-agent-a2"]);
   });
 });
