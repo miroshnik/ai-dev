@@ -410,7 +410,9 @@ failure: the log gets the reason from `git push` stderr, a pause of
 decision is made again — built from a descendant gives «already newer», otherwise
 a commit on top of the new head; up to `--attempts` attempts. After the push
 the branch is read from the remote and compared with the directory: exactly
-what was built is published, not "the push went through". `--check` —
+what was built is published, not "the push went through"; the next publication
+already on top of ours (our commit in the branch's history) isn't a mismatch —
+a log line names the new head (#443). `--check` —
 comparison only (exit code 1 if the branch is behind or missing).
 Exit codes: 0 — published, matches or already newer, 1 — mismatch or the push
 rejected on all attempts, 2 — no directory or not git. Without a configured

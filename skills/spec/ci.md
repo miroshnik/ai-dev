@@ -127,6 +127,11 @@ jobs:
       - run: bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
+The publish job is named `spec-publish` (in a reusable workflow — `<job> /
+spec-publish`): by this name `github pr premerge` doesn't count its red as a
+red `main`, and `ci-wait` doesn't wait for it — publishing the documentation
+isn't a check (#443).
+
 The `.spec-*` reports and logs are hidden files: `upload-artifact` skips them
 without `include-hidden-files: true`, and the artifact comes out empty.
 

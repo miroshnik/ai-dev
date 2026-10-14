@@ -10,7 +10,8 @@
  * published `Source:` is a descendant of the new source — "already newer", the branch isn't touched. A rejected push (the
  * branch moved by a parallel publish, a hosting failure) — a pause of `--interval` × the attempt number, the branch is
  * re-read and the decision is made again, up to `--attempts` attempts. After the push the branch is read from the remote
- * and compared with the directory — exactly what was built is published. `--check` — comparison only.
+ * and compared with the directory — exactly what was built is published; a later publish already on top of our commit
+ * isn't a mismatch. `--check` — comparison only.
  *
  *   bun spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check] [--root DIR]
  *
@@ -179,11 +180,17 @@ export async function main(argv: string[]): Promise<number> {
         await new Promise((resolve) => setTimeout(resolve, interval * attempt * 1000));
       }
     }
-    // check what reached the reader: the branch on the remote, not our own commit
+    // check what reached the reader: the branch on the remote, not our own commit. Between the push and this read the
+    // next publish may have landed on top (main runs are parallel): our commit in the branch's history is published —
+    // only a publish not older goes on top, an older one is skipped as "already newer"
     const after = remoteHead(root, v.remote, v.branch);
-    if (!after || git(root, ["rev-parse", `${after}^{tree}`]) !== tree) throw new Fail(`after the push ${v.remote}/${v.branch} doesn't match ${v.dir}`, 1);
+    const moved = after !== null && git(root, ["rev-parse", `${after}^{tree}`]) !== tree;
+    if (!after || (moved && tryGit(root, ["merge-base", "--is-ancestor", commit, after]) === null)) {
+      throw new Fail(`after the push ${v.remote}/${v.branch} doesn't match ${v.dir}`, 1);
+    }
     if (same) console.error(`spec-publish: no changes — ${v.remote}/${v.branch} confirmed for ${source.slice(0, 12)}`);
     else console.error(`spec-publish: published ${v.dir} → ${v.remote}/${v.branch} ${commit.slice(0, 12)} (from ${source.slice(0, 12)})`);
+    if (moved) console.error(`spec-publish: ${v.remote}/${v.branch} has moved on since — a later publish on top: ${after.slice(0, 12)}`);
     return 0;
   } catch (e) {
     if (e instanceof Fail) {
