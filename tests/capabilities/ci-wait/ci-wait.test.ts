@@ -17,7 +17,8 @@ const CI = ".github/workflows/ci.yml";
 
 // `gh` — внешний край, подменяется он: ответы — массивы JSON в <вид>.json, по одному на вызов, последний
 // повторяется; строка — ошибка gh (текст в stderr, код 1), как «API rate limit exceeded»; нет файла — `{}`.
-// Пути вызовов `gh api` пишутся в calls. GraphQL (`gh pr checks`, `gh pr view`) — ошибка: скрипт ходит по REST.
+// Пути вызовов `gh api` пишутся в calls; `{owner}/{repo}` в них, как у настоящего gh, — из GH_REPO, если он задан.
+// GraphQL (`gh pr checks`, `gh pr view`) — ошибка: скрипт ходит по REST.
 const FAKE_GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "api rate_limit") kind=rate_limit ;;
@@ -36,7 +37,7 @@ case "$1 $2" in
     esac ;;
   *) echo "fake gh: $*" >&2; exit 1 ;;
 esac
-echo "$2" >> "$FAKE_GH/calls"
+if [ -n "$GH_REPO" ]; then sed "s#{owner}/{repo}#$GH_REPO#g" <<<"$2"; else echo "$2"; fi >> "$FAKE_GH/calls"
 [ -f "$FAKE_GH/$kind.json" ] || { echo '{}'; exit 0; }
 n=$(cat "$FAKE_GH/$kind.n" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_GH/$kind.n"
 r=$(jq -c --argjson n "$n" '.[$n] // .[-1]' "$FAKE_GH/$kind.json")
@@ -100,7 +101,8 @@ const calls = () => readFileSync(path.join(sb.dir, "calls"), "utf8").split("\n")
 function ciWait(args: string[]) {
   const r = spawnSync("bash", [SCRIPT, ...args], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${sb.dir}:${process.env.PATH}`, FAKE_GH: sb.dir },
+    // GH_REPO окружения теста до скрипта не доходит: репозиторий ожидания задаёт только вызов
+    env: { ...process.env, PATH: `${sb.dir}:${process.env.PATH}`, FAKE_GH: sb.dir, GH_REPO: "" },
   });
   if (r.error) throw r.error;
   return { code: r.status, result: /^RESULT: (.*)$/m.exec(r.stdout)?.[1] ?? `(нет RESULT) ${r.stdout}${r.stderr}`, stdout: r.stdout, stderr: r.stderr };
@@ -253,6 +255,20 @@ describe("PR ждут по SHA его головы, пока чеки не за�
     write("branch", [{ protection: { required_status_checks: { enforcement_level: "non_admins", contexts: ["tests"] } } }]);
     const r = waitRequiredTests();
     expect([r.code, r.result]).toEqual([0, "PASS (2 checks)"]);
+  });
+});
+
+/**
+ * Задание исполнителя зовёт скрипты `github` с `--repo owner/repo`, и исполнители по образцу давали его и ожиданию
+ * (#514): в пилоте #471 — 5 из 16, у каждого `unknown arg: --repo`, код 3, и лишний ход на разбор справки.
+ */
+describe("Репозиторий ожидания задаётся аргументом --repo, как у скриптов github", () => {
+  it("wait-ci pr <N> --repo owner/repo ждёт проверки PR этого репозитория", () => {
+    const r = waitPr([{ runs: [ok("tests")] }], ["--repo", "octo/app"]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    expect(calls()).toContain("repos/octo/app/pulls/1");
+    expect(calls()).toContain(`repos/octo/app/commits/${HEAD}/check-runs?per_page=100`);
+    expect(calls().filter((c) => c.includes("{owner}"))).toEqual([]);
   });
 });
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # wait-ci.sh — waiting for the checks of a PR or a commit with visible progress and the full set
-# of outcomes. Run from the repository directory (gh resolves {owner}/{repo}) or set
-# GH_REPO.
+# of outcomes. Run from the repository directory (gh resolves {owner}/{repo}), with --repo owner/repo or GH_REPO.
 #
 #   wait-ci.sh pr <N> | status <sha> | merged <N> | issue <N> [options] — the modes and options: wait-ci.sh --help,
 #   a mode's — wait-ci.sh <mode> --help (the help() function below).
@@ -33,30 +32,30 @@ help() {
     "line when the state changes and the final line RESULT: PASS|FAIL|TIMEOUT|ERROR …, stderr — gh errors and notes.")
   case "${1:-}" in
     pr) printf '%s\n' \
-      "wait-ci pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]" "" \
+      "wait-ci pr <N> [--repo owner/repo] [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]" "" \
       "Waits for the checks of the PR head (like status), the base branch's required checks — by name, and the run of each" \
       "workflow that, by its on: at the head SHA, fires on the PR (needs bun). A conflict with the base — ERROR once the next" \
       "poll of the same head confirms it: CI won't start on such a PR; right after a push GitHub still reports the previous" \
       "head's conflict. The first failed check — FAIL right away; --wait-all — FAIL when all have finished." \
-      "${exits[@]}" "" "Examples:" "  wait-ci pr 57" "  wait-ci pr 57 --timeout 3600 --wait-all" ;;
+      "${exits[@]}" "" "Examples:" "  wait-ci pr 57" "  wait-ci pr 57 --repo octo/app --timeout 3600 --wait-all" ;;
     status) printf '%s\n' \
-      "wait-ci status <sha> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]" "" \
+      "wait-ci status <sha> [--repo owner/repo] [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]" "" \
       "Waits for all checks of a commit: commit statuses (hosting, external services) and check-runs (GitHub Actions)." \
       "--context — one check by name, among both. The SHA is the full one, from git." \
       "${exits[@]}" "" "Examples:" "  wait-ci status \"\$(git rev-parse HEAD)\"" "  wait-ci status \"\$(git rev-parse HEAD)\" --context Vercel --timeout 600" ;;
     merged) printf '%s\n' \
-      "wait-ci merged <N> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]" "" \
+      "wait-ci merged <N> [--repo owner/repo] [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]" "" \
       "Waits for all checks of the PR's merge commit (like status): takes the SHA from the PR itself — don't look it up" \
       "after the merge. PR not merged — ERROR." \
       "${exits[@]}" "" "Examples:" "  wait-ci merged 57" "  wait-ci merged 57 --context Vercel" ;;
     issue) printf '%s\n' \
-      "wait-ci issue <N> [--interval 60] [--timeout 7200]" "" \
+      "wait-ci issue <N> [--repo owner/repo] [--interval 60] [--timeout 7200]" "" \
       "Waits for an issue to close — the bug on a red main (github pr premerge, code 3): PASS when it is closed; no such" \
       "issue — ERROR." \
       "${exits[@]}" "" "Examples:" "  wait-ci issue 61" ;;
     *) printf '%s\n' \
-      "wait-ci — waiting for the checks of a PR or a commit with visible progress and the full set of outcomes; run it" \
-      "from the repository directory (gh resolves {owner}/{repo}) or set GH_REPO." ""
+      "wait-ci — waiting for the checks of a PR or a commit with visible progress and the full set of outcomes; the" \
+      "repository — --repo owner/repo (as in the github scripts), otherwise GH_REPO or the current directory's." ""
       for m in pr status merged issue; do synopsis=$(help "$m"); printf '  %s\n' "${synopsis%%$'\n'*}"; done
       printf '%s\n' "" "wait-ci <command> --help — the command's details and examples" ;;
   esac
@@ -78,6 +77,9 @@ while [ $# -gt 0 ]; do
     --expect)   expect=$2;   shift 2 ;;
     --context)  context=$2;  shift 2 ;;
     --wait-all) wait_all=1;  shift ;;
+    # the repository for gh, as --repo of the github scripts (#514): gh api resolves {owner}/{repo} from GH_REPO
+    --repo) [[ "${2:-}" == [!-]*/?* ]] || { echo "--repo expects owner/repo, got: ${2:-}" >&2; usage; }
+            export GH_REPO=$2; shift 2 ;;
     *) echo "unknown arg: $1" >&2; usage ;;
   esac
 done

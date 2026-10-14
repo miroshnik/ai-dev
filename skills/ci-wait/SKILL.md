@@ -13,7 +13,8 @@ happening, and manual polling gets forgotten. The `scripts/wait-ci.sh` script
 next to this file does it all deterministically; the agent only reads the
 outcome.
 
-Run it from the repository directory (or with `GH_REPO=owner/repo`); in the
+Run it from the repository directory or with `--repo owner/repo` in any mode
+(as in the `github` scripts; or `GH_REPO=owner/repo`); in the
 background — from a directory that will outlive the wait (the main checkout,
 not a worktree that will be removed earlier): a directory removed meanwhile
 gives `ERROR getcwd`. As a background command — **without `| tail` or other
