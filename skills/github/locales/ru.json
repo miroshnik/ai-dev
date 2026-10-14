@@ -139,6 +139,8 @@
       "cost": "; стоимость по API-тарифам ≈ ${usd}",
       "unpriced": "; без цены (нет в прайсе): {models}",
       "steps": "Ходы: {n} (субагентов {agents}, их ходов {agentSteps}), преамбула {preamble} тыс., контекст в конце {end} тыс., ходов с контекстом > {tail} тыс. — {share} %.",
+      "waits": "Ожидания: CI {ci} мин · после мержа {merged} · проверки {checks}{slot} · остальное {rest}.",
+      "waitsSlot": " (очередь slot {slot})",
       "and": " и ",
       "cloudAgent": "облачной сессии Claude Code"
     },

@@ -15,8 +15,8 @@ import { spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 
 import locale from "../../github/scripts/locale.ts";
-import { calib, EstError, fmtH, fmtLocal, loadRegistry, median, parseSince, Repo, resolveRepo, sharesTxt, usdByModel, usdShares } from "../../est/scripts/est.ts";
-import type { Registry, Row } from "../../est/scripts/est.ts";
+import { calib, EstError, fmtH, fmtLocal, loadRegistry, markerWaits, median, parseSince, Repo, resolveRepo, sharesTxt, usdByModel, usdShares, waitsBrief, waitsShift } from "../../est/scripts/est.ts";
+import type { Registry, Row, Waits, WaitsShift } from "../../est/scripts/est.ts";
 import { proxyHosts, proxyPort } from "../../task-env/scripts/task-env.ts";
 import { findTranscripts, liveQuery, readPins, RECENT, REFRESH, refreshScript, repoTranscripts, SESSIONS_CSS, sessionsBody, sessionsView } from "./sessions.ts";
 import type { Live, SessionsInput, SessionsView } from "./sessions.ts";
@@ -51,6 +51,8 @@ export interface Point {
   usd: number | null;
   /** Actual $ by model; null — the actual was computed before the per-model split. */
   usdModels: Record<string, number> | null;
+  /** The actual's split by waits, minutes; null — the actual was computed before the split. */
+  waits: Waits | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -77,7 +79,7 @@ export function points(repo: string, rows: Row[], since: number | null = null): 
       type: fm.type || em?.type || "", cov: fm.cov || "—",
       est: em ? num(em.h) || r.est || null : null, fact: r.fact,
       tokEst: num(em?.tok), tok: tok === null ? null : tok / 1e6,
-      usdEst: num(em?.usd), usd: num(fm.usd), usdModels: fm.models ? usdByModel([fm]) : null,
+      usdEst: num(em?.usd), usd: num(fm.usd), usdModels: fm.models ? usdByModel([fm]) : null, waits: markerWaits(fm),
     });
   }
   return out.sort((a, b) => a.t - b.t || a.number - b.number);
@@ -104,6 +106,9 @@ function shift(vals: number[]): Shift {
   return { now: last.length ? median(last) : null, prev: before.length >= MIN_TREND ? median(before) : null, n: last.length };
 }
 
+/** Minutes a task waited for CI, the merge's checks and the deploy, and local checks — the waits worth shortening. */
+const waited = (w: Waits) => w.ci + w.merged + w.checks;
+
 /** $ shares by model of the latest tasks and of the previous ones: a pricing shift next to the cost trend. */
 export interface ModelShift {
   now: [string, number][];
@@ -124,6 +129,9 @@ export interface View {
   tok: Shift;
   usd: Shift;
   models: ModelShift;
+  /** Waits for CI, after the merge and for checks per task, minutes: their sum and the median of each kind. */
+  waits: Shift;
+  waitKinds: WaitsShift;
 }
 
 /**
@@ -140,6 +148,8 @@ export function view(rowsByRepo: Record<string, Row[]>, since: number | null): V
     tok: shift(vals((p) => p.tok)),
     usd: shift(vals((p) => p.usd)),
     models: { now: modelShares(pts.slice(-WINDOW)), prev: pts.length - WINDOW >= MIN_TREND ? modelShares(pts.slice(-2 * WINDOW, -WINDOW)) : [] },
+    waits: shift(vals((p) => (p.waits ? waited(p.waits) : null))),
+    waitKinds: waitsShift(pts.map((p) => p.waits).filter((w): w is Waits => w !== null), WINDOW, MIN_TREND),
   };
 }
 
@@ -415,14 +425,25 @@ function tile(label: string, value: string, delta: string, hint: string): string
  * A metric tile: the median of the latest tasks and its change vs the previous ones; less is better, the sign
  * duplicates the color.
  */
-function shiftTile(label: string, s: Shift, f: (v: number) => string): string {
+function shiftTile(label: string, s: Shift, f: (v: number) => string, extra = ""): string {
   if (s.now === null) return tile(label, "—", "", "no data");
   let delta = `<div class="delta">nothing to compare with yet</div>`;
   if (s.prev) {
     const pct = Math.round((s.now / s.prev - 1) * 100);
     delta = pct === 0 ? `<div class="delta">no change vs the previous ${WINDOW}</div>` : `<div class="delta ${pct < 0 ? "good" : "bad"}">${pct < 0 ? "▼" : "▲"} ${pct < 0 ? "−" : "+"}${Math.abs(pct)} % vs the previous ${WINDOW} (${esc(f(s.prev))})</div>`;
   }
-  return tile(label, f(s.now), delta, `median of the last ${s.n}`);
+  return tile(label, f(s.now), delta + extra, `median of the last ${s.n}`);
+}
+
+/**
+ * The waits tile: the median of a task's waits for CI, after the merge and for checks, and the median of each kind — the
+ * latest tasks and the previous ones; tasks before the split aren't in it.
+ */
+function waitsTile(v: View): string {
+  const k = v.waitKinds;
+  let extra = k.now ? `<div class="delta">${esc(waitsBrief(k.now))}</div>` : "";
+  if (k.prev) extra += `<div class="delta">previous ${WINDOW}: ${esc(waitsBrief(k.prev))}</div>`;
+  return shiftTile("Waits per task: CI, merge, checks", v.waits, (x) => `${Math.round(x)} min`, extra);
 }
 
 /**
@@ -444,7 +465,7 @@ function tiles(v: View): string {
   const accuracy = c.n
     ? tile("Estimate accuracy", `×${c.k}`, `<div class="delta">within ×0.5…×2 — ${Math.trunc(c.share! * 100)} % of tasks</div>`, `actual to estimate, median of the last ${c.n} pairs`)
     : tile("Estimate accuracy", "—", "", "no tasks with an est estimate and an actual");
-  return `<section class="tiles">${accuracy}${shiftTile("Hours per task", v.h, (x) => `${fmtH(x)} h`)}${shiftTile("Tokens per task", v.tok, (x) => `${fmtH(x, 1)}M`)}${shiftTile("Cost per task", v.usd, fmtUsd)}${modelsTile(v.models)}</section>`;
+  return `<section class="tiles">${accuracy}${shiftTile("Hours per task", v.h, (x) => `${fmtH(x)} h`)}${shiftTile("Tokens per task", v.tok, (x) => `${fmtH(x, 1)}M`)}${shiftTile("Cost per task", v.usd, fmtUsd)}${modelsTile(v.models)}${waitsTile(v)}</section>`;
 }
 
 const LEGEND = [
@@ -455,12 +476,14 @@ const LEGEND = [
 ].join("");
 
 function table(pts: Point[], many: boolean): string {
-  const head = ["Closed", "Task", "Type", "Estimate, h", "Actual, h", "Actual to estimate", "Tokens, M: forecast", "Tokens, M: actual", "Cost: forecast", "Cost: actual", "Coverage"];
+  const head = ["Closed", "Task", "Type", "Estimate, h", "Actual, h", "Actual to estimate", "Tokens, M: forecast", "Tokens, M: actual", "Cost: forecast", "Cost: actual", "Wait for CI, min", "After the merge, min", "Checks, min (slot)", "Coverage"];
+  const min = (v: number) => String(Math.round(v));
   const body = [...pts].reverse().map((p) => {
     const cells = [
       fmtLocal(p.t).slice(0, 10),
       `<a href="${esc(p.url)}">${esc(`${many ? p.repo : ""}#${p.number}`)}</a> ${esc(p.title)}`,
-      esc(p.type), dash(p.est, fmtH), fmtH(p.fact), ratio(p), dash(p.tokEst, fmtTok), dash(p.tok, fmtTok), dash(p.usdEst, fmtUsd), dash(p.usd, fmtUsd), esc(p.cov),
+      esc(p.type), dash(p.est, fmtH), fmtH(p.fact), ratio(p), dash(p.tokEst, fmtTok), dash(p.tok, fmtTok), dash(p.usdEst, fmtUsd), dash(p.usd, fmtUsd),
+      p.waits ? min(p.waits.ci) : "—", p.waits ? min(p.waits.merged) : "—", p.waits ? `${min(p.waits.checks)} (${min(p.waits.slot)})` : "—", esc(p.cov),
     ];
     return `<tr data-task="${esc(taskId(p))}">${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
   });
@@ -503,7 +526,7 @@ export function page(m: Model): string {
     w: W,
     pts: pts.map((p, i) => ({
       ...c.hover[i]!, task: taskId(p), head: `${many ? p.repo : ""}#${p.number} ${p.title}`, when: [fmtLocal(p.t), p.type, p.cov === "full" ? "" : `coverage ${p.cov}`].filter(Boolean).join(" · "),
-      rows: [["Hours: estimate → actual", `${pair(p.est, p.fact, fmtH)}${p.est ? ` (${ratio(p)})` : ""}`], ["Tokens, M", pair(p.tokEst, p.tok, fmtTok)], ["Cost", pair(p.usdEst, p.usd, fmtUsd)]],
+      rows: [["Hours: estimate → actual", `${pair(p.est, p.fact, fmtH)}${p.est ? ` (${ratio(p)})` : ""}`], ["Tokens, M", pair(p.tokEst, p.tok, fmtTok)], ["Cost", pair(p.usdEst, p.usd, fmtUsd)], ...(p.waits ? [["Waits, min", waitsBrief(p.waits)]] : [])],
     })),
   };
   const body = pts.length

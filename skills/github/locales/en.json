@@ -139,6 +139,8 @@
       "cost": "; cost at API rates ≈ ${usd}",
       "unpriced": "; no price (not in the price list): {models}",
       "steps": "Turns: {n} (subagents {agents}, their turns {agentSteps}), preamble {preamble}K, context at the end {end}K, turns with context > {tail}K — {share} %.",
+      "waits": "Waits: CI {ci} min · after the merge {merged} · checks {checks}{slot} · rest {rest}.",
+      "waitsSlot": " (slot queue {slot})",
       "and": " and ",
       "cloudAgent": "a Claude Code cloud session"
     },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { chartSvg, page, points, trend, view } from "../../../skills/dashboard/scripts/dashboard.ts";
-import { calib, median } from "../../../skills/est/scripts/est.ts";
+import { calib, historyTable, median, waitsHistoryLine } from "../../../skills/est/scripts/est.ts";
 import type { Row } from "../../../skills/est/scripts/est.ts";
 
 const DAY = 86400;
@@ -23,7 +23,7 @@ const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
 describe("Данные графика — закрытые задачи с фактом по времени закрытия", () => {
   it("закрытая задача с фактом — точка: дата закрытия, оценка и прогноз из маркера «Оценка», часы, токены в млн и стоимость из факта", () => {
     expect(points("o/r", [row(1)])).toEqual([
-      { repo: "o/r", number: 1, title: "Задача 1", url: "https://github.com/o/r/issues/1", t: T0 + DAY, type: "feat", cov: "full", est: 0.5, fact: 0.25, tokEst: 10, tok: 5, usdEst: 8, usd: 4.5, usdModels: null },
+      { repo: "o/r", number: 1, title: "Задача 1", url: "https://github.com/o/r/issues/1", t: T0 + DAY, type: "feat", cov: "full", est: 0.5, fact: 0.25, tokEst: 10, tok: 5, usdEst: 8, usd: 4.5, usdModels: null, waits: null },
     ]);
     // по времени закрытия, а не по номеру
     expect(points("o/r", [row(1, { closedAt: T0 + 9 * DAY }), row(2)]).map((p) => p.number)).toEqual([2, 1]);
@@ -78,6 +78,33 @@ describe("Сводка — точность оценок и цена задач�
     expect(html).toContain("Cost by model");
     expect(html).toContain("claude-fable-5 75 %, claude-opus-5 25 %");
     expect(html).toContain("the $ trend mixes the flow with the model&#39;s rate");
+  });
+});
+
+/**
+ * Ожидания задачи — CI, после мержа и деплоя, локальные проверки с очередью slot — замеряются, чтобы их ускорять (#518):
+ * история и дашборд показывают их у каждой задачи и медианы последних задач против предыдущих.
+ */
+describe("Ожидания задач — в est history и на дашборде", () => {
+  it("est history и дашборд показывают ожидания задач и их медианы", () => {
+    const fm = (ci: number) => ({ cov: "full", tok: { total: 5_000_000 }, usd: 4.5, type: "feat", waits: { ci, merged: 2, checks: 6, slot: 1, rest: 10 } });
+    // 12 задач с разбивкой, CI — 1…12 мин; задача 13 — факт до разбивки: прочерки, в медианы не входит
+    const rs = [...Array.from({ length: 12 }, (_, i) => row(i + 1, { fact_marker: fm(i + 1) })), row(13)];
+    const lines = historyTable(rs);
+    expect(lines[0]).toContain("|  CI | merge | checks | slot | ");
+    expect(lines[1]).toMatch(/ \|\s+1 \|\s+2 \|\s+6 \|\s+1 \| feat/);
+    expect(lines[13]).toMatch(/ \|\s+— \|\s+— \|\s+— \|\s+— \| feat/);
+    // медиана последних 10 задач: CI 3…12 — 7.5
+    expect(waitsHistoryLine(rs)).toBe("waits, median of the last 10 tasks: CI 8 min · after the merge 2 · checks 6 (slot queue 1) · rest 10");
+    const v = view({ "o/r": rs }, null);
+    expect(v.waitKinds).toEqual({ now: { ci: 7.5, merged: 2, checks: 6, slot: 1, rest: 10 }, prev: null, n: 10 });
+    expect(v.waits).toEqual({ now: 15.5, prev: null, n: 10 }); // CI + после мержа + проверки
+    const html = model(rs);
+    expect(html).toContain("Waits per task: CI, merge, checks");
+    expect(html).toContain("CI 8 min · after the merge 2 · checks 6 (slot queue 1) · rest 10");
+    const table = /<table[\s\S]*<\/table>/.exec(html)?.[0] ?? "";
+    expect(table).toContain("<th>Wait for CI, min</th><th>After the merge, min</th><th>Checks, min (slot)</th>");
+    expect(table).toMatch(/data-task="o\/r#3"[\s\S]*?<td>3<\/td><td>2<\/td><td>6 \(1\)<\/td>/);
   });
 });
 
@@ -136,7 +163,7 @@ describe("Страница — один график: часы, токены и 
     const html = model([row(7, { title: "Экспорт счетов" }), row(8, { est_marker: null })]);
     const table = /<table[\s\S]*<\/table>/.exec(html)?.[0] ?? "";
     const cells = (n: number) => [...(new RegExp(`<tr[^>]*data-task="o/r#${n}"[\\s\\S]*?</tr>`).exec(table)?.[0] ?? "").matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => m[1]!.replace(/<[^>]+>/g, ""));
-    expect(cells(7)).toEqual(["2026-09-08", "#7 Экспорт счетов", "feat", "0.5", "0.25", "×0.50", "10", "5", "$8.00", "$4.50", "full"]);
+    expect(cells(7)).toEqual(["2026-09-08", "#7 Экспорт счетов", "feat", "0.5", "0.25", "×0.50", "10", "5", "$8.00", "$4.50", "—", "—", "—", "full"]);
     expect(cells(8).slice(3, 6)).toEqual(["—", "0.25", "—"]);
     expect(table).toContain('<a href="https://github.com/o/r/issues/7">');
   });

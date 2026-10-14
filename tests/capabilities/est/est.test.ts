@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "
 import {
   branchHasIssue, branchIssueNumber, branchType, calib, computeFact, EstError, extractKeptLines, factCommentBody,
   cloudPartsIn, cloudSessionsIn, descSize, fmtH, forecast, guestTranscripts, hashMatches, historyTable, inRepo, loadPins, sidKey, mergeIntervals, packPr, parseCloudFile, parseCodexFile, parseMarker, parseSessionFile, parseSince, pinnedTranscripts, plural, resolveLinks,
-  factsWithModel, parsePeriods, periodSummary, periodTable, pickAnalogs, priceFor, PRICES, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost,
+  factsWithModel, parsePeriods, periodSummary, periodTable, pickAnalogs, priceFor, PRICES, roundScale, selectPeriodSessions, selectSessions, sweepOverlapWarning, usageCost, waitKind,
 } from "../../../skills/est/scripts/est.ts";
 import type { CloudPart, FactRepo, Period, PR, Row, Session } from "../../../skills/est/scripts/est.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
@@ -81,7 +81,8 @@ describe("Факт — активные часы работы над задач�
   it("записи на ветке задачи и субагента с подсказкой считаются, паузы ≤ gap — время, токены и цена — с долей", () => {
     const s = parseSessionFile(claudeFixture());
     const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
-    expect(res.h).toBe(0.22); // 10:00 → 10:13 непрерывно
+    // 10:00 → 10:06 сессия и 10:07 → 10:08 субагент; с 10:06 сессия ждёт ввода — вставка приложения и два промпта
+    expect(res.h).toBe(0.12);
     expect(res.cov).toBe("full");
     expect(res.sessions).toBe(1);
     expect(res.prompts).toBe(3);
@@ -96,9 +97,9 @@ describe("Факт — активные часы работы над задач�
   it("общий PR на две задачи — доля ½ на записях ветки, субагент с подсказкой — целиком; в результате есть «shared»", () => {
     const s = parseSessionFile(claudeFixture());
     const res = computeFact(stubRepo([s], [pr77()], { "77": [43] }), 42, [{ ...pr77(), why: "closed the issue" }], []);
-    // 11 мин ветки × ½ + 2 мин субагента = 0.125 ч; округление как round() в Python — к чётному
-    expect(res.h).toBe(0.12);
-    expect(res.h_raw).toBe(0.22);
+    // 6 мин ветки × ½ + 1 мин субагента = 0.067 ч; без доли — 7 мин
+    expect(res.h).toBe(0.07);
+    expect(res.h_raw).toBe(0.12);
     expect(res.shared).toEqual([{ unit: "PR #77", with: [43], k: 2 }]);
   });
 
@@ -115,13 +116,135 @@ describe("Факт — активные часы работы над задач�
   });
 
   it("пауза длиннее gap не входит во время", () => {
+    // пауза кончается не вводом, а ответом модели — сон машины посреди вызова: не время задачи, хоть ввода и не ждали
     const s: Session = {
-      sid: "g", cwd: "/repo", n_human: 3, ev: [[ts("10:00"), "feat/42-x", 1, "", -1], [ts("10:10"), "feat/42-x", 0, "", -1], [ts("12:00"), "feat/42-x", 1, "", -1], [ts("12:05"), "feat/42-x", 0, "", -1]],
+      sid: "g", cwd: "/repo", n_human: 3, ev: [[ts("10:00"), "feat/42-x", 1, "", -1], [ts("10:10"), "feat/42-x", 0, "", -1], [ts("12:00"), "feat/42-x", 0, "", -1], [ts("12:05"), "feat/42-x", 0, "", -1]],
       prlinks: [], commits: [], first_refs: [42], first_urls: [], usage: [], models: [], title: "", title_refs: [], title_urls: [], n_subagents: 0, source: "claude", routine: false,
     };
     const res = computeFact(stubRepo([s], []), 42, [], [], 30);
     expect(res.h).toBe(0.25); // 10 + 5 минут, без двух часов паузы
     expect(res.wall).toBe(2.1);
+  });
+});
+
+/**
+ * Факт — всё время задачи, кроме ожидания ввода пользователя (#518): интервал до промпта человека, его команды, события
+ * приложения, сообщения координатора субагенту и до одобрения разрешения в диалоге — ожидание ввода, сколько бы ни
+ * длилось. Ожидание CI и проверок — время задачи без порога, у фоновой команды — до уведомления сессии; пауза длиннее
+ * 30 минут вне ожиданий (сон машины посреди вызова, забытый фоновый процесс) — нет. Факт делится на ожидания: CI на PR,
+ * после мержа и деплоя, локальные проверки (из них очередь slot) и остальное — чтобы их ускорять.
+ */
+describe("Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий", () => {
+  const SID = "51851851-0000-4000-8000-000000000518";
+  const at = (min: number, sec = 0) => new Date((ts("10:00") + min * 60 + sec) * 1000).toISOString();
+  const BR = "feat/42-export";
+  const rec = (type: string, min: number, content: unknown, o: Record<string, unknown> = {}) => ({ type, timestamp: at(min), cwd: "/repo", gitBranch: BR, message: { role: type, content }, ...o });
+  const human = (min: number, text: string) => rec("user", min, text, { origin: { kind: "human" } });
+  const say = (min: number, text = "работаю") => rec("assistant", min, [{ type: "text", text }]);
+  const call = (min: number, id: string, command: string, o: Record<string, unknown> = {}) => rec("assistant", min, [{ type: "tool_use", id, name: "Bash", input: { command, ...o } }]);
+  const result = (min: number, id: string, out: string, o: Record<string, unknown> = {}) => rec("user", min, [{ type: "tool_result", tool_use_id: id, content: out }], o);
+  const session = (top: unknown[], subs: unknown[][] = []) => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl(top));
+    if (subs.length) mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+    subs.forEach((recs, k) => writeFileSync(path.join(dir, SID, "subagents", `agent-${k + 1}.jsonl`), jsonl(recs)));
+    return parseSessionFile(file);
+  };
+  const fact = (s: Session) => computeFact(stubRepo([s], []), 42, [], []);
+  const WAIT_CI = "bash .agents/skills/ci-wait/scripts/wait-ci.sh";
+
+  it("интервал перед промптом пользователя в факт не входит, сколько бы он ни длился", () => {
+    // ответ за 5 мин; промпт через 10 мин — короче gap, но это ожидание; промпт через 3 ч
+    const res = fact(session([human(0, "#42 сделай экспорт"), say(5), human(15, "дальше"), say(20), human(200, "ещё"), say(205)]));
+    expect(res.h).toBe(0.25); // 3 × 5 минут работы
+    expect(res.prompts).toBe(3);
+    // команда пользователя и событие приложения — тоже ввод
+    const command = { ...human(15, "<command-name>/model</command-name>"), origin: undefined };
+    const event = { ...human(26, "<system-reminder>The user started your suggested background task</system-reminder>"), origin: undefined };
+    expect(fact(session([human(0, "#42 сделай экспорт"), say(5), command, say(16), event, say(30)])).h).toBe(0.17); // 5 + 1 + 4 мин
+  });
+
+  it("ожидание одобрения разрешения в диалоге — ожидание ввода; разрешение по правилу — время вызова", () => {
+    const res = fact(session([
+      human(0, "#42 влей PR"), call(1, "tu1", "git push"), result(20, "tu1", "pushed", { permissionDecision: { decision: "accept", source: "user_temporary" } }), say(21),
+      call(22, "tu2", "gh pr merge 77 --rebase"), result(25, "tu2", "merged", { permissionDecision: { decision: "accept", source: "config", reasonType: "rule" } }), say(26),
+    ]));
+    expect(res.h).toBe(0.12); // 1 + 1 + 1 + 3 + 1 = 7 мин: 19 мин ожидания одобрения не в счёт
+    expect(res.perm_unknown).toBe(0);
+    // транскрипт без решения о разрешении ожидания одобрения не различает: оно во времени вызова, сессия названа
+    expect(fact(session([human(0, "#42 влей PR"), call(1, "tu1", "git push"), result(20, "tu1", "pushed"), say(21)])).perm_unknown).toBe(1);
+  });
+
+  it("ожидание CI дольше 30 минут входит в факт", () => {
+    const res = fact(session([human(0, "#42 дождись CI"), call(5, "tu1", `${WAIT_CI} pr 77 --timeout 3600`), result(50, "tu1", "RESULT: PASS"), say(51)]));
+    expect(res.h).toBe(0.85); // 51 минута, из них 45 — CI
+    expect(res.waits).toMatchObject({ ci: 45, rest: 6 });
+  });
+
+  it("исполнитель диспетчера, ждущий ответа владельца, — ожидание ввода: в факт не входит", () => {
+    // исполнитель сдаёт вопрос в 10:10; ответ владельца диспетчер пересылает через SendMessage в 10:25
+    const worker = [
+      rec("user", 0, "Задача #42 в o/r: ты исполнитель сессии-диспетчера"),
+      say(10, "вопрос: …"),
+      rec("user", 25, "The coordinator sent a message while you were working: ответ владельца — (а)", { isMeta: true, origin: { kind: "coordinator" } }),
+      say(30, "влито #77"),
+    ];
+    const dispatcher = [{ ...human(0, "сделай все задачи эпика #40"), gitBranch: "main" }, { ...say(1, "запускаю исполнителя"), gitBranch: "main" }];
+    const res = fact(session(dispatcher, [worker]));
+    expect(res.h).toBe(0.25); // 10 + 5 минут: 15 минут ожидания ответа владельца не в счёт
+    expect(res.details[0]!.rules).toEqual({ subagent: 4 });
+  });
+
+  it("факт делит время на ожидание CI на PR, после мержа и деплоя, локальные проверки с очередью slot и остальное", () => {
+    const res = fact(session([
+      human(0, "#42 проверь и влей"),
+      call(2, "tu1", "bun run typecheck && bun run test"), result(8, "tu1", "slot: waiting for the machine queue — running /repo: bun test\nslot: waited 1 min 0 s\n 120 pass"),
+      call(9, "tu2", `${WAIT_CI} pr 77`), result(13, "tu2", "RESULT: PASS"),
+      call(14, "tu3", `${WAIT_CI} merged 77`), result(18, "tu3", "RESULT: PASS"),
+      say(30, "влито"),
+    ]));
+    expect(res.h).toBe(0.5);
+    const waits = { ci: 4, merged: 4, checks: 6, slot: 1, rest: 16 };
+    expect(res.waits).toEqual(waits);
+    const body = factCommentBody(res, null, [], 0, null);
+    expect(body).toContain("\nОжидания: CI 4 мин · после мержа 4 · проверки 6 (очередь slot 1) · остальное 16.");
+    expect(parseMarker(body, "fact").waits).toEqual(waits);
+    expect(factCommentBody(res, null, [], 0, null, "en")).toContain("\nWaits: CI 4 min · after the merge 4 · checks 6 (slot queue 1) · rest 16.");
+  });
+
+  it("вид ожидания — по команде: wait-ci, gh pr checks --watch, проверки и команда под slot; текст heredoc и чтение файлов — не ожидание", () => {
+    const kinds: [string, number][] = [
+      [`${WAIT_CI} pr 77 --timeout 540 2>&1 | tail -3`, 1],
+      [`GH_REPO=o/r ${WAIT_CI} status 0123abc --context Vercel`, 1],
+      ["gh pr checks 77 --watch --interval 30", 1],
+      [`${WAIT_CI} merged 77`, 2],
+      [`${WAIT_CI} issue 61 --timeout 7200`, 2],
+      ["set -o pipefail; bun run lint 2>&1 | tail -1 && bun run typecheck && bun run test:slow", 3],
+      ["pnpm --filter web test --run tests/x.test.ts", 3],
+      ["npx tsc --noEmit 2>&1 | head", 3],
+      ["bun --no-env-file skills/slot/scripts/slot.ts 'bun run spec:doc'", 3],
+      [". .agents/skills/slot/scripts/slot.sh && vitest run", 3],
+      ["cat > skills/ci-wait/SKILL.md <<'EOF'\nwait-ci.sh pr <N>\nbun run test\nEOF", 0],
+      ["head -60 skills/slot/scripts/slot.ts; cat eslint.config.js", 0],
+      ["git commit -m \"test: экспорт\"", 0],
+    ];
+    expect(kinds.map(([cmd]) => waitKind(cmd))).toEqual(kinds.map(([, k]) => k));
+  });
+
+  it("ожидание фоновой команды ci-wait до уведомления сессии — ожидание CI", () => {
+    const note = "<task-notification>\n<task-id>bci1</task-id>\n<tool-use-id>tu1</tool-use-id>\n<output-file>/nonexistent/bci1.output</output-file>\n<status>completed</status>\n<summary>Background command completed (exit code 0)</summary>\n</task-notification>";
+    const res = fact(session([
+      human(0, "#42 дождись CI"),
+      call(1, "tu1", `${WAIT_CI} pr 77 --timeout 3600`, { run_in_background: true }),
+      result(1, "tu1", "Command running in background with ID: bci1", { toolUseResult: { stdout: "", stderr: "", backgroundTaskId: "bci1" } }),
+      say(2, "жду CI в фоне"),
+      // команда кончилась в 10:41 — уведомление встало в очередь сессии, сессия взяла его секундой позже
+      { type: "queue-operation", operation: "enqueue", timestamp: at(41), content: note },
+      rec("user", 41, note, { timestamp: at(41, 1), origin: { kind: "task-notification" } }),
+      say(42, "CI зелёный"),
+    ]));
+    expect(res.h).toBe(0.7); // 42 минуты: ожидание уведомления — не ввод и не пауза
+    expect(res.waits).toMatchObject({ ci: 40, rest: 2 });
   });
 });
 
@@ -1296,12 +1419,12 @@ describe("Комментарии «Оценка» и «Факт» обновля
     const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     res.type = "feat";
     const body = factCommentBody(res, 1, ["+ вручную: 1 ч"], 1, null);
-    expect(body).toContain("Факт: 0.22 ч активных в Claude Code (оценка 1 ч, ×0.22). 1 сессия, 3 промпта, 1 субагент, стена 0.2 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.");
+    expect(body).toContain("Факт: 0.12 ч активных в Claude Code (оценка 1 ч, ×0.12). 1 сессия, 3 промпта, 1 субагент, стена 0.2 ч, покрытие full. PR #77; 1 коммит, дифф 12 строк.");
     // разбивка по моделям в скобках — только когда ценой обладают две и больше; у haiku здесь $0.00
     expect(body).toContain("Токены: 0.01 млн (вход 0 · выход 0 · запись кэша 0 · чтение кэша 0.01); стоимость по API-тарифам ≈ $0.02.\n");
     expect(body).toContain("\n+ вручную: 1 ч\n");
     const marker = parseMarker(body, "fact");
-    expect(marker.h).toBe(0.22);
+    expect(marker.h).toBe(0.12);
     expect(marker.manual).toBe(1);
     expect(marker.type).toBe("feat");
     expect(marker.prs).toEqual([77]);
@@ -1311,9 +1434,9 @@ describe("Комментарии «Оценка» и «Факт» обновля
     const s = parseSessionFile(claudeFixture());
     const res = computeFact(stubRepo([s], [pr77()]), 42, [{ ...pr77(), why: "closed the issue" }], []);
     const body = factCommentBody(res, 1, ["+ manually: 1 h"], 1, null, "en");
-    expect(body).toContain("Actual: 0.22 h active in Claude Code (estimate 1 h, ×0.22). 1 session, 3 prompts, 1 subagent, wall 0.2 h, coverage full. PR #77; 1 commit, diff 12 lines.");
+    expect(body).toContain("Actual: 0.12 h active in Claude Code (estimate 1 h, ×0.12). 1 session, 3 prompts, 1 subagent, wall 0.2 h, coverage full. PR #77; 1 commit, diff 12 lines.");
     expect(body).toContain("Tokens: 0.01 M (input 0 · output 0 · cache write 0 · cache read 0.01); cost at API rates ≈ $0.02.\n");
-    expect(parseMarker(body, "fact")).toMatchObject({ h: 0.22, manual: 1, prs: [77] });
+    expect(parseMarker(body, "fact")).toMatchObject({ h: 0.12, manual: 1, prs: [77] });
   });
 
   it("строки человека «+ manually: N h» и «Reason: …» — на любом языке словаря: язык проекта мог смениться", () => {
@@ -1939,7 +2062,7 @@ describe("Сводка периода — все сессии репозитор
     sid, cwd: "/repo", n_human: 3, ev, prlinks: [], commits: [], first_refs: [], first_urls: [], usage, models: ["claude-opus-5", "claude-haiku-4-5"],
     title: "", title_refs: [], title_urls: [], n_subagents: 0, source: "claude", routine: false, ...o,
   });
-  // задача #42: промпт, ответ, ответ субагента, пауза длиннее 30 мин, промпт и ответ — 30 мин работы
+  // задача #42: промпт и ответ — 10 мин, ответ субагента, ожидание следующего промпта (не в счёт), промпт и ответ — 10 мин
   const task = sess("s1", [
     [ts("10:00"), "feat/42-x", 1, "", -1, 0], [ts("10:10"), "feat/42-x", 0, "", 0, 0], [ts("10:20"), "feat/42-x", 0, "42", 1, 1],
     [ts("11:30"), "feat/42-x", 1, "", -1, 0], [ts("11:40"), "feat/42-x", 0, "", 2, 0],
@@ -1952,7 +2075,7 @@ describe("Сводка периода — все сессии репозитор
 
   it("сводка периода считает часы, токены и стоимость всех сессий репо, а не только привязанных к задачам", () => {
     const p = periodSummary([task, loose, outside], [merged(1, "09:00"), merged(2, "10:30"), merged(3, "11:50"), merged(4, "12:00")], ts("09:30"), ts("12:00"));
-    expect(p).toMatchObject({ sessions: 2, prs: 2, h: 50 * 60, machine: 35 * 60, tok: 6_220_000, out: 220_000, steps: 4, agents: 1, prompts: 3, unpriced: [] });
+    expect(p).toMatchObject({ sessions: 2, prs: 2, h: 40 * 60, machine: 35 * 60, tok: 6_220_000, out: 220_000, steps: 4, agents: 1, prompts: 3, unpriced: [] });
     expect(p.usd).toBeCloseTo(6.5, 9);
     expect(p.models["claude-opus-5"]).toBeCloseTo(6, 9);
     expect(p.models["claude-haiku-4-5"]).toBeCloseTo(0.5, 9);
