@@ -140,7 +140,8 @@ describe("Команда dashboard сервит страницу сама и о�
 
   it("поднимает сервер на localhost, печатает адрес и открывает его в браузере", async () => {
     const d = await start(["--repo", "o/a"]);
-    await until(() => opened() !== null);
+    // ждём адрес, а не файл: `>>` создаёт opened раньше, чем браузер пишет в него
+    await until(() => !!opened());
     expect(opened()).toBe(d.url);
     const r = await fetch(d.url);
     expect(r.status).toBe(200);
