@@ -458,7 +458,8 @@ function check(dir: string): number {
 // ----------------------------------------------------------------------------
 
 // canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts (and in skills/github/scripts/github.ts):
-// there's no shared module (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
+// no shared module: task-env imports no other skill (tests/standards/skill-imports); the tests/standards/task-branch
+// standard keeps the parsing identical
 const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
 const TASK_BRANCH_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + TASK_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 
@@ -794,7 +795,8 @@ function stackDown(root: string, task: number | undefined, env: NodeJS.ProcessEn
 }
 
 // The checkout's GitHub repository by its origin — a copy of originRepo from skills/est/scripts/est.ts and skills/github/scripts/github.ts:
-// there's no shared module (a skill is installed alone), the tests/standards/origin-repo standard keeps the parsing identical
+// no shared module: task-env imports no other skill (tests/standards/skill-imports); the tests/standards/origin-repo
+// standard keeps the parsing identical
 const ORIGIN_RE = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/\s]+@)?(?:ssh\.)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?(?:ssh\.)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
 
 /** `owner/repo` of a GitHub origin URL (host github.com or ssh.github.com, any case, with a port), otherwise null. */

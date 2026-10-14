@@ -159,7 +159,8 @@ export function usageCost(model: string, vals: [number, number, number, number, 
 // branch prefixes: <type>/<issue>-<slug> (an area prefix is allowed: <area>/<type>/<issue>-<slug>).
 export const EST_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"] as const;
 // the same copy — TASK_TYPES and TASK_BRANCH_RE in skills/github/scripts/github.ts and skills/task-env/scripts/task-env.ts:
-// there's no shared module (a skill is installed alone), the standard tests/standards/task-branch keeps the parsing identical
+// no shared module: github and task-env import no other skill (tests/standards/skill-imports); the standard
+// tests/standards/task-branch keeps the parsing identical
 const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 const PR_PAGE = 50;
 const PR_MAX = 500;
@@ -411,7 +412,8 @@ export function loadRegistry(): Registry {
 }
 
 // The checkout's GitHub repository by its origin — a copy of originRepo from skills/github/scripts/github.ts and skills/task-env/scripts/task-env.ts:
-// there's no shared module (a skill is installed alone), the tests/standards/origin-repo standard keeps the parsing identical
+// no shared module: github and task-env import no other skill (tests/standards/skill-imports); the
+// tests/standards/origin-repo standard keeps the parsing identical
 const ORIGIN_RE = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/\s]+@)?(?:ssh\.)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?(?:ssh\.)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
 
 /** `owner/repo` of a GitHub origin URL (host github.com or ssh.github.com, any case, with a port), otherwise null. */
@@ -1737,8 +1739,8 @@ export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: s
 }
 
 /**
- * The session pin: `owner/repo#N` — the task, anything else — not a pin. github has the same parse: it lives without est
- * (tests/standards/session-pin).
+ * The session pin: `owner/repo#N` — the task, anything else — not a pin. github has the same parse: it imports no other
+ * skill (tests/standards/skill-imports, tests/standards/session-pin).
  */
 export function sessionPin(text: string): { slug: string; number: number } | null {
   const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(text.trim());

@@ -1451,7 +1451,8 @@ function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "item
 
 /**
  * The personal configuration directory — `AI_DEV_CONFIG_DIR`, otherwise `~/.config/ai-dev`: one expression for all
- * scripts (the ai-dev `config-dir` standard) rather than a shared module — the skill works without its neighbor. est
+ * scripts (the ai-dev `config-dir` standard) rather than a shared module — github imports no other skill
+ * (tests/standards/skill-imports). est
  * moves the old `~/.claude/est` into the directory only while the directory doesn't exist (est.ts, `ensureConfigDir`):
  * creating it here first would leave est without its registry and prices. Before the move the configuration is the
  * old directory: the pins move along with it.
@@ -1472,8 +1473,8 @@ function pinFile(io: Io): string | null {
 }
 
 /**
- * The session pin: `owner/repo#N` — the task, anything else — not a pin. est has the same parse: github lives without est
- * (tests/standards/session-pin).
+ * The session pin: `owner/repo#N` — the task, anything else — not a pin. est has the same parse: github imports no other
+ * skill (tests/standards/skill-imports, tests/standards/session-pin).
  */
 export function sessionPin(text: string): { slug: string; number: number } | null {
   const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(text.trim());
@@ -2393,7 +2394,8 @@ export function cmdTaskResume(io: Io): number {
 }
 
 // canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts (and in skills/task-env/scripts/task-env.ts):
-// there's no shared module (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
+// no shared module: github imports no other skill (tests/standards/skill-imports); the tests/standards/task-branch
+// standard keeps the parsing identical
 const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
 const TASK_BRANCH_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + TASK_TYPES.join("|") + ")/(\\d{1,6})-", "iu");
 
@@ -2614,7 +2616,7 @@ const LEGACY_EXCEPTIONS = /^exceptions\.(ts|mts|js|mjs|json)$/;
 
 /**
  * Which decision folder's exceptions file is it? A copy of the spec skill's `exceptionFile` rule (`speclib.ts`):
- * skills are installed one by one, an import between them would break github without spec; the
+ * github imports no other skill (tests/standards/skill-imports) and works without spec; the
  * `tests/standards/exception-files` standard checks both copies against one table. The `exceptions/` directory of a
  * `tests/<kind>/<name>` folder, a `.json` file — the folder's exception; another file in the directory and a directory
  * in a subfolder — an error; `exceptions.*` in a folder or a subfolder — the former format; outside decision folders
@@ -3232,7 +3234,8 @@ const issueNumber = (s: string | undefined, what: string): number => {
 };
 
 // The checkout's GitHub repository by its origin — a copy of originRepo from skills/est/scripts/est.ts and skills/task-env/scripts/task-env.ts:
-// there's no shared module (a skill is installed alone), the tests/standards/origin-repo standard keeps the parsing identical
+// no shared module: github imports no other skill (tests/standards/skill-imports); the tests/standards/origin-repo
+// standard keeps the parsing identical
 const ORIGIN_RE = /^(?:[a-z][a-z\d+.-]*:\/\/(?:[^@/\s]+@)?(?:ssh\.)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?(?:ssh\.)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
 
 /** `owner/repo` of a GitHub origin URL (host github.com or ssh.github.com, any case, with a port), otherwise null. */
