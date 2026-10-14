@@ -181,7 +181,9 @@ describe("Фан-аут задачи — число её субагентов в
  * или субагента): соседняя запись в общем потоке у исполнителя почти всегда чужая, и его время выпадало (#490).
  * Ветка записи субагента в своём worktree — ветка этого worktree: Claude Code пишет в gitBranch ветку чужого чекаута.
  * Записи самой сессии он же пишет с веткой worktree исполнителя — такая ветка у записи в каталоге сессии нейтральна:
- * иначе время диспетчера уходило задаче исполнителя (#501).
+ * иначе время диспетчера уходило задаче исполнителя (#501). Свой worktree субагента — отдельный чекаут: коммит в его
+ * выводе и PR с его ветки, который приложение привязало к сессии, — якоря только записей этого worktree, а листинг в
+ * каталоге сессии — якорь только по коммиту, сделанному в каталоге сессии (#508).
  */
 describe("Параллельные субагенты сессии считаются каждый по своим записям", () => {
   const SID = "44444444-5555-6666-7777-888888888888";
@@ -329,6 +331,89 @@ describe("Параллельные субагенты сессии считаю�
     );
     expect([...new Set(s.ev.filter((e) => !e[5]).map((e) => e[1]))]).toEqual(["feat/41-import"]);
     expect(computeFact(stubRepo([s], []), 41, [], []).details[0]!.rules).toEqual({ branch: 3, subagent: 2 });
+  });
+
+  const bash = (min: number, cwd: string, branch: string, id: string, command: string, out: string) => [
+    rec("assistant", min, cwd, branch, [{ type: "tool_use", id, input: { command } }]),
+    rec("user", min, cwd, branch, [{ type: "tool_result", tool_use_id: id, content: out }]),
+  ];
+  const OID42 = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+  const pr42 = (): PR => ({ ...pr77(), headRefName: "fix/42-export", commits: [{ oid: OID42, at: at(5) }] });
+  const pr43 = (): PR => ({ ...pr77(), number: 78, headRefName: "docs/43-other", closing: [43], body: "Closes #43", commits: [{ oid: "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1", at: at(9) }] });
+  const ours = (p: PR) => [{ ...p, why: "closed the issue" }];
+  // gitBranch записей диспетчера — ветка worktree исполнителя #42: такие записи без ветки
+  const waiting = (repo: string, mins: number[]) => mins.map((m) => rec("assistant", m, repo, "fix/42-export", "жду исполнителей"));
+  const dispatcherTop = (repo: string, extra: unknown[] = []) => [{ ...rec("user", 0, repo, "claude/dispatcher", "сделай все задачи эпика #40"), origin: { kind: "human" } }, ...waiting(repo, [2, 4, 6, 8]), ...extra];
+  const executor42 = (wt: string, extra: unknown[] = []) => [
+    rec("user", 1, wt, "claude/dispatcher", "Задача #42 в o/r: ты исполнитель"),
+    rec("assistant", 3, wt, "claude/dispatcher", "работаю"),
+    ...bash(5, wt, "claude/dispatcher", "c42", 'git commit -m "fix: экспорт"', "[fix/42-export a1b2c3d] fix: экспорт"),
+    ...extra,
+  ];
+
+  it("коммит субагента в своём worktree не привязывает соседние по времени записи сессии к задаче этого коммита", () => {
+    const s = withWorktrees(
+      (repo) => dispatcherTop(repo, [rec("assistant", 8, repo, "claude/dispatcher", "жду исполнителей")]),
+      (repo, wt, wt2) => {
+        gitRepo(repo, { init: false }).git("worktree", "add", "-q", "-b", "worktree-agent-2", wt2);
+        return [
+          executor42(wt),
+          // субагент без задачи в задании: его время дают окна его коммитов — на ветке его worktree
+          [rec("user", 6, wt2, "fix/42-export", "проверь тесты и закоммить"), rec("assistant", 7, wt2, "fix/42-export", "работаю"), ...bash(9, wt2, "fix/42-export", "c43", 'git commit -m "docs: другое"', "[docs/43-other b2c3d4e] docs: другое")],
+        ];
+      },
+    );
+    const repo = stubRepo([s], [pr42(), pr43()]);
+    const f42 = computeFact(repo, 42, ours(pr42()), []);
+    expect(f42.details[0]!.rules).toEqual({ subagent: 4 }); // записи диспетчера 10:02 и 10:04 — не в окне коммита исполнителя
+    expect(Object.keys(f42.iv!)).toEqual(["44444444:agent-1"]);
+    const f43 = computeFact(repo, 43, ours(pr43()), []);
+    expect(f43.details[0]!.rules).toEqual({ anchor: 4 }); // 10:06–10:09 субагента; диспетчер в 10:06 и 10:08 — нет
+    expect(Object.keys(f43.iv!)).toEqual(["44444444:agent-2"]);
+    expect(f43.h).toBe(0.05);
+  });
+
+  it("хеш в листинге из каталога сессии не якорь, если коммит сделал субагент в своём worktree", () => {
+    const s = withWorktrees(
+      // диспетчер смотрит на соседей: в листинге — коммит исполнителя
+      (repo) => dispatcherTop(repo, bash(6, repo, "fix/42-export", "l0", "git worktree list", `${repo}  0a0b0c0 [claude/dispatcher]\n${repo}/.claude/worktrees/agent-1  a1b2c3d [fix/42-export]`)),
+      // листинг в том же worktree — якорь по его коммиту
+      (_repo, wt) => [executor42(wt, bash(7, wt, "claude/dispatcher", "l1", "git log --oneline -1", "a1b2c3d fix: экспорт"))],
+    );
+    expect(s.commits).toEqual([[at(5), "a1b2c3d", 1], [at(7), "a1b2c3d", 1]]);
+    expect(computeFact(stubRepo([s], [pr42()]), 42, ours(pr42()), []).details[0]!.rules).toEqual({ subagent: 6 });
+  });
+
+  it("PR с ветки worktree субагента, привязанный к сессии, не привязывает соседние по времени записи сессии к своей задаче", () => {
+    const link = (min: number, pr: number) => ({ type: "pr-link", timestamp: iso(min), prNumber: pr, prRepository: "o/r" });
+    const s = withWorktrees(
+      // приложение привязывает к диспетчеру PR, которые исполнители открыли со своих веток
+      (repo) => [...dispatcherTop(repo).slice(0, 3), link(5, 77), rec("assistant", 6, repo, "docs/43-other", "жду"), rec("assistant", 8, repo, "docs/43-other", "жду"), link(9, 78), rec("assistant", 10, repo, "docs/43-other", "жду")],
+      (_repo, wt, gone) => [
+        [rec("user", 1, wt, "claude/dispatcher", "Задача #42 в o/r: ты исполнитель"), rec("assistant", 3, wt, "claude/dispatcher", "ok"), rec("assistant", 5, wt, "claude/dispatcher", "ok"), rec("assistant", 7, wt, "claude/dispatcher", "ok")],
+        [
+          rec("user", 2, gone, "fix/42-export", "Задача #43 в o/r: ты исполнитель"),
+          // ветку своего уже убранного worktree исполнитель назвал в своём выводе
+          ...bash(3, gone, "fix/42-export", "st", "bun github.ts task status 43 --branch docs/43-other", "+ branch worktree-agent-2 → docs/43-other"),
+          rec("assistant", 7, gone, "fix/42-export", "ok"),
+          rec("assistant", 9, gone, "fix/42-export", "ok"),
+        ],
+      ],
+    );
+    expect(s.wt_branches).toEqual([["fix/42-export"], ["docs/43-other"]]);
+    const repo = stubRepo([s], [pr42(), pr43()]);
+    expect(computeFact(repo, 42, ours(pr42()), []).details[0]!.rules).toEqual({ subagent: 4 });
+    expect(computeFact(repo, 43, ours(pr43()), []).details[0]!.rules).toEqual({ subagent: 5 });
+  });
+
+  it("без перегиба: окно PR с ветки worktree субагента — записи этого worktree до PR и после него, пока ветка та же", () => {
+    // субагент без задачи в задании в уже убранном worktree (записи без ветки) и диспетчер на своей ветке вперемежку
+    const sub = (min: number) => [at(min), "", 0, "", -1, 1, 1];
+    const top = (min: number, human = 0) => [at(min), "claude/dispatcher", human, "", -1, 0];
+    const s: Session = { ...session([top(0, 1), sub(1), sub(3), top(4), sub(6), top(7), sub(8)]), prlinks: [[at(5), 77, "o/r"]], wt_branches: [["fix/42-export"]] };
+    const res = computeFact(stubRepo([s], [pr42()]), 42, ours(pr42()), []);
+    expect(res.details[0]!.rules).toEqual({ anchor: 4 }); // 10:01–10:08 субагента, хвост после PR — тоже; диспетчер — нет
+    expect(Object.keys(res.iv!)).toEqual(["44444444:1"]);
   });
 });
 
