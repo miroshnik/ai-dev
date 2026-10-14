@@ -461,6 +461,73 @@ describe("check проекта со стандартами или архитек
   });
 });
 
+// строка ○: test гоняет корни спеки, которые уже гоняет test:spec, — готовая строка test без них
+const REPEATS = (roots: string, test: string) => `  ○ package.json: test repeats test:spec — runs ${roots} a second time; put in "scripts": "test": ${JSON.stringify(test)}\n`;
+
+/**
+ * С `test:spec` стандарты и архитектура идут и в `test`, если он их не исключает: замер #470 — во всех трёх проектах с
+ * `test:spec` локальный прогон перед коммитом гонял стандарты дважды, в одном это 76 с из 142 с `test`. Это лишнее
+ * время, а не дыра в проверке: строка `○`, код выхода и признак нехватки `test:spec` прежние (#487).
+ */
+describe("check проекта с test:spec называет test, который повторяет стандарты и архитектуру", () => {
+  beforeEach(() => {
+    aiDev(sb, ["install"]);
+    decision("tests/standards/naming");
+  });
+  const withSpec = (test: string, deps: Record<string, string> = { vitest: "^4.0.0" }) =>
+    writePkg({ devDependencies: deps, scripts: { "test:spec": inSlot("vitest run tests/standards tests/architecture"), test: inSlot(test) } });
+
+  it("проект с test:spec, test — одиночный вызов раннера без корней спеки — check выводит строку ○ с готовой строкой test без них", () => {
+    decision("tests/architecture/layers");
+    withSpec("vitest run");
+    const before = snapshot(sb.proj);
+    const r = aiDev(sb, ["check"]);
+    expect(r.stdout).toContain(REPEATS("tests/standards, tests/architecture", inSlot("vitest run --exclude 'tests/standards/**' --exclude 'tests/architecture/**'")));
+    expect(snapshot(sb.proj)).toEqual(before);
+    // раннер под менеджером пакетов — тот же одиночный вызов
+    withSpec("pnpm exec vitest run");
+    expect(aiDev(sb, ["check"]).stdout).toContain(REPEATS("tests/standards, tests/architecture", inSlot("pnpm exec vitest run --exclude 'tests/standards/**' --exclude 'tests/architecture/**'")));
+  });
+
+  it("готовая строка test дописывает исключение к фильтру, который в test уже есть, и остаётся под обёрткой slot", () => {
+    const cases: [deps: Record<string, string>, test: string, line: string][] = [
+      [{ vitest: "^4.0.0" }, "vitest run --exclude '**/*.slow.test.ts'", inSlot("vitest run --exclude '**/*.slow.test.ts' --exclude 'tests/standards/**'")],
+      [{ jest: "^30.0.0" }, "jest --ci", inSlot("jest --ci --testPathIgnorePatterns=tests/standards/")],
+      [{}, "bun test --path-ignore-patterns='**/*.slow.test.ts'", inSlot("bun test --path-ignore-patterns='**/*.slow.test.ts' --path-ignore-patterns='tests/standards/**'")],
+    ];
+    for (const [deps, test, line] of cases) {
+      withSpec(test, deps);
+      expect(aiDev(sb, ["check"]).stdout).toContain(REPEATS("tests/standards", line));
+    }
+  });
+
+  it("test называет все корни спеки — строки нет", () => {
+    decision("tests/architecture/layers");
+    // называет один корень из двух — строка о другом
+    withSpec("vitest run --exclude 'tests/standards/**'");
+    expect(aiDev(sb, ["check"]).stdout).toContain(REPEATS("tests/architecture", inSlot("vitest run --exclude 'tests/standards/**' --exclude 'tests/architecture/**'")));
+    withSpec("vitest run --exclude 'tests/standards/**' --exclude 'tests/architecture/**'");
+    expect(aiDev(sb, ["check"]).stdout).not.toContain("○");
+  });
+
+  it("test не одиночный вызов раннера — turbo или цепочка команд — check молчит", () => {
+    for (const test of ["turbo run test", "vitest run && tsc --noEmit", "vitest run | tee vitest.log"]) {
+      withSpec(test);
+      const r = aiDev(sb, ["check"]);
+      expect(r.code).toBe(0);
+      expect(r.stdout).not.toContain("○");
+    }
+  });
+
+  it("строка ○ о повторе стандартов не меняет код выхода check", () => {
+    withSpec("vitest run");
+    const r = aiDev(sb, ["check"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toStartWith("ai-dev in the project: up to date");
+    expect(r.stdout).toEndWith(REPEATS("tests/standards", inSlot("vitest run --exclude 'tests/standards/**'")) + MODE_ASK);
+  });
+});
+
 describe("Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude")));
 

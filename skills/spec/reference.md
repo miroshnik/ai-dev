@@ -439,7 +439,9 @@ section "Wiring into the project's CI" below.
    `github pr premerge` runs `test:spec` before a merge on the merge with a
    fresh `main` (after `typecheck`, if there is one); the flow's `check`
    requires it once `tests/standards` or `tests/architecture` exists and names
-   both lines — `test:spec` and `test` without the same roots.
+   both lines — `test:spec` and `test` without the same roots; with
+   `test:spec` in place, a `test` that still runs them — an `○` line with
+   that `test`.
    Before `spec:doc` locally — a full run with reports (`SKILL.md`, "Reports for
    spec-doc"). In `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
    `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,

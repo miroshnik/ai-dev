@@ -31,7 +31,8 @@
  * `.claude/` directory) the install un-ignores with exceptions in an ai-dev block at the end of `.gitignore`, `check`
  * reports them as a mismatch (`gitignoreFlow`). A project's compose file `check` holds to the task isolation rules
  * with the task-env skill's command (`composeCheck`): a violation is a mismatch too, `update` doesn't fix it; so is a
- * project with standards or architecture without a `test:spec` script — `check` names the lines (`specScript`). The
+ * project with standards or architecture without a `test:spec` script — `check` names the lines (`specScript`); a
+ * `test` that runs them a second time next to `test:spec` — an `○` line with `test` without them. The
  * project's checks — the `package.json` scripts `lint`, `typecheck`, `test`, `test:*` — the install wraps in the
  * machine queue, the slot skill (`slotScripts`); if such a script calls turbo and turbo.json doesn't pass the queue
  * variables to tasks, it warns with a ready-made line (`turboEnv`).
@@ -127,11 +128,13 @@ Examples:
   check: `ai-dev check [-g]
 ai-dev check --hook
 
-Whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git ignores flow files or its
-compose file breaks task isolation, 2 — the check is unavailable; a copy is compared with the latest release, a --link
-clone — with origin/main. For a project names the mode (auto) and the language, holds the compose file to the task
-isolation rules (❌ per violation, ○ — not checked: no docker compose; the task-env skill) and warns (!) if a script in
-slot calls turbo and turbo.json doesn't pass the queue variables to tasks (the exit code stays the same); a project that
+Whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git ignores flow files, its
+compose file breaks task isolation or standards and architecture have no test:spec script, 2 — the check is
+unavailable; a copy is compared with the latest release, a --link clone — with origin/main. For a project names the
+mode (auto) and the language, holds the compose file to the task isolation rules (❌ per violation, ○ — not checked: no
+docker compose; the task-env skill), names a test that runs standards and architecture again next to test:spec (○, the
+ready test without them) and warns (!) if a script in slot calls turbo and turbo.json doesn't pass the queue variables
+to tasks (the exit code stays the same); a project that
 needs update — the update in a task of its own, not in a task session: the task new command of the github skill, one
 task per project. For the machine names the task-env proxy of *.localhost addresses — running or not, with the start
 command (with Docker on the machine; the exit code stays the same), run from the agent's Bash in Claude Code — a
@@ -1082,6 +1085,10 @@ const RUNNERS = {
  * under the wrapper (`unslot`): the roots run once, in `test:spec` (the spec skill, "Wiring into a repository").
  * `test` doesn't run them (names them already) or there is none — `test:spec` alone; `test` isn't a single runner call
  * — the exclusion in words.
+ * With `test:spec` in place, a `test` that is a single runner call and doesn't name a root runs it a second time — an
+ * `○` line with the same ready `test` (#487): extra time, not a hole in the check, so neither the exit code nor
+ * `missing`. Any other `test` (turbo, a chain) — no line: its text doesn't tell what it runs. An exclusion in the
+ * runner's config isn't seen in the text either — accepted noise: the ready line puts the exclusion in the script.
  */
 function specScript(root: string): { lines: string[]; missing: boolean } {
   const roots = specRoots(root);
@@ -1091,22 +1098,23 @@ function specScript(root: string): { lines: string[]; missing: boolean } {
   } catch {
     // no package.json or not JSON — no scripts
   }
-  if (!roots.length || pkg.scripts?.["test:spec"]) return { lines: [], missing: false };
+  if (!roots.length) return { lines: [], missing: false };
   const test = typeof pkg.scripts?.test === "string" ? unslot(pkg.scripts.test) : undefined;
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const pm = packageManager(root);
   const byTest = Object.values(RUNNERS).find((r) => test !== undefined && r.re.test(test));
-  const runner = byTest ?? ("vitest" in deps ? RUNNERS.vitest : "jest" in deps ? RUNNERS.jest : pm.name === "bun" ? RUNNERS.bun : RUNNERS.vitest);
   const wrap = existsSync(path.join(root, SLOT_TS)) ? slotWrap(pm.berry) : (cmd: string) => cmd;
-  const spec = `"test:spec": ${JSON.stringify(wrap([runner.spec, ...roots].join(" ")))}`;
-  const lead = `  ❌ package.json: no test:spec script — pr premerge doesn't run ${roots.join(", ")} on the merge with a moved main`;
   // the roots test runs too — they would run twice, in test and in test:spec
   const twice = test === undefined ? [] : roots.filter((dir) => !test.includes(dir));
-  if (test === undefined || !twice.length) return { lines: [`${lead}; add to "scripts": ${spec}`], missing: true };
   // a filter goes to a single runner call only: after `&&` or a pipe it would reach another command
-  if (!byTest || /[;&|<>`$()]/.test(test)) return { lines: [`${lead}; add to "scripts": ${spec}; exclude ${twice.join(", ")} from test with the runner's filter — they don't run twice`], missing: true };
-  const pair = `${spec}, "test": ${JSON.stringify(wrap([test, ...twice.map(runner.exclude)].join(" ")))}`;
-  return { lines: [`${lead}; put in "scripts" — test without them, they don't run twice: ${pair}`], missing: true };
+  const filtered = test !== undefined && byTest && twice.length && !/[;&|<>`$()]/.test(test) ? `"test": ${JSON.stringify(wrap([test, ...twice.map(byTest.exclude)].join(" ")))}` : undefined;
+  if (pkg.scripts?.["test:spec"]) return { lines: filtered ? [`  ○ package.json: test repeats test:spec — runs ${twice.join(", ")} a second time; put in "scripts": ${filtered}`] : [], missing: false };
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const runner = byTest ?? ("vitest" in deps ? RUNNERS.vitest : "jest" in deps ? RUNNERS.jest : pm.name === "bun" ? RUNNERS.bun : RUNNERS.vitest);
+  const spec = `"test:spec": ${JSON.stringify(wrap([runner.spec, ...roots].join(" ")))}`;
+  const lead = `  ❌ package.json: no test:spec script — pr premerge doesn't run ${roots.join(", ")} on the merge with a moved main`;
+  if (!twice.length) return { lines: [`${lead}; add to "scripts": ${spec}`], missing: true };
+  if (!filtered) return { lines: [`${lead}; add to "scripts": ${spec}; exclude ${twice.join(", ")} from test with the runner's filter — they don't run twice`], missing: true };
+  return { lines: [`${lead}; put in "scripts" — test without them, they don't run twice: ${spec}, ${filtered}`], missing: true };
 }
 
 /** The check failed: what and why. */
