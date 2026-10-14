@@ -1,8 +1,16 @@
 # A project's CI with the spec skill — workflow fragment
 
 The "Wiring into a repository" section of `SKILL.md`, item 4: pnpm
-(`packageManager` in `package.json`), Vitest in 3 shards, Playwright in 2;
-concurrency — per `docs/ci-concurrency.md`. The shards write blob reports, the
+(`packageManager` in `package.json`), standards and architecture in one
+`test-spec` job, the rest of Vitest in 3 shards, Playwright in 2;
+concurrency — per `docs/ci-concurrency.md`. `test-spec` runs the `test:spec`
+script once per run, without shards and browsers: standards and architecture
+are static checks over the code (`checks.md`); `unit` runs `test`, which
+excludes them, `e2e` — only the browser tests. The jobs call the project's
+scripts, not the runner directly: the split between `test` and `test:spec` is
+in one place, and locally the same scripts run what CI runs. The scripts are
+wrapped in `slot` under Bun (the `slot` skill; no queue in CI) — hence
+`oven-sh/setup-bun@v2` in those jobs. The jobs write blob reports, the
 `spec` job merges them with the runners' own tools and builds `docs/spec` with
 `--strict`; on `main` it hands it as an artifact to the `spec-publish` job —
 the only one with a write token (no CI on `main` — publishing on PR merge,
@@ -25,6 +33,21 @@ concurrency: # main — a run gets its own group: it doesn't wait and isn't disp
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  test-spec: # standards and architecture — once per run, no shards: green or red in a minute
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - uses: oven-sh/setup-bun@v2 # package.json checks go through slot under Bun
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:spec --reporter=default --reporter=blob --outputFile.blob=vitest-blob/spec.json
+      - uses: actions/upload-artifact@v7
+        with: { name: vitest-blob-spec, path: vitest-blob/, retention-days: 1 }
+      - uses: actions/upload-artifact@v7 # example code and exception reasons — for spec-doc
+        with: { name: spec-meta-spec, path: .spec-meta/, retention-days: 1, include-hidden-files: true }
+
   unit:
     runs-on: ubuntu-latest
     strategy:
@@ -35,9 +58,11 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
+      - uses: oven-sh/setup-bun@v2
       - run: pnpm install --frozen-lockfile
+      # test excludes standards and architecture: test-spec runs them
       - run: >-
-          pnpm exec vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
       - uses: actions/upload-artifact@v7
         with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
@@ -58,6 +83,7 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps
+      # only the browser tests: no test or test:spec step here
       - run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=dot,blob
       - uses: actions/upload-artifact@v7
         with: { name: 'playwright-blob-${{ matrix.shard }}', path: blob-report/, retention-days: 1 }
@@ -65,7 +91,7 @@ jobs:
         with: { name: 'spec-journal-e2e-${{ matrix.shard }}', path: .spec-journal/, retention-days: 1, include-hidden-files: true }
 
   spec:
-    needs: [unit, e2e]
+    needs: [test-spec, unit, e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -136,8 +162,9 @@ The `.spec-*` reports and logs are hidden files: `upload-artifact` skips them
 without `include-hidden-files: true`, and the artifact comes out empty.
 
 No Playwright — no `e2e` job, no steps for it in `spec` and no second report
-in `spec:doc`. No shards — the same steps in one job: a run with JSON reports,
-`spec:doc`, the artifact on `main`; `spec-publish` stays separate as well.
+in `spec:doc`. No shards — `unit` without the matrix; `test-spec` stays a job
+of its own: it doesn't wait for the long branch, and a broken standard is
+visible in a minute. `spec-publish` stays separate as well.
 ai-dev itself runs on Bun — its `.github/workflows/ci.yml` is no model for a
 project on Node.
 

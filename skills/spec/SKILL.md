@@ -554,10 +554,14 @@ locally matches CI. Why a copy and not a submodule, a checkout in the workflow o
    "spec:publish": "bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts",
    "spec:claims": "bun --no-env-file .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
    ```
-   Fast checks — the `test:spec` script of the project's runner, standards and
-   architecture (`"test:spec": "vitest run tests/standards tests/architecture"`):
-   `github pr premerge` runs it before a merge on the merge with a fresh
-   `main` (after `typecheck`, if there is one).
+   Standards and architecture run once — the `test:spec` script, a fast CI job
+   of its own; `test` excludes them, e2e doesn't run them (`checks.md`):
+   ```json
+   "test": "vitest run --exclude 'tests/standards/**' --exclude 'tests/architecture/**'",
+   "test:spec": "vitest run tests/standards tests/architecture"
+   ```
+   `github pr premerge` runs `test:spec` before a merge on the merge with a
+   fresh `main` (after `typecheck`, if there is one).
    Before `spec:doc` locally — a full run with reports (section "Reports for
    spec-doc"). In `.gitignore`: `docs/spec/`, `.spec-*.json`, `.spec-*.xml`,
    `.spec-meta/`, `.spec-journal/`, `vitest-blob/`, `blob-report/`,
