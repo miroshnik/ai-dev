@@ -310,6 +310,7 @@
       "harnessNote": "_Harness tests — from the report; base — branch {branch} (source {source}{gap})._",
       "harnessGap": " older than the diff base {sha}: the lists may contain tests of PRs merged between them",
       "noSpecBase": "_Harness tests: branch {branch} has no tests.json for the base — a diff by sources, harness tests aren't visible in it._",
+      "partialReport": "⚠️ **Incomplete report:** it has no harness tests from {folders} — their tests weren't compared ({n} in branch {branch}) and aren't in «{removed}»; the full diff — with the report of a run of all tests.",
       "modelModule": "module {module}",
       "modelDependency": "dependency {from} → {to}",
       "modelPackage": "package {package} of module {module}",

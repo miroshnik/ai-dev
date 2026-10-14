@@ -345,6 +345,7 @@ interface SpecNames {
     harnessNote: string;
     harnessGap: string;
     noSpecBase: string;
+    partialReport: string;
     modelModule: string;
     modelDependency: string;
     modelPackage: string;

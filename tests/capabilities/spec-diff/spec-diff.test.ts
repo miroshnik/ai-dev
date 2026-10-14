@@ -790,6 +790,38 @@ describe("Тесты харнесса — в диффе спеки: назван
     expect(r.stdout).toContain(`\n\n_Тесты харнесса — по отчёту; база — ветка spec (исходник ${base.slice(0, 12)})._\n`);
   });
 
+  // отчёт прогона одной папки (`bun test tests/standards/<папка>`): тестов харнесса остальных папок в нём нет, а ветка
+  // spec их знает — без пометки они шли бы «удалёнными» (#486); снятой проверку делает исходник головы без её вызова
+  it("отчёт без тестов харнесса папки, чьи проверки есть в исходниках, — не удаление, а пометка о неполном отчёте", () => {
+    const NAMING = "tests/standards/naming/naming.test.ts";
+    const LEGACY = "tests/standards/legacy/legacy.test.ts";
+    const naming = ts(`import { examples } from "../../../harness.ts";\nexamples(it, { rule: "id-length", bad: [] });`);
+    const base = repo.commit({ [STD]: registry, [NAMING]: naming, [LEGACY]: registry });
+    publishSpec(base, [
+      t("a пишет аудит"),
+      t("b пишет аудит"),
+      { path: NAMING, describes: [], name: "нельзя: x" },
+      { path: LEGACY, describes: [], name: "старое пишет аудит" },
+    ]);
+    repo.commit({ [STD]: registry + "// реестр сменился\n", [LEGACY]: null });
+    report(["a пишет аудит"]);
+    const r = diffFrom(base, "--report", "r.json", "--spec-branch", "spec");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(
+      [
+        `_Тесты харнесса — по отчёту; база — ветка spec (исходник ${base.slice(0, 12)})._`,
+        "",
+        "⚠️ **Отчёт неполный:** в нём нет тестов харнесса из `tests/standards/naming` — их тесты не сравнивались (1 в ветке spec) и в «Удалены» не попали; полный дифф — с отчётом прогона всех тестов.",
+      ].join("\n"),
+    );
+    // файл папки audit в отчёте есть — снятый элемент реестра удалён; вызова в legacy больше нет — её тесты удалены
+    expect(r.stdout).toContain("**Удалены (2):**\n\n- `tests/standards/audit` · b пишет аудит\n- `tests/standards/legacy` · старое пишет аудит\n");
+    expect(r.stdout).not.toContain("нельзя: x");
+    const j = JSON.parse(diffFrom(base, "--report", "r.json", "--spec-branch", "spec", "--json").stdout);
+    expect(j.unreported).toEqual([{ file: NAMING, folder: "tests/standards/naming", describes: [], name: "нельзя: x" }]);
+    expect(j.removed.map((x: { name: string }) => x.name)).toEqual(["b пишет аудит", "старое пишет аудит"]);
+  });
+
   // публикация на мерж отставшего PR пропускается: ближайшая публикация-предок — до чужих PR, влитых после неё
   it("публикация в ветке spec старше базы диффа — под «База» названы оба коммита и сказано, что в списках возможны тесты уже влитых PR", () => {
     const published = repo.commit({ [STD]: registry });
