@@ -125,9 +125,9 @@ function waitCommit(polls: Poll[], args: string[] = []) {
   return ciWait(["status", SHA, ...args]);
 }
 
-/** PR: на каждый опрос — `mergeable` (по умолчанию true) и чеки его головы. */
-function waitPr(polls: (Poll & { mergeable?: boolean | null })[], args: string[] = []) {
-  write("pull", polls.map((p) => ({ head: { sha: HEAD }, base: { ref: "main" }, mergeable: p.mergeable === undefined ? true : p.mergeable })));
+/** PR: на каждый опрос — `mergeable` (по умолчанию true), SHA головы (по умолчанию HEAD) и чеки его головы. */
+function waitPr(polls: (Poll & { mergeable?: boolean | null; head?: string })[], args: string[] = []) {
+  write("pull", polls.map((p) => ({ head: { sha: p.head ?? HEAD }, base: { ref: "main" }, mergeable: p.mergeable === undefined ? true : p.mergeable })));
   writeChecks(polls);
   return ciWait(["pr", "1", ...args]);
 }
@@ -359,11 +359,32 @@ describe("Разовый сбой API до начала опроса — пов�
   });
 });
 
+/**
+ * Сразу после force-push GitHub ещё отдаёт `mergeable: false` прежней головы (#472): её конфликт с `main` и был причиной
+ * ребейза, а у новой головы конфликта нет и CI на ней уже идёт. Конфликт — только подтверждённый повторным опросом той же
+ * головы.
+ */
 describe("PR с конфликтом с базой не ждут — CI на нём не запустится", () => {
-  it("PR с конфликтом с базой — ERROR сразу: CI на нём не запустится", () => {
+  const pulls = () => calls().filter((c) => c === "repos/{owner}/{repo}/pulls/1").length;
+
+  it("конфликт текущей головы с базой — ERROR, как только повторный опрос той же головы его подтвердил", () => {
     const r = waitPr([{ mergeable: false, statuses: [status("preview", "pending")] }]);
     expect(r.code).toBe(3);
     expect(r.result).toStartWith("ERROR conflict with base main");
+    expect(pulls()).toBe(2);
+  });
+
+  it("сразу после force-push устаревший mergeable=false прежней головы — ожидание, а не ERROR", () => {
+    const tests = run("tests", "in_progress");
+    const r = waitPr([{ mergeable: false, runs: [tests] }, { runs: [tests] }, { runs: [ok("tests")] }]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
+    expect(r.stdout).toContain("waiting: conflict with base main: rechecking, tests");
+  });
+
+  // сторож от перекоррекции: два `false` подряд без сверки головы дали бы ERROR
+  it("mergeable=false прежней головы не подтверждает конфликт новой", () => {
+    const r = waitPr([{ mergeable: false, head: SHA }, { mergeable: false }, { runs: [ok("tests")] }]);
+    expect([r.code, r.result]).toEqual([0, "PASS (1 checks)"]);
   });
 
   it("mergeable ещё не вычислен — ожидание, а не ERROR", () => {
