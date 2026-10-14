@@ -17,7 +17,7 @@
  *   github task actualize — after the merge, in parallel with the deploy: the epic refresh's mechanics and the
  *                          subagent's prompt (or "not needed"); --assignment — the subagent's whole assignment
  *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the task's
- *                          stacks (task-env) and the merged branch removed
+ *                          stacks (task-env) and the task's merged branches removed
  *   github task queue    — the dispatcher session's ready tasks with the prompts of their executors (subagents);
  *                          --assignment — an executor's whole assignment
  *   github pr labels     — decision labels for the task from "Closes #N" by the PR diff, for its epic — the union
@@ -2332,7 +2332,12 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   if (!checkoutOf(originUrl(io), slug)) io.out(`○ ${o.git ? "branches and task stacks" : "task stacks"} left alone: the current directory is not a checkout of ${slug}`);
   else {
     takeDownStacks(io, number);
-    if (o.git) cleanupBranch(io, slug, number, merged[0] ?? null);
+    if (o.git) {
+      // a follow-up fix to a merged PR is the same task, and GitHub doesn't link it (Refs, not Closes): the branches are
+      // those of every merged PR of the task — the linked ones and the ones found by the branch or «Closes #N»
+      const more = (found ?? unlinkedPrs(io, slug, number)).prs.filter((p) => p.merged && !merged.some((x) => x.number === p.number));
+      cleanupBranches(io, number, [...merged, ...more]);
+    }
   }
   // three lines — in the project language: dashboard parses them
   io.out(
@@ -2537,35 +2542,47 @@ function closeMilestone(io: Io, slug: string, issue: Issue, wasOpen: boolean): v
 }
 
 /**
- * Merged branches go away (SKILL.md, "Git, PRs and merging — mechanics", the "Right after a PR merge" item): the
- * checkout moves from the task branch to origin/<base> detached, the local and remote branches are deleted. "Merged" —
- * the PR is merged, without a PR — `git cherry`; not merged or someone else's — left alone. That the directory is the
- * repository's checkout, the caller checks.
+ * Merged branches go away (SKILL.md, "Git, PRs and merging — mechanics", the "Right after a PR merge" item): the branch
+ * of each merged PR of the task — a task may have two, its PR and a follow-up fix to it (#473) — and the checkout's task
+ * branch; the checkout moves off a removed branch to origin/<base> detached, the local and remote branches are deleted.
+ * "Merged" — the PR is merged; a branch without a merged PR — `git cherry`: another merged PR of the task doesn't make
+ * it merged. Not merged or someone else's — left alone. That the directory is the repository's checkout, the caller
+ * checks.
  */
-function cleanupBranch(io: Io, slug: string, number: number, pr: { head: string; base: string } | null): void {
+function cleanupBranches(io: Io, number: number, prs: { head: string; base: string }[]): void {
   const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd);
-  const base = pr?.base || "main";
   const current = git("branch", "--show-current").stdout.trim();
-  const isTask = (b: string) => b === pr?.head || isTaskBranch(b, number);
-  const branch = current && isTask(current) ? current : (pr?.head ?? "");
-  if (!branch) return io.out("○ the task branch not found — branches left alone");
+  // a merged branch → the base it went into: each merged PR's head once
+  const merged = new Map<string, string>();
+  for (const p of prs) if (p.head && !merged.has(p.head)) merged.set(p.head, p.base || "main");
+  const loose = current && !merged.has(current) && isTaskBranch(current, number) ? current : "";
+  if (!merged.size && !loose) return io.out("○ the task branch not found — branches left alone");
   git("fetch", "--prune", "origin");
-  const local = git("branch", "--list", branch).stdout.trim() !== "";
-  const cherry = pr || !local ? null : git("cherry", `origin/${base}`, branch);
-  if (cherry && (cherry.status !== 0 || cherry.stdout.split("\n").some((l) => l.startsWith("+")))) return io.out(`○ branch ${branch} is not merged into origin/${base} — left alone`);
-  if (current === branch) {
-    const sw = git("switch", "--detach", `origin/${base}`);
-    if (sw.status !== 0) return io.out(`! git switch --detach origin/${base}: ${sw.stderr.trim()}`);
-    io.out(`+ checkout — on origin/${base} (detached)`);
+  if (loose) {
+    const base = prs[0]?.base || "main";
+    const cherry = git("cherry", `origin/${base}`, loose);
+    if (cherry.status !== 0 || cherry.stdout.split("\n").some((l) => l.startsWith("+"))) io.out(`○ branch ${loose} is not merged into origin/${base} — left alone`);
+    else merged.set(loose, base);
   }
-  if (local) {
-    const d = git("branch", "-D", branch);
-    io.out(d.status === 0 ? `+ local branch ${branch} deleted` : `! git branch -D ${branch}: ${d.stderr.trim()}`);
+  if (!merged.size) return;
+  for (const [branch, base] of merged) {
+    if (current === branch) {
+      const sw = git("switch", "--detach", `origin/${base}`);
+      if (sw.status !== 0) {
+        io.out(`! git switch --detach origin/${base}: ${sw.stderr.trim()}`);
+        continue;
+      }
+      io.out(`+ checkout — on origin/${base} (detached)`);
+    }
+    if (git("branch", "--list", branch).stdout.trim()) {
+      const d = git("branch", "-D", branch);
+      io.out(d.status === 0 ? `+ local branch ${branch} deleted` : `! git branch -D ${branch}: ${d.stderr.trim()}`);
+    }
+    if (git("ls-remote", "--heads", "origin", branch).stdout.trim()) {
+      const d = git("push", "origin", "--delete", branch);
+      io.out(d.status === 0 ? `+ remote branch ${branch} deleted` : `! git push origin --delete ${branch}: ${d.stderr.trim()}`);
+    } else io.out(`○ remote branch ${branch} is already gone`);
   }
-  if (git("ls-remote", "--heads", "origin", branch).stdout.trim()) {
-    const d = git("push", "origin", "--delete", branch);
-    io.out(d.status === 0 ? `+ remote branch ${branch} deleted` : `! git push origin --delete ${branch}: ${d.stderr.trim()}`);
-  } else io.out(`○ remote branch ${branch} is already gone`);
   const top = git("rev-parse", "--show-toplevel").stdout.trim();
   const common = git("rev-parse", "--git-common-dir").stdout.trim();
   if (top && common && path.resolve(io.cwd ?? process.cwd(), common) !== path.join(top, ".git")) io.out(`Next: remove worktree ${top} from the main checkout: git worktree remove ${top}`);
@@ -3166,7 +3183,7 @@ Examples:
   "task close": `github task close <N> [--no-git] [--repo owner/repo]
 
 After the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write), Status Done, the
-epic and the milestone, the task's stacks taken down with their volumes (task-env down), the merged branch removed
+epic and the milestone, the task's stacks taken down with their volumes (task-env down), the merged branches removed
 (--no-git — without git). Docker and gh don't work in an agent's sandbox — run it outside.
 
 Examples:
