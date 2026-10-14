@@ -450,15 +450,27 @@ function installSkills(src: string, root: string, linkMode: boolean, claude: boo
 }
 
 /**
- * The machine queue script in the project's flow copy: package.json scripts call it, in CI too (there — at once,
- * without a queue).
+ * The machine queue in the project's flow copy: a package.json script sources it before its command, in CI too (there
+ * the command goes at once, without a queue).
  */
-const SLOT_SCRIPT = ".agents/skills/slot/scripts/slot.ts";
+const SLOT_SH = ".agents/skills/slot/scripts/slot.sh";
+/** The queue script itself: slot.sh calls it, and on Yarn 2+ a script passes it the command as a string. */
+const SLOT_TS = ".agents/skills/slot/scripts/slot.ts";
+/** A package.json script wrapped in slot: `. SLOT_SH && <command>`. */
+const SLOT_WRAPPED = /^\. \.agents\/skills\/slot\/scripts\/slot\.sh && ([^]*)$/;
 /**
- * A package.json script already wrapped in slot (by any runtime — a previous install wrapped with node too; with Bun's
- * env files too — a previous install wrapped without `--no-env-file`).
+ * A script a previous install wrapped: the command a string argument of slot.ts — tools that read package.json scripts
+ * (knip) don't see it; by any runtime — node too; with Bun's env files too — without `--no-env-file`.
  */
-const SLOT_WRAPPED = /^(?:node|bun)(?: --no-env-file)? \.agents\/skills\/slot\/scripts\/slot\.ts '((?:[^']|'\\'')*)'$/;
+const SLOT_STRING = /^(?:node|bun)(?: --no-env-file)? \.agents\/skills\/slot\/scripts\/slot\.ts '((?:[^']|'\\'')*)'$/;
+/** The script's own command, without the slot wrapper of any install. */
+const unslot = (cmd: string) => SLOT_WRAPPED.exec(cmd)?.[1] ?? SLOT_STRING.exec(cmd)?.[1]?.replaceAll("'\\''", "'") ?? cmd;
+/**
+ * Yarn 2+ runs package.json scripts in its own shell (`@yarnpkg/shell`) — without `.`, `eval` and `export`, slot.sh
+ * can't be sourced there: the command stays a string argument of slot.ts, hidden from knip, but in the queue.
+ */
+const yarnShell = (root: string, pkg: { packageManager?: unknown }) =>
+  existsSync(path.join(root, ".yarnrc.yml")) || /^yarn@(?!1\.)\d/.test(String(pkg.packageManager ?? ""));
 /**
  * Check scripts that go through the machine queue: `lint`, `typecheck`, `test`, `test:*`. Not `build` — hosting and
  * Docker run it, where the skill's copy may be missing; not watch — long-running, it would hold a slot for long.
@@ -467,12 +479,13 @@ const slotted = (name: string) => /^(?:lint|typecheck|test)$|^test:/.test(name) 
 
 /**
  * The project's checks — through the machine queue (the slot skill): `slotted` scripts in the root package.json are
- * wrapped in `bun --no-env-file SLOT_SCRIPT '<command>'` — any agent and human call them; Bun is the flow's only
- * runtime, in a project on Node too (a previous install wrapped such a project with node — rewritten). Without
- * `--no-env-file` Bun would load the project's `.env`, `.env.local` into slot, and slot would pass them to the command
- * — production keys reaching the test runner (tests/standards/no-env-file); a wrapper without the flag is rewritten.
- * The indentation and the trailing newline stay as they were. The slot skill isn't installed (someone else's directory
- * with the same name) — left alone.
+ * wrapped in `. SLOT_SH && <command>` — any agent and human call them. The script's shell sources slot.sh: it holds the
+ * slot and gets the queue variables, the command stays a plain command of the script — knip sees its binary, and
+ * `bun test` gives knip the test files and `preload` as entries; the command gets exactly the environment it would
+ * without the wrapper, no env files of Bun. A wrapper of a previous install — the command a string argument of
+ * slot.ts, hidden from knip — is rewritten; on Yarn 2+ that is the wrapper (`yarnShell`). The indentation and the
+ * trailing newline stay as they were. The slot skill isn't installed (someone else's directory with the same name) —
+ * left alone.
  * @param skills installed skills
  * @returns package.json changed
  */
@@ -480,7 +493,7 @@ function slotScripts(root: string, skills: string[]) {
   const file = path.join(root, "package.json");
   if (!skills.includes("slot") || !existsSync(file)) return false;
   const text = readFileSync(file, "utf8");
-  let pkg: { scripts?: Record<string, unknown> };
+  let pkg: { scripts?: Record<string, unknown>; packageManager?: unknown };
   try {
     pkg = JSON.parse(text);
   } catch {
@@ -488,18 +501,21 @@ function slotScripts(root: string, skills: string[]) {
   }
   const scripts = pkg.scripts;
   if (!scripts || typeof scripts !== "object") return false;
+  const yarn = yarnShell(root, pkg);
+  const wrap = (cmd: string) => (yarn ? `bun --no-env-file ${SLOT_TS} '${cmd.replaceAll("'", "'\\''")}'` : `. ${SLOT_SH} && ${cmd}`);
   const outside: string[] = [];
-  const envFiles: string[] = [];
+  const previous: string[] = [];
   for (const [name, cmd] of Object.entries(scripts)) {
     if (!slotted(name) || typeof cmd !== "string") continue;
-    const inner = SLOT_WRAPPED.exec(cmd)?.[1]?.replaceAll("'\\''", "'");
-    const want = `bun --no-env-file ${SLOT_SCRIPT} '${(inner ?? cmd).replaceAll("'", "'\\''")}'`;
-    if (cmd !== want) (scripts[name] = want), (inner === undefined ? outside : envFiles).push(name);
+    const inner = unslot(cmd);
+    const want = wrap(inner);
+    if (cmd !== want) (scripts[name] = want), (inner === cmd ? outside : previous).push(name);
   }
-  const wrapped = [...outside, ...envFiles];
+  const wrapped = [...outside, ...previous];
   if (!wrapped.length) return false;
   if (dry) {
-    const notes = [outside.length && `checks outside the slot queue: ${outside.join(", ")}`, envFiles.length && `the slot wrapper without --no-env-file — the command gets the project's env files: ${envFiles.join(", ")}`];
+    const why = yarn ? "" : " — knip doesn't see the command";
+    const notes = [outside.length && `checks outside the slot queue: ${outside.join(", ")}`, previous.length && `the slot wrapper of a previous install${why}: ${previous.join(", ")}`];
     return change("~", file, { note: notes.filter(Boolean).join("; ") }), false;
   }
   const indent = /^([ \t]+)"/m.exec(text)?.[1] ?? 2;
@@ -548,7 +564,7 @@ function turboEnv(root: string) {
     return;
   }
   if (!scripts || typeof scripts !== "object") return;
-  const cmds = Object.entries(scripts).flatMap(([name, cmd]) => (slotted(name) && typeof cmd === "string" ? [SLOT_WRAPPED.exec(cmd)?.[1] ?? cmd] : []));
+  const cmds = Object.entries(scripts).flatMap(([name, cmd]) => (slotted(name) && typeof cmd === "string" ? [unslot(cmd)] : []));
   if (!cmds.some((cmd) => TURBO.test(cmd) && !/--env-mode[= ]loose\b/.test(cmd))) return;
   const name = ["turbo.json", "turbo.jsonc"].find((f) => existsSync(path.join(root, f)));
   if (!name) return;

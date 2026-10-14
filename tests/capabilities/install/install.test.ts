@@ -293,9 +293,11 @@ describe("Проверки проекта идут очередью машины
   };
   const pkgFile = () => path.join(proj, "package.json");
   const scripts = () => JSON.parse(read(pkgFile())).scripts;
-  const slot = (cmd: string) => `bun --no-env-file .agents/skills/slot/scripts/slot.ts '${cmd}'`;
+  const slot = (cmd: string) => `. .agents/skills/slot/scripts/slot.sh && ${cmd}`;
+  /** Обёртка прошлых установок: команда — строкой-аргументом slot.ts. */
+  const slotString = (cmd: string, runtime = "bun --no-env-file") => `${runtime} .agents/skills/slot/scripts/slot.ts '${cmd}'`;
 
-  it("установка оборачивает lint, typecheck, test и test:* в slot без env-файлов проекта, build и watch — нет", () => {
+  it("установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет", () => {
     writeTree(proj, { "package.json": JSON.stringify({ name: "app", scripts: SCRIPTS }, null, 2) + "\n" });
     const r = install();
     expect(r.code).toBe(0);
@@ -319,9 +321,9 @@ describe("Проверки проекта идут очередью машины
   });
 
   /**
-   * Bun сам подгружает env-файлы рабочего каталога, а slot передаёт своё окружение команде: прод-ключи `.env.local`
-   * дошли бы до раннера тестов, который без обёртки их не видел (tests/standards/no-env-file). Окружение песочницы — без
-   * `CI`: команда идёт через слот, очередь — в её домашнем каталоге.
+   * Bun сам подгружает env-файлы рабочего каталога: прод-ключи `.env.local` не должны дойти через slot до раннера
+   * тестов, который без обёртки их не видел (tests/standards/no-env-file). Окружение песочницы — без `CI`: команда идёт
+   * через слот, очередь — в её домашнем каталоге.
    */
   it("команда под slot не видит ключей env-файлов рабочего каталога", () => {
     writeTree(proj, {
@@ -344,25 +346,75 @@ describe("Проверки проекта идут очередью машины
     expect(read(pkgFile())).toBe(once);
   });
 
-  /** Bun — единственный рантайм флоу: прошлая установка оборачивала проект на Node через node — update это переписывает. */
-  it("slot — через bun в любом проекте: обёрнутый через node скрипт переписывается на bun, команда та же", () => {
-    writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: "node .agents/skills/slot/scripts/slot.ts 'vitest run'", lint: "eslint ." } }) });
+  /**
+   * Прошлые установки передавали команду slot.ts строкой — через node в проекте на Node, через bun без отключения
+   * env-файлов, через bun с ним: knip такую команду не видит.
+   */
+  it("обёртка прошлой установки — команда строкой у slot.ts через node или bun — переписывается, команда та же", () => {
+    const quoted = `printf '%s' "it's"`;
+    writeTree(proj, {
+      "package.json": JSON.stringify({
+        scripts: { test: slotString("vitest run", "node"), lint: slotString("eslint .", "bun"), typecheck: slotString(quoted.replaceAll("'", "'\\''")) },
+      }),
+    });
     install();
-    expect(scripts()).toEqual({ test: slot("vitest run"), lint: slot("eslint .") });
+    expect(scripts()).toEqual({ test: slot("vitest run"), lint: slot("eslint ."), typecheck: slot(quoted) });
   });
 
-  it("check называет обёртку slot без отключения env-файлов несоответствием, update ставит отключение", () => {
+  /**
+   * Yarn 2+ выполняет скрипты своим shell (`@yarnpkg/shell`): в нём нет `.`, `eval` и `export`, и подключить slot.sh
+   * нечем. Там команда остаётся строкой у slot.ts — knip её не видит, но проверки идут очередью.
+   */
+  it("в проекте на Yarn 2+ команда остаётся строкой у slot.ts: shell Yarn не подключает slot.sh", () => {
+    const markers: [Record<string, string>, string?][] = [[{ ".yarnrc.yml": "nodeLinker: node-modules\n" }], [{}, "yarn@4.9.1"]];
+    for (const [files, packageManager] of markers) {
+      rmSync(path.join(proj, ".yarnrc.yml"), { force: true });
+      writeTree(proj, { ...files, "package.json": JSON.stringify({ packageManager, scripts: { test: "vitest run", lint: slot("eslint .") } }) });
+      install();
+      expect(scripts()).toEqual({ test: slotString("vitest run"), lint: slotString("eslint .") });
+      expect(aiDev(sb, ["check"]).code).toBe(0);
+    }
+    writeTree(proj, { "package.json": JSON.stringify({ packageManager: "yarn@1.22.22", scripts: { test: "vitest run" } }) });
+    install();
+    expect(scripts()).toEqual({ test: slot("vitest run") });
+  });
+
+  it("check называет обёртку прошлой установки несоответствием, update переписывает её", () => {
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "vitest run" } }) });
     install();
-    writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: "bun .agents/skills/slot/scripts/slot.ts 'vitest run'" } }) });
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: slotString("vitest run") } }) });
     const c = aiDev(sb, ["check"]);
     expect(c.code).toBe(1);
-    expect(c.stdout).toMatch(/~ package\.json — [^\n]*without --no-env-file[^\n]*\btest\b/);
+    expect(c.stdout).toMatch(/~ package\.json — [^\n]*previous install[^\n]*\btest\b/);
     expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
     const u = aiDev(sb, ["update"]);
     expect(u.code).toBe(0);
     expect(scripts()).toEqual({ lint: slot("eslint ."), test: slot("vitest run") });
     expect(aiDev(sb, ["check"]).code).toBe(0);
+  });
+
+  /**
+   * knip разбирает скрипты package.json: по скрипту `bun test` плагин Bun берёт входами файлы тестов и `preload` из
+   * bunfig.toml, по бинарнику команды зависимость считается использованной. Команду строкой-аргументом knip не видел —
+   * deadCode проекта краснел от установки флоу, а не от кода. knip — настоящий, из devDependencies ai-dev, под node.
+   */
+  it("после установки флоу knip видит команды обёрнутых скриптов: тесты bun test и preload — входы, бинарник команды — использованная зависимость", () => {
+    writeTree(proj, {
+      "package.json": JSON.stringify({ name: "app", private: true, type: "module", scripts: { lint: "eslint .", test: "bun test" }, devDependencies: { eslint: "^10.0.0", knip: "^6.41.0" } }),
+      "bunfig.toml": '[test]\npreload = ["./tests/lib/setup.ts"]\n',
+      "knip.json": JSON.stringify({ project: ["src/**/*.ts", "tests/**/*.ts"] }),
+      "src/index.ts": "export const sum = (a: number, b: number): number => a + b;\n",
+      "tests/sum.test.ts": 'import { expect, it } from "bun:test";\nimport { sum } from "../src/index.ts";\n\nit("сумма", () => expect(sum(1, 2)).toBe(3));\n',
+      "tests/lib/setup.ts": 'process.env.TZ = "UTC";\n',
+      "node_modules/eslint/package.json": JSON.stringify({ name: "eslint", version: "10.0.0", bin: { eslint: "bin/eslint.js" } }),
+      "node_modules/eslint/bin/eslint.js": "",
+    });
+    symlinkSync(path.join(REPO, "node_modules/knip"), path.join(proj, "node_modules/knip"));
+    symlinkSync(execFileSync("sh", ["-c", "command -v node"], { encoding: "utf8" }).trim(), path.join(sb.bin, "node"));
+    expect(install().code).toBe(0);
+    expect(scripts()).toMatchObject({ lint: slot("eslint ."), test: slot("bun test") });
+    const knip = spawnSync("node", ["node_modules/knip/bin/knip.js", "--no-progress"], { cwd: proj, env, encoding: "utf8" });
+    expect({ code: knip.status, out: knip.stdout + knip.stderr }).toEqual({ code: 0, out: "" });
   });
 
   it("check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json", () => {
