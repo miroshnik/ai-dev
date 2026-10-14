@@ -177,6 +177,15 @@ project language and parse the names of any language there.
   one-sentence refusal and the chip again. My own regression and a fix for a
   green PR are the same task. An epic's session plans and hands out work and
   doesn't take In progress.
+- **A dispatcher session** — "do all tasks of epic #M", "fix all High bugs":
+  it takes no task; `github task queue` (the epic or filters) lists the
+  ready ones in order with an executor's prompt each; an executor is a
+  background subagent in its own worktree, at most 3 at once (`slot`; a
+  number in the request replaces it). After each answer — the queue again:
+  new tasks get in; a question — to the owner, the answer into the issue and
+  back to that executor; failed — a comment in the task, no restart. Queue
+  empty, nothing running — the summary and the last line. Named by meaning,
+  without a number.
 - **The session is named `#<number> <task title>`** — the issue title with
   the number in front: `#42 Billing · Export invoices to PDF`. I rename it
   myself as soon as the task is clear (no tool — ask the user): `est` links

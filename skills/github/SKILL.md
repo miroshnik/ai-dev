@@ -1,6 +1,6 @@
 ---
 name: github
-description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task show` prints a task with its epic, blockers, PR checks and questions in one output (not `gh issue view`), `task answer` puts ✅ and the answer at a question (not `gh issue edit`); `task status`, `task drop`; `task actualize` does the epic refresh's mechanics and prints the subagent's prompt right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, reading, finishing, reopening or cancelling a task; an answer to a task's question; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
+description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task show` prints a task with its epic, blockers, PR checks and questions in one output (not `gh issue view`), `task answer` puts ✅ and the answer at a question (not `gh issue edit`); `task status`, `task drop`; `task actualize` does the epic refresh's mechanics and prints the subagent's prompt right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `task queue` — a dispatcher session's ready tasks for executor subagents; `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, reading, finishing, reopening or cancelling a task; an answer to a task's question; "do all tasks of epic #M", "fix all High bugs"; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
 allowed-tools: Bash(bun *skills/github/scripts/github.ts *) Bash(git remote get-url *)
 ---
 
@@ -209,6 +209,8 @@ bun --no-env-file <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
 bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the epic refresh's mechanics and the subagent's prompt
 bun --no-env-file <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
 bun --no-env-file <skill dir>/scripts/github.ts task resume                       # the session's task after a restart: which wait to restart
+bun --no-env-file <skill dir>/scripts/github.ts task queue [--epic N] [--type Task|Bug] [--priority Urgent,High]   # the dispatcher's ready tasks and executor prompts
+bun --no-env-file <skill dir>/scripts/github.ts task queue --assignment <N>       # an executor's whole assignment (its first call)
 bun --no-env-file <skill dir>/scripts/github.ts pr labels <PR>                 # decision labels from the PR diff
 bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               # before the merge: the merge with a fresh default branch
 ```
@@ -221,6 +223,7 @@ bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               #
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed two-line prompt; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Session resumed after the app restarted | the `SessionStart` hook runs `task resume` itself — its line is in the context: run the named command, a background wait died with the process |
+| "Do all tasks of epic #M", "fix all High bugs" | the session is a dispatcher, not a task: `task queue --epic M` (or `--type`, `--priority`), executors — background subagents; below, **`task queue`** |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
 | PR ready (and after new commits) | `pr labels <PR>` — decision labels for the task and the epic |
 | PR's CI green (`ci-wait` PASS), before `gh pr merge` | `pr premerge <PR>` — a separate call; code `0` — merge, `3` — `main` is red: don't merge, wait for the bug |
@@ -303,7 +306,8 @@ form `owner/repo#N` isn't a pin — for `est` and the dashboard either
 (`tests/standards/session-pin`): In progress replaces it with the task, an `○`
 line. `est` counts the actual by the pin: the whole session goes to this task.
 No variable (not Claude Code) — the line `○ session not recognized …`, the
-status is set, no guard.
+status is set, no guard. A dispatcher session (`task queue` below) — no pin:
+the line `○ dispatcher session: #N isn't pinned …`.
 
 **`task status --branch <type>/<N>-<slug>`** — only with In progress, not for
 an epic: the current branch of a worktree tool (`claude/<slug>-<hash>`)
@@ -402,7 +406,46 @@ deploys, then `task close N`; no PR or the task is closed — an `○` line; no 
 — nothing, without a request to GitHub; a line not of the form `owner/repo#N` —
 an `○` line with the file path, code 0. Read-only. The Claude Code
 `SessionStart` hook runs it with the session id from its input (`check
---hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's.
+--hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's. In a
+dispatcher session it first names the queue command: the executors died with
+the app's process too.
+
+**`task queue`** — a dispatcher session: "do all tasks of epic #M", "fix all
+High bugs" (`AGENTS.md`, "Session and branch — one task"). The session takes no
+task; the script prints the queue — ready tasks (open, not an epic, not In
+progress, no open blockers, no open PR: linked, or by the task branch and
+"Closes #N" among recent PRs) by `Priority`, then number, each with an indented
+line — its executor's prompt, «Task #N …» in the project language (`est` links
+the subagent's work by it); then `=` lines — In progress, `○` lines — not ready
+with the reason, and `Next:`. `--epic N` — the epic's open sub-issues,
+otherwise the repository's open tasks (the first 100 of the search);
+`--type`, `--priority` — only in an organization. It marks the session as a
+dispatcher — `dispatchers/<CLAUDE_CODE_SESSION_ID>` in the configuration
+directory with the queue command: the executors are subagents with the
+session's id, a pin would refuse the second and give `est` the whole session as
+one task. A session with a pinned task — a refusal (code 2): the dispatcher is
+a separate session, named by meaning, without a number. `--assignment N` —
+read-only, the executor's first call: the task by the canon in auto mode and
+what a subagent does otherwise — doesn't rename or archive the session and
+writes no last line, waits for CI and the deploy with regular calls
+(`wait-ci.sh … --timeout 540`: a background command doesn't wake a subagent, a
+Bash call lives 10 minutes), git in separate calls, found work — `task new`
+without a chip; the answer — one line: merged, a question or failed.
+
+In Claude Code: an executor — `Agent` with `isolation: "worktree"` and
+`run_in_background: true`, the prompt — the indented line as is; at most 3 at
+once (`slot` runs two heavy checks, a number in the request replaces it), a
+task whose executor runs but hasn't set In progress yet isn't launched twice.
+Before each launch — `get_usage`: the 5-hour limit at 85% and more — no new
+executors, the running ones finish, then `Remaining: N tasks, the limit`. An
+answer arrives as the subagent's notification; after each — `task queue`
+again. A question — to the owner in text; the answer — ✅ in the task's
+questions section and to the same executor with `SendMessage` (its context is
+intact). Failed — a comment in the task with what stopped, no restart. Queue
+empty and nothing running — the summary (merged, questions, not ready, new
+tasks outside the queue), the last line and, in auto mode, archiving. The app's
+child sessions (`start_session`) aren't given out yet (a server flag); when
+they are, an executor becomes a session.
 
 **`task drop`** — closes as not planned (with `--duplicate-of` — as a
 duplicate with a link) and removes it from the project: otherwise "Item closed"
