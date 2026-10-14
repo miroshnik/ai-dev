@@ -310,12 +310,20 @@ compare periods longer than a typical task.
   own output switched to there (`Switched to branch`, a commit line, `+ branch
   … → …` of `github task status --branch`): a removed worktree leaves only the
   output.
+- A subagent's own worktree is a separate checkout: a commit hash in the output
+  of a subagent working there, and a PR the app bound to the session from one of
+  that worktree's branches, open windows only for that worktree's records, with
+  its branch — a dispatcher's own records next to its executor's commit or PR
+  don't go to the executor's task. Coverage (whether the PR is seen) still counts
+  every commit.
 - A hash in a listing's output (`git worktree list`, `git branch`, `git log`,
   `git fetch`, reading via `gh` other than `gh pr view`; a command made only of
   these and utilities like `head`, `grep`, including inside a `for` or `while`
-  loop and an `if` condition) links only if that commit is also in the session's
-  own output: `git log` of a neighboring worktree doesn't hand the session's time
-  to someone else's task.
+  loop and an `if` condition) links only if that commit is also in the own
+  output of the same checkout (the session's folders or that subagent's
+  worktree): `git log` of a neighboring worktree doesn't hand the session's time
+  to someone else's task, nor does the session's `git worktree list` with a
+  commit its subagent made in its own worktree.
 
 ## Codex sessions
 

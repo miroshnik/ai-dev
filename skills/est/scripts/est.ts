@@ -165,11 +165,12 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // how many closed issues the index of closing commits keeps
-const SESSION_CACHE_V = 20; // transcript cache format version (changed — reparse); 11 = session name history
+const SESSION_CACHE_V = 21; // transcript cache format version (changed — reparse); 11 = session name history
 // (title_hist), 12 = cloud sessions, 13 = all session directories (cwds), 14 = PR repository on pr-link, 16 = git and
 // gh listing hashes — only own ones, 17 = shell keywords in a listing, 18 = agent number on a record (task fan-out),
 // 19 = a subagent's branch in its own worktree — from that checkout, not gitBranch, 20 = a record in the session's
-// folder on the branch of its subagent's worktree — neutral
+// folder on the branch of its subagent's worktree — neutral, 21 = the scope of a record and a hash — a subagent's own
+// worktree
 const PROJECT_META_TTL = 86400; // a day: reread the cache of project/field ids
 const OPEN_PRS_TTL = 3600; // an hour: the list of open PRs (their branches are someone else's)
 // Long-lived branches: "neutral" — by themselves they don't link a task, but inside an anchor window they count.
@@ -515,9 +516,10 @@ export interface Session {
   cwd: string | null;
   cwds?: string[]; // all record directories in order of appearance: a session may move to another repository mid-work
   n_human: number;
-  ev: Any[][]; // [ts, branch, human, hint?, uidx?, agent? (0 — the session itself, k — the k-th subagent)]
+  ev: Any[][]; // [ts, branch, human, hint?, uidx?, agent? (0 — the session itself, k — the k-th subagent), scope?]
+  // scope — k: the record is in the k-th of the session's subagent worktrees (own checkouts); none — the session's
   prlinks: [number, number, string?][]; // [ts, PR number, PR repository owner/name — prRepository in Claude Code]
-  commits: [number, string][];
+  commits: [number, string, number?][]; // [ts, hash, scope? — of the record whose output has it]
   first_refs: number[];
   first_urls: string[];
   usage: Any[][]; // [mid, model_idx, in, out, cw5, cw1, cr, fast]
@@ -529,6 +531,7 @@ export interface Session {
   n_subagents: number;
   agents?: string[]; // ids of subagents by number (agent k — agents[k - 1]): the transcript's file name, in the cloud —
   // the call that started the subagent
+  wt_branches?: string[][]; // branches of the session's subagent worktrees by scope (scope k — wt_branches[k - 1])
   source: string;
   routine: boolean;
   mtime?: number;
@@ -1100,8 +1103,8 @@ interface Acc {
   n_human: number;
   ev: Any[][];
   prlinks: [number, number, string?][];
-  commits: [number, string][];
-  listed: [number, string][]; // hashes from git listing output — only own ones go into commits (finishCommits)
+  commits: Hash[];
+  listed: Hash[]; // hashes from git listing output — only own ones go into commits (finishCommits)
   first_refs: number[] | null;
   first_urls: string[];
   usage: Any[][];
@@ -1113,9 +1116,14 @@ interface Acc {
   checkouts: Map<string, Checkout | null>; // a subagent's directory outside them → its checkout (null — removed)
   switched: Map<string, Set<string>>; // the same directory → branches the subagent's git output switched to there
   written: number[]; // indexes in ev of records with gitBranch as written (in a session's directory)
+  wtDirs: string[]; // the same directories in order of appearance: a record's and a hash's scope k — wtDirs[k - 1]
+  wtBranches: string[][]; // branches of the worktree of scope k (finishWorktrees) — wtBranches[k - 1]
 }
 
-const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map(), switched: new Map(), written: [] });
+/** A commit hash from a tool's output: [ts, hash, scope?] — scope as on a record (Session.ev), absent — the session's. */
+type Hash = [number, string, number?];
+
+const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map(), switched: new Map(), written: [], wtDirs: [], wtBranches: [] });
 
 interface Checkout {
   root: string;
@@ -1159,7 +1167,7 @@ const inOwnWorktree = (r: Any, acc: Acc, subagent: boolean) => subagent && !!r.c
 /**
  * A record's branch. A subagent working in its own worktree — the branch of that worktree: Claude Code writes into a
  * subagent record's gitBranch the branch of another checkout (#490). The rest — gitBranch as written; it may be the
- * branch of a subagent's worktree too — finishBranches.
+ * branch of a subagent's worktree too — finishWorktrees.
  */
 function recordBranch(r: Any, acc: Acc, subagent: boolean): string {
   if (!inOwnWorktree(r, acc, subagent)) return r.gitBranch || "";
@@ -1167,29 +1175,58 @@ function recordBranch(r: Any, acc: Acc, subagent: boolean): string {
   return acc.checkouts.get(r.cwd)?.branch ?? "";
 }
 
+/** The scope of a subagent's record in directory dir outside the session's ones: its number k in wtDirs. */
+function wtScope(acc: Acc, dir: string): number {
+  const k = acc.wtDirs.indexOf(dir);
+  return k >= 0 ? k + 1 : acc.wtDirs.push(dir);
+}
+
 /**
+ * Subagents' own worktrees after all of the session's transcripts are read; a subagent's directory inside the
+ * session's own checkout isn't a worktree.
+ *
  * A record in the session's directory on the branch of its subagent's own worktree — without a branch (neutral, #501):
  * Claude Code writes into gitBranch of the session's records — and of a subagent continued there after its worktree
  * was removed — the branch some agent's checkout had last, so a dispatcher's records get its executors' branches. A
  * worktree's branches — the one checked out now and those the subagent's git output switched to there (a removed
- * worktree leaves only the output); a subagent's directory inside the session's own checkout isn't a worktree.
+ * worktree leaves only the output).
+ *
+ * The scope of a record and of a hash in its output (#508): a worktree's number among the session's subagent
+ * worktrees — directories of one checkout share it; the session's own checkout — none. The scope's branches — the
+ * same as above: by them a PR the app bound to the session is the worktree's one.
  */
-function finishBranches(acc: Acc): void {
+function finishWorktrees(acc: Acc): void {
   const roots = new Set<string>();
   for (const d of acc.topCwds) {
     const c = gitCheckout(d);
     if (c) roots.add(c.root);
   }
+  const branchesOf = (d: string, c: Checkout | null) => [...(c ? [c.branch] : []), ...(acc.switched.get(d) ?? [])].filter((b) => b && b !== "HEAD");
   const foreign = new Set<string>();
-  for (const [d, c] of acc.checkouts) {
-    if (c && roots.has(c.root)) continue;
-    if (c) foreign.add(c.branch);
-    for (const b of acc.switched.get(d) ?? []) foreign.add(b);
-  }
-  foreign.delete("");
-  foreign.delete("HEAD");
-  if (!foreign.size) return;
-  for (const i of acc.written) if (foreign.has(acc.ev[i]![1])) acc.ev[i]![1] = "";
+  for (const [d, c] of acc.checkouts) if (!(c && roots.has(c.root))) for (const b of branchesOf(d, c)) foreign.add(b);
+  if (foreign.size) for (const i of acc.written) if (foreign.has(acc.ev[i]![1])) acc.ev[i]![1] = "";
+  const keys: string[] = [];
+  const scopes = acc.wtDirs.map((d) => {
+    const c = acc.checkouts.get(d) ?? null;
+    if (c && roots.has(c.root)) return 0;
+    const key = c?.root ?? d;
+    let k = keys.indexOf(key) + 1;
+    if (!k) {
+      k = keys.push(key);
+      acc.wtBranches.push([]);
+    }
+    const bs = acc.wtBranches[k - 1]!;
+    for (const b of branchesOf(d, c)) if (!bs.includes(b)) bs.push(b);
+    return k;
+  });
+  const rescope = (x: Any[], at: number) => {
+    if (x[at] === undefined) return;
+    const k = scopes[x[at] - 1]!;
+    if (k) x[at] = k;
+    else x.length = at;
+  };
+  for (const e of acc.ev) rescope(e, 6);
+  for (const h of [...acc.commits, ...acc.listed]) rescope(h, 2);
 }
 
 function* jsonlRecords(file: string): Generator<Any> {
@@ -1205,14 +1242,14 @@ function* jsonlRecords(file: string): Generator<Any> {
   }
 }
 
-/** Commit hashes from a tool's output (at most 60 per output, 5000 per session). */
-function collectHashes(into: [number, string][], ts: number, txt: string): void {
+/** Commit hashes from a tool's output (at most 60 per output, 5000 per session); scope — of the output's record. */
+function collectHashes(into: Hash[], ts: number, txt: string, scope = 0): void {
   const seen = new Set<string>();
   for (const m of txt.matchAll(HASH_RE)) {
     const h = m[0];
     if (!seen.has(h) && seen.size < 60 && into.length < 5000) {
       seen.add(h);
-      into.push([ts, h]);
+      into.push(scope ? [ts, h, scope] : [ts, h]);
     }
   }
 }
@@ -1262,11 +1299,14 @@ function gitListingOnly(cmd: string): boolean {
 /**
  * Listing hashes become anchors only if the same commit is in the session's own outputs (git commit, push, a script):
  * an own commit in `git log` extends the window, someone else's in `git worktree list` doesn't link. Then — by time.
+ * Own — in the same checkout (#508): a commit a subagent made in its own worktree doesn't make the session's listing of
+ * it an anchor, and the other way round.
  */
 function finishCommits(acc: Acc): void {
+  const key = (c: Hash) => `${c[2] ?? 0}:${c[1].slice(0, 7)}`;
   const own = new Map<string, string[]>();
-  for (const [, h] of acc.commits) own.set(h.slice(0, 7), [...(own.get(h.slice(0, 7)) ?? []), h]);
-  for (const c of acc.listed) if (hashMatches(c[1], own.get(c[1].slice(0, 7)) ?? [])) acc.commits.push(c);
+  for (const c of acc.commits) own.set(key(c), [...(own.get(key(c)) ?? []), c[1]]);
+  for (const c of acc.listed) if (hashMatches(c[1], own.get(key(c)) ?? [])) acc.commits.push(c);
   acc.commits.sort(byTs);
 }
 
@@ -1360,8 +1400,9 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
       }
     }
     const ownWt = inOwnWorktree(r, acc, subagent);
+    const scope = ownWt ? wtScope(acc, r.cwd) : 0;
     if (!ownWt) acc.written.push(acc.ev.length);
-    acc.ev.push([ts, recordBranch(r, acc, subagent), human ? 1 : 0, hint, uidx, agent]);
+    acc.ev.push([ts, recordBranch(r, acc, subagent), human ? 1 : 0, hint, uidx, agent, ...(scope ? [scope] : [])]);
     if (human && acc.first_refs === null) {
       const txt = promptText(content);
       acc.first_refs = refsIn(txt);
@@ -1383,7 +1424,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         const tur = r.toolUseResult;
         if (tur && typeof tur === "object") txt += "\n" + String(tur.stdout ?? "") + "\n" + String(tur.stderr ?? "");
         if (!commitToolIds.has(b.tool_use_id) && !txt.includes("git") && txt.length > 20000) continue; // huge output without git — don't spend time on it
-        collectHashes(listingToolIds.has(b.tool_use_id) ? acc.listed : acc.commits, ts, txt);
+        collectHashes(listingToolIds.has(b.tool_use_id) ? acc.listed : acc.commits, ts, txt, scope);
         if (ownWt) {
           const set = acc.switched.get(r.cwd) ?? new Set<string>();
           for (const br of gitBranchesIn(txt)) set.add(br);
@@ -1422,7 +1463,7 @@ export function parseSessionFile(file: string): Session {
       continue;
     }
   }
-  finishBranches(acc); // before sorting: written holds indexes in scan order
+  finishWorktrees(acc); // before sorting: written holds indexes in scan order
   acc.ev.sort(byTs);
   acc.prlinks.sort(byTs);
   finishCommits(acc);
@@ -1444,6 +1485,7 @@ export function parseSessionFile(file: string): Session {
     title_hist: acc.titles,
     n_subagents: subs.length,
     agents: subs.map((f) => path.basename(f, ".jsonl")),
+    ...(acc.wtBranches.length ? { wt_branches: acc.wtBranches } : {}),
     source: "claude",
     routine: acc.n_human < 3 && !acc.prlinks.length && !acc.commits.length,
   };
@@ -1624,7 +1666,7 @@ export function parseCloudFile(file: string): Session {
   const acc = newAcc();
   scanRecords(top, acc, 0);
   for (const [k, recs] of [...subs.values()].entries()) scanRecords(recs, acc, k + 1);
-  finishBranches(acc);
+  finishWorktrees(acc);
   acc.ev.sort(byTs);
   finishCommits(acc);
   return {
@@ -2251,7 +2293,7 @@ export interface Fact {
   cloud_parts?: CloudPart[]; // parts computed by cloud sessions (the cloud marker) — kept in the marker on rewrite
 }
 
-type Anchor = [number, string, string, number]; // (ts, own|foreign, pr|commit, share)
+type Anchor = [number, string, string, number, number]; // (ts, own|foreign, pr|commit, share, scope)
 
 /**
  * For each record of the timeline — the index of the previous record of the same agent (the session itself or one
@@ -2271,7 +2313,8 @@ function prevOfSameAgent(ev: Any[][]): number[] {
 /**
  * Time window for linking: [a, z] (z exclusive if zOpen), only branch br (null — any one that isn't foreign)
  * or a neutral one; rule — "anchor" (own PR/commit) or "title" / "prompt" (the task is named in the session
- * name or in the first prompt — a weak link: it yields to an already recorded actual of another task).
+ * name or in the first prompt — a weak link: it yields to an already recorded actual of another task); scope — only
+ * records of the k-th subagent worktree (0 — any record).
  */
 interface Win {
   a: number;
@@ -2280,6 +2323,7 @@ interface Win {
   br: string | null;
   w: number;
   rule: string;
+  scope: number;
 }
 
 export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closers: Closer[], gapMin = 30, parts: CloudPart[] = []): Fact {
@@ -2430,6 +2474,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // a guest's pr-link without a repository is ambiguous; with our repository — ours, with another — neither ours nor
     // foreign
     const links = s.prlinks.filter(([, , r]) => (r ? sameRepo(r) : !guest));
+    // the app binds to the session a PR its subagent opened from its own worktree too: a PR from the branch of a
+    // subagent's worktree is that worktree's anchor, like its commits (#508)
+    const prScope = (pr: number) => {
+      const head = prObjs.find((p) => p.number === pr)?.headRefName ?? prsAll.get(pr)?.headRefName ?? openPrs[String(pr)]?.headRefName;
+      return head ? (s.wt_branches ?? []).findIndex((bs) => bs.includes(head)) + 1 : 0;
+    };
     const anchors: Anchor[] = [];
     for (const [ts, pr] of links) {
       const own = ourPrs.has(pr);
@@ -2439,12 +2489,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       // was renamed for)
       const mergedAt = prsAll.get(pr)?.mergedAt ?? null;
       if (mergedAt !== null && ts > mergedAt) continue;
-      anchors.push([ts, own ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0]);
+      anchors.push([ts, own ? "own" : "foreign", "pr", prW.get(pr) ?? 0.0, prScope(pr)]);
     }
-    for (const [ts, h] of s.commits) {
+    for (const [ts, h, scope] of s.commits) {
       const [cls, w] = hashClass(h, ts);
-      if (cls === "own") seenHashes.add(h);
-      if (cls !== "neutral") anchors.push([ts, cls, "commit", w]);
+      if (cls === "own") seenHashes.add(h); // coverage — by commits of any scope
+      if (cls !== "neutral") anchors.push([ts, cls, "commit", w, scope ?? 0]);
     }
     anchors.sort(cmpAnchor);
     // a guest is linked only by a feature of our repository; a number in the name — only together with it
@@ -2465,10 +2515,14 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // windows by anchors: from the previous foreign anchor to our own; inside a window only records
     // on the anchor's branch or on a neutral branch (HEAD/empty/main…) count — foreign branches don't.
     // A session rename is a boundary too: before it, the session worked on the task from the previous name.
+    // A commit in the output of a subagent in its own worktree and a PR from its branch open a window only for that
+    // worktree's records, the branch and the tail are theirs too (#508): its checkout is a separate one, its branch and
+    // commits tell about its records, not the session's.
     const renames = [...(s.title_hist ?? [])].map((t) => t[0]).sort((x, y) => x - y).slice(1); // the first one — from the session start
+    const scopeOf = (e: Any[]): number => e[6] ?? 0;
     const windows: Win[] = [];
     let prevForeign = -1e18;
-    for (const [ts, cls, kind, w] of anchors) {
+    for (const [ts, cls, kind, w, scope] of anchors) {
       if (cls === "foreign") {
         prevForeign = ts;
         continue;
@@ -2478,19 +2532,19 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       let brAt = "";
       for (const e of ev) {
         if (e[0] > ts) break;
-        if (!isNeutral(e[1])) brAt = e[1];
+        if (!isNeutral(e[1]) && (!scope || scopeOf(e) === scope)) brAt = e[1];
       }
       if (kind === "pr") {
         // the tail after a pr-link: while the branch is the same and there's no foreign anchor (fixes after review)
         const later = [...foreignTs, ...renames].filter((t) => t > ts);
         const nxtForeign = later.length ? Math.min(...later) : 1e18;
         for (const e of ev) {
-          if (e[0] <= ts) continue;
+          if (e[0] <= ts || (scope && scopeOf(e) !== scope)) continue;
           if (e[0] >= nxtForeign || e[1] !== brAt) break;
           end = e[0];
         }
       }
-      windows.push({ a: start, z: end, zOpen: false, br: brAt, w, rule: "anchor" });
+      windows.push({ a: start, z: end, zOpen: false, br: brAt, w, rule: "anchor", scope });
     }
     // The task is named in the session name or in the first prompt. A name applies from the moment of the rename
     // (the first one — from the session start): a session renamed for each next task gives the records of a
@@ -2525,7 +2579,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         }
         startBranch = b;
       }
-      windows.push({ a: seg.a, z: end, zOpen, br: null, w: 1.0, rule: seg.rule });
+      windows.push({ a: seg.a, z: end, zOpen, br: null, w: 1.0, rule: seg.rule, scope: 0 });
     }
 
     const attributed: number[] = []; // share (0 — not our record)
@@ -2557,7 +2611,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         w = branchW(b);
         rules["branch"] = (rules["branch"] ?? 0) + 1;
       } else if (windows.length && !foreignBr(b)) {
-        const ws = windows.filter((x) => x.a <= ts && (x.zOpen ? ts < x.z : ts <= x.z) && (x.br === null || b === x.br || isNeutral(b)));
+        const ws = windows.filter((x) => x.a <= ts && (x.zOpen ? ts < x.z : ts <= x.z) && (x.br === null || b === x.br || isNeutral(b)) && (!x.scope || scopeOf(e) === x.scope));
         if (ws.length) {
           w = Math.max(...ws.map((x) => x.w));
           const anchored = ws.some((x) => x.rule === "anchor");
