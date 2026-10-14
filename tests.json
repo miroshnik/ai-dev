@@ -2709,6 +2709,55 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "PR, который GitHub не связал с задачей, находится по ветке задачи"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "возобновлённая сессия с влитым PR и открытой задачей получает команду закрыть задачу"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "возобновлённая сессия с открытым PR задачи получает команду перезапустить ожидание его чеков"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "закрепление не по форме owner/repo#N — ошибка (код 2) с путём файла"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "открытый PR — ожидание его чеков, даже если у задачи уже есть влитый"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "сессия без закреплённой задачи подсказки не получает — и в GitHub не ходит"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
+  ],
+  "name": "у задачи нет PR или она закрыта — ждать нечего, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task status --branch переименовывает ветку worktree в ветку задачи"
   ],
   "name": "--branch не ветка этой задачи по канону — ошибка до изменений"
@@ -6461,6 +6510,38 @@
    "update называет изменения каждого пропущенного релиза"
   ],
   "name": "установщик из клона — коммиты флоу после последнего релиза отдельным блоком «not in a release» над релизами"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает",
+   "возобновлённая сессия узнаёт из хука, какое ожидание перезапустить"
+  ],
+  "name": "id сессии из входа хука — скиллу github машины: его ответ task resume в выводе хука; без входа — из CLAUDE_CODE_SESSION_ID"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает",
+   "возобновлённая сессия узнаёт из хука, какое ожидание перезапустить"
+  ],
+  "name": "без id сессии скилл github не зовётся"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает",
+   "возобновлённая сессия узнаёт из хука, какое ожидание перезапустить"
+  ],
+  "name": "скилл github упал — его вывод и строка ! с причиной, код хука 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает",
+   "возобновлённая сессия узнаёт из хука, какое ожидание перезапустить"
+  ],
+  "name": "скилл github — машины, а нет его на машине — копии проекта"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -11717,6 +11798,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "README: подкоманда github task new названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: подкоманда github task resume названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
