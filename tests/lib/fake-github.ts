@@ -151,6 +151,7 @@ export class FakeGitHub {
     const out = structuredClone(i);
     // подзадачи с заголовком, как у GitHub: заголовок — из записи подзадачи
     out.subIssues = { nodes: i.subIssues.nodes.map((s: Any) => ({ ...s, title: this.issue(s.number)?.title ?? "" })) };
+    out.blockedBy = { nodes: (this.blockedBy[number] ?? []).map((b) => ({ number: b, state: this.issue(b).state })) };
     const lag = this.issueRefLag[number] ?? 0;
     if (lag > 0) {
       this.issueRefLag[number] = lag - 1;

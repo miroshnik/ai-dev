@@ -81,6 +81,20 @@ export interface Names {
     unlabeled: string;
     milestone: string;
   };
+  /** The dispatcher's executor (`task queue`): its prompt and its whole assignment (`--assignment`), lines in order. */
+  queue: {
+    prompt: string;
+    epic: string;
+    lead: string;
+    resume: string;
+    subagent: string;
+    session: string;
+    wait: string;
+    git: string;
+    found: string;
+    question: string;
+    answer: string;
+  };
   /** The est skill's "Estimate" and "Actual" comments and the lines a human appends to them. */
   est: {
     answer: string;
