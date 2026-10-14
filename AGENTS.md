@@ -273,8 +273,8 @@ information without a decision (a deadline, a warning) doesn't prevent it.
   and milestone, the task's Compose stacks (with volumes) and the merged branch
   removed; I don't touch others' branches, stacks or unmerged work.
 - **Before a commit — exactly the checks CI runs**, via the repository's
-  scripts (`lint`, `typecheck`, `test`), before merging — a full build; in
-  `script | tail` chains — `set -o pipefail`.
+  scripts (`lint`, `typecheck`, `test:spec`, `test`), before merging — a full
+  build; in `script | tail` chains — `set -o pipefail`.
 - Mechanics — the `github` skill, "Git, PRs and merging — mechanics"; the full
   SHA, waiting for checks and deploys — `docs/pr-checks.md`.
 
