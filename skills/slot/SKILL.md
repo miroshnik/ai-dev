@@ -21,24 +21,34 @@ bun --no-env-file <skill dir>/scripts/slot.ts '<command>' [arguments…]
 The command runs through `sh`, the arguments are appended to its end, as with
 `npm run`; the exit code is the command's. No queue in CI (`CI`) and inside a
 slot (`AI_DEV_SLOT`): a script that calls another queued script would
-otherwise wait for itself.
+otherwise wait for itself. A `package.json` script doesn't pass its command to
+`slot.ts` — it sources `scripts/slot.sh` (below).
 
 ## How it is enabled
 
 Installing the flow (`install`, `update`) wraps the project's `package.json`
-scripts `lint`, `typecheck`, `test` and `test:*` in `slot`, always via `bun`
-— the flow's only runtime, a Node project included:
-`"test": "bun --no-env-file .agents/skills/slot/scripts/slot.ts 'vitest run'"`.
-Everyone calls them — the agent, a human in a terminal, `github pr premerge` —
-and everyone joins one queue. `build` isn't wrapped — the host and Docker run
-it, where a copy of the skill may be missing; watch isn't either: it's long and
-would hold a slot for a long time. Removed the wrapper or its `--no-env-file`
-by hand — `check` names the script, `update` puts it back.
+scripts `lint`, `typecheck`, `test` and `test:*` in `slot`:
+`"test": ". .agents/skills/slot/scripts/slot.sh && vitest run"`. The script's
+shell sources `slot.sh`: `slot.ts --for <shell PID>` takes a slot for that
+shell — held until it exits — and the shell exports `AI_DEV_SLOT` and
+`AI_DEV_SLOT_CPUS` to the command. The command stays a plain command of the
+script: knip sees its binary as a used dependency, and `bun test` gives knip
+the test files and the `preload` of `bunfig.toml` as entries; passed to
+`slot.ts` as a string, it was hidden, and the project's dead code went red from
+the flow install. Yarn 2+ runs scripts in its own shell, without `.`: there
+the command stays a string of `slot.ts`
+(`"test": "bun --no-env-file .agents/skills/slot/scripts/slot.ts 'vitest run'"`),
+hidden from knip. Everyone calls the scripts — the agent, a human in a
+terminal, `github pr premerge` — and everyone joins one queue. `build` isn't
+wrapped — the host and Docker run it, where a copy of the skill may be missing;
+watch isn't either: it's long and would hold a slot for a long time. Removed
+the wrapper by hand, or it's a previous install's (the command a string of
+`slot.ts`) — `check` names the script, `update` puts the wrapper back.
 
 ## The project's env files are off
 
 Bun loads the env files of the working directory — `.env`,
-`.env.<NODE_ENV>`, `.env.local` — into its process by itself, and `slot`
+`.env.<NODE_ENV>`, `.env.local` — into its process by itself, and `slot.ts`
 passes its environment to the command. `.env.local` often holds production
 keys (`vercel env pull`): without `--no-env-file` they reach a runner that
 never saw them before the wrapper — tests of "the key isn't set" go red
@@ -46,7 +56,10 @@ locally and green in CI, a test calling an external service goes there with a
 production key. With the flag the command gets exactly the environment it
 would get without the wrapper: `npm run` and `bun run` don't load env files
 for a `package.json` script, and a runner that loads them itself (`bun test`
-— `.env.test`) still does. Not `env = false` in the project's `bunfig.toml`:
+— `.env.test`) still does. A script's command doesn't go through `slot.ts`
+at all — it gets the script's environment and the two queue variables;
+`slot.sh` calls `slot.ts` with the flag too. Not `env = false` in the
+project's `bunfig.toml`:
 it would turn env files off for every `bun` of a Bun project, its own
 `bun test` and `bun run dev` included. The same flag is on every call of a
 skill script (`tests/standards/no-env-file` in ai-dev): a child `bun` inherits

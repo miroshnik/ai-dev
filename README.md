@@ -257,7 +257,7 @@ Waits for all checks of a PR or a commit (a merge commit — by the PR number) �
 
 Project checks — `lint`, `typecheck`, `test`, `test:*` — go through the machine queue: two runs at once, together half the cores, the rest wait in arrival order and print whom they are waiting for; the runner takes its workers from `AI_DEV_SLOT_CPUS`. The flow install puts the wrapper into the `package.json` scripts — both agents and a human in the terminal join the queue; in CI — no queue.
 
-`slot '<command>' [args…]`
+`slot '<command>' [args…]` · in `package.json`: `. .agents/skills/slot/scripts/slot.sh && <command>`
 
 ### [`task-env`](skills/task-env/SKILL.md) — a task's environment: its Compose stack and addresses `*.localhost`
 
