@@ -7,7 +7,8 @@
 #   wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
 #       Waits for the checks of the PR head (like status), the base branch's required checks — by name, and the run
 #       of each workflow that, by its `on:` at the head SHA, fires on the PR (needs bun).
-#       A conflict with the base — ERROR right away: CI won't start on such a PR.
+#       A conflict with the base — ERROR once the next poll of the same head confirms it: CI won't start on such a
+#       PR; right after a push GitHub still reports the previous head's conflict.
 #
 #   wait-ci.sh status <sha> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
 #       Waits for all checks of a commit: commit statuses (hosting, external services) and
@@ -174,23 +175,28 @@ case "$mode" in
   pr)
     [[ "$target" =~ ^[0-9]+$ ]] || finish "ERROR PR number expected, got: $target" 3
     : "${interval:=30}" "${timeout:=1800}"
-    label="pr#$target"
+    label="pr#$target"; conflict_head=""
     poll() {
-      local pull base
+      local pull base mergeable
       pull=$(gh api "repos/{owner}/{repo}/pulls/$target" 2>&1) || {
         out=$pull; [[ "$pull" == *"HTTP 404"* ]] && { out="PR #$target not found: $pull"; return 2; }; return 1; }
       base=$(jq -r .base.ref <<<"$pull")
-      # GitHub computes mergeable in the background: null — doesn't know yet, false — a conflict, there is no
-      # merge-ref, and workflows on pull_request won't start at all
-      if [ "$(jq -r .mergeable <<<"$pull")" == false ]; then
-        out="conflict with base $base — CI will not run; rebase onto origin/$base"; return 2
-      fi
-      [ -n "$required_loaded" ] || load_required "$base" || return 1
       # the head — on every poll: a new push changes the SHA, we must wait for the checks of the current one
       head_sha=$(jq -r .head.sha <<<"$pull")
       label="pr#$target@${head_sha:0:7}"
+      # GitHub computes mergeable in the background: null — doesn't know yet, false — a conflict, there is no
+      # merge-ref, and workflows on pull_request won't start at all. Right after a push it still gives the false of the
+      # previous head, whose conflict was the reason for the rebase (#472): a conflict is the current head's only when
+      # the next poll of the same head repeats it; until then — pending, not a PASS
+      mergeable=$(jq -r .mergeable <<<"$pull")
+      if [ "$mergeable" == false ] && [ "$conflict_head" == "$head_sha" ]; then
+        out="conflict with base $base — CI will not run; rebase onto origin/$base"; return 2
+      fi
+      [ "$mergeable" == false ] && conflict_head=$head_sha || conflict_head=""
+      [ -n "$required_loaded" ] || load_required "$base" || return 1
       [ "$expected_for" == "$head_sha" ] || load_expected "$head_sha" "$base" || return 1
-      checks "$head_sha"
+      checks "$head_sha" || return 1
+      [ -z "$conflict_head" ] || out=$(jq -c --arg n "conflict with base $base: rechecking" '. + [{ name: $n, bucket: "pending" }]' <<<"$out")
     }
     ;;
   status)

@@ -33,7 +33,7 @@ bash <skill dir>/scripts/wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
 
 | Moment | Command |
 |---|---|
-| Pushed the PR branch, before merging | `pr <N>` — waits for the PR head's checks, the base branch's required checks and a run of every workflow whose `on:` fires on the PR; a conflict with the base — ERROR at once |
+| Pushed the PR branch, before merging | `pr <N>` — waits for the PR head's checks, the base branch's required checks and a run of every workflow whose `on:` fires on the PR; a conflict with the base — ERROR on the second poll of the same head, without waiting for the checks |
 | Merged, and the merge triggers a deploy or CI on `main` | `merged <N>` as a background command in the same turn as `github task actualize` — waits for all checks of the PR's merge commit: GitHub Actions check-runs and the statuses of the host and external services; takes the SHA from the PR itself, an unmerged PR — ERROR |
 | A commit's checks by SHA (my own commit without a PR) | `status <sha>` — the same as `merged`, by the full SHA |
 | One check of a commit is needed (the deploy among others) | `merged <N> --context <name>` or `status <sha> --context <name>` |
@@ -137,7 +137,11 @@ What to do next:
 - A PR with a conflict with the base (`mergeable: false`): there is no
   merge-ref, and workflows on `pull_request` don't start at all — without
   this check the wait ended with a result from the host's statuses alone.
-  `mergeable: null` — GitHub is still computing; keep waiting.
+  `mergeable: null` — GitHub is still computing; keep waiting. Right after a
+  push GitHub still returns the previous head's `false` — the conflict that
+  was the reason for the rebase: a conflict counts only when the next poll of
+  the same head repeats it; until then — `waiting: conflict with base <base>:
+  rechecking`.
 - The base branch's required checks (ruleset and classic protection) are
   awaited by name: while any one is missing there is no final result, even if
   the rest have finished.

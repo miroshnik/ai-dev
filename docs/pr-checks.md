@@ -66,7 +66,9 @@ section "Git, PRs and merging — mechanics".
 - `mergeable: false` — a conflict with the base: there is no merge ref,
   workflows on `pull_request` don't start, and a non-empty snapshot of host
   statuses alone gives a false outcome. Nothing to wait for — rebase. `null` —
-  GitHub is still computing: wait.
+  GitHub is still computing: wait. Right after a push the API still returns
+  the previous head's `false`: a conflict — only when the next poll of the
+  same head repeats it.
 - The base branch's required checks — `rules/branches/<base>` (ruleset, rule
   `required_status_checks`) and `branches/<base>`
   (`protection.required_status_checks`, if `enforcement_level` isn't `off`):
