@@ -135,6 +135,9 @@ export interface Names {
       cost: string;
       unpriced: string;
       steps: string;
+      /** The actual's split by waits, minutes (est, #518): {ci}, {merged}, {checks}, {slot} — `waitsSlot` or empty, {rest}. */
+      waits: string;
+      waitsSlot: string;
       and: string;
       cloudAgent: string;
     };

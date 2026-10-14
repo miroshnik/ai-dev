@@ -165,12 +165,12 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // how many closed issues the index of closing commits keeps
-const SESSION_CACHE_V = 21; // transcript cache format version (changed — reparse); 11 = session name history
+const SESSION_CACHE_V = 22; // transcript cache format version (changed — reparse); 11 = session name history
 // (title_hist), 12 = cloud sessions, 13 = all session directories (cwds), 14 = PR repository on pr-link, 16 = git and
 // gh listing hashes — only own ones, 17 = shell keywords in a listing, 18 = agent number on a record (task fan-out),
 // 19 = a subagent's branch in its own worktree — from that checkout, not gitBranch, 20 = a record in the session's
 // folder on the branch of its subagent's worktree — neutral, 21 = the scope of a record and a hash — a subagent's own
-// worktree
+// worktree, 22 = waits for input on records and wait calls (calls, perm)
 const PROJECT_META_TTL = 86400; // a day: reread the cache of project/field ids
 const OPEN_PRS_TTL = 3600; // an hour: the list of open PRs (their branches are someone else's)
 // Long-lived branches: "neutral" — by themselves they don't link a task, but inside an anchor window they count.
@@ -516,8 +516,13 @@ export interface Session {
   cwd: string | null;
   cwds?: string[]; // all record directories in order of appearance: a session may move to another repository mid-work
   n_human: number;
-  ev: Any[][]; // [ts, branch, human, hint?, uidx?, agent? (0 — the session itself, k — the k-th subagent), scope?]
-  // scope — k: the record is in the k-th of the session's subagent worktrees (own checkouts); none — the session's
+  ev: Any[][]; // [ts, branch, input, hint?, uidx?, agent? (0 — the session itself, k — the k-th subagent), scope?]
+  // input — the record ends a wait for input (INPUT_HUMAN — a human prompt, INPUT_OTHER — other input: a command, a
+  // coordinator's message to a subagent, a permission approved by the user), 0 — not; scope — k: the record is in the
+  // k-th of the session's subagent worktrees (own checkouts); none — the session's
+  calls?: Call[]; // wait calls (CI, after the merge, local checks) — the actual's split of waits
+  perm?: boolean; // whether tool results carry the permission decision — a wait for the user's approval is told apart;
+  // absent — no tool results
   prlinks: [number, number, string?][]; // [ts, PR number, PR repository owner/name — prRepository in Claude Code]
   commits: [number, string, number?][]; // [ts, hash, scope? — of the record whose output has it]
   first_refs: number[];
@@ -1118,12 +1123,14 @@ interface Acc {
   written: number[]; // indexes in ev of records with gitBranch as written (in a session's directory)
   wtDirs: string[]; // the same directories in order of appearance: a record's and a hash's scope k — wtDirs[k - 1]
   wtBranches: string[][]; // branches of the worktree of scope k (finishWorktrees) — wtBranches[k - 1]
+  calls: Call[]; // wait calls (Session.calls)
+  perm: boolean | null; // whether tool results carry the permission decision (Session.perm); null — no tool results
 }
 
 /** A commit hash from a tool's output: [ts, hash, scope?] — scope as on a record (Session.ev), absent — the session's. */
 type Hash = [number, string, number?];
 
-const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map(), switched: new Map(), written: [], wtDirs: [], wtBranches: [] });
+const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map(), switched: new Map(), written: [], wtDirs: [], wtBranches: [], calls: [], perm: null });
 
 interface Checkout {
   root: string;
@@ -1254,6 +1261,106 @@ function collectHashes(into: Hash[], ts: number, txt: string, scope = 0): void {
   }
 }
 
+// ----------------------------------------------------------------------------
+// Waits: for input (not the task's time) and of calls (the actual's split, #518)
+// ----------------------------------------------------------------------------
+
+/** A record's input mark (Session.ev[2]): a human prompt; other input — a command, a coordinator's message, an approval. */
+export const INPUT_HUMAN = 1;
+export const INPUT_OTHER = 2;
+
+/**
+ * A wait call: [start, end, kind, agent, slot queue s] — from the tool call to its result, a background command — to the
+ * session's notification; kind — WAIT_KINDS[kind - 1]; agent — as on a record (Session.ev[5]).
+ */
+export type Call = [number, number, number, number, number];
+
+/** Kinds of waits in the actual's split, in priority order: a moment inside two calls at once goes to the first one. */
+export const WAIT_KINDS = ["ci", "merged", "checks"] as const;
+
+// wait-ci of the ci-wait skill: `pr`, `status` — CI before the merge, `merged`, `issue` — after the merge and the deploy
+// (and a red main's bug); `gh pr checks --watch` — the same CI wait by hand
+const WAIT_CI_RE = /wait-ci(?:\.sh)?['"]?\s+(pr|status|merged|issue)\b/;
+const GH_WATCH_RE = /\bgh\s+pr\s+checks\b[^;&|\n]*--watch\b/;
+// local checks: typecheck, lint, test* and e2e as package scripts (options of the package manager before the name —
+// `pnpm --filter web test`), the runners themselves, a command under slot (its script with a quoted command, slot.sh
+// sourced) — reading slot's files isn't a check
+const CHECKS_RE = /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)(?:\s+--?[\w-]+(?:[= ][^\s;&|-][^\s;&|]*)?){0,3}\s+(?:run\s+)?(?:typecheck|lint|test(?::[\w.-]+)?|e2e(?::[\w.-]+)?)(?![\w:-])|(?:npx\s+|bunx\s+)?(?:vitest|jest|tsc|eslint)(?![\w.-])|playwright\s+test\b|(?:\.|source)\s+\S*\/slot\.sh\b|slot\s+['"])|\/slot\.ts['"]?\s+['"]/;
+
+/** The command without heredoc bodies: a file written by `cat <<EOF` or a `python3 - <<EOF` script isn't run by the shell. */
+function withoutHeredocs(cmd: string): string {
+  const out: string[] = [];
+  let end: string | null = null;
+  for (const line of cmd.split("\n")) {
+    if (end !== null) {
+      if (line.trim() === end) end = null;
+      continue;
+    }
+    out.push(line);
+    end = /<<-?\s*['"]?([\w-]+)['"]?/.exec(line)?.[1] ?? null;
+  }
+  return out.join("\n");
+}
+
+/** The kind of a wait call by its command (WAIT_KINDS index + 1); 0 — not a wait. */
+export function waitKind(command: string): number {
+  const cmd = withoutHeredocs(command);
+  const ci = WAIT_CI_RE.exec(cmd);
+  if (ci) return ci[1] === "pr" || ci[1] === "status" ? 1 : 2;
+  if (GH_WATCH_RE.test(cmd)) return 1;
+  return CHECKS_RE.test(cmd) ? 3 : 0;
+}
+
+/** Seconds a command waited in the machine queue: the `slot: waited 1 min 5 s` lines of its output, summed. */
+export function slotWaitIn(txt: string): number {
+  let s = 0;
+  for (const m of txt.matchAll(/slot: waited (?:(\d+) min )?(\d+) s/g)) s += Number(m[1] ?? 0) * 60 + Number(m[2]);
+  return s;
+}
+
+/** The slot queue of a background command — from its output file while it exists (the notification has no output). */
+function outputSlotWait(file: string | null): number {
+  if (!file) return 0;
+  try {
+    return statSync(file).size < 5e6 ? slotWaitIn(readFileSync(file, "utf8")) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+const tagIn = (txt: string, tag: string) => new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(txt)?.[1]?.trim() || null;
+
+/**
+ * The user's own permission decision in the dialog (not by the settings' rules or the classifier): the call waited for
+ * the user's approval — a wait for input. A rule the user saved earlier (`user_permanent`) doesn't ask.
+ */
+const askedUser = (r: Any) => {
+  const s = r.permissionDecision?.source;
+  return typeof s === "string" && s.startsWith("user") && s !== "user_permanent";
+};
+
+/** Tools whose call is a question to the user: the result is their answer. */
+const ASK_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode"]);
+
+/**
+ * Whether a user record that isn't a tool result ends a wait for input. Not input: a background command's notification
+ * and a background subagent's hand-back — the session waited for its own work; a subagent's assignment and the
+ * harness's insertions into its stream; the user's interrupt of the agent's work; a cloud session's service record.
+ * Input: at the session's top level — everything else (a human prompt, a command, the app's event, another session's
+ * message); in a subagent — the coordinator's message (SendMessage: a dispatcher's executor waited for the owner's
+ * answer) and the text of a continuation.
+ */
+function isInput(r: Any, subagent: boolean, first: boolean): boolean {
+  const kind = r.origin && typeof r.origin === "object" ? r.origin.kind : undefined;
+  const txt = promptText(r.message?.content).trimStart();
+  if (kind === "task-notification" || txt.startsWith("<task-notification") || txt.startsWith("<\\task-notification")) return false;
+  if ((kind === "peer" && r.origin.handback) || kind === "agent") return false;
+  if (txt.startsWith("[Request interrupted by user")) return false;
+  if (!subagent) return true;
+  if (first) return false;
+  return kind === "coordinator" || !r.isMeta;
+}
+
 // Listing: git and gh commands that don't make commits but list them — including someone else's (neighbor worktrees,
 // branches, log, fetch, PRs and issues via the API). The canon says to look at neighbors before work and after a
 // merge, and a fresh hash of someone else's PR in such output close in time to its commit is a false anchor (#134).
@@ -1336,6 +1443,21 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
   let hintDone = !subagent;
   let pending: string[] = []; // renames without a time: the time comes from the next record
   let lastTs: number | null = null;
+  // tool calls: id → start, the wait kind (waitKind), the tool, whether it went to the background; a background
+  // command's task id → its call id (the notification may name only the task)
+  const calls = new Map<string, { at: number; kind: number; name: string; bg: boolean }>();
+  const bgTask = new Map<string, string>();
+  let firstUser = true; // a subagent's first user record is the assignment
+  /** A background command's notification ends its call: the wait call — from the launch to it. */
+  const notified = (txt: string, at: number) => {
+    for (const part of txt.split("<task-notification>").slice(1)) {
+      const id = tagIn(part, "tool-use-id") ?? bgTask.get(tagIn(part, "task-id") ?? "") ?? null;
+      const call = id ? calls.get(id) : undefined;
+      if (!call) continue;
+      calls.delete(id!);
+      if (call.kind) acc.calls.push([call.at, at, call.kind, agent, outputSlotWait(tagIn(part, "output-file"))]);
+    }
+  };
   for (const r of records) {
     const t = r.type;
     const ts = r.timestamp ? parseTs(r.timestamp) : null;
@@ -1366,12 +1488,30 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
       if (ts && Number.isInteger(pr)) acc.prlinks.push(prRepo ? [ts, pr, prRepo] : [ts, pr]);
       continue;
     }
+    // a background command's notification enters the session's queue when the command ends — the end of its call; the
+    // session may take it later or absorb it mid-turn without a record of its own
+    if (t === "queue-operation" && r.operation === "enqueue" && ts !== null && typeof r.content === "string") notified(r.content, ts);
     if (t !== "user" && t !== "assistant") continue;
     if (ts === null) continue;
     const human = !subagent && isHumanPrompt(r);
     if (human) acc.n_human++;
     const msg = r.message ?? {};
     const content = msg.content;
+    // A wait for input ends with this record (#518): a human prompt; a user record that isn't a tool result and isn't a
+    // notification of the session's own work (isInput); a tool result the user approved in the permission dialog or
+    // answered (AskUserQuestion)
+    let input = human ? INPUT_HUMAN : 0;
+    if (t === "user") {
+      const results = Array.isArray(content) ? content.filter((b: Any) => b && typeof b === "object" && b.type === "tool_result") : [];
+      if (results.length) {
+        acc.perm = !!acc.perm || !!r.permissionDecision;
+        if (askedUser(r) || results.some((b: Any) => ASK_TOOLS.has(calls.get(b.tool_use_id)?.name ?? ""))) input = INPUT_OTHER;
+      } else {
+        if (!human && isInput(r, subagent, firstUser)) input = INPUT_OTHER;
+        notified(textOfContent(content), ts);
+      }
+      firstUser = false;
+    }
     if (!hintDone && t === "user") {
       // a subagent's first prompt is the assignment from the orchestrator
       const txt = textOfContent(content);
@@ -1402,7 +1542,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
     const ownWt = inOwnWorktree(r, acc, subagent);
     const scope = ownWt ? wtScope(acc, r.cwd) : 0;
     if (!ownWt) acc.written.push(acc.ev.length);
-    acc.ev.push([ts, recordBranch(r, acc, subagent), human ? 1 : 0, hint, uidx, agent, ...(scope ? [scope] : [])]);
+    acc.ev.push([ts, recordBranch(r, acc, subagent), input, hint, uidx, agent, ...(scope ? [scope] : [])]);
     if (human && acc.first_refs === null) {
       const txt = promptText(content);
       acc.first_refs = refsIn(txt);
@@ -1415,6 +1555,7 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         const cmd = b.input && typeof b.input === "object" ? b.input.command : null;
         if (typeof cmd === "string" && cmd.includes("git commit")) commitToolIds.add(b.id);
         if (typeof cmd === "string" && gitListingOnly(cmd)) listingToolIds.add(b.id);
+        if (b.id) calls.set(b.id, { at: ts, kind: typeof cmd === "string" ? waitKind(cmd) : 0, name: String(b.name ?? ""), bg: !!(b.input && typeof b.input === "object" && b.input.run_in_background) });
       } else if (t === "user" && b.type === "tool_result") {
         // Hashes are taken from ANY tool_result, not only after `git commit`: a commit is often made by
         // a script (checks + commit + push), and the hash surfaces in its output. False anchors (old
@@ -1423,6 +1564,15 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         let txt = textOfContent(b.content);
         const tur = r.toolUseResult;
         if (tur && typeof tur === "object") txt += "\n" + String(tur.stdout ?? "") + "\n" + String(tur.stderr ?? "");
+        // a wait call ends with its result; a command that went to the background — with its notification (notified)
+        const call = calls.get(b.tool_use_id);
+        const bgId = tur && typeof tur === "object" && tur.backgroundTaskId ? String(tur.backgroundTaskId) : null;
+        if (call && (call.bg || bgId)) {
+          if (bgId) bgTask.set(bgId, b.tool_use_id);
+        } else if (call) {
+          calls.delete(b.tool_use_id);
+          if (call.kind) acc.calls.push([call.at, ts, call.kind, agent, slotWaitIn(txt)]);
+        }
         if (!commitToolIds.has(b.tool_use_id) && !txt.includes("git") && txt.length > 20000) continue; // huge output without git — don't spend time on it
         collectHashes(listingToolIds.has(b.tool_use_id) ? acc.listed : acc.commits, ts, txt, scope);
         if (ownWt) {
@@ -1486,10 +1636,14 @@ export function parseSessionFile(file: string): Session {
     n_subagents: subs.length,
     agents: subs.map((f) => path.basename(f, ".jsonl")),
     ...(acc.wtBranches.length ? { wt_branches: acc.wtBranches } : {}),
+    ...callsOf(acc),
     source: "claude",
     routine: acc.n_human < 3 && !acc.prlinks.length && !acc.commits.length,
   };
 }
+
+/** The session's wait calls (by start) and whether its tool results tell a wait for the user's approval apart. */
+const callsOf = (acc: Acc): Pick<Session, "calls" | "perm"> => ({ ...(acc.calls.length ? { calls: acc.calls.sort(byTs) } : {}), ...(acc.perm !== null ? { perm: acc.perm } : {}) });
 
 /** A shell command from Codex call arguments: `{"cmd": "…"}` or `{"command": ["bash", "-lc", "…"]}`. */
 function codexCommand(args: unknown): string {
@@ -1526,6 +1680,7 @@ export function parseCodexFile(file: string): Session {
   let model: string | null = null;
   const commitCalls = new Set<string>();
   const listingCalls = new Set<string>();
+  const waitCalls = new Map<string, [number, number]>(); // call_id → (start, wait kind)
   for (const r of jsonlRecords(file)) {
     const t = r.type;
     const p: Any = r.payload && typeof r.payload === "object" ? r.payload : {};
@@ -1548,7 +1703,7 @@ export function parseCodexFile(file: string): Session {
         if (item.type === "UserMessage") {
           const txt = codexText(item.content);
           acc.n_human++;
-          acc.ev.push([ts, "", 1, "", -1]);
+          acc.ev.push([ts, "", INPUT_HUMAN, "", -1]);
           if (acc.first_refs === null) {
             acc.first_refs = refsIn(txt);
             acc.first_urls = urlsIn(txt);
@@ -1578,10 +1733,15 @@ export function parseCodexFile(file: string): Session {
       const inp = pt === "custom_tool_call" ? p.input : p.arguments;
       if (typeof inp === "string" && inp.includes("git commit")) commitCalls.add(p.call_id);
       if (pt === "function_call" && gitListingOnly(codexCommand(inp))) listingCalls.add(p.call_id);
+      const kind = pt === "function_call" ? waitKind(codexCommand(inp)) : 0;
+      if (kind && p.call_id) waitCalls.set(p.call_id, [ts, kind]);
       acc.ev.push([ts, "", 0, "", -1]);
     } else if (pt === "custom_tool_call_output" || pt === "function_call_output") {
       const txt = codexText(p.output);
       acc.ev.push([ts, "", 0, "", -1]);
+      const call = waitCalls.get(p.call_id);
+      if (call) acc.calls.push([call[0], ts, call[1], 0, slotWaitIn(txt)]);
+      acc.perm = false; // Codex writes no permission decision: a wait for the user's approval is in the call's time
       if (!commitCalls.has(p.call_id) && !txt.includes("git") && txt.length > 20000) continue;
       collectHashes(listingCalls.has(p.call_id) ? acc.listed : acc.commits, ts, txt);
     }
@@ -1603,6 +1763,7 @@ export function parseCodexFile(file: string): Session {
     title_refs: [],
     title_urls: [],
     n_subagents: 0,
+    ...callsOf(acc),
     source: "codex",
     routine: acc.n_human < 3 && !acc.commits.length,
   };
@@ -1686,6 +1847,7 @@ export function parseCloudFile(file: string): Session {
     title_hist: acc.titles,
     n_subagents: subs.size,
     agents: [...subs.keys()],
+    ...callsOf(acc),
     source: "cloud",
     routine: acc.n_human < 3 && !acc.commits.length,
   };
@@ -2291,6 +2453,54 @@ export interface Fact {
   overlap?: { issue: number; h: number }[]; // counted (pinning, branch, subagent, commit), but also in someone else's actual
   cloud_missing?: string[]; // cloud sessions from the PR commits' trailer whose export is missing (est cloud-import)
   cloud_parts?: CloudPart[]; // parts computed by cloud sessions (the cloud marker) — kept in the marker on rewrite
+  waits?: Waits; // the actual's split by waits, minutes (#518); absent — no time or an epic
+  perm_unknown?: number; // linked sessions whose transcript doesn't tell a wait for the user's approval apart
+}
+
+/**
+ * The actual's split, minutes: CI on the PR (`wait-ci pr`), after the merge and the deploy (`wait-ci merged`, `issue`),
+ * local checks (typecheck, test*, lint, commands under slot), of them the slot queue, and the rest — the model and the
+ * other tools. A moment inside calls of two kinds goes to the first by WAIT_KINDS; ci + merged + checks + rest = the
+ * actual.
+ */
+export interface Waits {
+  ci: number;
+  merged: number;
+  checks: number;
+  slot: number;
+  rest: number;
+}
+
+/**
+ * Whether the interval from record j — the previous record of the same agent — to record i is the agent's time (#518):
+ * it doesn't end with input (a wait for input isn't the task's time, however long), and it's no longer than gap or lies
+ * inside a wait call of that agent (CI, checks — whole, however long). A longer pause outside a wait — the machine
+ * asleep mid-call, a background process killed days later — isn't counted.
+ */
+export function agentTime(s: Pick<Session, "ev" | "calls">, i: number, j: number, gap: number): boolean {
+  const ev = s.ev;
+  if (j < 0 || ev[i]![2]) return false;
+  const a = ev[j]![0] as number;
+  const b = ev[i]![0] as number;
+  if (b - a <= gap) return true;
+  const k = ev[i]![5] ?? 0;
+  return (s.calls ?? []).some((c) => c[3] === k && c[0] <= a + 1 && b <= c[1] + 1);
+}
+
+/** The split of the time `all` (merged intervals) worth h hours by the wait calls' intervals of each kind and the queue. */
+export function splitWaits(all: [number, number][], byKind: [number, number][][], queue: [number, number][], h: number): Waits | null {
+  const total = ivTotal(all);
+  if (total <= 0 || h <= 0) return null;
+  const min = (sec: number) => round1((sec / total) * h * 60); // seconds of the union → minutes of the actual (with shares)
+  let taken: [number, number][] = [];
+  const own = byKind.map((iv) => {
+    const x = subtractIntervals(intersectIntervals(iv, all), taken);
+    taken = mergeIntervals([...taken, ...x]);
+    return x;
+  });
+  const [ci, merged, checks] = own.map((x) => min(ivTotal(x))) as [number, number, number];
+  const slot = min(ivTotal(intersectIntervals(queue, own[2]!)));
+  return { ci, merged, checks, slot, rest: Math.max(0, round1(h * 60 - ci - merged - checks)) };
 }
 
 type Anchor = [number, string, string, number, number]; // (ts, own|foreign, pr|commit, share, scope)
@@ -2441,6 +2651,10 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
   let lastTs: number | null = null;
   const details: Detail[] = [];
   const iv: Record<string, [number, number][]> = {};
+  // the task's time inside wait calls by kind (WAIT_KINDS) and in the slot queue — the actual's split
+  const waitIv: [number, number][][] = WAIT_KINDS.map(() => []);
+  const queueIv: [number, number][] = [];
+  let permUnknown = 0;
   const takenS = new Map<number, number>(); // task → seconds given to its recorded actual
   const overlapS = new Map<number, number>();
   const recorded: Recorded = repo.recorded?.() ?? new Map();
@@ -2649,7 +2863,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
         if (!others) continue;
         const t = ev[i]![0] as number;
         const j = prev[i]!;
-        const pair = j >= 0 && t - ev[j]![0] <= gap && (orig[j]! > 0 || !!ev[j]![2]);
+        const pair = j >= 0 && (orig[j]! > 0 || !!ev[j]![2]) && agentTime(s, i, j, gap);
         const x = pair ? (ev[j]![0] + t) / 2 : t; // a record's interval — by the midpoint, a single one — by time
         const tol = pair ? 0 : 1; // marker boundaries are rounded to a second
         const hit = others.find(([, ivs]) => ivs.some(([a, b]) => a - tol <= x && x <= b + tol));
@@ -2670,7 +2884,7 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     }
     if (!attributed.some((w) => w > 0)) continue;
     // the interval to the previous record of the same agent counts only if that one is ours too
-    // or it's the human prompt our segment started with
+    // or it's the human prompt our segment started with, and if it's the agent's time (agentTime: not a wait for input)
     const next = new Array<number>(ev.length).fill(-1);
     for (let i = 0; i < ev.length; i++) if (prev[i]! >= 0) next[prev[i]!] = i;
     let sessRaw = 0.0;
@@ -2681,13 +2895,14 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const brs: Record<string, number> = {};
     const sessIv: [number, number][] = [];
     const ivBy = new Map<string, [number, number][]>(); // the same intervals by agent key — into the marker
+    const ivAgent = new Map<number, [number, number][]>(); // the same by agent number — for its wait calls
     const sessAgents = new Set<number>();
     const sessUsage: [Any[], number, boolean][] = []; // (usage record, share, whether a subagent) for linked model responses
     const sUsage = s.usage ?? [];
     const sModels = s.models ?? [];
     for (let i = 0; i < ev.length; i++) {
       const e = ev[i]!;
-      const [ts, b, human] = [e[0] as number, e[1] as string, e[2] as number];
+      const [ts, b, human] = [e[0] as number, e[1] as string, e[2] === INPUT_HUMAN ? 1 : 0];
       const w = attributed[i]!;
       const k = next[i]!;
       if (human && !w && k >= 0 && attributed[k]! && ev[k]![0] - ts <= gap) prompts++;
@@ -2698,12 +2913,14 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
       sFirst = sFirst === null ? ts : sFirst;
       sLast = ts;
       const j = prev[i]!;
-      if (j >= 0 && ts - ev[j]![0] <= gap && (attributed[j]! || ev[j]![2])) {
+      if (j >= 0 && (attributed[j]! || ev[j]![2]) && agentTime(s, i, j, gap)) {
         const d = ts - ev[j]![0];
         intervals.push([ev[j]![0], ts]);
         sessIv.push([ev[j]![0], ts]);
         const ak = keyOf(i);
         ivBy.set(ak, [...(ivBy.get(ak) ?? []), [ev[j]![0], ts]]);
+        const ag: number = e[5] ?? 0;
+        ivAgent.set(ag, [...(ivAgent.get(ag) ?? []), [ev[j]![0], ts]]);
         sessRaw += d;
         sessW += d * w;
         const key = b || "?";
@@ -2712,6 +2929,14 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     }
     if (sessRaw < 60 && prompts === 0) continue; // less than a minute and no prompts (a random hash in output) — not counted as a session
     for (const [k, list] of ivBy) iv[k] = mergeIntervals([...(iv[k] ?? []), ...list]).map(([a, b]) => [Math.floor(a), Math.ceil(b)]);
+    // a wait call is the task's wait as far as its agent's time is the task's
+    for (const [a, z, kind, agent, queue] of s.calls ?? []) {
+      const mine = ivAgent.get(agent);
+      if (!mine || !kind || kind > WAIT_KINDS.length) continue;
+      waitIv[kind - 1]!.push(...intersectIntervals([[a, z]], mine));
+      if (queue > 0) queueIv.push(...intersectIntervals([[a, Math.min(z, a + queue)]], mine));
+    }
+    if (s.perm === false) permUnknown++;
     nSessions++;
     nPrompts += prompts;
     nAgents += sessAgents.size;
@@ -2851,8 +3076,12 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     overlap: hoursByIssue(overlapS),
     cloud_missing: cloudMissing,
     cloud_parts: parts,
+    perm_unknown: permUnknown,
   };
   Object.assign(res, cov !== "none" ? tokensResult(tok, byModel) : { tok: null, usd: null });
+  // the split of the actual by waits: the time of the cloud parts has no calls — it's in the rest
+  const waits = res.h !== null ? splitWaits(merged, waitIv, queueIv, res.h) : null;
+  if (waits) res.waits = waits;
   return res;
 }
 
@@ -2886,6 +3115,14 @@ function stepsTxt(res: Fact, language = locale.projectLanguage()): string {
   const n = res.steps ?? 0;
   const share = n ? Math.round(((res.tail ?? 0) / n) * 100) : 0;
   return locale.fill(locale.names(language).est.fact.steps, { n, agents: res.agents ?? 0, agentSteps: res.steps_agents ?? 0, preamble: k(res.preamble), end: k(res.ctx_end), tail: TAIL_CTX / 1000, share });
+}
+
+/** "Waits: CI 4 min · after the merge 4 · checks 6 (slot queue 1) · rest 15." — whole minutes. */
+export function waitsTxt(w: Waits, language = locale.projectLanguage()): string {
+  const n = locale.names(language);
+  const m = (v: number) => String(Math.round(v));
+  const slot = w.checks > 0 ? locale.fill(n.est.fact.waitsSlot, { slot: m(w.slot) }) : "";
+  return locale.fill(n.est.fact.waits, { ci: m(w.ci), merged: m(w.merged), checks: m(w.checks), slot, rest: m(w.rest) });
 }
 
 function tokensTxt(res: Fact, language = locale.projectLanguage()): string {
@@ -2927,6 +3164,41 @@ export function mergeIntervals(iv: [number, number][]): [number, number][] {
     const last = out[out.length - 1];
     if (last && a <= last[1]) last[1] = Math.max(last[1], b);
     else out.push([a, b]);
+  }
+  return out;
+}
+
+/** Length of the union of intervals, s. */
+const ivTotal = (iv: [number, number][]) => mergeIntervals(iv).reduce((s, [a, b]) => s + (b - a), 0);
+
+/** The part of intervals a inside intervals b. */
+export function intersectIntervals(a: [number, number][], b: [number, number][]): [number, number][] {
+  const x = mergeIntervals(a);
+  const y = mergeIntervals(b);
+  const out: [number, number][] = [];
+  for (let i = 0, j = 0; i < x.length && j < y.length; ) {
+    const lo = Math.max(x[i]![0], y[j]![0]);
+    const hi = Math.min(x[i]![1], y[j]![1]);
+    if (lo < hi) out.push([lo, hi]);
+    if (x[i]![1] < y[j]![1]) i++;
+    else j++;
+  }
+  return out;
+}
+
+/** The part of intervals a outside intervals b. */
+export function subtractIntervals(a: [number, number][], b: [number, number][]): [number, number][] {
+  const y = mergeIntervals(b);
+  const out: [number, number][] = [];
+  for (const [a0, a1] of mergeIntervals(a)) {
+    let lo = a0;
+    for (const [b0, b1] of y) {
+      if (b1 <= lo || b0 >= a1) continue;
+      if (b0 > lo) out.push([lo, b0]);
+      lo = Math.max(lo, b1);
+      if (lo >= a1) break;
+    }
+    if (lo < a1) out.push([lo, a1]);
   }
   return out;
 }
@@ -2991,7 +3263,9 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
   for (const sid of res.cloud_missing ?? []) text += locale.fill(n.est.fact.cloudMissing, { sid });
   if (res.tok) text += "\n" + tokensTxt(res, language);
   if (res.steps) text += "\n" + stepsTxt(res, language);
+  if (res.waits) text += "\n" + waitsTxt(res.waits, language);
   const marker: Record<string, unknown> = { v: 1, h, manual, wall: res.wall, cov: res.cov, sessions: res.sessions, prompts: res.prompts, agents: res.agents ?? 0, prs: res.prs, commits: res.commits, diff: res.diff, cause };
+  if (res.waits) marker.waits = res.waits; // minutes: est history and the dashboard show them and their medians
   if (res.tok) {
     marker.tok = res.tok;
     marker.usd = res.usd ?? null;
@@ -3175,7 +3449,7 @@ const rowType = (r: Row): string => r.fact_marker?.type || r.est_marker?.type ||
 export function historyTable(rows: Row[]): string[] {
   const labelsOf = (r: Row) => r.labels.filter((l) => l !== "epic").join(",");
   const w = Math.max("labels".length, ...rows.map((r) => labelsOf(r).length));
-  const out = [`${pad("#", 5, true)} | ${pad("est.", 6, true)} | ${pad("actual", 6, true)} | ${pad("cov.", 7)} | ${pad("M tok", 7, true)} | ${pad("$", 7, true)} | ${pad("agents", 6, true)} | ${pad("turns", 5, true)} | ${pad("type", 8)} | ${pad("labels", w)} | title`];
+  const out = [`${pad("#", 5, true)} | ${pad("est.", 6, true)} | ${pad("actual", 6, true)} | ${pad("cov.", 7)} | ${pad("M tok", 7, true)} | ${pad("$", 7, true)} | ${pad("agents", 6, true)} | ${pad("turns", 5, true)} | ${pad("CI", 3, true)} | ${pad("merge", 5, true)} | ${pad("checks", 6, true)} | ${pad("slot", 4, true)} | ${pad("type", 8)} | ${pad("labels", w)} | title`];
   for (const r of rows) {
     const fm = r.fact_marker ?? {};
     const cov = fm.cov || "—";
@@ -3184,10 +3458,48 @@ export function historyTable(rows: Row[]): string[] {
     // the task's subagents and turns are fan-out and size features; an actual computed before the feature — a dash
     const ag = typeof fm.agents === "number" ? String(fm.agents) : "—";
     const st = typeof fm.steps === "number" ? String(fm.steps) : "—";
-    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 6, true)} | ${pad(st, 5, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
+    // waits, whole minutes: the actual before the split — dashes
+    const wt = markerWaits(fm);
+    const m = (k: keyof Waits) => (wt ? String(Math.round(wt[k])) : "—");
+    out.push(`${pad(String(r.number), 5, true)} | ${pad(fmtH(r.est), 6, true)} | ${pad(fmtH(r.fact), 6, true)} | ${pad(cov, 7)} | ${pad(mt, 7, true)} | ${pad(usd, 7, true)} | ${pad(ag, 6, true)} | ${pad(st, 5, true)} | ${pad(m("ci"), 3, true)} | ${pad(m("merged"), 5, true)} | ${pad(m("checks"), 6, true)} | ${pad(m("slot"), 4, true)} | ${pad(rowType(r), 8)} | ${pad(labelsOf(r), w)} | ${r.title.slice(0, 60)}`);
   }
   return out;
 }
+
+/** The waits of a recorded actual — the `waits` of the "Actual" marker, minutes; an actual before the split — null. */
+export function markerWaits(fm: Any): Waits | null {
+  const w = fm?.waits;
+  if (!w || typeof w !== "object") return null;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return { ci: n(w.ci), merged: n(w.merged), checks: n(w.checks), slot: n(w.slot), rest: n(w.rest) };
+}
+
+/** Median waits of the latest tasks and of the previous ones; a median of fewer than `min` tasks is noise — none. */
+export interface WaitsShift {
+  now: Waits | null;
+  prev: Waits | null;
+  n: number;
+}
+
+/** Medians of each kind of wait over the latest `window` tasks and the `window` before them (oldest first). */
+export function waitsShift(ws: Waits[], window = 10, min = 3): WaitsShift {
+  const med = (xs: Waits[]): Waits => ({ ci: median(xs.map((w) => w.ci)), merged: median(xs.map((w) => w.merged)), checks: median(xs.map((w) => w.checks)), slot: median(xs.map((w) => w.slot)), rest: median(xs.map((w) => w.rest)) });
+  const last = ws.slice(-window);
+  const before = ws.slice(-2 * window, -window);
+  return { now: last.length >= min ? med(last) : null, prev: before.length >= min ? med(before) : null, n: last.length };
+}
+
+/** The `est history` line of median waits: the latest tasks and the previous ones; no tasks with the split — none. */
+export function waitsHistoryLine(rows: Row[], window = 10): string | null {
+  const ws = [...rows].sort((a, b) => (a.closedAt || 0) - (b.closedAt || 0)).map((r) => markerWaits(r.fact_marker)).filter((w): w is Waits => w !== null);
+  const s = waitsShift(ws, window);
+  if (!s.now) return ws.length ? `waits: ${ws.length} ${plural(ws.length, "task", "tasks")} with the split — too few for a median` : null;
+  const prev = s.prev ? `; the previous ${window}: ${waitsBrief(s.prev)}` : "";
+  return `waits, median of the last ${s.n} tasks: ${waitsBrief(s.now)}${prev}`;
+}
+
+/** "CI 4 min · after the merge 4 · checks 6 (slot queue 1) · rest 15" — the waits of a task or their medians, in English. */
+export const waitsBrief = (w: Waits) => waitsTxt(w, "en").replace(/^Waits: /, "").replace(/\.$/, "");
 
 interface HistoryArgs {
   repo?: string;
@@ -3230,6 +3542,8 @@ function cmdHistory(args: HistoryArgs): void {
       console.log("k: no pairs «estimate with the est marker + actual» — calibration unavailable");
     }
     if (c.n_partial) console.log(`tasks with coverage partial/none left out of k: ${c.n_partial}`);
+    const waits = waitsHistoryLine(rowsFact.filter((r) => !isEpicRow(r)));
+    if (waits) console.log(waits);
     const shares = usdShares(usdByModel(rowsFact.map((r) => r.fact_marker)));
     if (shares.length) console.log(`$ by model: ${sharesTxt(shares)} — ${TARIFF_NOTE} (est period)`);
     console.log(`closed in 90 days without an actual: ${noFact90}`);
@@ -3417,6 +3731,10 @@ function printFact(repo: Repo, res: Fact, est: number | null): void {
     console.log(`actual: ${fmtH(res.h)} h active in ${agentsTxt(res, "en")}${raw} (${estTxt}); ${res.sessions} sess., ${res.prompts} prompts, wall ${fmtH(res.wall, 1)} h, coverage ${res.cov}`);
   }
   if (res.tok) console.log(tokensTxt(res, "en"));
+  if (res.waits) console.log(waitsTxt(res.waits, "en"));
+  // a wait for the user's approval is told apart by the permission decision on a tool result (Claude Code); without it
+  // the wait is inside the call's time (#518)
+  if (res.h !== null && res.perm_unknown) console.log(`○ waits for permission approval aren't told apart in ${res.perm_unknown} ${plural(res.perm_unknown, "session", "sessions")} (no permission decision in the transcript: an older Claude Code, Codex, cloud) — they're in the call time`);
   console.log(`secondary: PR ${res.prs.map((p) => `#${p}`).join(", ") || "none"}; commits ${res.commits}; diff ${diffTxt(res, "en")} (without lock files / snapshots / minified)`);
   for (const d of res.details) {
     const brs = Object.entries(d.branches).slice(0, 4).map(([b, h]) => `${b} ${h} h`).join(", ");
@@ -3471,6 +3789,28 @@ export function factsWithModel(rows: Row[], model: string, since: number, now: n
   return [...tasks, ...rows.filter((r) => done(r) && isEpicRow(r) && parents.has(r.number))];
 }
 
+/**
+ * Actuals to recompute after a change of the actual's definition (#518): closed tasks of the window with a recorded
+ * actual, newest first, then their closed epics.
+ */
+export function factsRecorded(rows: Row[], since: number, now: number): Row[] {
+  const done = (r: Row) => r.state === "CLOSED" && r.stateReason !== "NOT_PLANNED";
+  const tasks = rows.filter((r) => done(r) && !isEpicRow(r) && r.fact !== null && (r.closedAt || 0) >= now - since).sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
+  const parents = new Set(tasks.map((r) => r.parent));
+  return [...tasks, ...rows.filter((r) => done(r) && isEpicRow(r) && parents.has(r.number))];
+}
+
+/**
+ * Why a recomputation doesn't overwrite a recorded actual: its transcripts are gone — fewer sessions than the marker
+ * recorded (cleaned by cleanupPeriodDays) or none at all. null — overwrite.
+ */
+export function recomputeKept(fm: Any, res: Pick<Fact, "cov" | "sessions" | "epic">): string | null {
+  if (res.epic) return null;
+  if (res.cov === "none") return "no sessions found — transcripts gone";
+  const was = typeof fm?.sessions === "number" ? fm.sessions : 0;
+  return res.sessions < was ? `sessions ${was} → ${res.sessions} — transcripts gone` : null;
+}
+
 interface FactArgs {
   number?: number;
   repo?: string;
@@ -3480,6 +3820,7 @@ interface FactArgs {
   sweep: boolean;
   since: string;
   model?: string;
+  recompute?: boolean;
 }
 
 /** Exit code: 1 — a sweep with --write failed to write something (#353). */
@@ -3488,6 +3829,8 @@ function cmdFact(args: FactArgs): number {
   if (args.gap < 1) throw new EstError(`--gap must be ≥ 1 minute, got ${args.gap}`);
   if (args.sweep && args.number !== undefined) throw new EstError("an issue number and --sweep are incompatible: one or the other");
   if (args.model !== undefined && !args.sweep) throw new EstError("--model — only with --sweep: recomputing the recorded actuals with this model");
+  if (args.recompute && !args.sweep) throw new EstError("--recompute — only with --sweep: recomputing the recorded actuals of the window");
+  if (args.recompute && args.model !== undefined) throw new EstError("--recompute and --model are incompatible: --recompute takes every recorded actual of the window");
   if (isCloud()) {
     if (args.number === undefined) throw new EstError(CLOUD_ERR);
     const sid = cloudSid(process.env.CLAUDE_CODE_REMOTE_SESSION_ID);
@@ -3508,9 +3851,13 @@ function cmdFact(args: FactArgs): number {
     const since = parseSince(args.since);
     const now = nowTs();
     let rows: Row[];
+    const recompute = args.model !== undefined || !!args.recompute;
     if (args.model !== undefined) {
       rows = factsWithModel(repo.projectRows(), args.model, since, now);
       console.log(`== ${repo.full}: closed with an actual on ${modelVersion(args.model)} in ${args.since} (with their epics): ${rows.length}`);
+    } else if (args.recompute) {
+      rows = factsRecorded(repo.projectRows(), since, now);
+      console.log(`== ${repo.full}: closed with an actual in ${args.since} (with their epics): ${rows.length}`);
     } else {
       rows = repo.projectRows().filter((r) => r.state === "CLOSED" && r.fact === null && r.stateReason !== "NOT_PLANNED" && (r.closedAt || 0) >= now - since);
       rows.sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
@@ -3555,8 +3902,12 @@ function cmdFact(args: FactArgs): number {
       // recomputing gives the whole actual by the current logic, not just one rate: the previous hours sit alongside so
       // the difference is visible before --write
       if (args.model !== undefined) extra += `; was ${fmtH(r.fact)} h, $${fmtH(r.fact_marker?.usd ?? null)} → $${fmtH(res.usd ?? null)}`;
+      else if (args.recompute) extra += `; was ${fmtH(r.fact)} h`;
+      // the recorded actual stays when its transcripts are gone: a recomputation would count only what's left of them
+      const kept = args.recompute ? recomputeKept(r.fact_marker, res) : null;
+      if (kept) extra += `; kept: ${kept}`;
       console.log(`  #${pad(String(r.number), 5)} ${pad(fmtH(h), 6, true)} h  ${pad(res.cov, 7)} estimate ${pad(fmtH(r.est), 5, true)}  ${pad(extra, 26)} ${r.title.slice(0, 50)}`);
-      if (args.write && res.cov !== "none") {
+      if (args.write && res.cov !== "none" && !kept) {
         let body: string;
         try {
           body = writeFact(repo, issue, res, r.est);
@@ -3579,10 +3930,10 @@ function cmdFact(args: FactArgs): number {
       const missed = [...failed, ...left.map((r) => r.number)];
       console.log(`not written: ${missed.length} — ${missed.map((n) => `#${n}`).join(", ")}`);
       const opts = `--repo ${repo.full}${args.gap === 30 ? "" : ` --gap ${args.gap}`}`;
-      // a regular sweep takes only tasks without an actual — it would skip the written ones; a sweep by model would
-      // recompute them too
+      // a regular sweep takes only tasks without an actual — it would skip the written ones; a sweep by model or a
+      // recomputation would recompute them too
       console.log(
-        args.model === undefined
+        !recompute
           ? `retry: est fact --sweep --since ${args.since} ${opts} --write — it skips the written ones`
           : `retry task by task, in order (a sweep would recompute the written ones too): est fact <N> ${opts} --write — ${missed.map((n) => `#${n}`).join(", ")}`,
       );
@@ -4142,10 +4493,11 @@ export interface Period {
 }
 
 /**
- * Period summary over all sessions — like the actual, but without linking: active time is the gaps between neighboring
- * records of a session no longer than gap, both in the period; tokens and cost — once per model response (a resumed
- * session copies the history); machine hours — the union of all sessions' gaps, their ratio to agent hours is
- * parallelism.
+ * Period summary over all sessions — like the actual, but without linking: active time is the intervals between
+ * neighboring records of one agent of a session that are the agent's time (agentTime: not a wait for input, no longer
+ * than gap or inside a wait call), both ends in the period, a session's agents — by their union; tokens and cost — once
+ * per model response (a resumed session copies the history); machine hours — the union of all sessions' time, their
+ * ratio to agent hours is parallelism.
  */
 export function periodSummary(sessions: Session[], prs: PR[], since: number, until: number, gapMin = 30): Period {
   const gap = gapMin * 60;
@@ -4156,20 +4508,19 @@ export function periodSummary(sessions: Session[], prs: PR[], since: number, unt
   const inside = (t: number) => t >= since && t < until;
   for (const s of sessions) {
     const ev = s.ev;
+    const prevOf = prevOfSameAgent(ev);
     const agents = new Set<number>();
+    const own: [number, number][] = [];
     let touched = false;
     for (let i = 0; i < ev.length; i++) {
       const e = ev[i]!;
       const t = e[0] as number;
       if (!inside(t)) continue;
       touched = true;
-      if (e[2]) res.prompts++;
+      if (e[2] === INPUT_HUMAN) res.prompts++;
       if (e[5] > 0) agents.add(e[5]);
-      const prev = i > 0 ? (ev[i - 1]![0] as number) : null;
-      if (prev !== null && prev >= since && t - prev <= gap) {
-        all.push([prev, t]);
-        res.h += t - prev;
-      }
+      const j = prevOf[i]!;
+      if (j >= 0 && ev[j]![0] >= since && agentTime(s, i, j, gap)) own.push([ev[j]![0], t]);
       const u = e.length > 4 && e[4] >= 0 ? s.usage?.[e[4]] : undefined;
       if (!u || seen.has(u[0])) continue;
       seen.add(u[0]);
@@ -4184,6 +4535,10 @@ export function periodSummary(sessions: Session[], prs: PR[], since: number, unt
     }
     if (touched) res.sessions++;
     res.agents += agents.size;
+    // parallel agents of a session overlap: the session's time is their union
+    const time = mergeIntervals(own);
+    res.h += ivTotal(time);
+    all.push(...time);
   }
   res.machine = mergeIntervals(all).reduce((a, [x, y]) => a + (y - x), 0);
   for (const [m, v] of byModel) {
@@ -4298,14 +4653,18 @@ Examples:
   fact: `est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
 est fact --sweep [--since 90d] [--repo o/r] [--write]
 est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]
+est fact --sweep --recompute [--since 90d] [--repo o/r] [--write]
 
-The actual of a task from session transcripts: active hours (pauses ≤ --gap minutes), tokens and cost; --write — the
-actual comment and the project fields (github task close runs it). An epic — the sum of its subtasks. --sweep — the
-actuals of closed tasks without one; with --model — recompute the recorded actuals with this model and their epics.
+The actual of a task from session transcripts: all of its time except waits for the user's input — a pause longer than
+--gap minutes counts only inside a CI or checks wait — split by waits, tokens and cost; --write — the actual comment
+and the project fields (github task close runs it). An epic — the sum of its subtasks. --sweep — the actuals of closed
+tasks without one; with --model — recompute the recorded actuals with this model and their epics; with --recompute —
+every recorded actual of the window and their epics (an actual whose transcripts are gone stays).
 
 Examples:
   est fact 42
-  est fact --sweep --since 90d --write`,
+  est fact --sweep --since 90d --write
+  est fact --sweep --recompute --since 365d --write`,
   estimate: `est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]
 est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]
 est estimate <N> [--repo o/r] --type <type> --hours H [--write]
@@ -4413,10 +4772,10 @@ export function main(argv: string[]): number {
       const { values, positionals } = parseArgs({
         args: rest,
         allowPositionals: true,
-        options: { repo: { type: "string" }, write: { type: "boolean", default: false }, gap: { type: "string", default: "30" }, json: { type: "boolean", default: false }, sweep: { type: "boolean", default: false }, since: { type: "string", default: "90d" }, model: { type: "string" } },
+        options: { repo: { type: "string" }, write: { type: "boolean", default: false }, gap: { type: "string", default: "30" }, json: { type: "boolean", default: false }, sweep: { type: "boolean", default: false }, since: { type: "string", default: "90d" }, model: { type: "string" }, recompute: { type: "boolean", default: false } },
       });
       if (positionals.length > 1) throw new EstError(`extra arguments: ${positionals.slice(1).join(" ")}`);
-      return cmdFact({ number: intArg(positionals[0], "issue number"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model });
+      return cmdFact({ number: intArg(positionals[0], "issue number"), repo: values.repo, write: values.write, gap: intArg(values.gap, "--gap")!, json: values.json, sweep: values.sweep, since: values.since, model: values.model, recompute: values.recompute });
     }
     if (cmd === "period") {
       const { values } = parseArgs({ args: rest, options: { repo: { type: "string" }, since: { type: "string", multiple: true }, until: { type: "string", multiple: true }, gap: { type: "string", default: "30" } } });
