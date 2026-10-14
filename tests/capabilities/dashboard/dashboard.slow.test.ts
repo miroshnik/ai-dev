@@ -119,7 +119,7 @@ describe("Команда dashboard сервит страницу сама и о�
   const sync = (args: string[], extra: Record<string, string> = {}) => spawnSync("bun", [DASHBOARD, ...args], { encoding: "utf8", env: env(extra) });
 
   /** Запускает дашборд и ждёт строку готовности: страница отдана первому, кто её откроет, решение о браузере принято. */
-  function start(args: string[], extra: Record<string, string> = {}): Promise<{ url: string; stdout: () => string }> {
+  function start(args: string[], extra: Record<string, string> = {}): Promise<{ url: string; stdout: () => string; stderr: () => string }> {
     const p = spawn("bun", [DASHBOARD, ...args], { env: env(extra), stdio: ["ignore", "pipe", "pipe"] });
     running.push(p);
     let out = "";
@@ -129,7 +129,7 @@ describe("Команда dashboard сервит страницу сама и о�
       p.stdout!.on("data", (d) => {
         out += d;
         const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(out)?.[0];
-        if (url && /^browser: .*$/m.test(out)) resolve({ url, stdout: () => out });
+        if (url && /^browser: .*$/m.test(out)) resolve({ url, stdout: () => out, stderr: () => err });
       });
       p.on("exit", (code, signal) => reject(new Error(`dashboard вышел (${code ?? signal}): ${out}${err}`)));
     });
@@ -201,6 +201,8 @@ describe("Команда dashboard сервит страницу сама и о�
     const bad = await fetch(new URL("/est", d.url));
     expect(bad.status).toBe(502);
     expect(await bad.text()).toContain("HTTP 502: Bad Gateway");
+    // сбой сети повторяется без настоящих пауз: прогон задаёт AI_DEV_GH_RETRY_MS (tests/standards/fast-tests)
+    expect(d.stderr()).toContain("network failure, retry in 0 s");
     // неверный период в адресе — ошибка запроса, а не GitHub
     const period = await fetch(new URL("/est?since=вчера", d.url));
     expect(period.status).toBe(400);

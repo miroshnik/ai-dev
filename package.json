@@ -19,7 +19,8 @@
     "bun": ">=1.2"
   },
   "scripts": {
-    "test": "bun --no-env-file skills/slot/scripts/slot.ts 'bun test'",
+    "test": "bun --no-env-file skills/slot/scripts/slot.ts 'bun test --path-ignore-patterns=\"**/*.slow.test.ts\"'",
+    "test:slow": "bun --no-env-file skills/slot/scripts/slot.ts 'bun test .slow.test.ts'",
     "test:spec": "bun --no-env-file skills/slot/scripts/slot.ts 'bun test tests/standards'",
     "typecheck": "bun --no-env-file skills/slot/scripts/slot.ts 'bun check'",
     "spec:doc": "bun test --reporter=junit --reporter-outfile=.spec-report.xml && bun --no-env-file skills/spec/scripts/spec-doc.ts .spec-report.xml --strict",
