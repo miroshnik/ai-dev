@@ -100,8 +100,36 @@ without pinning (before it, cloud, Codex, an epic's session, the file deleted) �
 by features: the PR's commit hashes in tool outputs, `pr-link` records of its
 repository, a branch with the task number, `#N` in the session's name and first
 prompt or in a subagent's assignment. Then it computes active hours — including
-the work of subagents and workflows inside the session — and writes a comment
-(section "Actual — the comment").
+the work of subagents and workflows inside the session, without waits for input
+(section "Waits") — and writes a comment (section "Actual — the comment").
+
+## Waits
+
+The actual is all of the task's time except waits for the user's input
+(#518). An interval between neighboring records of one agent ends with input
+when its record is a human prompt, the user's command, the app's event, another
+session's message, the coordinator's message to a subagent (SendMessage — a
+dispatcher's executor waiting for the owner's answer), a tool result the user
+approved in the permission dialog (`permissionDecision` with a `user…` source,
+not a saved rule) or answered (`AskUserQuestion`, `ExitPlanMode`) — such an
+interval isn't the task's time, however long. Not input: a tool result, a
+background command's notification and a background subagent's hand-back, the
+harness's insertions into a subagent's stream, the user's interrupt.
+
+The rest counts: whole inside a wait call of the same agent — from the call to
+its result, a background command — to its notification entering the session's
+queue — and up to `--gap` (30 min) otherwise: a longer pause outside a wait is
+the machine asleep mid-call or a background process killed days later. Wait
+calls by command (heredoc text isn't a command): `wait-ci pr|status` and `gh pr
+checks --watch` — CI; `wait-ci merged|issue` — after the merge and the deploy;
+`typecheck`, `lint`, `test*`, `e2e` as package scripts, `vitest`, `jest`,
+`tsc`, `eslint`, `playwright test` and a command under `slot` — checks, of them
+the slot queue (`slot: waited …` in the output; a background command's — from
+its output file while it exists). A moment inside calls of two kinds goes to
+the first of CI, after the merge, checks; the split is in minutes of the actual
+(a shared PR's share too), the rest — the model and the other tools. A
+transcript without the permission decision (an older Claude Code, Codex) has
+the approval wait inside the call's time — `est fact` prints it as a `○` line.
 
 A session from the folder of another registry repository (the conversation there
 grew into a task of this one: the task was created, the session renamed, the
@@ -143,6 +171,15 @@ and 45 % of tokens). Turns of a shared PR aren't split into shares — each task
 gets the whole turn. In the marker — `steps`, `steps_agents`, `tail` (a number),
 `preamble`, `ctx_end`.
 
+and on a fourth — the waits, minutes (section "Waits"):
+
+`Waits: CI 4 min · after the merge 4 · checks 6 (slot queue 1) · rest 15.`
+
+In the marker — `waits` (`ci`, `merged`, `checks`, `slot`, `rest`, minutes to a
+tenth): `est history` shows them as columns and the medians of the last 10
+tasks against the previous 10, the dashboard («Estimate and actual») — as a
+tile and columns. The estimate doesn't use them yet.
+
 ## Tokens and cost
 
 Besides the comment — the fields «Actual, h», «Tokens, M», «Cost, $» (the last
@@ -175,7 +212,11 @@ found before writing to GitHub. Comments are idempotent: the markers
 updates the existing comment instead of adding new ones. `--sweep --write` writes
 only tasks with coverage `full`/`partial` — it doesn't mass-post "unavailable";
 for a single task `est fact <N> --write` does write «actual unavailable»
-(that is the honest record at closing).
+(that is the honest record at closing). `--sweep --recompute` rewrites every
+recorded actual of the `--since` window, then their epics, by the current
+counting (after a change of the actual's definition); an actual whose
+transcripts are gone — no sessions or fewer than its marker recorded — stays
+as it is, the line says «kept».
 
 A `gh` network failure (timeout, dropped connection, GitHub 5xx) the script
 retries with pauses of 2, 5 and 15 s; a request error (404, permissions,
@@ -188,7 +229,7 @@ command to retry, exit code 1.
 ## Double counting and shared commits
 
 Active time is the intervals between neighboring records of one agent — the
-session itself or one of its subagents — no longer than the gap: a dispatcher
+session itself or one of its subagents — that are its time (section "Waits"): a dispatcher
 session's executors write at the same time, and the neighbor in the session's
 common timeline is usually another agent's. Intervals of parallel agents
 overlap, so the session's hours, its split by branch and the total are their
@@ -267,7 +308,8 @@ A period is a pair `--since … [--until …]` (the i-th `--until` closes the i-
 `--since`; without it — up to now; a date `YYYY-MM-DD` is midnight local time, or
 an ISO time, or `90d`). Sessions come from the repo's folders, including short
 ones without commits (the actual discards them as routines), and those pinned to
-its tasks; no guests (sessions of another repo). The script prints the totals and
+its tasks; no guests (sessions of another repo). Agent time is counted as in the
+actual (section "Waits"), a session's agents — by their union. The script prints the totals and
 the same per PR merged in the period: agent hours (sum over sessions), machine
 hours (union of sessions) and their ratio — parallelism, tokens, output, $, turns,
 subagents, human prompts, $ per 1M tokens; for two periods — the «after / before»

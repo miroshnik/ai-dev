@@ -16,8 +16,11 @@ this file; syntax and flags — `est --help` and `est <command> --help`.
 
 **Unit:** «Estimate, h» = «Actual, h» (in the project language —
 `locales/<language>.json` of the `github` skill) = the agent's active
-hours on the task (agent work + pauses ≤ 30 min between records). Not
-person-hours, not calendar time. Manual work outside the agent (> 0.5 h) the human
+hours on the task: all of its time except waits for the user's input (a
+prompt, a command, a permission approved in the dialog, a dispatcher's
+answer to its executor), however long; a wait for CI or checks counts whole,
+another pause — up to 30 min (reference.md, "Waits"). Not person-hours, not
+calendar time. Manual work outside the agent (> 0.5 h) the human
 adds themselves as a line «+ manually: N h» in the actual
 comment. Old estimates and the comments' language — reference.md, "Unit and comment language".
 
@@ -49,6 +52,7 @@ update the same comment (reference.md, "Writing and reruns").
 | PR merged / issue closed | `github task close <N>` — runs `est fact <N> --write` inside; recomputing the actual — `est fact <N> --write` |
 | `est history` prints «closed in 90 days without an actual: N» | `est fact --sweep --since 90d --write` — fill in the actuals of closed tasks |
 | A model's rate in the price list was fixed or added | `est fact --sweep --model <id> --write` — recompute the recorded actuals with it and their epics |
+| The actual's definition changed (the counting of time, the split) | `est fact --sweep --recompute --since <window> --write` — every recorded actual of the window and their epics; an actual whose transcripts are gone stays |
 | The actual says «Not counted again: N h already in the actual of #M» or «Overlap with the actual of #M … — recompute #M», and #M's actual is the wrong one | `est fact M --write`, then this task again — reference.md, "Double counting and shared commits" |
 | `--write` ended with «not written: …» (exit code 1) | the command to retry it prints |
 | The actual says «Cloud session … not imported — est cloud-import» | the import — section "Cloud session" |
@@ -102,9 +106,10 @@ sessions — first by pinning (the session in which `github task status` set the
 task to In progress, with its subagents), the rest by features (the PR's
 commits, the branch, `#N` in the session's name, first prompt or a subagent's
 assignment; reference.md, "Actual — how sessions are found"). It computes active
-hours — including subagents and workflows — and writes a comment of three lines:
-the actual (sessions, prompts, subagents, wall clock, coverage), the model spend
-and turns with context (reference.md, "Actual — the comment"), plus the fields
+hours — including subagents and workflows — and writes a comment of four lines:
+the actual (sessions, prompts, subagents, wall clock, coverage), the model spend,
+turns with context and the waits — CI, after the merge, checks with the slot
+queue, the rest (reference.md, "Actual — the comment", "Waits"), plus the fields
 «Actual, h», «Tokens, M», «Cost, $». Cost is the API equivalent at public rates,
 not money charged; a model outside the price list gives tokens without a price
 (reference.md, "Tokens and cost").
