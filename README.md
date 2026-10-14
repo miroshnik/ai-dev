@@ -232,7 +232,7 @@ An estimate from analogs with a measured actual, set by `github task new` itself
 
 ### [`dashboard`](skills/dashboard/SKILL.md) — sessions at work, estimate, actual and cost
 
-A browser page the script serves itself, with two tabs. Sessions (the main one) — tasks In progress, their sessions and what each one waits for: CI, merge, deploy, a human's answer, working or silent; on top — questions to the owner from the sessions' answers and from tasks. When to call it — "what's up with the sessions", "is anything stuck", "which tasks are hanging". Estimate and actual — estimate and actual in hours by task close date, actual to estimate, tokens and cost, with a rolling median and the $ share per model: whether estimates converge and whether a task gets cheaper after a flow change.
+A browser page the script serves itself, with two tabs. Sessions (the main one) — tasks In progress, their sessions and what each one waits for: CI, merge, deploy, a human's answer, working or silent; on top — questions to the owner from the sessions' answers and from tasks, at the bottom — questions the sessions answered themselves (✅ auto) within the last day. When to call it — "what's up with the sessions", "is anything stuck", "which tasks are hanging". Estimate and actual — estimate and actual in hours by task close date, actual to estimate, tokens and cost, with a rolling median and the $ share per model: whether estimates converge and whether a task gets cheaper after a flow change.
 
 `dashboard [--repo o/r | --all-repos] [--since 90d]`
 

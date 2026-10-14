@@ -165,7 +165,8 @@ describe("Страница — один график: часы, токены и 
 });
 
 // `gh` — внешний край, подменяется он: проект репозитория и его элементы — из мира $FAKE_GH/world.json
-// (перечитывается на каждый вызов), PR, эпики задач и задачи с вопросами — его `live`, `fail` — ошибка gh; каждый вызов —
+// (перечитывается на каждый вызов), PR, эпики задач, задачи с вопросами и изменённые с `since` — его `live`, `fail` — ошибка
+// gh; каждый вызов —
 // строкой JSON в $FAKE_GH/calls.jsonl.
 const FAKE_GH = `import { appendFileSync, readFileSync } from "node:fs";
 const dir = process.env.FAKE_GH;
@@ -191,7 +192,7 @@ else if (query.includes("projectV2(number:$n)")) {
   // значения фильтра через запятую — любое из них
   const statuses = [...(/status:((?:"[^"]+",?)+)/.exec(v.q)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   const items = repo.items.filter((it) => it.fieldValues.nodes.some((f) => f.field?.name === "Status" && statuses.includes(f.name))).map((it) => ({ content: { ...it.content, parent: (l.parents ?? {})[it.content.number] ?? null } }));
-  print({ data: { project: { items: { nodes: items } }, repository: { open: { nodes: l.open ?? [] }, merged: { nodes: l.merged ?? [] }, questions: { nodes: l.questions ?? [] } } } });
+  print({ data: { project: { items: { nodes: items } }, repository: { open: { nodes: l.open ?? [] }, merged: { nodes: l.merged ?? [] }, questions: { nodes: l.questions ?? [] }, recent: { nodes: (l.recent ?? []).filter((i) => i.updatedAt >= v.since) } } } });
 } else { console.error("fake gh: " + query.slice(0, 80)); process.exit(1); }
 `;
 
@@ -402,6 +403,11 @@ describe("Команда dashboard сервит страницу сама и о�
             open: [{ number: 50, url: "https://github.com/o/a/pull/50", headRefName: "feat/5-bank-import", mergeable: "MERGEABLE", closingIssuesReferences: { nodes: [{ number: 5 }] }, commits: commit("SUCCESS") }],
             parents: { 5: { number: 10, title: "Банки · эпик" } },
             questions: [{ number: 6, title: "Отчёт по ROI", body: "## Вопросы\n1. Валюта отчёта?\n" }],
+            // задачи, изменённые с `since`: ответ авто в #5 — за сутки, #11 обновлена давно — GitHub её не отдаёт
+            recent: [
+              { number: 5, title: "Импорт банков", body: "## Вопросы\n1. ✅ авто Формат выписки? **Ответ:** MT940.\n", createdAt: new Date((now - 7200) * 1000).toISOString(), lastEditedAt: new Date((now - 600) * 1000).toISOString(), updatedAt: new Date((now - 60) * 1000).toISOString() },
+              { number: 11, title: "Поиск", body: "## Вопросы\n1. ✅ авто Движок? **Ответ:** встроенный.\n", createdAt: "2026-01-01T00:00:00Z", lastEditedAt: null, updatedAt: "2026-01-02T00:00:00Z" },
+            ],
           },
         },
       },
@@ -422,6 +428,10 @@ describe("Команда dashboard сервит страницу сама и о�
     expect(html).not.toContain('data-task="o/a#13"');
     const asks = /<section class="asks[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
     for (const q of ["Осталось: мерж — от владельца.", "1. Делить импорт?", "1. Валюта отчёта?"]) expect(asks).toContain(q);
+    // «Decided auto» — ответы авто задач, изменённых за сутки, под таблицей задач
+    const autos = (/<section class="autos[\s\S]*?<\/section>/.exec(html)?.[0] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(autos).toContain("#5 Импорт банков edited 10 min ago Формат выписки? MT940.");
+    expect(autos).not.toContain("Движок?");
     // обновляется сама: раз в 30 с страница заново, подменой <main> — раскрытое остаётся раскрытым
     expect(html).toMatch(/<\/main><script>[\s\S]*replaceWith[\s\S]*setInterval\([^\n]*, 30000\);[\s\S]*<\/script>/);
   });
