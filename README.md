@@ -302,7 +302,8 @@ git show origin/spec:capabilities/est.md       # a decision page: why, what hold
 
 ```bash
 bun install
-bun run test          # fast level: script tests and ai-dev standards, without Docker and live servers
+bun run test:spec     # ai-dev standards — tests/standards, once: test doesn't repeat them
+bun run test          # fast level: script tests without standards, Docker and live servers
 bun run test:slow     # slow level — *.slow.test.ts: Docker, live servers; CI runs both levels
 bun run typecheck     # bun check — Bun's own type checker, Bun 1.4.3 from packageManager
 bun run spec:doc      # docs/spec from test names, --strict
