@@ -1899,6 +1899,13 @@
   "describes": [
    "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
   ],
+  "name": "premerge в проекте со стандартами без test:spec называет, что стандарты на слиянии не проверены"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
   "name": "зависимости ставятся по lockfile слияния до test:spec"
  },
  {
@@ -6868,6 +6875,34 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
+   "check проекта со стандартами или архитектурой требует скрипт test:spec — быструю проверку pr premerge"
+  ],
+  "name": "test:spec — раннер команды test, без неё — по зависимостям: vitest, jest, bun test в проекте на Bun, без раннера — vitest; по корням спеки, что есть"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта со стандартами или архитектурой требует скрипт test:spec — быструю проверку pr premerge"
+  ],
+  "name": "проект без стандартов и архитектуры — check не требует test:spec"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта со стандартами или архитектурой требует скрипт test:spec — быструю проверку pr premerge"
+  ],
+  "name": "проект со стандартами без скрипта test:spec — check называет нарушение и строку для package.json"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта со стандартами или архитектурой требует скрипт test:spec — быструю проверку pr premerge"
+  ],
+  "name": "рядом со строкой test:spec — исключение тех же корней из test фильтром раннера: стандарты не идут дважды"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
    "update называет изменения каждого пропущенного релиза"
   ],
   "name": "update -g копией на машине — тот же список"
@@ -6980,6 +7015,13 @@
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
   "name": "вывод хука называет нарушения compose-файла и что их правка — отдельная задача проекта; без нарушений подсказки нет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "вывод хука называет нехватку test:spec и что её добавление — отдельная задача проекта; со скриптом подсказки нет"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
