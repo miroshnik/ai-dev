@@ -235,10 +235,10 @@ may change scope and approach.
 
 Once a task is merged, **a subagent with a fresh context** brings the open
 tasks of the same epic in line with what shipped; the session at peak context
-doesn't do it itself. `github task actualize <N>` prints the assignment with
-the five checks (no epic or no open tasks in it — not needed) — in the same
-turn as `ci-wait merged <PR>` in the background; the subagent and the deploy
-wait run in parallel, after both — `github task close`. Merged, deploy
+doesn't do it itself. `github task actualize <N>` does the mechanics and
+prints the subagent's prompt (no epic or no open tasks in it — not needed) —
+in the same turn as `ci-wait merged <PR>` in the background; the subagent and
+the deploy wait run in parallel, after both — `github task close`. Merged, deploy
 awaited, branch removed, epic refreshed, no questions — the last line of the
 answer is the "all done, can be closed" line; done, but the owner has
 something to decide — the "all done, but there are questions" line with the
