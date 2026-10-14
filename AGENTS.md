@@ -154,7 +154,8 @@ task with open questions.
 
 ### Estimate and actual — the `est` skill
 
-The unit is the agent's active hours on the task (work + pauses ≤ 30 min).
+The unit is the agent's hours on the task except waits for the user's input;
+CI and check waits count, split out.
 The estimate is set by `github task new`, the actual by `github task close`;
 neither is written by hand, the estimate isn't rewritten after
 work starts, no actual — "actual unavailable", not a number by eye. Work is

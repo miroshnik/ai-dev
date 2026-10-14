@@ -17,7 +17,9 @@ up a page with two tabs:
   what each is waiting for and links to the task's services, with «Waiting
   for the owner» at the top and «Decided auto» at the bottom;
 - **«Estimate and actual»** (`/est`) — a chart by task close date: GitHub
-  project fields and the «Estimate» and «Actual» comment markers.
+  project fields and the «Estimate» and «Actual» comment markers; the waits of
+  each task (CI, after the merge, checks with the slot queue) and their medians
+  — a tile and table columns.
 
 It writes nothing to GitHub.
 
