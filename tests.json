@@ -2709,6 +2709,69 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "--branch не ветка этой задачи по канону — ошибка до изменений"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "--branch не с «В работе» и у эпика — ошибка до изменений: ветку заводят, беря задачу в работу, у эпика ветки нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "блокировка .git/config при переименовании ветки — повтор, ветка и её настройка переименованы"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "блокировка не снята за время повторов — ветка переименована, строка ! с файлом блокировки и командой, которая доделает настройку; код 1, блокировка не тронута"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "ветка worktree переименована в ветку задачи вместе с её настройкой — upstream остался у ветки"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "каталог — не чекаут репозитория задачи — ветка не трогается, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "ошибка git не из-за блокировки — без повторов: строка !, код 1"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "повторный вызов на ветке задачи — без изменений: строка ="
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "текущая ветка уже есть на origin (main) или HEAD отсоединён — не трогается, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task status берёт в работу одну задачу на сессию"
   ],
   "name": "CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «session not recognized», файла нет"
@@ -12377,6 +12440,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/github/reference.md: skills/github/reference.md, «Project (GitHub Projects)» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/scripts/github.ts: AGENTS.md, «Session and branch» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
