@@ -130,13 +130,6 @@
   "describes": [
    "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
   ],
-  "name": "лимит API — ожидание до сброса, а не ERROR"
- },
- {
-  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
-  "describes": [
-   "PR ждут по SHA его головы, пока чеки не зарегистрируются и не завершатся"
-  ],
   "name": "обязательный чек базовой ветки из ruleset ещё не зарегистрирован — ожидание, хотя остальные завершились"
  },
  {
@@ -257,6 +250,34 @@
    "Одноимённые check-runs коммита сводятся к последнему — итог решает последний прогон, а не все сразу"
   ],
   "name": "последний check-run имени решает итог: ранний отменённый и поздний зелёный — PASS"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Ожидание показывает, чего ждёт, и не рвётся на лимите API"
+  ],
+  "name": "интервал опроса растёт с длиной ожидания"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Ожидание показывает, чего ждёт, и не рвётся на лимите API"
+  ],
+  "name": "исчерпанный лимит GitHub API — ожидание ждёт сброса и продолжается"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Ожидание показывает, чего ждёт, и не рвётся на лимите API"
+  ],
+  "name": "ожидание печатает строку только при смене состояния чеков"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Ожидание показывает, чего ждёт, и не рвётся на лимите API"
+  ],
+  "name": "строка состояния называет ожидаемые чеки и прошедшее время"
  },
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
@@ -455,6 +476,104 @@
   "name": "упавший чек при другом ещё pending — FAIL сразу, не дожидаясь pending"
  },
  {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "--all-repos — задачи всех репозиториев реестра, у задачи назван репозиторий"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "--no-open и BROWSER=none браузер не открывают"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "--port N, когда и свободный порт не взять, — тот же запрет, а не «port N is busy»"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "«Sessions» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "«Sessions» — у задачи «В работе» ссылки на адреса её сервисов из маршрутов прокси; маршруты не прочитаны — причина плашкой, страница отдаётся"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "в облачной сессии — ошибка с объяснением, а не сбой gh"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "вкладка «Sessions» открыта по умолчанию, «Estimate and actual» — второй вкладкой"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "занятый порт — ошибка с подсказкой, а не трасса"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "запрос с чужим Host — отказ: сайт, навёдший своё имя на 127.0.0.1, страницу не прочтёт"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "локальный порт не открыть (песочница агента) — ошибка, что слушать порт на 127.0.0.1 здесь запрещено, с подсказкой запустить вне песочницы, а не «port 0 is busy»"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "неизвестный параметр — код 2, --help — справка"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "ошибка GitHub — на странице, сервер живёт дальше"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "поднимает сервер на localhost, печатает адрес и открывает его в браузере"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.slow.test.ts",
+  "describes": [
+   "Команда dashboard сервит страницу сама и открывает её в браузере"
+  ],
+  "name": "страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Refresh» — перечитывает"
+ },
+ {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
   "describes": [
    "Данные графика — закрытые задачи с фактом по времени закрытия"
@@ -488,104 +607,6 @@
    "Данные графика — закрытые задачи с фактом по времени закрытия"
   ],
   "name": "эпик, открытая задача и задача без факта в график не входят"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "--all-repos — задачи всех репозиториев реестра, у задачи назван репозиторий"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "--no-open и BROWSER=none браузер не открывают"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "--port N, когда и свободный порт не взять, — тот же запрет, а не «port N is busy»"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "«Sessions» — задачи «В работе» проекта с закреплёнными сессиями из транскриптов и PR из GitHub; страница обновляется сама"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "«Sessions» — у задачи «В работе» ссылки на адреса её сервисов из маршрутов прокси; маршруты не прочитаны — причина плашкой, страница отдаётся"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "в облачной сессии — ошибка с объяснением, а не сбой gh"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "вкладка «Sessions» открыта по умолчанию, «Estimate and actual» — второй вкладкой"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "занятый порт — ошибка с подсказкой, а не трасса"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "запрос с чужим Host — отказ: сайт, навёдший своё имя на 127.0.0.1, страницу не прочтёт"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "локальный порт не открыть (песочница агента) — ошибка, что слушать порт на 127.0.0.1 здесь запрещено, с подсказкой запустить вне песочницы, а не «port 0 is busy»"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "неизвестный параметр — код 2, --help — справка"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "ошибка GitHub — на странице, сервер живёт дальше"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "поднимает сервер на localhost, печатает адрес и открывает его в браузере"
- },
- {
-  "path": "tests/capabilities/dashboard/dashboard.test.ts",
-  "describes": [
-   "Команда dashboard сервит страницу сама и открывает её в браузере"
-  ],
-  "name": "страница отдаёт задачи проекта; повторное открытие в течение минуты GitHub не перечитывает, «Refresh» — перечитывает"
  },
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
@@ -3495,7 +3516,7 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
-  "name": "check называет обёртку slot без отключения env-файлов несоответствием, update ставит отключение"
+  "name": "check называет обёртку прошлой установки несоответствием, update переписывает её"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3509,7 +3530,7 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
-  "name": "slot — через bun в любом проекте: обёрнутый через node скрипт переписывается на bun, команда та же"
+  "name": "в проекте на Yarn 2+ команда остаётся строкой у slot.ts: shell Yarn не подключает slot.sh"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3530,7 +3551,21 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
+  "name": "обёртка прошлой установки — команда строкой у slot.ts через node или bun — переписывается, команда та же"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
   "name": "повторная установка не оборачивает дважды, отступ и конец package.json — как были"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
+  "name": "после установки флоу knip видит команды обёрнутых скриптов: тесты bun test и preload — входы, бинарник команды — использованная зависимость"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3551,7 +3586,7 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
-  "name": "установка оборачивает lint, typecheck, test и test:* в slot без env-файлов проекта, build и watch — нет"
+  "name": "установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3769,6 +3804,55 @@
    "Песочница агента не роняет очередь"
   ],
   "name": "прогон в песочнице ждёт прогоны вне её, мёртвый билет вне песочницы ему не мешает"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "--for без PID живого процесса — код 2 с объяснением"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "shell скрипта убит, пока ждал, — его slot выходит, а не ждёт за мёртвого"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "slot не запустился — скрипт падает с его кодом, команда не идёт"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "в CI скрипт идёт сразу, без очереди и её переменных"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "команда скрипта получает четверть ядер и слот своего shell; вложенный скрипт идёт сразу"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "ожидающий видит команду скрипта, а не slot.sh"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "скрипты стоят в общей очереди: слот держит shell скрипта, пока тот не вышел"
  },
  {
   "path": "tests/capabilities/slot/slot.test.ts",
@@ -6300,6 +6384,146 @@
   "name": "пуш прошёл, а до сверки поверх легла следующая публикация — код 0, наш коммит в истории ветки"
  },
  {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "API прокси называет хосты маршрутов по адресу `<имя прокси>.localhost` на его порту: контейнер стартовал — его хост есть, остановился — нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "proxy status: работает — код 0; после proxy down — не запущен, код 1, с командой запуска; сети прокси нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "контейнер без меток прокси не публикуется"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "контейнер с метками сервиса открывается по `<сервис>.<N>.<проект>.localhost`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "остановленный контейнер пропадает из маршрутов"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "compose-файл получает адрес HTTP-сервиса стека задачи в `TASK_ENV_<СЕРВИС>_URL`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "override добавляет метки только HTTP-сервисам из настройки"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "адрес сервиса — `<сервис>.<N>.<проект>.localhost`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "без `task-env` переменных нет — работает значение по умолчанию compose-файла"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "без номера в ветке — стек и адреса основного чекаута"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "команда прогона e2e получает адреса e2e в переменных, код выхода — её"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "номер задачи берётся из ветки `<type>/<N>-slug`"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "поиск сирот находит только стеки закрытых задач: снимает их с томами, стеки открытых задач, основного чекаута и номеров, которых нет в GitHub, не трогает"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "профиль (`--profile`) поднимает сервисы профиля, без него их нет"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "снятие убирает и стек, от которого остались одни тома"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "снятие убирает контейнеры и тома только своей задачи — стеки другой задачи и основного чекаута остаются"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "стек другого репозитория с именем `<проект>-<N>` prune не трогает, даже если задача N закрыта"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "стек не поднялся (образ, сборка, контейнер упал, healthcheck не прошёл) — скрипт называет сервис, его состояние и последние строки лога, код 1"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "у e2e свой стек с чистыми томами, отличный от dev той же задачи"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
+  ],
+  "name": "у стека e2e в интерполяции — адреса e2e, не dev той же задачи"
+ },
+ {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
    "check -g называет прокси на машине: работает или не запущен — с командой запуска; код check прокси не меняет"
@@ -6465,41 +6689,6 @@
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
   "describes": [
-   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
-  ],
-  "name": "API прокси называет хосты маршрутов по адресу `<имя прокси>.localhost` на его порту: контейнер стартовал — его хост есть, остановился — нет"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
-  ],
-  "name": "proxy status: работает — код 0; после proxy down — не запущен, код 1, с командой запуска; сети прокси нет"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
-  ],
-  "name": "контейнер без меток прокси не публикуется"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
-  ],
-  "name": "контейнер с метками сервиса открывается по `<сервис>.<N>.<проект>.localhost`"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
-  ],
-  "name": "остановленный контейнер пропадает из маршрутов"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
    "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
   ],
   "name": "Docker не отвечает — строка ! с причиной, код 2"
@@ -6531,111 +6720,6 @@
    "Снять нечего или нечем — строка ○, а не ошибка; Docker не отвечает — строка ! с причиной"
   ],
   "name": "у задачи нет стеков на машине — строка ○, Compose ничего не снимает"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "compose-файл получает адрес HTTP-сервиса стека задачи в `TASK_ENV_<СЕРВИС>_URL`"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "override добавляет метки только HTTP-сервисам из настройки"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "адрес сервиса — `<сервис>.<N>.<проект>.localhost`"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "без `task-env` переменных нет — работает значение по умолчанию compose-файла"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "без номера в ветке — стек и адреса основного чекаута"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "команда прогона e2e получает адреса e2e в переменных, код выхода — её"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "номер задачи берётся из ветки `<type>/<N>-slug`"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "поиск сирот находит только стеки закрытых задач: снимает их с томами, стеки открытых задач, основного чекаута и номеров, которых нет в GitHub, не трогает"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "профиль (`--profile`) поднимает сервисы профиля, без него их нет"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "снятие убирает и стек, от которого остались одни тома"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "снятие убирает контейнеры и тома только своей задачи — стеки другой задачи и основного чекаута остаются"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "стек другого репозитория с именем `<проект>-<N>` prune не трогает, даже если задача N закрыта"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "стек не поднялся (образ, сборка, контейнер упал, healthcheck не прошёл) — скрипт называет сервис, его состояние и последние строки лога, код 1"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "у e2e свой стек с чистыми томами, отличный от dev той же задачи"
- },
- {
-  "path": "tests/capabilities/task-env/task-env.test.ts",
-  "describes": [
-   "Стек задачи — проект Compose `<проект>-<N>` по ветке; адреса HTTP-сервисов — через прокси"
-  ],
-  "name": "у стека e2e в интерполяции — адреса e2e, не dev той же задачи"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6805,6 +6889,13 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "хук: флоу проекта отстал — рекомендовать обновление и чип на его задачу, в сессии задачи не обновлять; отстала только машина — update -g в сессии"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
   "name": "git fetch не удался (нет сети, нет remote) — проверка недоступна, код 2"
@@ -6856,14 +6947,21 @@
   "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
-  "name": "в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0"
+  "name": "в клоне ai-dev: в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
-  "name": "всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано"
+  "name": "в клоне ai-dev: всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "в проекте вывод хука не содержит строки о невыпущенных коммитах ai-dev"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -6962,6 +7060,13 @@
    "Копия в проекте сверяется со свежим ai-dev и обновляется им"
   ],
   "name": "поставлено из того же ai-dev — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия в проекте сверяется со свежим ai-dev и обновляется им"
+  ],
+  "name": "проверка проекта с отставшим флоу рекомендует обновление и не велит обновлять в сессии задачи"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7087,7 +7192,7 @@
   "describes": [
    "Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением"
   ],
-  "name": "check: код 1, ❌ с путём и правилом, команда update; check ничего не меняет"
+  "name": "check: код 1, ❌ с путём и правилом, команда update — в задаче обновления, как и при отставании; check ничего не меняет"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7752,6 +7857,122 @@
    "Файл исключений папки решения распознаётся одинаково в spec и github"
   ],
   "name": "таблица ловит расхождения pr labels до стандарта: не JSON, прежний файл не .ts, подпапка, скрытый файл"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "примеры"
+  ],
+  "name": "CI с одним test без test:slow — медленный уровень не идёт"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "примеры"
+  ],
+  "name": "spawnSync с fetch, spawn без fetch, docker compose config без демона — причины нет"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "примеры"
+  ],
+  "name": "проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "примеры"
+  ],
+  "name": "уровни шагом только на push в main — PR их не гоняет"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "CI запускает и быстрый, и медленный уровень"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "tests/capabilities/dashboard/dashboard.slow.test.ts (живой сервер) — в медленном уровне"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "tests/capabilities/dashboard/dashboard.slow.test.ts — медленный по причине: Docker или живой сервер"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "tests/capabilities/task-env/task-env.slow.test.ts (Docker) — в медленном уровне"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "tests/capabilities/task-env/task-env.slow.test.ts — медленный по причине: Docker или живой сервер"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "нарушитель не проходит: быстрый файл с пробой docker info"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "нарушитель не проходит: медленный файл без Docker и сервера"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "реестр «медленные тесты ai-dev» не пуст"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "реестр «тесты ai-dev, которым нужен Docker или живой сервер» находит tests/capabilities/task-env/task-env.slow.test.ts, tests/capabilities/dashboard/dashboard.slow.test.ts"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "реестр «тесты ai-dev, которым нужен Docker или живой сервер» не пуст"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "скрипт test не запускает тесты, которым нужен Docker или живой сервер: файлы *.slow.test.ts идут скриптом test:slow"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт AI_DEV_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9985,6 +10206,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название updateCommit скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название updateTask скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -13070,7 +13298,7 @@
   "describes": [
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
-  "name": "tests/capabilities/dashboard/dashboard.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+  "name": "tests/capabilities/dashboard/dashboard.slow.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
@@ -13252,6 +13480,13 @@
   "describes": [
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
+  "name": "tests/capabilities/task-env/task-env.slow.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
   "name": "tests/capabilities/task-env/task-env.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
@@ -13260,6 +13495,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/update/update.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/fast-tests/fast-tests.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
