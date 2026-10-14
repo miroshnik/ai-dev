@@ -294,7 +294,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 
 ## Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи
 
-<details><summary>✅ 287 тестов</summary>
+<details><summary>✅ 300 тестов</summary>
 
 - ✅ у каждого языка те же ключи, что у en, и ни одного пустого названия
 - ✅ в en.json нет кириллицы
@@ -306,15 +306,28 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ реестр «названия словаря skills/github/locales/en.json» находит status.backlog, sections.questions, subagentPrompt.task, lastLine.done
 - ✅ нарушитель не проходит: название, которого скрипты не читают
 - ✅ название actualize.answer скрипты читают из словаря
+- ✅ название actualize.answers скрипты читают из словаря
 - ✅ название actualize.checks скрипты читают из словаря
 - ✅ название actualize.comment скрипты читают из словаря
+- ✅ название actualize.commentAnswer скрипты читают из словаря
+- ✅ название actualize.copies скрипты читают из словаря
+- ✅ название actualize.copy скрипты читают из словаря
 - ✅ название actualize.epic скрипты читают из словаря
+- ✅ название actualize.fetch скрипты читают из словаря
+- ✅ название actualize.files скрипты читают из словаря
 - ✅ название actualize.lead скрипты читают из словаря
+- ✅ название actualize.linkWords скрипты читают из словаря
+- ✅ название actualize.mechanics скрипты читают из словаря
+- ✅ название actualize.milestone скрипты читают из словаря
+- ✅ название actualize.noBody скрипты читают из словаря
 - ✅ название actualize.noPr скрипты читают из словаря
 - ✅ название actualize.openTask скрипты читают из словаря
+- ✅ название actualize.openTasks скрипты читают из словаря
 - ✅ название actualize.prs скрипты читают из словаря
 - ✅ название actualize.scope скрипты читают из словаря
 - ✅ название actualize.shipped скрипты читают из словаря
+- ✅ название actualize.unblocked скрипты читают из словаря
+- ✅ название actualize.unlabeled скрипты читают из словаря
 - ✅ название comments.actual скрипты читают из словаря
 - ✅ название comments.closedByPr скрипты читают из словаря
 - ✅ название est.answer скрипты читают из словаря

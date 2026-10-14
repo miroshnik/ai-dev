@@ -2226,35 +2226,84 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "task actualize печатает задание субагенту актуализации блока"
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
   ],
-  "name": "в эпике нет открытых задач, кроме этой, — скрипт пишет, что актуализация не нужна"
+  "name": "blocked by на влитой, но ещё открытой задаче — её PR влит — снимается тоже"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "task actualize печатает задание субагенту актуализации блока"
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "blocked by на закрытой задаче снимает сам task actualize, на открытой — оставляет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "milestone задач эпика без открытых задач закрывает сам task actualize, milestone самой задачи оставляет task close"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "в эпике нет открытых задач, кроме этой, — субагент без проверок по смыслу не нужен: механика и строка «актуализация не нужна»"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "задание субагенту содержит тексты эпика и его открытых задач, файлы PR и проверки по смыслу — 1, 3 и 5"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
   ],
   "name": "задачи эпика в задании — его подзадачи (sub-issues): список задач в описании эпика туда не попадает"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "task actualize печатает задание субагенту актуализации блока"
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "метку вопросов у задачи эпика без открытых вопросов снимает сам task actualize, с открытым вопросом — оставляет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
   ],
   "name": "новая открытая подзадача эпика попадает в задание"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "task actualize печатает задание субагенту актуализации блока"
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
   ],
-  "name": "скрипт печатает готовое задание субагенту актуализации: задача, эпик, открытые задачи эпика, пять проверок"
+  "name": "ответ на открытый вопрос в комментарии и копии связей в тексте задание называет, а не правит"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "task actualize печатает задание субагенту актуализации блока"
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "правки скрипта — одной строкой в комментарии к эпику; повторный запуск ничего не правит и не комментирует"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
+  ],
+  "name": "сессия получает от скрипта короткий промпт субагенту: строка «Задача #N (эпик #M)» и команда, которая печатает задание"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task actualize делает механику актуализации блока и печатает задание субагенту"
   ],
   "name": "у задачи без эпика скрипт пишет, что актуализация не нужна"
  },
@@ -2985,6 +3034,13 @@
    "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
   ],
   "name": "проект на en: комментарий о PR, с которым GitHub не связал задачу, — по-английски"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+  ],
+  "name": "проект на en: правки скрипта в комментарии к эпику — по-английски"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -7793,6 +7849,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название actualize.answers скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название actualize.checks скрипты читают из словаря"
  },
  {
@@ -7807,6 +7870,27 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название actualize.commentAnswer скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.copies скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.copy скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название actualize.epic скрипты читают из словаря"
  },
  {
@@ -7814,7 +7898,49 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название actualize.fetch скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.files скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название actualize.lead скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.linkWords скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.mechanics скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.milestone скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.noBody скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -7829,6 +7955,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название actualize.openTask скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.openTasks скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -7850,6 +7983,20 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название actualize.shipped скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.unblocked скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название actualize.unlabeled скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
