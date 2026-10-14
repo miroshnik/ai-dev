@@ -485,6 +485,13 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
+   "Репозиторий ожидания задаётся аргументом --repo, как у скриптов github"
+  ],
+  "name": "wait-ci pr <N> --repo owner/repo ждёт проверки PR этого репозитория"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
    "Упавший чек завершает ожидание сразу — о красном CI сессия узнаёт, не дожидаясь долгих чеков"
   ],
   "name": "с --wait-all упавший чек — FAIL, только когда завершились все"
