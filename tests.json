@@ -14436,6 +14436,13 @@
   "describes": [
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
+  "name": "tests/standards/spec-publish-job/spec-publish-job.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
   "name": "в реестр попадают установщик, скрипты spec и est"
  },
  {
@@ -14451,6 +14458,121 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "реестр «тесты ai-dev, которые запускают процессы» не пуст"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "ci-wait (skills/ci-wait/scripts/wait-ci.sh) узнаёт публикацию спеки по таблице"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "github (skills/github/scripts/github.ts) узнаёт публикацию спеки по таблице"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "нарушитель не проходит: копия правила в одном из скриптов расходится с таблицей"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "нарушитель не проходит: правило без якорей узнаёт публикацией хвост и середину имени"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "реестр «скрипты скиллов с правилом SPEC_PUBLISH» находит ci-wait, github"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "реестр «скрипты скиллов с правилом SPEC_PUBLISH» не пуст"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек"
+  ],
+  "name": "таблица ловит расхождения копий без якорей и без реюзабельного workflow"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией",
+   "примеры"
+  ],
+  "name": "имя check-run — name job, без него — ключ, с матрицей — с её значениями"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией",
+   "примеры"
+  ],
+  "name": "переименованный job — ошибка с файлом, строкой и копиями, которые его не узнают"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией",
+   "примеры"
+  ],
+  "name": "публикация в тексте и job без шага публикации — не элементы; неразборный фрагмент с публикацией — ошибка"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией"
+  ],
+  "name": ".github/workflows/ci.yml jobs.spec-publish: check-run «spec-publish» — публикация для github и ci-wait"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией"
+  ],
+  "name": "skills/spec/ci.md jobs.spec-publish (2): check-run «spec-publish» — публикация для github и ci-wait"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией"
+  ],
+  "name": "skills/spec/ci.md jobs.spec-publish: check-run «spec-publish» — публикация для github и ci-wait"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией"
+  ],
+  "name": "нарушитель не проходит: job публикации переименован во фрагменте"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией"
+  ],
+  "name": "реестр «job публикации спеки в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» находит .github/workflows/ci.yml jobs.spec-publish, skills/spec/ci.md jobs.spec-publish, skills/spec/ci.md jobs.spec-publish (2)"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией"
+  ],
+  "name": "реестр «job публикации спеки в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» не пуст"
  },
  {
   "path": "tests/standards/task-branch/task-branch.test.ts",
