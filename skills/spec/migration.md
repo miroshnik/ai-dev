@@ -106,12 +106,9 @@ In the pilot ≈10 % of requirements were handled this way.
 - A decision folder belongs to one PR at a time: tags and exceptions in the
   folder are removed by its owner; a neighboring PR doesn't touch the folder.
 - Exceptions of cross-folder checks — in the folder of the decision they
-  concern (canon: exceptions — in the decision folder's `exceptions/`): name
-  exceptions — one file per name in the folder's `names.exceptions/`
-  (`spec-doc --names-baseline` lays them out itself); rewrote a name — delete
-  its file. The old array (`names.exceptions.ts`, the shared
-  `tests/standards/spec-names/exceptions.ts`) is migrated by
-  `spec-exceptions`.
+  concern (canon: exceptions — in the decision folder's `exceptions/`). Names
+  that aren't statements yet aren't exceptions: `spec-doc` warns about them
+  without an exit code, they are rewritten when the folder is touched.
 
 ## Scripts and seeds
 

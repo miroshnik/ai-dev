@@ -169,9 +169,12 @@ no decision claims is dead and is deleted.
 - **Names are statements in the project language** (`language` in
   `.agents/ai-dev.json`). `describe` — a capability in the user's terms ("only
   someone with access to the entity itself sees its history"), `it` — a
-  concrete example; not a function, component or file name (`spec-doc
-  --strict` names such ones: in `ru` a statement has Russian words, in
-  another language it is a phrase of words, not an identifier). Tests of one
+  concrete example; not a function, component or file name (`spec-doc` warns
+  about such ones and `spec-diff` counts the PR's new ones in its body: in
+  `ru` a statement has Russian words, in another language it is a phrase of
+  words, not an identifier). A rule without an exit code and without
+  exceptions: failing `--strict` on names was paperwork, not findings (#447).
+  Tests of one
   capability from units and e2e —
   under the same `describe`. JSDoc before a `describe` or `it` — what the name
   doesn't show, one to three sentences for the spec reader; file names, issue

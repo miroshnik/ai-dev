@@ -29,9 +29,8 @@ closing — `task new`, `task status`, `task actualize`, `task close`,
   or changes (`github task new --labels`, from the PR diff —
   `github pr labels <PR>`; a mechanical edit — a deletion, a rename without
   changes, the decision folder's exceptions file that spec reads as an
-  exception: `exceptions/*.json`, `names.exceptions/*.json`, the former
-  `exceptions.*` and `names.exceptions.*` — doesn't change the decision and
-  gives no label); no labels — only a task without code. An epic has the
+  exception: `exceptions/*.json`, the former `exceptions.*` — doesn't change
+  the decision and gives no label); no labels — only a task without code. An epic has the
   union of its subtasks' labels. `github project check` checks the set
   against the spec tree of the main branch.
 - **Project slice labels** — the team's own slice of tasks (apps `web`,

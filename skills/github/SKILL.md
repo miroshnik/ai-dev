@@ -281,9 +281,8 @@ file — the label of the model module from the PR head (the longest matching
 directory), `tests/lib` and files outside modules aren't decisions. A
 mechanical edit doesn't change a decision and gives no label: a deleted file,
 a rename without content changes, an exceptions file of a decision folder that
-spec reads as an exception (`exceptions/*.json`, `names.exceptions/*.json`, the
-former `exceptions.*` and `names.exceptions.*`; a copy of the spec rule
-`exceptionFile`) — a decision touched only that way
+spec reads as an exception (`exceptions/*.json`, the former `exceptions.*`; a
+copy of the spec rule `exceptionFile`) — a decision touched only that way
 comes out as an `○` line (a label is needed — set it by hand). A decision whose
 name belongs to a slice label (module `web` and the app label `web`) — also an
 `○` line: a slice label isn't set as a decision label. It labels the tasks from
