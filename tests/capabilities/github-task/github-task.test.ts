@@ -2329,10 +2329,14 @@ describe("task queue раздаёт задачи эпика или фильтр�
     }
   });
 
-  it("задание исполнителю по задаче «В работе» с веткой `*/N-*` велит продолжить её работу", () => {
+  // новый исполнитель получает свой worktree, а ветку задачи git ему не отдаст, пока она взята в старом, — там и
+  // незакоммиченная работа прежнего (#528): продолжать её надо там, а не в своём
+  it("задание исполнителю по задаче «В работе» с веткой `*/N-*` велит продолжить её работу в worktree ветки, а не в новом", () => {
     const { work, cleanup } = checkout("feat/47-export", { merged: false });
     const resume = (branch: string) =>
-      `Задача уже «В работе» и у неё есть ветка \`${branch}\` — это перезапуск: продолжи её работу (worktree ветки — \`git worktree list\`, незакоммиченное — \`git status\` там).`;
+      `Задача уже «В работе» и у неё есть ветка \`${branch}\` — это перезапуск: продолжи её работу. ` +
+      "Ветка взята в другом worktree (`git worktree list`) — работай в нём, а не в своём новом: в Claude Code — `EnterWorktree` с его путём; " +
+      "незакоммиченное — `git status` там. Ни в одном worktree её нет — возьми её в свой.";
     try {
       const f = new FakeGitHub(REC);
       f.status(47, "В работе");
@@ -2373,24 +2377,46 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
   });
 
-  it("task resume в сессии-диспетчере называет команду очереди: исполнители умерли с процессом приложения", () => {
+  /**
+   * Перезапуск приложения останавливает фоновых исполнителей, но их транскрипты целы, и приложение называет их в
+   * уведомлении (#528). В пилоте #471 трое остановленных (#513, #515, #518) держали ветки задач в своих worktree с
+   * незакоммиченными правками: новый исполнитель получил бы свежий worktree, ветку задачи git ему не отдал бы, а работа
+   * осталась бы в старом. Диспетчер продолжил всех троих через `SendMessage` — каждый с целым контекстом в своём worktree.
+   */
+  it("строка возобновления сессии-диспетчера велит продолжить остановленных исполнителей сообщением, а не запускать новых", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
     task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
     const r = task(f, ["resume"], REPO, inSession(config));
     expect(r.code).toBe(0);
-    expect(r.out).toMatch(/^Dispatcher session: its executors \(background subagents\) died with the app's process — re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/ai-dev; its tasks «В работе» — executors again with the same prompt/);
+    expect(r.out.split("\n")[0]).toMatch(
+      /^Dispatcher session: its executors \(background subagents\) stopped with the app's process, their transcripts are intact — continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree; then re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/ai-dev — their tasks stay = in it$/,
+    );
   });
 
-  // исполнитель умер с процессом приложения, не взяв задачу в работу: выдача ему снята, иначе задачу никто не выдал бы снова
-  it("после перезапуска приложения задача, выданная умершему исполнителю, снова среди готовых", () => {
+  it("нового исполнителя задачи «В работе» строка отправляет в worktree её ветки", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
+    const r = task(f, ["resume"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")[1]).toBe(
+      "Dispatcher session: a new executor — only for one that can't be continued, with the same prompt; " +
+        "a task «В работе» it continues in the worktree of the task's branch (`git worktree list`), not in a new one — its assignment says so: " +
+        "git won't give the branch to a second worktree, and uncommitted work stays in the old one",
+    );
+  });
+
+  // остановленного исполнителя продолжают сообщением, и выдача ему живёт: снятая, она вернула бы задачу в готовые, пока
+  // он её ещё не взял «В работе», и диспетчер выдал бы её второму исполнителю
+  it("после перезапуска приложения задача, выданная остановленному исполнителю, остаётся в работе: его продолжают сообщением", () => {
     const f = new FakeGitHub(REC);
     f.status(47, "Бэклог");
     const config = scratch();
     task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
     task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() });
     expect(task(f, ["resume"], REPO, inSession(config)).code).toBe(0);
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)).toContain(`= #47 «${f.issue(47).title}» — handed out to an executor of this session`);
   });
 
   it("очередь пуста и в работе ничего — строка с последним шагом диспетчера", () => {

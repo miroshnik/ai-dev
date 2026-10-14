@@ -1595,7 +1595,8 @@ const isDispatcher = (io: Io) => {
  * The tasks handed out to the dispatcher's executors — `<marker>.tasks`, a line `owner/repo#N` per `task queue
  * --assignment N` in the session (#513): the executor's first call, In progress comes later, after the task's
  * questions, and till then the queue gave the task out as ready. A separate file: executors append to it in parallel,
- * the queue rewrites the marker. `task resume` drops it — the executors died with the app's process.
+ * the queue rewrites the marker. It lives for the session: after the app restarts, the stopped executors are continued
+ * with `SendMessage` (`task resume`) — dropped, it would make a task not yet In progress ready for a second executor.
  */
 const handedOutFile = (io: Io) => {
   const file = dispatcherFile(io);
@@ -2579,16 +2580,23 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
  * lost their waits in one minute, and the owner wrote "continue" 17 times (#433). The SessionStart hook runs this
  * command: the task pinned to the session (its repository is in the pin, not in the checkout) and its PRs name the
  * wait — an open PR's checks; a merged PR of an open task — the deploy and `task close`. The PR GitHub didn't link — by
- * the task branch, as in `task close`. No pin — no line and no request: the session has no task. Read-only on GitHub;
- * a dispatcher's hand-outs it drops (`handedOutFile`): its executors died, their tasks are given out again.
+ * the task branch, as in `task close`. No pin — no line and no request: the session has no task. Read-only on GitHub.
+ * A dispatcher's executors stopped with the app's process, but their transcripts are intact (#528): each is continued
+ * with `SendMessage` — its context and worktree, where the task branch and uncommitted work are; a new executor would get
+ * a fresh worktree, and git won't give it the branch. So the hand-outs stay (`handedOutFile`): their tasks aren't ready.
  */
 export function cmdTaskResume(io: Io): number {
   const dispatcher = dispatcherFile(io);
   if (dispatcher && existsSync(dispatcher)) {
-    rmSync(handedOutFile(io)!, { force: true });
     io.out(
-      `Dispatcher session: its executors (background subagents) died with the app's process — re-read the queue: ${readFileSync(dispatcher, "utf8").trim()}; ` +
-        `its tasks ${q(N.status.inProgress)} — executors again with the same prompt: they continue on the task's branch`,
+      "Dispatcher session: its executors (background subagents) stopped with the app's process, their transcripts are intact — " +
+        "continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree; " +
+        `then re-read the queue: ${readFileSync(dispatcher, "utf8").trim()} — their tasks stay = in it`,
+    );
+    io.out(
+      "Dispatcher session: a new executor — only for one that can't be continued, with the same prompt; " +
+        `a task ${q(N.status.inProgress)} it continues in the worktree of the task's branch (\`git worktree list\`), not in a new one — its assignment says so: ` +
+        "git won't give the branch to a second worktree, and uncommitted work stays in the old one",
     );
   }
   const pin = pinnedTask(io);
@@ -3457,8 +3465,9 @@ Examples:
   "task resume": `github task resume
 
 The SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks, a merged PR
-of an open task — the deploy and task close; no pin — nothing (code 0). Read-only on GitHub; a dispatcher session — the
-queue command, its hand-outs dropped: the executors died.
+of an open task — the deploy and task close; no pin — nothing (code 0). Read-only on GitHub; a dispatcher session — its
+stopped executors continued with SendMessage, then the queue command; a new executor only for one that can't be
+continued, in the worktree of its task's branch.
 
 Examples:
   github task resume`,
