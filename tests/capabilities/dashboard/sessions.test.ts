@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { BG_MAX, openQuestions, parseTranscript, questionOf, RECENT, SILENCE, sessionsBody, sessionsView } from "../../../skills/dashboard/scripts/sessions.ts";
+import { AUTO_WINDOW, autoAnswers, BG_MAX, openQuestions, parseTranscript, questionOf, RECENT, SILENCE, sessionsBody, sessionsView } from "../../../skills/dashboard/scripts/sessions.ts";
 import type { Live, PrInfo, SessionsInput, Task, Transcript } from "../../../skills/dashboard/scripts/sessions.ts";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z") / 1000;
@@ -26,7 +26,7 @@ const bgCommand = (t: number, taskId: string, description: string) => [call(t, "
 const session = (id: string, name: string, ...recs: unknown[]): Transcript => parseTranscript(id, jsonl(title(name), ...recs));
 
 const pr = (o: Partial<PrInfo> = {}): PrInfo => ({ number: 70, url: "https://github.com/o/r/pull/70", branch: "feat/7-export", closes: [7], merged: false, checks: "success", conflict: false, deploy: null, cloud: false, ...o });
-const live = (o: Partial<Live> = {}): Live => ({ tasks: [], prs: [], questions: [], ...o });
+const live = (o: Partial<Live> = {}): Live => ({ tasks: [], prs: [], questions: [], recent: [], ...o });
 const task = (number: number, title = `Задача ${number}`, parent: Task["parent"] = null): Task => ({ number, title, parent });
 const input = (o: Partial<SessionsInput> = {}): SessionsInput => ({ pins: {}, transcripts: {}, live: {}, others: {}, hosts: [], port: "80", ...o });
 const byId = (...ts: Transcript[]) => Object.fromEntries(ts.map((t) => [t.id, t]));
@@ -289,5 +289,98 @@ describe("Ждут владельца — вопросы сессий и зад�
     expect(text(html)).toContain("Waiting for the owner");
     expect(text(html)).toContain("no questions");
     expect(text(html)).toContain("No tasks in progress");
+  });
+});
+
+describe("Решено авто — ответы «✅ авто» в задачах, изменённых за сутки", () => {
+  /** Раздел вопросов: ответы с пометкой авто в формах, которые встречаются в задачах, ответы владельца и открытые. */
+  const BODY = [
+    "## Что сделать", "1. ✅ авто не вопрос — пункт вне раздела вопросов", "",
+    "## Вопросы", "",
+    // формат `task answer --auto` (#434)
+    "1. ✅ авто Формат выгрузки? **Ответ:** CSV — его читает бухгалтерия.",
+    // руками: пометка после вопроса, на языке другого репозитория (#399)
+    "2. Валюта отчёта? ✅ auto: рубли, как в счетах.",
+    // руками: пометка на строке продолжения — рекомендация остаётся при вопросе
+    "3. Порог тишины? Рекомендация: 15 мин.", "   ✅ авто: 15 мин — фоновое ожидание CI молчит дольше.",
+    // руками: пометка в начале, ответ после «? —»
+    "4. ✅ auto Path — env file or zshrc? — The env file: zshrc changes the human's shell.",
+    // разметка вокруг пометки, вопрос без «?» — первая строка
+    "5. **✅ Авто.** Делить импорт", "   Нет — один PR.",
+    // руками: пометка после «—» разделяет вопрос и ответ, жирная метка внутри ответа его не делит
+    "6. Свежесть кэша — ✅ auto: проверено — ставит один раз, **итог:** без сети.",
+    // одна строка без «?» — вопрос до первого « — »
+    "7. ✅ авто zsh в CI — шаг ставит его, если на раннере нет.",
+    // ответы владельца и открытый вопрос — не авто
+    "8. Период? ✅ месяц",
+    "9. ✅ (владелец: по рекомендации) Облако?",
+    "10. ✅ Формат дат? **Ответ:** ISO (владелец).",
+    "11. Эпик?", "",
+    "## Сценарии", "1. ✅ авто не вопрос", "",
+  ].join("\n");
+
+  it("вопрос и ответ — из пункта раздела вопросов с пометкой autoAnswer любого языка словаря в любом месте пункта", () => {
+    expect(autoAnswers(BODY)).toEqual([
+      { question: "Формат выгрузки?", answer: "CSV — его читает бухгалтерия." },
+      { question: "Валюта отчёта?", answer: "рубли, как в счетах." },
+      { question: "Порог тишины? Рекомендация: 15 мин.", answer: "15 мин — фоновое ожидание CI молчит дольше." },
+      { question: "Path — env file or zshrc?", answer: "The env file: zshrc changes the human's shell." },
+      { question: "Делить импорт", answer: "Нет — один PR." },
+      { question: "Свежесть кэша", answer: "проверено — ставит один раз, **итог:** без сети." },
+      { question: "zsh в CI", answer: "шаг ставит его, если на раннере нет." },
+    ]);
+  });
+
+  /** Задача репозитория `o/r`, описание которой правили `ago` секунд назад. */
+  const recent = (number: number, title: string, body: string, ago: number) => ({ number, title, body, edited: NOW - ago });
+  const block = (html: string) => /<section class="autos[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+
+  it("ответ с пометкой ✅ авто в задаче, изменённой за сутки, — строка в блоке «Decided auto» со ссылкой на задачу", () => {
+    const v = sessionsView(input({
+      live: {
+        "o/r": live({
+          tasks: [task(7, "Экспорт")],
+          recent: [
+            recent(9, "Отчёт по <ROI>", "## Вопросы\n1. ✅ авто Валюта? **Ответ:** рубли.\n2. ✅ авто Период? **Ответ:** месяц.\n", 2 * 3600),
+            recent(7, "Экспорт", "## Questions\n1. Format? ✅ auto: CSV.\n", 10 * MIN),
+            // описание правили раньше суток назад — ответы уже разобраны
+            recent(5, "Импорт", "## Вопросы\n1. ✅ авто Банк? **Ответ:** любой.\n", AUTO_WINDOW + 3600),
+          ],
+        }),
+      },
+    }), NOW);
+    // свежие правки — выше
+    expect(v.autos.map((a) => [a.number, a.answers])).toEqual([
+      [7, [{ question: "Format?", answer: "CSV." }]],
+      [9, [{ question: "Валюта?", answer: "рубли." }, { question: "Период?", answer: "месяц." }]],
+    ]);
+    const html = sessionsBody(v, NOW, false);
+    const b = block(html);
+    expect(text(b)).toContain("Decided auto");
+    expect(b).toContain('<a href="https://github.com/o/r/issues/9">#9 Отчёт по &lt;ROI&gt;</a>');
+    expect(b).toContain('<a href="https://github.com/o/r/issues/7">#7 Экспорт</a>');
+    // строка — задача, вопрос, ответ
+    expect(text(b)).toContain("Валюта? рубли.");
+    expect(text(b)).toContain("Период? месяц.");
+    expect(text(b)).toContain("edited 10 min ago");
+    expect(b).not.toContain("Банк?");
+    // разбор после факта — под таблицей задач, срочное «Waiting for the owner» — наверху
+    expect(html.indexOf("<table class=\"sessions\"")).toBeLessThan(html.indexOf('class="autos'));
+    // репозиториев несколько — задача названа с репозиторием
+    expect(block(sessionsBody(v, NOW, true))).toContain(">o/r#9 Отчёт по &lt;ROI&gt;</a>");
+  });
+
+  it("ответ владельца без пометки авто в блок не попадает", () => {
+    const owner = "## Вопросы\n1. Период? ✅ месяц\n2. ✅ (владелец: по рекомендации) Облако?\n3. ✅ Формат дат? **Ответ:** ISO.\n4. Эпик?\n";
+    expect(autoAnswers(owner)).toEqual([]);
+    const v = sessionsView(input({ live: { "o/r": live({ recent: [recent(9, "Отчёт", owner, MIN)] }) } }), NOW);
+    expect(v.autos).toEqual([]);
+  });
+
+  it("нет решений авто за сутки — блока нет", () => {
+    const old = recent(5, "Импорт", "## Вопросы\n1. ✅ авто Банк? **Ответ:** любой.\n", AUTO_WINDOW + MIN);
+    const html = sessionsBody(sessionsView(input({ live: { "o/r": live({ tasks: [task(7, "Экспорт")], recent: [old] }) } }), NOW), NOW, false);
+    expect(html).not.toContain('class="autos');
+    expect(text(html)).not.toContain("Decided auto");
   });
 });

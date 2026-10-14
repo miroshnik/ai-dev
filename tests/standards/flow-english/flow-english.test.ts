@@ -218,7 +218,6 @@ describe("Названия, которые пишут и разбирают ск
     violator: { name: "название, которого скрипты не читают", item: ["status.archived", "Archived"] },
     outside: [
       { item: "standardIssue", reason: "соглашение агента: issue «Standard · …» заводит он сам, скрипты название не разбирают" },
-      { item: "autoAnswer", reason: "пометку ответа в разделе вопросов ставит агент, скрипты её не читают" },
       { item: "comments.state", reason: "комментарий «State» перед паузой пишет агент, скрипты его не пишут и не разбирают" },
     ],
     includes: ["status.backlog", "sections.questions", "subagentPrompt.task", "lastLine.done"],

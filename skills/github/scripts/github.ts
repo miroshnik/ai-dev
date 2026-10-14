@@ -1700,10 +1700,10 @@ const MEANING_CHECKS = [0, 2, 4];
 
 /**
  * The items of the issue's questions section ("## Questions" in any language of the dictionary): the number, the first
- * line and whether it is answered — ✅ in any of its lines. The dashboard lists the open ones, `task actualize` removes
- * the questions label from a task without them.
+ * line, all the item's lines and whether it is answered — ✅ in any of its lines. The dashboard lists the open ones and
+ * the answers marked auto, `task actualize` removes the questions label from a task without open ones.
  */
-export function questionItems(body: string): { k: number; text: string; answered: boolean }[] {
+export function questionItems(body: string): { k: number; text: string; lines: string[]; answered: boolean }[] {
   const section = new RegExp(`^(?:${locale.every((n) => n.sections.questions).map(locale.escapeRe).join("|")})\\s*$`);
   const lines = body.split(/\r?\n/);
   const from = lines.findIndex((l) => section.test(l));
@@ -1714,7 +1714,7 @@ export function questionItems(body: string): { k: number; text: string; answered
     if (/^\d+\.\s/.test(line)) items.push([line]);
     else if (items.length && line.trim()) items[items.length - 1]!.push(line);
   }
-  return items.map((it) => ({ k: parseInt(it[0]!, 10), text: it[0]!.trim(), answered: it.some((l) => l.includes("✅")) }));
+  return items.map((it) => ({ k: parseInt(it[0]!, 10), text: it[0]!.trim(), lines: it, answered: it.some((l) => l.includes("✅")) }));
 }
 
 interface MilestoneRef {

@@ -28,6 +28,8 @@ export const SILENCE = 15 * 60;
 export const BG_MAX = 2 * 3600;
 /** A session without an "In progress" task gets into "Waiting for the owner" if it wrote within the last day. */
 export const RECENT = 86400;
+/** "Decided auto" — answers of tasks whose description changed within the last day. */
+export const AUTO_WINDOW = 86400;
 /** The tab refreshes itself: seconds. */
 export const REFRESH = 30;
 /**
@@ -203,6 +205,59 @@ export function openQuestions(body: string): string[] {
   return questionItems(body).filter((x) => !x.answered).map((x) => x.text);
 }
 
+/** A question the session answered itself in auto mode, and its answer. */
+export interface AutoAnswer {
+  question: string;
+  answer: string;
+}
+
+/**
+ * The auto-answer mark — `autoAnswer` of any language of the dictionary, with markup around it: `task answer --auto`
+ * puts it before the question, by hand it was put after the question and on a continuation line, and «✅ auto» in a
+ * project of another language too.
+ */
+const AUTO_RE = new RegExp(`[*_]*(?:${alt(locale.every((n) => n.autoAnswer)).replace(/ /g, "\\s*")})(?![\\p{L}\\p{N}])[*_:.]*`, "iu");
+/** The end of a question: "?" at the end of a word, closing markup included. */
+const QMARK_RE = /\?[»"'*_)]*(?=\s|$)/;
+/** A bold label before the answer — `**Answer:**` of the `task answer` format, `**Decision:**` by hand. */
+const LABEL_RE = /\*\*[^*\n]{1,40}:\*\*/g;
+
+/** A dash between the question and the answer: «Question? — answer». */
+const dashes = { start: /^[\s—–]+/, end: /[\s—–]+$/ };
+
+/**
+ * The question and the answer of an item text with the mark at its start or end: before a bold label, otherwise up to
+ * the first "?", otherwise the first line is the question, and a single line — up to the first « — ».
+ */
+function splitAnswer(text: string): AutoAnswer {
+  const cut = (at: number, skip: number) => ({ question: text.slice(0, at).replace(dashes.end, ""), answer: text.slice(at + skip).replace(dashes.start, "") });
+  const label = [...text.matchAll(LABEL_RE)].find((l) => text.slice(0, l.index).trim());
+  if (label) return cut(label.index, label[0].length);
+  const q = QMARK_RE.exec(text);
+  if (q) return cut(q.index + q[0].length, 0);
+  const nl = text.indexOf("\n");
+  if (nl >= 0) return cut(nl, 1);
+  const dash = text.indexOf(" — ");
+  return dash > 0 ? cut(dash, 3) : { question: text, answer: "" };
+}
+
+/**
+ * Answers marked `autoAnswer` in the questions section. The mark between text is itself the separator: before it is
+ * the question (a recommendation stays with it), after it — the answer; a bold label in the answer doesn't cut it.
+ * The mark at the start or end — the question and the answer are split by the text (`splitAnswer`).
+ */
+export function autoAnswers(body: string): AutoAnswer[] {
+  return questionItems(body).flatMap((item) => {
+    const text = item.lines.map((l) => l.trim()).join("\n").replace(/^\d+\.\s*/, "");
+    const m = AUTO_RE.exec(text);
+    if (!m) return [];
+    const before = text.slice(0, m.index).replace(dashes.end, "");
+    const after = text.slice(m.index + m[0].length).replace(dashes.start, "");
+    if (before && after) return [{ question: before, answer: after }];
+    return before || after ? [splitAnswer(before || after)] : [];
+  });
+}
+
 // ----------------------------------------------------------------------------
 // What a session waits for
 // ----------------------------------------------------------------------------
@@ -286,11 +341,15 @@ export interface Task {
   parent: { number: number; title: string } | null;
 }
 
-/** What GitHub knows about a repository: "In progress" tasks (without epics), PRs, tasks with open questions. */
+/**
+ * What GitHub knows about a repository: "In progress" tasks (without epics), PRs, tasks with open questions, tasks
+ * changed within the last day — `edited` is when their description was edited (never — created), epoch seconds.
+ */
 export interface Live {
   tasks: Task[];
   prs: PrInfo[];
   questions: { number: number; title: string; body: string }[];
+  recent: { number: number; title: string; body: string; edited: number }[];
 }
 
 export interface SessionsInput {
@@ -341,9 +400,20 @@ export interface Ask {
   lines: string[];
 }
 
+/** A task whose description got answers marked `autoAnswer` within the last day. */
+export interface Decided {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  edited: number;
+  answers: AutoAnswer[];
+}
+
 export interface SessionsView {
   rows: SessionRow[];
   asks: Ask[];
+  autos: Decided[];
 }
 
 const issueUrl = (repo: string, n: number) => `https://github.com/${repo}/issues/${n}`;
@@ -407,7 +477,15 @@ export function sessionsView(inp: SessionsInput, now: number): SessionsView {
     }),
   );
   asks.push(...issues.filter((a) => a.kind === "issue"), ...issues.filter((a) => a.kind === "backlog"));
-  return { rows, asks };
+  // the window is by the description's edit, not by the task's update: a comment or a close would bring back old answers
+  const autos = Object.entries(inp.live).flatMap(([repo, live]) =>
+    live.recent.flatMap((i): Decided[] => {
+      const answers = now - i.edited <= AUTO_WINDOW ? autoAnswers(i.body) : [];
+      return answers.length ? [{ repo, number: i.number, title: i.title, url: issueUrl(repo, i.number), edited: i.edited, answers }] : [];
+    }),
+  );
+  autos.sort((a, b) => b.edited - a.edited || a.repo.localeCompare(b.repo) || a.number - b.number);
+  return { rows, asks, autos };
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -466,9 +544,25 @@ function rowsTable(rows: SessionRow[], now: number, many: boolean): string {
   return `<section class="card scroll"><table class="sessions"><thead><tr><th>Task</th><th>Session</th><th>Waiting for</th><th>PR</th></tr></thead><tbody>${body.join("")}</tbody></table></section>`;
 }
 
-/** The tab's content: "Waiting for the owner" on top, below it — a line per "In progress" task. */
+/** "Decided auto": a line per answer — the task (once for its answers), the question, the answer; none — no block. */
+function autosBlock(autos: Decided[], now: number, many: boolean): string {
+  if (!autos.length) return "";
+  const lines = (s: string) => s.split("\n").map(esc).join("<br>");
+  const body = autos.flatMap((d) =>
+    d.answers.map((a, i) => {
+      const task = i ? "" : `<td rowspan="${d.answers.length}">${link(d.url, `${many ? d.repo : ""}#${d.number} ${d.title}`)}<div class="minor">edited ${esc(ago(now - d.edited))}</div></td>`;
+      return `<tr>${task}<td>${lines(a.question)}</td><td>${lines(a.answer)}</td></tr>`;
+    }),
+  );
+  return `<section class="autos card scroll"><h2>Decided auto</h2><p class="note">answers marked ✅ auto in tasks whose description changed within a day</p><table class="autos"><thead><tr><th>Task</th><th>Question</th><th>Answer</th></tr></thead><tbody>${body.join("")}</tbody></table></section>`;
+}
+
+/**
+ * The tab's content: "Waiting for the owner" on top, below it — a line per "In progress" task, at the bottom — what
+ * sessions decided themselves: it's looked at after the fact.
+ */
 export function sessionsBody(v: SessionsView, now: number, many: boolean): string {
-  return asksBlock(v.asks, now, many) + rowsTable(v.rows, now, many);
+  return asksBlock(v.asks, now, many) + rowsTable(v.rows, now, many) + autosBlock(v.autos, now, many);
 }
 
 /**
@@ -505,6 +599,10 @@ table.sessions td:nth-child(1){min-width:220px}
 table.sessions td:nth-child(2){min-width:0;white-space:nowrap}
 table.sessions td:nth-child(3){min-width:160px}
 table.sessions th{text-align:left}
+.autos .note{margin:0 0 8px}
+table.autos th,table.autos td{text-align:left;white-space:normal;vertical-align:top}
+table.autos td:first-child{min-width:200px}
+table.autos td:not(:first-child){min-width:220px}
 .wait{display:inline-block;padding:1px 8px;border-radius:999px;font-size:13px;border:1px solid var(--border);white-space:nowrap}
 .wait.human,.wait.merge{background:var(--warn);color:#000;border-color:transparent}
 .wait.silent,.wait.ci-red{background:var(--bad);color:#fff;border-color:transparent}
@@ -633,6 +731,9 @@ function packLive(data: Any): Live {
     tasks: issues.map((c: Any) => ({ number: c.number, title: c.title, parent: c.parent ? { number: c.parent.number, title: c.parent.title } : null })).sort((a: Task, b: Task) => a.number - b.number),
     prs: [...(repo?.open?.nodes ?? []).map((p: Any) => pack(p, false)), ...(repo?.merged?.nodes ?? []).map((p: Any) => pack(p, true))],
     questions: (repo?.questions?.nodes ?? []).map((q: Any) => ({ number: q.number, title: q.title, body: q.body ?? "" })),
+    recent: (repo?.recent?.nodes ?? [])
+      .map((i: Any) => ({ number: i.number, title: i.title, body: i.body ?? "", edited: Date.parse(i.lastEditedAt ?? i.createdAt ?? "") / 1000 }))
+      .filter((i: { edited: number }) => Number.isFinite(i.edited)),
   };
 }
 
@@ -664,19 +765,22 @@ function graphql(query: string, variables: Record<string, unknown>): Promise<Any
 /**
  * One request per repository: "In progress" tasks with their epic — by a project filter on GitHub's side (whole
  * project rows, with comments, as for the "Estimate and actual" tab, take tens of seconds), open and recently merged
- * PRs, tasks with the "questions" label.
+ * PRs, tasks with the "questions" label, tasks updated within the last day — GitHub filters by any update, the window
+ * by the description's edit is applied by `sessionsView`.
  */
 export async function liveQuery(full: string, projectId: string): Promise<Live> {
   // a cloud session has Projects v2 closed to it; dashboard exits earlier, this is for a call that bypasses it
   if (process.env.CLAUDE_CODE_REMOTE === "true") throw new EstError("Claude Code cloud session: GitHub projects aren't reachable from here (docs/cloud-sessions.md in ai-dev)");
   const [o, r] = full.split("/");
-  const q = `query($o:String!,$r:String!,$p:ID!,$q:String!){
+  const q = `query($o:String!,$r:String!,$p:ID!,$q:String!,$since:DateTime!){
     project: node(id:$p){ ... on ProjectV2{ items(first:100, query:$q){ nodes{ content{ __typename
       ... on Issue{ number title state issueType{name} labels(first:15){nodes{name}} parent{ number title } } } } } } }
     repository(owner:$o,name:$r){
       open: pullRequests(states:OPEN, first:50, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ ${PR_FIELDS} } }
       merged: pullRequests(states:MERGED, first:30, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ ${PR_FIELDS} mergeCommit{ statusCheckRollup{state} } } }
-      questions: issues(states:OPEN, labels:${JSON.stringify(locale.every((n) => n.labels.questions))}, first:50){ nodes{ number title body } } } }`;
+      questions: issues(states:OPEN, labels:${JSON.stringify(locale.every((n) => n.labels.questions))}, first:50){ nodes{ number title body } }
+      recent: issues(filterBy:{since:$since}, first:100, orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ number title body createdAt lastEditedAt } } } }`;
+  const since = new Date(Date.now() - AUTO_WINDOW * 1000).toISOString();
   // the project filter: comma-separated values — any of them
-  return packLive(await graphql(q, { o, r, p: projectId, q: `status:${IN_WORK.map((s) => JSON.stringify(s)).join(",")}` }));
+  return packLive(await graphql(q, { o, r, p: projectId, q: `status:${IN_WORK.map((s) => JSON.stringify(s)).join(",")}`, since }));
 }

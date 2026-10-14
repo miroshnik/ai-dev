@@ -1,6 +1,6 @@
 ---
 name: dashboard
-description: A browser task dashboard served by the script itself, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, links to the services of the task's stack (task-env addresses `*.localhost`), and the «Waiting for the owner» block with questions from session answers and from tasks with the «questions» label; refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual in hours, actual to estimate, tokens and cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "which tasks are hanging", "what is the session waiting for", which questions await an answer, where a task's app opens; asked for a dashboard, a chart or "show it visually", how accurately tasks are estimated, whether they get pricier or cheaper, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
+description: A browser task dashboard served by the script itself, in two tabs. «Sessions» (main) — In progress tasks, their Claude Code sessions and what each is waiting for (CI, merge, deploy, human reply, working, silence), the task's PR, links to the services of the task's stack (task-env addresses `*.localhost`), the «Waiting for the owner» block with questions from session answers and from tasks with the «questions» label, and the «Decided auto» block — answers marked ✅ auto in tasks whose description changed within the last day; refreshes itself. «Estimate and actual» — a chart by task close time (estimate and actual in hours, actual to estimate, tokens and cost) with a rolling median, a summary and a table. Use when asked "what's up with the sessions", "is anything stuck", "which tasks are hanging", "what is the session waiting for", which questions await an answer and which the sessions answered themselves, where a task's app opens; asked for a dashboard, a chart or "show it visually", how accurately tasks are estimated, whether they get pricier or cheaper, how a flow change affected hours, tokens and cost — even if the word "dashboard" wasn't said. A single table in the terminal — `est history`.
 allowed-tools: Bash(bun *skills/dashboard/scripts/dashboard.ts *)
 ---
 
@@ -15,7 +15,7 @@ up a page with two tabs:
 
 - **«Sessions»** (`/`, the main one) — In progress tasks, their sessions,
   what each is waiting for and links to the task's services, with «Waiting
-  for the owner» at the top;
+  for the owner» at the top and «Decided auto» at the bottom;
 - **«Estimate and actual»** (`/est`) — a chart by task close date: GitHub
   project fields and the «Estimate» and «Actual» comment markers.
 
@@ -106,6 +106,18 @@ call: a regular one won't return until the timeout.
   (`<scheduled-task>`) don't count. In progress tasks with the «questions»
   label — as a row, the open items of «## Questions» under a disclosure;
   tasks not in work with the label — as a collapsed group.
+- **«Decided auto».** What the sessions decided themselves in auto mode — to
+  look at after the fact, without stopping them: the items of «## Questions»
+  marked `autoAnswer` of any language of the dictionary (✅ auto), anywhere in
+  the item — `task answer --auto` puts it before the question, by hand it was
+  also put after the question or on a continuation line. Tasks of any state,
+  epics included, whose description was edited within the last day (never
+  edited — created): a comment or a close doesn't bring back old answers. A
+  line per answer — the task with a link and how long ago it was edited, the
+  question, the answer: the mark between text separates them; at the start or
+  end — the text before a bold label (`**Answer:**`), otherwise up to the
+  first "?", otherwise the first line (a single line — up to the first dash)
+  is the question. No such answers — no block.
 - It refreshes itself every 30 s (and on returning to the tab): what's
   expanded stays expanded. Pins and transcripts are re-read, GitHub — at most
   once a minute and in the background: the page answers from cache, fresh
