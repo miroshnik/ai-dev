@@ -302,7 +302,14 @@ compare periods longer than a typical task.
   gets that worktree's branch, read from its git files: Claude Code writes into
   such a record's `gitBranch` the branch of another checkout. A worktree
   already removed gives no branch (neutral) — its records are linked by the
-  task number in the assignment.
+  task number in the assignment. The other way too: a record in the session's
+  folder (the session's own, or a subagent continued there after its worktree
+  was removed) whose `gitBranch` is the branch of one of its subagents'
+  worktrees is neutral — a dispatcher's records carry its executors' branches.
+  A worktree's branches are the one checked out now and those the subagent's
+  own output switched to there (`Switched to branch`, a commit line, `+ branch
+  … → …` of `github task status --branch`): a removed worktree leaves only the
+  output.
 - A hash in a listing's output (`git worktree list`, `git branch`, `git log`,
   `git fetch`, reading via `gh` other than `gh pr view`; a command made only of
   these and utilities like `head`, `grep`, including inside a `for` or `while`

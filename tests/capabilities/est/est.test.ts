@@ -180,6 +180,8 @@ describe("Фан-аут задачи — число её субагентов в
  * перемежаются в общем таймлайне сессии. Активное время — интервалы между соседними записями одного агента (сессии
  * или субагента): соседняя запись в общем потоке у исполнителя почти всегда чужая, и его время выпадало (#490).
  * Ветка записи субагента в своём worktree — ветка этого worktree: Claude Code пишет в gitBranch ветку чужого чекаута.
+ * Записи самой сессии он же пишет с веткой worktree исполнителя — такая ветка у записи в каталоге сессии нейтральна:
+ * иначе время диспетчера уходило задаче исполнителя (#501).
  */
 describe("Параллельные субагенты сессии считаются каждый по своим записям", () => {
   const SID = "44444444-5555-6666-7777-888888888888";
@@ -270,6 +272,63 @@ describe("Параллельные субагенты сессии считаю�
     expect(f42.h).toBe(0.05); // 10:02 → 10:05 субагента в worktree задачи
     expect(f42.details[0]!.branches).toEqual({ "fix/42-export": 0.05 });
     expect(computeFact(stubRepo([s], []), 7, [], []).h).toBeNull();
+  });
+
+  /** Сессия в repo и её субагенты: agent-1 — в живом worktree на ветке задачи, agent-2 — в уже убранном. */
+  function withWorktrees(top: (repo: string) => unknown[], subs: (repo: string, wt: string, gone: string) => unknown[][]): Session {
+    const repo = path.join(dir, "repo");
+    mkdirSync(repo);
+    const { git, commit } = gitRepo(repo);
+    commit({ "a.txt": "a\n" });
+    const wt = path.join(repo, ".claude", "worktrees", "agent-1");
+    git("worktree", "add", "-q", "-b", "fix/42-export", wt);
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl(top(repo)));
+    mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+    for (const [k, recs] of subs(repo, wt, path.join(repo, ".claude", "worktrees", "agent-2")).entries()) writeFileSync(path.join(dir, SID, "subagents", `agent-${k + 1}.jsonl`), jsonl(recs));
+    return parseSessionFile(file);
+  }
+  const rec = (type: string, min: number, cwd: string, branch: string, content: unknown) => ({ type, timestamp: iso(min), cwd, gitBranch: branch, message: { role: type, content } });
+
+  it("запись сессии с gitBranch ветки worktree её субагента не привязывается к задаче этой ветки", () => {
+    const s = withWorktrees(
+      (repo) => [
+        { ...rec("user", 0, repo, "claude/dispatcher", "сделай все задачи эпика #40"), origin: { kind: "human" } },
+        // gitBranch записей диспетчера — ветки worktree его исполнителей: живого и уже убранного
+        rec("assistant", 4, repo, "fix/42-export", "жду исполнителей"),
+        rec("assistant", 6, repo, "docs/43-other", "жду исполнителей"),
+        rec("assistant", 8, repo, "claude/dispatcher", "жду исполнителей"),
+      ],
+      (repo, wt, gone) => [
+        [rec("user", 1, wt, "claude/dispatcher", "Задача #42 в o/r: ты исполнитель"), rec("assistant", 3, wt, "claude/dispatcher", "ok"), rec("assistant", 5, wt, "docs/43-other", "ok")],
+        [
+          rec("user", 2, gone, "fix/42-export", "Задача #43 в o/r: ты исполнитель"),
+          rec("assistant", 3, gone, "fix/42-export", [{ type: "tool_use", id: "tu1", input: { command: "bun github.ts task status 43 --branch docs/43-other" } }]),
+          // ветку своего worktree исполнитель назвал в своём выводе — от убранного worktree остался только он
+          { ...rec("user", 3, gone, "fix/42-export", [{ type: "tool_result", tool_use_id: "tu1", content: "+ branch worktree-agent-2 → docs/43-other" }]), toolUseResult: { stdout: "+ branch worktree-agent-2 → docs/43-other", stderr: "" } },
+          rec("assistant", 7, gone, "fix/42-export", "ok"),
+          // продолжен после того, как его worktree убран: пишет в каталоге сессии с gitBranch соседнего исполнителя
+          rec("assistant", 9, repo, "fix/42-export", "ok"),
+        ],
+      ],
+    );
+    const branchesOf = (agent: number) => [...new Set(s.ev.filter((e) => (e[5] ?? 0) === agent).map((e) => e[1]))];
+    expect(branchesOf(0)).toEqual(["claude/dispatcher", ""]);
+    expect(branchesOf(2)).toEqual([""]);
+    const f42 = computeFact(stubRepo([s], []), 42, [], []);
+    expect(f42.details[0]!.rules).toEqual({ subagent: 3 });
+    expect(f42.details[0]!.branches).toEqual({ "fix/42-export": 0.07 }); // 10:01 → 10:05 исполнителя в своём worktree
+    const f43 = computeFact(stubRepo([s], []), 43, [], []);
+    expect(f43.details[0]!.rules).toEqual({ subagent: 5 });
+  });
+
+  it("без перегиба: ветка самой сессии остаётся её веткой, хотя тот же gitBranch пишут и записи её субагента в worktree", () => {
+    const s = withWorktrees(
+      (repo) => [{ ...rec("user", 0, repo, "feat/41-import", "#41 сделай импорт"), origin: { kind: "human" } }, rec("assistant", 2, repo, "feat/41-import", "запускаю субагента"), rec("assistant", 6, repo, "feat/41-import", "готово")],
+      (_repo, wt) => [[rec("user", 1, wt, "feat/41-import", "Задача #41: проверь тесты"), rec("assistant", 4, wt, "feat/41-import", "ok")]],
+    );
+    expect([...new Set(s.ev.filter((e) => !e[5]).map((e) => e[1]))]).toEqual(["feat/41-import"]);
+    expect(computeFact(stubRepo([s], []), 41, [], []).details[0]!.rules).toEqual({ branch: 3, subagent: 2 });
   });
 });
 

@@ -165,10 +165,11 @@ const BRANCH_CONV_RE = new RegExp("^(?:[\\p{L}\\p{N}_.-]+/)?(" + EST_TYPES.join(
 const PR_PAGE = 50;
 const PR_MAX = 500;
 const ISSUES_MAX = 500; // how many closed issues the index of closing commits keeps
-const SESSION_CACHE_V = 19; // transcript cache format version (changed — reparse); 11 = session name history
+const SESSION_CACHE_V = 20; // transcript cache format version (changed — reparse); 11 = session name history
 // (title_hist), 12 = cloud sessions, 13 = all session directories (cwds), 14 = PR repository on pr-link, 16 = git and
 // gh listing hashes — only own ones, 17 = shell keywords in a listing, 18 = agent number on a record (task fan-out),
-// 19 = a subagent's branch in its own worktree — from that checkout, not gitBranch
+// 19 = a subagent's branch in its own worktree — from that checkout, not gitBranch, 20 = a record in the session's
+// folder on the branch of its subagent's worktree — neutral
 const PROJECT_META_TTL = 86400; // a day: reread the cache of project/field ids
 const OPEN_PRS_TTL = 3600; // an hour: the list of open PRs (their branches are someone else's)
 // Long-lived branches: "neutral" — by themselves they don't link a task, but inside an anchor window they count.
@@ -1109,18 +1110,25 @@ interface Acc {
   title: string;
   titles: [number, string][];
   topCwds: Set<string>; // directories of the session's own (top-level) records
-  checkouts: Map<string, string>; // a subagent's directory outside them → the branch of its checkout
+  checkouts: Map<string, Checkout | null>; // a subagent's directory outside them → its checkout (null — removed)
+  switched: Map<string, Set<string>>; // the same directory → branches the subagent's git output switched to there
+  written: number[]; // indexes in ev of records with gitBranch as written (in a session's directory)
 }
 
-const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map() });
+const newAcc = (): Acc => ({ cwd: null, cwds: [], n_human: 0, ev: [], prlinks: [], commits: [], listed: [], first_refs: null, first_urls: [], usage: [], models: [], mids: new Set(), title: "", titles: [], topCwds: new Set(), checkouts: new Map(), switched: new Map(), written: [] });
+
+interface Checkout {
+  root: string;
+  branch: string;
+}
 
 /**
- * The branch checked out in the checkout containing dir — from its git files, without running git: `.git` is a
- * directory (the main checkout) or a `gitdir:` file (a linked worktree). A detached HEAD — "HEAD"; no such directory
- * (the worktree is already removed) — "" (no branch, neutral).
+ * The checkout containing dir — its root and branch from its git files, without running git: `.git` is a directory
+ * (the main checkout) or a `gitdir:` file (a linked worktree). A detached HEAD — "HEAD"; no such directory (the
+ * worktree is already removed) or no checkout above it — null (no branch, neutral).
  */
-function checkoutBranch(dir: string): string {
-  if (!existsSync(dir)) return "";
+function gitCheckout(dir: string): Checkout | null {
+  if (!existsSync(dir)) return null;
   for (let d = dir; ; d = path.dirname(d)) {
     const dotGit = path.join(d, ".git");
     let gitDir: string | null = null;
@@ -1136,26 +1144,52 @@ function checkoutBranch(dir: string): string {
     if (gitDir !== null) {
       try {
         const head = readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
-        return /^ref:\s*refs\/heads\/(.+)$/.exec(head)?.[1] ?? "HEAD";
+        return { root: d, branch: /^ref:\s*refs\/heads\/(.+)$/.exec(head)?.[1] ?? "HEAD" };
       } catch {
-        return "";
+        return null;
       }
     }
-    if (path.dirname(d) === d) return "";
+    if (path.dirname(d) === d) return null;
   }
 }
 
+/** A subagent's record in its own worktree: its directory isn't one of the session's. */
+const inOwnWorktree = (r: Any, acc: Acc, subagent: boolean) => subagent && !!r.cwd && !acc.topCwds.has(r.cwd);
+
 /**
- * A record's branch. A subagent working in its own worktree (its directory isn't one of the session's) — the branch of
- * that worktree: Claude Code writes into a subagent record's gitBranch the branch of another checkout (#490). The rest
- * — gitBranch as written.
+ * A record's branch. A subagent working in its own worktree — the branch of that worktree: Claude Code writes into a
+ * subagent record's gitBranch the branch of another checkout (#490). The rest — gitBranch as written; it may be the
+ * branch of a subagent's worktree too — finishBranches.
  */
 function recordBranch(r: Any, acc: Acc, subagent: boolean): string {
-  const cwd: string | undefined = r.cwd;
-  if (!subagent || !cwd || acc.topCwds.has(cwd)) return r.gitBranch || "";
-  let b = acc.checkouts.get(cwd);
-  if (b === undefined) acc.checkouts.set(cwd, (b = checkoutBranch(cwd)));
-  return b;
+  if (!inOwnWorktree(r, acc, subagent)) return r.gitBranch || "";
+  if (!acc.checkouts.has(r.cwd)) acc.checkouts.set(r.cwd, gitCheckout(r.cwd));
+  return acc.checkouts.get(r.cwd)?.branch ?? "";
+}
+
+/**
+ * A record in the session's directory on the branch of its subagent's own worktree — without a branch (neutral, #501):
+ * Claude Code writes into gitBranch of the session's records — and of a subagent continued there after its worktree
+ * was removed — the branch some agent's checkout had last, so a dispatcher's records get its executors' branches. A
+ * worktree's branches — the one checked out now and those the subagent's git output switched to there (a removed
+ * worktree leaves only the output); a subagent's directory inside the session's own checkout isn't a worktree.
+ */
+function finishBranches(acc: Acc): void {
+  const roots = new Set<string>();
+  for (const d of acc.topCwds) {
+    const c = gitCheckout(d);
+    if (c) roots.add(c.root);
+  }
+  const foreign = new Set<string>();
+  for (const [d, c] of acc.checkouts) {
+    if (c && roots.has(c.root)) continue;
+    if (c) foreign.add(c.branch);
+    for (const b of acc.switched.get(d) ?? []) foreign.add(b);
+  }
+  foreign.delete("");
+  foreign.delete("HEAD");
+  if (!foreign.size) return;
+  for (const i of acc.written) if (foreign.has(acc.ev[i]![1])) acc.ev[i]![1] = "";
 }
 
 function* jsonlRecords(file: string): Generator<Any> {
@@ -1325,6 +1359,8 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         acc.usage.push([mid.slice(-12), acc.models.indexOf(model), Math.trunc(u.input_tokens || 0), Math.trunc(u.output_tokens || 0), cw5, cw1, Math.trunc(u.cache_read_input_tokens || 0), u.speed === "fast" ? 1 : 0]);
       }
     }
+    const ownWt = inOwnWorktree(r, acc, subagent);
+    if (!ownWt) acc.written.push(acc.ev.length);
     acc.ev.push([ts, recordBranch(r, acc, subagent), human ? 1 : 0, hint, uidx, agent]);
     if (human && acc.first_refs === null) {
       const txt = promptText(content);
@@ -1348,6 +1384,11 @@ function scanRecords(records: Iterable<Any>, acc: Acc, agent: number): void {
         if (tur && typeof tur === "object") txt += "\n" + String(tur.stdout ?? "") + "\n" + String(tur.stderr ?? "");
         if (!commitToolIds.has(b.tool_use_id) && !txt.includes("git") && txt.length > 20000) continue; // huge output without git — don't spend time on it
         collectHashes(listingToolIds.has(b.tool_use_id) ? acc.listed : acc.commits, ts, txt);
+        if (ownWt) {
+          const set = acc.switched.get(r.cwd) ?? new Set<string>();
+          for (const br of gitBranchesIn(txt)) set.add(br);
+          if (set.size) acc.switched.set(r.cwd, set);
+        }
       }
     }
   }
@@ -1381,6 +1422,7 @@ export function parseSessionFile(file: string): Session {
       continue;
     }
   }
+  finishBranches(acc); // before sorting: written holds indexes in scan order
   acc.ev.sort(byTs);
   acc.prlinks.sort(byTs);
   finishCommits(acc);
@@ -1582,6 +1624,7 @@ export function parseCloudFile(file: string): Session {
   const acc = newAcc();
   scanRecords(top, acc, 0);
   for (const [k, recs] of [...subs.values()].entries()) scanRecords(recs, acc, k + 1);
+  finishBranches(acc);
   acc.ev.sort(byTs);
   finishCommits(acc);
   return {
@@ -1606,11 +1649,19 @@ export function parseCloudFile(file: string): Session {
   };
 }
 
-/** The last branch git switched to in this output: `Switched to branch 'x'` or a commit line `[x abc1234]`. */
+/**
+ * Branches git switched to in this output, in order: `Switched to branch 'x'`, a commit line `[x abc1234]` or the
+ * flow's rename `+ branch <old> → x` (`github task status --branch`; the same line — renameBranch in
+ * skills/github/scripts/github.ts).
+ */
+function gitBranchesIn(txt: string): string[] {
+  const re = /Switched to (?:a new )?branch '([^']+)'|^\[([^\s\]]+)(?: \(root-commit\))? [0-9a-f]{7,40}\]|^\+ branch \S+ → (\S+)/gm;
+  return [...txt.matchAll(re)].map((m) => (m[1] ?? m[2] ?? m[3])!);
+}
+
+/** The last branch git switched to in this output. */
 function gitBranchIn(txt: string): string | null {
-  let last: string | null = null;
-  for (const m of txt.matchAll(/Switched to (?:a new )?branch '([^']+)'|^\[([^\s\]]+)(?: \(root-commit\))? [0-9a-f]{7,40}\]/gm)) last = m[1] ?? m[2] ?? last;
-  return last;
+  return gitBranchesIn(txt).at(-1) ?? null;
 }
 
 /**
