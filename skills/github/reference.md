@@ -668,9 +668,11 @@ directory with the queue command: the executors are subagents with the
 session's id, a pin would refuse the second and give `est` the whole session as
 one task. A session with a pinned task — a refusal (code 2): the dispatcher is
 a separate session, named by meaning, without a number. `--assignment N` —
-read-only, the executor's first call: the task by the canon in auto mode and
-what a subagent does otherwise — doesn't rename or archive the session and
-writes no last line, waits for CI and the deploy with regular calls
+read-only, the executor's first call: the task by the canon in auto mode, a
+restart line only for an In progress task with a branch `*/N-*` in the
+checkout or on its origin (it names the branch), and what a subagent does
+otherwise — doesn't rename or archive the session and writes no last line,
+waits for CI and the deploy with regular calls
 (`wait-ci.sh … --timeout 540`: a background command doesn't wake a subagent, a
 Bash call lives 10 minutes), git in separate calls, found work — `task new`
 without a chip; the answer — one line: merged, a question or failed.

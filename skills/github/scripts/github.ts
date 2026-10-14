@@ -2059,9 +2059,26 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   return 0;
 }
 
-/** The executor's whole assignment (`task queue --assignment N`): the task by the canon, what a subagent does otherwise, the answer form. */
+/**
+ * The task's branches `[<area>/]<type>/<N>-<slug>`: local ones of the current directory's checkout and those on its origin
+ * (`git ls-remote`: the executor's fresh worktree hasn't fetched a branch its predecessor pushed). The directory isn't a
+ * checkout of the repository — none: the script doesn't see the branches and claims nothing.
+ */
+function taskBranchesHere(io: Io, slug: string, number: number): string[] {
+  if (!checkoutOf(originUrl(io), slug)) return [];
+  const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd).stdout.split("\n");
+  const refs = [...git("for-each-ref", "--format=%(refname)", "refs/heads/"), ...git("ls-remote", "--heads", "origin").map((l) => l.split("\t")[1] ?? "")];
+  return [...new Set(refs.map((r) => r.trim().replace(/^refs\/heads\//, "")).filter((b) => isTaskBranch(b, number)))].sort();
+}
+
+/**
+ * The executor's whole assignment (`task queue --assignment N`): the task by the canon, what a subagent does otherwise, the
+ * answer form. The restart line — only when it is true: the task is In progress and has a branch `<type>/N-<slug>`
+ * (#511); printed always, it misled the executor of a Backlog task, who argued with it in the answer.
+ */
 export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
+  const restart = itemIn(taskContext(io, slug), issue)?.status === N.status.inProgress ? taskBranchesHere(io, slug, number) : [];
   const vars = {
     task: N.subagentPrompt.task,
     number,
@@ -2073,8 +2090,9 @@ export function cmdTaskAssignment(io: Io, slug: string, number: number): number 
     inProgress: N.status.inProgress,
     done: N.lastLine.done,
     questions: N.sections.questions,
+    branches: restart.map((b) => `\`${b}\``).join(", "),
   };
-  const lines = [N.queue.lead, N.queue.resume, N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.found, N.queue.question, N.queue.answer];
+  const lines = [N.queue.lead, ...(restart.length ? [N.queue.resume] : []), N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.found, N.queue.question, N.queue.answer];
   for (const line of lines) io.out(locale.fill(line, vars));
   return 0;
 }

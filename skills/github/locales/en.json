@@ -76,7 +76,7 @@
     "prompt": "{task} #{number} in {repo}{epic}: you are an executor of the dispatcher session. The whole assignment is printed by `{command}` — call it first, outside the sandbox (gh doesn't work in it).",
     "epic": " ({epicWord} #{epic})",
     "lead": "{task} #{number} «{title}» in {repo}{epic}: you are an executor of the dispatcher session — do the task whole by the canon, like a session in auto mode: the task's questions, `{script} task status {number} \"{inProgress}\" --branch <type>/{number}-<slug>`, the branch from a fresh origin/main, code and tests, PR, green CI, `pr premerge`, merge, deploy, the epic refresh, `{script} task close {number}`.",
-    "resume": "The task is already «{inProgress}» and has a branch `*/{number}-*` — a restart: continue its work (the branch's worktree — `git worktree list`, uncommitted work — `git status` there).",
+    "resume": "The task is already «{inProgress}» and has a branch {branches} — a restart: continue its work (the branch's worktree — `git worktree list`, uncommitted work — `git status` there).",
     "subagent": "You are a subagent, not a session:",
     "session": "- don't rename or archive the session and don't write the last line («{done}») — the dispatcher does;",
     "wait": "- wait for CI and the deploy with a regular call, not in the background: a background command doesn't wake a subagent, and a Bash call lives up to 10 minutes — `{waitCi} pr <PR> --timeout 540` (after the merge — `merged <PR>`), on TIMEOUT — the same call again;",

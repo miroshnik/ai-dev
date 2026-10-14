@@ -2026,7 +2026,11 @@ describe("task queue раздаёт задачи эпика или фильтр�
 
   it("--assignment N — задание исполнителю: первая строка «Задача #N», отличия субагента, форма ответа", () => {
     const f = new FakeGitHub(REC);
-    const r = task(f, ["queue", "--assignment", "47"]);
+    // каталог с языком проекта, но не чекаут: ветки задачи скрипт не ищет — тест не зависит от веток репозитория, где его запустили
+    const dir = scratch();
+    mkdirSync(path.join(dir, ".agents"));
+    writeFileSync(path.join(dir, ".agents/ai-dev.json"), '{ "language": "ru" }\n');
+    const r = task(f, ["queue", "--assignment", "47"], REPO, { cwd: dir });
     expect(r.code).toBe(0);
     const lines = r.out.split("\n");
     expect(lines[0]).toStartWith("Задача #47 «GitHub · Задача одной командой — github task» в miroshnik/ai-dev (эпик #45): ты исполнитель сессии-диспетчера — сделай задачу целиком по канону");
@@ -2035,6 +2039,43 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(r.out).toContain("pr <PR> --timeout 540");
     expect(lines.at(-1)).toBe("Ответ диспетчеру — одной строкой: `влито #<PR>` · `вопрос: <вопрос, варианты, рекомендация>` · `сломалось: <что и где остановилось>`.");
     expect(f.mutations).toEqual([]);
+  });
+
+  // строка о перезапуске — факт о задаче, а не напоминание всем: исполнитель задачи из «Бэклога» разбирал, что она неправда (#511)
+  it("задание исполнителю по задаче в «Бэклоге» без ветки не говорит, что задача уже в работе", () => {
+    const { work, cleanup } = checkout("feat/48-other", { merged: false });
+    try {
+      const f = new FakeGitHub(REC);
+      f.status(49, "Бэклог");
+      const r = task(f, ["queue", "--assignment", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(r.out).not.toContain("«В работе» и у неё есть ветка");
+      expect(r.out).not.toContain("перезапуск");
+      expect(r.out.split("\n")[1]).toBe("Ты субагент, а не сессия:");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("задание исполнителю по задаче «В работе» с веткой `*/N-*` велит продолжить её работу", () => {
+    const { work, cleanup } = checkout("feat/47-export", { merged: false });
+    const resume = (branch: string) =>
+      `Задача уже «В работе» и у неё есть ветка \`${branch}\` — это перезапуск: продолжи её работу (worktree ветки — \`git worktree list\`, незакоммиченное — \`git status\` там).`;
+    try {
+      const f = new FakeGitHub(REC);
+      f.status(47, "В работе");
+      const assignment = () => task(f, ["queue", "--assignment", "47"], REPO, { run: noEst, cwd: work }).out.split("\n");
+      // прежний исполнитель запушил ветку, его worktree убран: локальной ветки нет, она есть на origin
+      git(work, "switch", "-q", "main");
+      git(work, "branch", "-q", "-D", "feat/47-export");
+      expect(assignment()[1]).toBe(resume("feat/47-export"));
+      // прежний исполнитель не успел запушить: ветка только локальная
+      git(work, "push", "-q", "origin", "--delete", "feat/47-export");
+      git(work, "branch", "fix/47-local");
+      expect(assignment()[1]).toBe(resume("fix/47-local"));
+    } finally {
+      cleanup();
+    }
   });
 
   it("сессия-диспетчер: task status «В работе» в ней задачу не закрепляет — исполнители-субагенты делят id сессии", () => {
