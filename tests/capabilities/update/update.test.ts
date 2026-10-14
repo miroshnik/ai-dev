@@ -49,7 +49,7 @@ const dropSha = (root: string) => editManifest(root, { sha: undefined });
 const MODE_ASK = "  tasks: with permission\n  language: en\n";
 const MODE_AUTO = "  tasks: entirely by itself\n  language: en\n";
 
-// скрипт скилла github в копии флоу проекта: команда задачи обновления в выводе check
+// скрипт скилла github в копии флоу — проекта (от корня проекта) и машины (от домашнего каталога)
 const GITHUB = ".agents/skills/github/scripts/github.ts";
 // хвост хука: флоу проекта обновляет своя задача, машину — сама сессия
 const PROJECT_UPDATE = "The project's flow needs update — not in a task session";
@@ -95,8 +95,30 @@ describe("Копия в проекте сверяется со свежим ai-d
     const r = aiDev(sb, ["check"], { bin: newer.bin });
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("Update in a task of its own, not in this session's task: bunx github:miroshnik/ai-dev update\n");
-    expect(r.stdout).toContain(`The task — one per project, an open one is named by the refusal: bun --no-env-file ${GITHUB} task new --title "Обновить флоу ai-dev" --branch-type chore\n`);
-    expect(existsSync(path.join(sb.proj, GITHUB))).toBe(true);
+    expect(r.stdout).toMatch(/\nThe task — one per project, an open one is named by the refusal: bun --no-env-file \S+\/skills\/github\/scripts\/github\.ts task new --title "Обновить флоу ai-dev" --branch-type chore\n/);
+  });
+
+  /**
+   * Строка выходит ровно тогда, когда копия проекта отстала, — её скрипт github может не знать печатаемых флагов
+   * (`--branch-type` — с v2026.10.11). Команда — скриптом машины, иначе пакета, которым идёт check: тот же релиз. Без
+   * GitHub задачу не завести — команда доходит до поиска репозитория, а не падает на флаге.
+   */
+  it("копия проекта до `--branch-type`: команда задачи обновления из `check` — скриптом github, который знает её флаги, а не отставшей копией", () => {
+    aiDev(sb, ["install"]);
+    writeFileSync(path.join(sb.proj, GITHUB), "console.error(\"Unknown option '--branch-type'\");\nprocess.exit(2);\n");
+    const run = () => {
+      const command = /bun --no-env-file (\S+) task new --title "Update the ai-dev flow" --branch-type chore\n/.exec(aiDev(sb, ["check"], { bin: newer.bin }).stdout);
+      const r = spawnSync("sh", ["-c", command![0]], { cwd: sb.proj, env: sb.env, encoding: "utf8" });
+      return { script: realpathSync(path.resolve(sb.proj, command![1]!)), stderr: r.stderr };
+    };
+    const pkg = run();
+    expect(pkg.script).toBe(realpathSync(path.join(newer.dir, "skills/github/scripts/github.ts")));
+    expect(pkg.stderr).toContain("couldn't determine the repository");
+    mkdirSync(path.join(sb.home, ".claude"));
+    aiDev(sb, ["install", "-g"], { bin: newer.bin });
+    const machine = run();
+    expect(machine.script).toBe(realpathSync(path.join(sb.home, GITHUB)));
+    expect(machine.stderr).toContain("couldn't determine the repository");
   });
 
   it("update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально", () => {
@@ -240,7 +262,7 @@ describe("Файл флоу, который игнорирует git проек�
     expect(r.stdout).toContain("git ignores flow files");
     expect(r.stdout).toContain("  ❌ .agents/ai-dev/claude/CLAUDE.md — .gitignore:1 «CLAUDE.md»\n");
     expect(r.stdout).toContain("Fix in a task of its own, not in this session's task: bunx github:miroshnik/ai-dev update — adds exceptions to .gitignore\n");
-    expect(r.stdout).toContain(`${GITHUB} task new --title "Update the ai-dev flow" --branch-type chore\n`);
+    expect(r.stdout).toContain("/skills/github/scripts/github.ts task new --title \"Update the ai-dev flow\" --branch-type chore\n");
     expect(r.stdout).toEndWith(MODE_ASK);
     expect(snapshot(sb.proj)).toEqual(before);
   });

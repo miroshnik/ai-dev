@@ -1003,16 +1003,15 @@ function composeCheck(root: string): { lines: string[]; violations: boolean } {
   return notChecked(`task-env: ${r.stderr.trim().split("\n")[0] || `exit code ${r.status ?? r.signal}`}`);
 }
 
-/** The github skill script in the project's flow copy: `check` names its `task new` for the update task. */
-const GITHUB_SCRIPT = ".agents/skills/github/scripts/github.ts";
-
 /**
  * The project's update is a task of its own, one per project: a task session doesn't update the copy — thousands of
  * lines don't belong in its branch. The title is constant, in the project language (the `updateTask` key of this
  * package's github skill dictionary): `task new` refuses a second open task with the same title and names the open one.
+ * The script — not the project's copy: the line shows exactly when the copy is behind, and its script may not know the
+ * flags printed here (`--branch-type` — since v2026.10.11, #431).
  */
 const updateTaskLine = (root: string) =>
-  `The task — one per project, an open one is named by the refusal: bun --no-env-file ${GITHUB_SCRIPT} task new --title "${locale.names(languageOf(root)).updateTask}" --branch-type chore`;
+  `The task — one per project, an open one is named by the refusal: bun --no-env-file ${githubScript(false)} task new --title "${locale.names(languageOf(root)).updateTask}" --branch-type chore`;
 
 /** The check failed: what and why. */
 const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `ai-dev ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
@@ -1257,10 +1256,11 @@ function hookSession(): string | null {
 /**
  * The github skill script the agent runs: the machine's — a same-named machine skill wins over the project's in Claude
  * Code, — otherwise the project's copy, otherwise this package's. The commands it prints name its own paths.
+ * withProject false — without the project's copy: a command for updating it (updateTaskLine) when it's behind.
  */
-function githubScript(): string {
+function githubScript(withProject = true): string {
   const rel = "skills/github/scripts/github.ts";
-  const roots = [path.join(os.homedir(), ".agents"), path.join(projectRoot(), ".agents"), SRC];
+  const roots = [path.join(os.homedir(), ".agents"), ...(withProject ? [path.join(projectRoot(), ".agents")] : []), SRC];
   return roots.map((r) => path.join(r, rel)).find((f) => existsSync(f)) ?? path.join(SRC, rel);
 }
 
