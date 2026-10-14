@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
@@ -560,5 +560,48 @@ describe("Issue ждут до закрытия — баг на красный ma
     const r = ciWait(["issue", "41"]);
     expect(r.code).toBe(3);
     expect(r.result).toStartWith("ERROR issue #41 not found");
+  });
+});
+
+/**
+ * Подмена `printf` для bash через `BASH_ENV`: вывод в конвейер (и в подстановку команды) дописывается сверх буфера
+ * конвейера. Читатель, ушедший после первой строки, оставляет пишущего с недописанным выводом — тот получает SIGPIPE
+ * всегда, а не только когда планировщик под нагрузкой дал читателю уйти раньше.
+ */
+const PIPE_FLOOD = `printf() {
+  builtin printf "$@" || return
+  [ -p /dev/stdout ] || return 0
+  local i
+  for ((i = 0; i < 4096; i++)); do builtin printf '%064d\\n' 0 || return; done
+}
+`;
+
+/** Справка wait-ci; stdout — в файл, не в конвейер: подмена `printf` дописывает только выводу внутри скрипта. */
+function help(args: string[], env: Record<string, string> = {}) {
+  const file = path.join(sb.dir, "help.out");
+  const fd = openSync(file, "w");
+  try {
+    const r = spawnSync("bash", [SCRIPT, ...args], { encoding: "utf8", stdio: ["ignore", fd, "pipe"], env: { ...process.env, ...env } });
+    if (r.error) throw r.error;
+    return { code: r.status, stdout: readFileSync(file, "utf8"), stderr: r.stderr };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Обзор собирал строку синтаксиса каждого режима конвейером `help "$m" | { read -r line; … }` (#495): читатель берёт
+ * строку и уходит, а bash пишет stdout построчно — пишущий под нагрузкой получал SIGPIPE, при `pipefail` код конвейера
+ * последнего режима 141 рвал цепочку `&&`, и обзор терял хвост. `main` на мерже #491 упал на стандарте `cli-help`:
+ * `wait-ci -h` печатал не то же, что `--help`.
+ */
+describe("Обзор справки wait-ci не зависит от гонки конвейера", () => {
+  it("обзор wait-ci печатает строку каждого режима и хвост о справке команды и тогда, когда пишущий в конвейер получает SIGPIPE", () => {
+    const synopses = ["pr", "status", "merged", "issue"].map((m) => `  ${lines(help([m, "--help"]).stdout)[0]}`);
+    writeFileSync(path.join(sb.dir, "bash-env.sh"), PIPE_FLOOD);
+    const r = help(["--help"], { BASH_ENV: path.join(sb.dir, "bash-env.sh") });
+    expect([r.code, r.stderr]).toEqual([0, ""]);
+    expect(lines(r.stdout).filter((l) => l.startsWith("  "))).toEqual(synopses);
+    expect(lines(r.stdout).at(-1)).toStartWith("wait-ci <command> --help");
   });
 });

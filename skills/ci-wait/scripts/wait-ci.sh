@@ -25,9 +25,11 @@
 set -uo pipefail
 
 # help [mode]: the mode's synopsis, what it does and examples, otherwise the overview (tests/standards/cli-help);
-# printf is a builtin — help runs no commands
+# printf is a builtin — help runs no commands. The overview takes a mode's first line by command substitution, not a
+# pipeline (#495): `help "$m" | { read -r line; … }` — the reader leaves after one line, bash writes stdout line by line,
+# and the writer got SIGPIPE under load; with pipefail the last mode's 141 broke the && chain, and the tail was lost
 help() {
-  local exits=("Exit: 0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call — the outcome is the exit code; stdout — a state" \
+  local m synopsis exits=("Exit: 0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call — the outcome is the exit code; stdout — a state" \
     "line when the state changes and the final line RESULT: PASS|FAIL|TIMEOUT|ERROR …, stderr — gh errors and notes.")
   case "${1:-}" in
     pr) printf '%s\n' \
@@ -54,8 +56,8 @@ help() {
       "${exits[@]}" "" "Examples:" "  wait-ci issue 61" ;;
     *) printf '%s\n' \
       "wait-ci — waiting for the checks of a PR or a commit with visible progress and the full set of outcomes; run it" \
-      "from the repository directory (gh resolves {owner}/{repo}) or set GH_REPO." "" && \
-      for m in pr status merged issue; do help "$m" | { IFS= read -r line; printf '  %s\n' "$line"; }; done && \
+      "from the repository directory (gh resolves {owner}/{repo}) or set GH_REPO." ""
+      for m in pr status merged issue; do synopsis=$(help "$m"); printf '  %s\n' "${synopsis%%$'\n'*}"; done
       printf '%s\n' "" "wait-ci <command> --help — the command's details and examples" ;;
   esac
 }
