@@ -6952,6 +6952,41 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
+   "check проекта с test:spec называет test, который повторяет стандарты и архитектуру"
+  ],
+  "name": "test называет все корни спеки — строки нет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта с test:spec называет test, который повторяет стандарты и архитектуру"
+  ],
+  "name": "test не одиночный вызов раннера — turbo или цепочка команд — check молчит"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта с test:spec называет test, который повторяет стандарты и архитектуру"
+  ],
+  "name": "готовая строка test дописывает исключение к фильтру, который в test уже есть, и остаётся под обёрткой slot"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта с test:spec называет test, который повторяет стандарты и архитектуру"
+  ],
+  "name": "проект с test:spec, test — одиночный вызов раннера без корней спеки — check выводит строку ○ с готовой строкой test без них"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check проекта с test:spec называет test, который повторяет стандарты и архитектуру"
+  ],
+  "name": "строка ○ о повторе стандартов не меняет код выхода check"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
    "check проекта со стандартами или архитектурой требует скрипт test:spec — быструю проверку pr premerge"
   ],
   "name": "test:spec — раннер команды test, без неё — по зависимостям: vitest, jest, bun test в проекте на Bun, без раннера — vitest; по корням спеки, что есть"
