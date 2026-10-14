@@ -272,9 +272,11 @@ In progress pins the task to the session: the file
 the same session — a refusal (code 2) before any changes, in one line: the
 pinned task, the new session's first prompt (`#M`) and the file path. The same
 task again, an epic, Backlog and Done — no refusal. No command removes the pin:
-a mistaken one is removed by a human, by deleting the file. `est` counts the
-actual by the pin: the whole session goes to this task. No variable (not
-Claude Code) — the line `○ session not recognized …`, the
+a mistaken one is removed by a human, by deleting the file. A line not of the
+form `owner/repo#N` isn't a pin — for `est` and the dashboard either
+(`tests/standards/session-pin`): In progress replaces it with the task, an `○`
+line. `est` counts the actual by the pin: the whole session goes to this task.
+No variable (not Claude Code) — the line `○ session not recognized …`, the
 status is set, no guard.
 
 **`task status --branch <type>/<N>-<slug>`** — only with In progress, not for
@@ -368,7 +370,8 @@ pin, not the checkout) and its PRs — linked, otherwise by the task branch, as 
 `task close`: an open PR — `wait-ci.sh pr <PR>` as a background command; only a
 merged one and the task is open — `wait-ci.sh merged <PR>` where the merge
 deploys, then `task close N`; no PR or the task is closed — an `○` line; no pin
-— nothing, without a request to GitHub. Read-only. The Claude Code
+— nothing, without a request to GitHub; a line not of the form `owner/repo#N` —
+an `○` line with the file path, code 0. Read-only. The Claude Code
 `SessionStart` hook runs it with the session id from its input (`check
 --hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's.
 
