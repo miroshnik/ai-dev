@@ -654,20 +654,22 @@ deploys, then `task close N`; no PR or the task is closed — an `○` line; no 
 an `○` line with the file path, code 0. Read-only. The Claude Code
 `SessionStart` hook runs it with the session id from its input (`check
 --hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's. In a
-dispatcher session it first names the queue command: the executors died with
-the app's process too.
+dispatcher session it first names the queue command and drops the hand-outs
+(`dispatchers/<id>.tasks`, "task queue"): the executors died with the app's
+process too, their tasks not In progress are ready again.
 
 ### task queue
 
 A dispatcher session: "do all tasks of epic #M", "fix all
 High bugs" (`AGENTS.md`, "Session and branch — one task"). The session takes no
-task; the script prints the queue — ready tasks (open, not an epic, not In
-progress, no open blockers — another repository's named `owner/repo#N` —, no
+task; the script prints the queue — ready tasks (open, not an epic, not in
+work, no open blockers — another repository's named `owner/repo#N` —, no
 `external blocker` label — its line has the reason from the latest
-`External blocker: …` comment —, no open PR: linked, or by the task branch and
-"Closes #N" among recent PRs) by `Priority`, then number, each with an indented
+`External blocker: …` comment) by `Priority`, then number, each with an indented
 line — its executor's prompt, «Task #N …» in the project language (`est` links
-the subagent's work by it); then `=` lines — In progress, `○` lines — not ready
+the subagent's work by it); then `=` lines — in work: In progress, an open PR
+(linked, or by the task branch and "Closes #N" among recent PRs) with its link,
+handed out to an executor of this session; `○` lines — not ready
 with the reason, and `Next:`. `--epic N` — the epic's open sub-issues,
 otherwise the repository's open tasks (the first 100 of the search);
 `--type`, `--priority` — only in an organization. It marks the session as a
@@ -676,7 +678,11 @@ directory with the queue command: the executors are subagents with the
 session's id, a pin would refuse the second and give `est` the whole session as
 one task. A session with a pinned task — a refusal (code 2): the dispatcher is
 a separate session, named by meaning, without a number. `--assignment N` —
-read-only, the executor's first call: the task by the canon in auto mode, a
+read-only on GitHub, the executor's first call; in a dispatcher session it
+records the task as handed out — a line `owner/repo#N` in
+`dispatchers/<id>.tasks`, `=` in the queue till the session restarts (an
+executor's answer leaves the task not ready either: merged closes it, a question
+waits for the owner, failed isn't restarted). The assignment: the task by the canon in auto mode, a
 restart line only for an In progress task with a branch `*/N-*` in the
 checkout or on its origin (it names the branch), and what a subagent does
 otherwise — doesn't rename or archive the session and writes no last line,
@@ -690,8 +696,8 @@ without a chip; the answer — one line: merged, a question or failed.
 
 In Claude Code: an executor — `Agent` with `isolation: "worktree"` and
 `run_in_background: true`, the prompt — the indented line as is; at most 3 at
-once (`slot` runs two heavy checks, a number in the request replaces it), a
-task whose executor runs but hasn't set In progress yet isn't launched twice.
+once (`slot` runs two heavy checks, a number in the request replaces it); a
+task in work (`=`) isn't launched again.
 Before each launch — `get_usage`: the 5-hour limit at 85% and more — no new
 executors, the running ones finish, then `Remaining: N tasks, the limit`. An
 answer arrives as the subagent's notification; after each — `task queue`

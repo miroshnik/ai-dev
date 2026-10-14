@@ -32,7 +32,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -1591,6 +1591,25 @@ const isDispatcher = (io: Io) => {
   return !!file && existsSync(file);
 };
 
+/**
+ * The tasks handed out to the dispatcher's executors — `<marker>.tasks`, a line `owner/repo#N` per `task queue
+ * --assignment N` in the session (#513): the executor's first call, In progress comes later, after the task's
+ * questions, and till then the queue gave the task out as ready. A separate file: executors append to it in parallel,
+ * the queue rewrites the marker. `task resume` drops it — the executors died with the app's process.
+ */
+const handedOutFile = (io: Io) => {
+  const file = dispatcherFile(io);
+  return file && `${file}.tasks`;
+};
+
+/** The numbers of the repository's tasks handed out to this dispatcher's executors (`handedOutFile`). */
+function handedOut(io: Io, slug: string): Set<number> {
+  const file = handedOutFile(io);
+  if (!file || !existsSync(file)) return new Set();
+  const lines = readFileSync(file, "utf8").split("\n").map((l) => l.trim());
+  return new Set(lines.filter((l) => l.startsWith(`${slug}#`)).map((l) => Number(l.slice(slug.length + 1))).filter(Number.isInteger));
+}
+
 /** The epic prefix — the part of the title before " · ": the titles of the epic and all its subtasks start with it. */
 export function epicPrefix(title: string): string | null {
   const i = title.indexOf(" · ");
@@ -2007,9 +2026,10 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
 /**
  * The dispatcher's queue: the session takes no task itself — its ready tasks go to background executors (subagents),
  * K at a time; the queue is re-read after each answer, so tasks that appeared meanwhile are picked up. Ready — open,
- * not an epic, not "In progress", no open blockers (other repositories' too), no external blocker label, no open PR
- * (linked, or by the task branch and "Closes #N" among recent PRs); order — Priority, then the number. Marks the
- * session as a dispatcher (`dispatcherFile`).
+ * not an epic, not in work, no open blockers (other repositories' too), no external blocker label; order — Priority,
+ * then the number. In work (`=`) — "In progress", an open PR (linked, or by the task branch and "Closes #N" among
+ * recent PRs) named with its link, or handed out to an executor of this session (`handedOutFile`). Marks the session
+ * as a dispatcher (`dispatcherFile`).
  */
 export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   // a line that isn't a pin leaves the session free, as for est and the dashboard (tests/standards/session-pin)
@@ -2037,8 +2057,9 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   const recent = (graphql(io, Q.RecentPrs, { owner, name })?.repository?.pullRequests?.nodes ?? []).filter((p: Any) => p.state === "OPEN");
   const openPr = (i: Issue) =>
     i.prs.find((p) => p.state === "OPEN")?.number ?? recent.find((p: Any) => isTaskBranch(p.headRefName ?? "", i.number) || closingInBody(p.body ?? "").includes(i.number))?.number;
+  const handed = handedOut(io, slug);
   const ready: Issue[] = [];
-  const running: Issue[] = [];
+  const running: string[] = [];
   const waiting: string[] = [];
   for (const n of numbers.sort((a, b) => a - b)) {
     const i = loadIssue(io, slug, n);
@@ -2051,17 +2072,20 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     if (want && typeAliases()[(i.type ?? "").toLowerCase()] !== want) continue;
     if (o.priority?.length && !o.priority.includes(i.priority ?? DEFAULT_PRIORITY)) continue;
     const status = itemIn(ctx, i)?.status ?? null;
-    if (status === N.status.inProgress) {
-      running.push(i);
+    // the task is in work: In progress, an open PR (the executor waits for its CI — #513: it was ○ and the dispatcher
+    // lost it from both lists), or handed out to an executor of this session that hasn't set In progress yet
+    const pr = openPr(i);
+    const work = [status === N.status.inProgress ? q(N.status.inProgress) : "", pr === undefined ? "" : `open PR #${pr} https://github.com/${slug}/pull/${pr}`].filter(Boolean);
+    if (!work.length && handed.has(i.number)) work.push("handed out to an executor of this session");
+    if (work.length) {
+      running.push(`= ${label} — ${work.join(", ")}`);
       continue;
     }
     const blockers = i.blockers.filter((b) => b.state === "OPEN").map((b) => blockerRef(slug, b));
     const external = i.labels.find((l) => locale.every((n) => n.labels.externalBlocker).includes(l));
-    const pr = openPr(i);
     if (status === N.status.done) waiting.push(`○ ${label} — ${STATUS} ${q(status)}, but the task is open`);
     else if (blockers.length) waiting.push(`○ ${label} — blocked by ${blockers.join(", ")}`);
     else if (external) waiting.push(`○ ${label} — ${externalBlocker(io, slug, i.number, external)}`);
-    else if (pr !== undefined) waiting.push(`○ ${label} — open PR #${pr}`);
     else ready.push(i);
   }
   ready.sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.number - b.number);
@@ -2079,7 +2103,7 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     io.out(`+ #${i.number} ${q(i.title)}${org ? ` (${i.priority ?? DEFAULT_PRIORITY})` : ""}`);
     io.out(`  ${executorPrompt(slug, i.number, i.parent?.number ?? null)}`);
   }
-  for (const i of running) io.out(`= #${i.number} ${q(i.title)} — ${q(N.status.inProgress)}`);
+  for (const line of running) io.out(line);
   for (const line of waiting) io.out(line);
   if (ready.length) {
     io.out(
@@ -2106,10 +2130,12 @@ function taskBranchesHere(io: Io, slug: string, number: number): string[] {
 /**
  * The executor's whole assignment (`task queue --assignment N`): the task by the canon, what a subagent does otherwise, the
  * answer form. The restart line — only when it is true: the task is In progress and has a branch `<type>/N-<slug>`
- * (#511); printed always, it misled the executor of a Backlog task, who argued with it in the answer.
+ * (#511); printed always, it misled the executor of a Backlog task, who argued with it in the answer. In a dispatcher
+ * session the task is recorded as handed out (`handedOutFile`): the queue no longer gives it out as ready.
  */
 export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
+  if (isDispatcher(io)) appendFileSync(handedOutFile(io)!, `${slug}#${number}\n`);
   const restart = itemIn(taskContext(io, slug), issue)?.status === N.status.inProgress ? taskBranchesHere(io, slug, number) : [];
   const vars = {
     task: N.subagentPrompt.task,
@@ -2433,11 +2459,13 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
  * lost their waits in one minute, and the owner wrote "continue" 17 times (#433). The SessionStart hook runs this
  * command: the task pinned to the session (its repository is in the pin, not in the checkout) and its PRs name the
  * wait — an open PR's checks; a merged PR of an open task — the deploy and `task close`. The PR GitHub didn't link — by
- * the task branch, as in `task close`. No pin — no line and no request: the session has no task. Read-only.
+ * the task branch, as in `task close`. No pin — no line and no request: the session has no task. Read-only on GitHub;
+ * a dispatcher's hand-outs it drops (`handedOutFile`): its executors died, their tasks are given out again.
  */
 export function cmdTaskResume(io: Io): number {
   const dispatcher = dispatcherFile(io);
   if (dispatcher && existsSync(dispatcher)) {
+    rmSync(handedOutFile(io)!, { force: true });
     io.out(
       `Dispatcher session: its executors (background subagents) died with the app's process — re-read the queue: ${readFileSync(dispatcher, "utf8").trim()}; ` +
         `its tasks ${q(N.status.inProgress)} — executors again with the same prompt: they continue on the task's branch`,
@@ -3306,19 +3334,22 @@ Examples:
   "task resume": `github task resume
 
 The SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks, a merged PR
-of an open task — the deploy and task close; no pin — nothing (code 0). Read-only.
+of an open task — the deploy and task close; no pin — nothing (code 0). Read-only on GitHub; a dispatcher session — the
+queue command, its hand-outs dropped: the executors died.
 
 Examples:
   github task resume`,
   "task queue": `github task queue [--epic N] [--type Task|Bug] [--priority Urgent,High] [--repo owner/repo]
 github task queue --assignment <N> [--repo owner/repo]
 
-The dispatcher session's queue: ready tasks (open, not an epic, not In progress, no open blockers — other repositories'
-too —, no external blocker label, no open PR) by Priority, then number, each with its executor's prompt; the rest — In
-progress (=) and ○ lines with the reason (the label's — from the latest «External blocker: …» comment). Marks the
-session as a dispatcher (dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the
-executors are subagents with the session's id; refused in a session with a pinned task. --type and --priority — in an
-organization. --assignment N (read-only, the executor's first call) — its whole assignment.
+The dispatcher session's queue: ready tasks (open, not an epic, not in work, no open blockers — other repositories'
+too —, no external blocker label) by Priority, then number, each with its executor's prompt; the rest — in work (=: In
+progress, an open PR with its link, handed out to an executor of this session) and ○ lines with the reason (the
+label's — from the latest «External blocker: …» comment). Marks the session as a dispatcher
+(dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the executors are subagents
+with the session's id; refused in a session with a pinned task. --type and --priority — in an organization.
+--assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a dispatcher session it
+records the task as handed out (dispatchers/<id>.tasks).
 
 Examples:
   github task queue --epic 40

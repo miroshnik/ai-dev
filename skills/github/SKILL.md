@@ -144,9 +144,9 @@ tasks, each with an indented line — its executor's prompt; `--type`,
 `--priority` — only in an organization. A session with a pinned task — a
 refusal (code 2): the dispatcher is a separate session. In Claude Code: an executor — `Agent` with
 `isolation: "worktree"` and `run_in_background: true`, the prompt — the
-indented line as is; at most 3 at once (a number in the request replaces it),
-a task whose executor runs but hasn't set In progress yet isn't launched
-twice. Before each launch — `get_usage`: the 5-hour limit at 85% and more —
+indented line as is; at most 3 at once (a number in the request replaces it);
+`=` — a task in work (In progress, an open PR, handed out to an executor of
+this session), not launched again. Before each launch — `get_usage`: the 5-hour limit at 85% and more —
 no new executors, the running ones finish, then `Remaining: N tasks, the
 limit`. After each executor's answer — `task queue` again. A question — to the
 owner in text; the answer — ✅ in the task's questions section and to the same

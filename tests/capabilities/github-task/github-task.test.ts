@@ -2118,31 +2118,81 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(lines.at(-1)).toStartWith("Next: each ready task above — a background subagent in its own worktree while fewer than 3 run");
   });
 
-  it("не готовые — строкой ○ с причиной: blocked by открытой задачей, открытый PR, эпик; «В работе» — отдельной строкой", () => {
+  it("не готовые — строкой ○ с причиной: blocked by открытой задачей, эпик; «В работе» — отдельной строкой", () => {
     const f = new FakeGitHub(REC);
     f.status(42, "Бэклог");
     f.status(47, "В работе");
     f.status(49, "Готово");
     const blocked = subtask(f, REPO, "Заблокирована", "--blocked-by", "47");
-    const linked = subtask(f, REPO, "С PR");
-    const branch = subtask(f, REPO, "С веткой");
     const ready = subtask(f, REPO, "Готова");
-    f.prs[200] = { files: [], closes: [linked], head: `feat/${linked}-pr`, model: null, state: "OPEN" };
-    f.prs[201] = { files: [], closes: [], head: `fix/${branch}-branch`, model: null, state: "OPEN" };
     const r = queue(f, []);
     expect(r.code).toBe(0);
     expect(heads(r.out)).toEqual([
-      "Queue miroshnik/ai-dev (open tasks): ready 2, «В работе» 1, not ready 5",
+      "Queue miroshnik/ai-dev (open tasks): ready 2, «В работе» 1, not ready 3",
       `+ #42 «${f.issue(42).title}»`,
       `+ #${ready} «GitHub · Готова»`,
       `= #47 «${f.issue(47).title}» — «В работе»`,
       `○ #45 «${f.issue(45).title}» — an epic: its tasks — task queue --epic 45`,
       `○ #49 «${f.issue(49).title}» — Status «Готово», but the task is open`,
       `○ #${blocked} «GitHub · Заблокирована» — blocked by #47`,
-      `○ #${linked} «GitHub · С PR» — open PR #200`,
-      `○ #${branch} «GitHub · С веткой» — open PR #201`,
       expect.stringMatching(/^Next: each ready task above/),
     ]);
+  });
+
+  /**
+   * В пилоте #471 задача с открытым PR, пока исполнитель ждал CI, была строкой ○ среди не готовых — ни `+`, ни `=` (#513):
+   * работа по ней идёт, и строка `=` называет PR ссылкой — открытый PR находится связью или веткой задачи и «Closes #N».
+   */
+  it("задача с открытым PR в очереди — строка `=` со ссылкой на PR, а не пропадает", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "В работе");
+    const linked = subtask(f, REPO, "С PR");
+    const branch = subtask(f, REPO, "С веткой");
+    f.prs[200] = { files: [], closes: [linked], head: `feat/${linked}-pr`, model: null, state: "OPEN" };
+    f.prs[201] = { files: [], closes: [], head: `fix/${branch}-branch`, model: null, state: "OPEN" };
+    f.prs[202] = { files: [], closes: [47], head: "feat/47-export", model: null, state: "OPEN" };
+    const r = queue(f, ["--epic", "45"]);
+    expect(r.code).toBe(0);
+    expect(heads(r.out)).toEqual([
+      "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 3, not ready 0",
+      `= #47 «${f.issue(47).title}» — «В работе», open PR #202 https://github.com/miroshnik/ai-dev/pull/202`,
+      `= #${linked} «GitHub · С PR» — open PR #200 https://github.com/miroshnik/ai-dev/pull/200`,
+      `= #${branch} «GitHub · С веткой» — open PR #201 https://github.com/miroshnik/ai-dev/pull/201`,
+      "Next: no ready tasks — wait for the executors' answers; after each — task queue again.",
+    ]);
+  });
+
+  /**
+   * Исполнитель печатает задание первым вызовом (`--assignment`), а «В работе» ставит позже — после вопросов задачи; до
+   * того очередь выдавала задачу готовой (#484 сразу после запуска, #513). Выдачу помнит сессия-диспетчер — субагент
+   * делит её id: пока исполнитель не ответил, задача у него. Ответ «влито» закрывает задачу, после «вопрос» он ждёт ответа
+   * владельца, после «сломалось» задачу не перезапускают — ни в одном случае она не готова для этой сессии.
+   */
+  it("задача, выданная исполнителю этой сессии-диспетчера, не среди готовых, пока он не ответил", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const config = scratch();
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    // задание исполнитель печатает из своего worktree; каталог не чекаут — веток задачи скрипт не ищет
+    expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)).toEqual([
+      "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 1, not ready 0",
+      `= #47 «${f.issue(47).title}» — handed out to an executor of this session`,
+      "Next: no ready tasks — wait for the executors' answers; after each — task queue again.",
+    ]);
+    // выдача — этой сессии: у другого диспетчера задача готова
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config, "5e1d0c9a-2b7f-4c3e-8a6d-1f0e9b8c7a65")).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(f.mutations).toEqual([]);
+  });
+
+  // без перегиба: задание вне сессии-диспетчера выдачи не помнит — в обычной сессии его печатают для чтения
+  it("задание в сессии не диспетчера задачу не держит", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const config = scratch();
+    expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
+    expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
   });
 
   /**
@@ -2303,6 +2353,17 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = task(f, ["resume"], REPO, inSession(config));
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/^Dispatcher session: its executors \(background subagents\) died with the app's process — re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/ai-dev; its tasks «В работе» — executors again with the same prompt/);
+  });
+
+  // исполнитель умер с процессом приложения, не взяв задачу в работу: выдача ему снята, иначе задачу никто не выдал бы снова
+  it("после перезапуска приложения задача, выданная умершему исполнителю, снова среди готовых", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const config = scratch();
+    task(f, ["queue", "--epic", "45"], REPO, inSession(config));
+    task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() });
+    expect(task(f, ["resume"], REPO, inSession(config)).code).toBe(0);
+    expect(heads(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
   });
 
   it("очередь пуста и в работе ничего — строка с последним шагом диспетчера", () => {
