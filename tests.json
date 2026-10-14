@@ -3191,6 +3191,13 @@
   "describes": [
    "task show печатает задачу одним выводом"
   ],
+  "name": "чек зелёный, потом красный на перезапуске — task show называет его красным, как ci-wait"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task show печатает задачу одним выводом"
+  ],
   "name": "эпик: тип из метки epic, его открытые подзадачи; строки PR у эпика нет"
  },
  {
@@ -7978,6 +7985,111 @@
    "Ядро канона и SKILL.md умещаются в бюджет слов, описание скилла — в лимит Agent Skills"
   ],
   "name": "указатель на скилл — `the `name` skill` или `skill `name``; команда скилла в бэктиках указателем не считается"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "ci-wait (skills/ci-wait/scripts/wait-ci.sh) читает состояние check-run по таблице"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "github (skills/github/scripts/github.ts) читает состояние check-run по таблице"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "нарушитель не проходит: копия правила в одном из скриптов расходится с таблицей"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "нарушитель не проходит: копия сводит одноимённые check-runs разных приложений в один"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "реестр «скрипты скиллов с правилом checkStates / CHECK_STATES» находит ci-wait, github"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "реестр «скрипты скиллов с правилом checkStates / CHECK_STATES» не пуст"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "таблица ловит лучший прогон из перезапусков и сведение приложений в одно"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "github и ci-wait одинаково читают состояние check-run по одной таблице: status и conclusion, перезапуски одного имени"
+  ],
+  "name": "чек зелёный, потом красный на перезапуске — task show и ci-wait оба называют его красным"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "запрос IssueShow берёт чеки головы фрагментом HEAD_CHECKS"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "запрос MergeRules берёт чеки головы фрагментом HEAD_CHECKS"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "запрос PrShow берёт чеки головы фрагментом HEAD_CHECKS"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "нарушитель не проходит: запрос со своей выборкой statusCheckRollup"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "реестр «запросы github со statusCheckRollup» находит IssueShow, MergeRules, PrShow"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "реестр «запросы github со statusCheckRollup» не пуст"
+ },
+ {
+  "path": "tests/standards/check-run-state/check-run-state.test.ts",
+  "describes": [
+   "каждый запрос github с чеками головы PR берёт их одним фрагментом — с id прогона и приложением"
+  ],
+  "name": "фрагмент выбирает то, что читает правило: имя, status, conclusion, id прогона и приложение"
  },
  {
   "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
@@ -15259,6 +15371,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/update/update.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/check-run-state/check-run-state.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
