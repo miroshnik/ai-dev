@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDe
 
 import { aiDev, aiDevPackage, bunxPackage, bunxServesPackages, copyPackage, REPO, sandbox, snapshot, type AiDevPackage, type Sandbox } from "../../lib/ai-dev.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { tmpDir } from "../../lib/spec.ts";
+import { tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -826,12 +826,13 @@ describe("Клон --link сверяется с origin/main, update подтяг
 describe("В начале сессии Claude Code проверка идёт сама и старт сессии не срывает", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude"), { recursive: true }));
 
-  // команда хука из ~/.claude/settings.json — как её запускает Claude Code: через shell, в каталоге проекта
-  function runHook() {
+  // команда хука из ~/.claude/settings.json — как её запускает Claude Code: через shell, в каталоге проекта, вход хука
+  // (JSON) — на stdin
+  function runHook(input?: string) {
     const s = JSON.parse(read(path.join(sb.home, ".claude/settings.json")));
     const hooks: { command: string }[] = s.hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
     const command = hooks.find((h) => h.command.includes("check --hook"))!.command;
-    const r = spawnSync("sh", ["-c", command], { cwd: sb.proj, env: sb.env, encoding: "utf8" });
+    const r = spawnSync("sh", ["-c", command], { cwd: sb.proj, env: sb.env, encoding: "utf8", input });
     return { code: r.status, stdout: r.stdout };
   }
 
@@ -943,5 +944,60 @@ describe("В начале сессии Claude Code проверка идёт с�
     const r = aiDev(sb, ["check", "--hook"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("check unavailable");
+  });
+
+  /**
+   * Фоновое ожидание (ci-wait) умирает с процессом приложения (#433): возобновлённой сессии хук называет, какое ожидание
+   * перезапустить. Id сессии Claude Code передаёт во входе хука — JSON на stdin; задачу сессии и её PR знает скилл
+   * github: хук зовёт его `task resume` и печатает ответ. Скилл — тот, что зовёт агент: одноимённый скилл машины у
+   * Claude Code сильнее проектного, и команды в ответе называют его пути.
+   */
+  describe("возобновлённая сессия узнаёт из хука, какое ожидание перезапустить", () => {
+    const SESSION = "0b1f6c1e-7a52-4f0e-9d3a-2c4e8a9b5d10";
+    const input = JSON.stringify({ session_id: SESSION, hook_event_name: "SessionStart", source: "resume" });
+    // скилл github — заглушка: печатает, кто она, свои аргументы и id сессии из окружения
+    const fakeGithub = (root: string, who: string, code = 0) =>
+      writeTree(root, {
+        ".agents/skills/github/scripts/github.ts": `console.log(\`${who} \${process.argv.slice(2).join(" ")} \${process.env.CLAUDE_CODE_SESSION_ID}\`);\nconsole.error("gh: boom");\nprocess.exit(${code});\n`,
+      });
+
+    it("id сессии из входа хука — скиллу github машины: его ответ task resume в выводе хука; без входа — из CLAUDE_CODE_SESSION_ID", () => {
+      aiDev(sb, ["install", "-g"]);
+      bunxServes(base.bin);
+      fakeGithub(sb.home, "fake-machine");
+      const r = runHook(input);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(`\nfake-machine task resume ${SESSION}\n`);
+      expect(aiDev(sb, ["check", "--hook"], { env: { CLAUDE_CODE_SESSION_ID: SESSION } }).stdout).toContain(`\nfake-machine task resume ${SESSION}\n`);
+    });
+
+    it("скилл github — машины, а нет его на машине — копии проекта", () => {
+      aiDev(sb, ["install"]);
+      fakeGithub(sb.proj, "fake-project");
+      expect(aiDev(sb, ["check", "--hook"], { input }).stdout).toContain(`\nfake-project task resume ${SESSION}\n`);
+      aiDev(sb, ["install", "-g"]);
+      fakeGithub(sb.home, "fake-machine");
+      const out = aiDev(sb, ["check", "--hook"], { input }).stdout;
+      expect(out).toContain(`\nfake-machine task resume ${SESSION}\n`);
+      expect(out).not.toContain("fake-project");
+    });
+
+    // страховка от перегиба: хук не зовёт скилл на каждом старте вслепую — без сессии закрепления не найти
+    it("без id сессии скилл github не зовётся", () => {
+      aiDev(sb, ["install", "-g"]);
+      bunxServes(base.bin);
+      fakeGithub(sb.home, "fake-machine");
+      expect(runHook().stdout).not.toContain("fake-machine");
+      expect(runHook(JSON.stringify({ source: "startup" })).stdout).not.toContain("fake-machine");
+    });
+
+    it("скилл github упал — его вывод и строка ! с причиной, код хука 0", () => {
+      aiDev(sb, ["install", "-g"]);
+      bunxServes(base.bin);
+      fakeGithub(sb.home, "fake-machine", 2);
+      const r = runHook(input);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain(`\nfake-machine task resume ${SESSION}\n! the session's task — github task resume: gh: boom\n`);
+    });
   });
 });

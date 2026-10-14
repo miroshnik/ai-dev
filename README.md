@@ -167,7 +167,7 @@ bunx github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a 
 bunx github:miroshnik/ai-dev update -g   # bring it to the latest release
 ```
 
-Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
+Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session; a session resumed after the app restarted also gets the wait of its task to restart — background waits die with the app's process. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
 
 An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun/install/cache` — prefix the command with `BUN_INSTALL_CACHE_DIR="$TMPDIR/bun"` — nor the install write `.claude/skills`: then run the command in your own terminal — the refusal names it, and a repeat run finishes a cut-off install.
 

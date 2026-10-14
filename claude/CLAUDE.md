@@ -24,7 +24,9 @@ project's `CLAUDE.md`.
   (`startup|resume|clear`): `check --hook` checks the machine's skills and
   hook and the project's flow (`AGENTS.md`, "First step of a session"),
   including its mode and language; the output goes to the start of the
-  context; in a git repository without the flow it suggests installing it.
+  context; in a git repository without the flow it suggests installing it; a
+  session with a pinned task (a resume after the app restarted) gets the wait
+  to restart — `github task resume` with the session id from the hook's input.
   The hook's exit code is always 0 — otherwise Claude Code doesn't put the
   output into context; timeout 60 s, an error doesn't block the session. No
   hook output in context — run `check` by hand.

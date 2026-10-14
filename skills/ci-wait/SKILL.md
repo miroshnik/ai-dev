@@ -19,7 +19,9 @@ not a worktree that will be removed earlier): a directory removed meanwhile
 gives `ERROR getcwd`. As a background command — **without `| tail` or other
 filters**: the result is the `RESULT:` line in the output file, and the
 heartbeat from stderr is the only way to peek at progress there; a filter
-holds the output back until the end.
+holds the output back until the end. A background wait dies with the app's
+process: a session resumed after a restart gets the command to restart it from
+the `SessionStart` hook (`github task resume`).
 
 ```bash
 bash <skill dir>/scripts/wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]

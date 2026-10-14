@@ -56,9 +56,9 @@ export interface Run {
   stderr: string;
 }
 
-/** `bun <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта. */
-export function aiDev(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string> } = {}): Run {
-  const r = spawnSync(process.execPath, [opts.bin ?? BIN, ...args], { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8" });
+/** `bun <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта; input — на stdin. */
+export function aiDev(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string>; input?: string } = {}): Run {
+  const r = spawnSync(process.execPath, [opts.bin ?? BIN, ...args], { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8", input: opts.input });
   if (r.error) throw r.error;
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }

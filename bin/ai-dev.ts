@@ -1137,9 +1137,55 @@ function withProxy(global: boolean, r: Result): Result {
  */
 const SANDBOX_HINT = `In the Claude Code sandbox bunx can't write its cache ~/.bun/install/cache — prefix the command with BUN_INSTALL_CACHE_DIR="$TMPDIR/bun"; the sandbox refuses writes to .claude/ too — then the owner runs the command in their terminal.`;
 
+/** One request or two of the github skill to GitHub; the hook has 60 s for everything. */
+const RESUME_TIMEOUT = 20_000;
+
 /**
- * The SessionStart hook: the machine and the project in one output to the session context; the code is always 0,
- * errors go to stdout. failed — the latest release couldn't be found: what's installed is "check unavailable".
+ * The session id from the hook's input: Claude Code passes JSON on stdin (`session_id`, `source` — startup, resume,
+ * clear); a run by hand in a terminal has no input — then `CLAUDE_CODE_SESSION_ID`, as the agent's Bash has it.
+ */
+function hookSession(): string | null {
+  let id: unknown;
+  if (!isatty(0)) {
+    try {
+      id = JSON.parse(readFileSync(0, "utf8")).session_id;
+    } catch {
+      /* no input or not JSON */
+    }
+  }
+  return (typeof id === "string" && id) || process.env.CLAUDE_CODE_SESSION_ID || null;
+}
+
+/**
+ * The github skill script the agent runs: the machine's — a same-named machine skill wins over the project's in Claude
+ * Code, — otherwise the project's copy, otherwise this package's. The commands it prints name its own paths.
+ */
+function githubScript(): string {
+  const rel = "skills/github/scripts/github.ts";
+  const roots = [path.join(os.homedir(), ".agents"), path.join(projectRoot(), ".agents"), SRC];
+  return roots.map((r) => path.join(r, rel)).find((f) => existsSync(f)) ?? path.join(SRC, rel);
+}
+
+/**
+ * A background wait (ci-wait) dies with the app's process, and the session resumed after a restart doesn't know it has
+ * to restart it (#433). The task pinned to the session and its PR are known to the github skill: `task resume` names
+ * the wait; no pin — it prints nothing. Not filtered by `source`: the pin itself is the sign of a resumed session — a
+ * new session and /clear have a new id. A failure — its lines and a `!` line: the hook's code stays 0.
+ */
+function resumeLines(): string[] {
+  const id = hookSession();
+  if (!id) return [];
+  const r = spawnSync(process.execPath, ["--no-env-file", githubScript(), "task", "resume"], { encoding: "utf8", timeout: RESUME_TIMEOUT, env: { ...process.env, CLAUDE_CODE_SESSION_ID: id } });
+  const lines = (r.stdout ?? "").split("\n").filter((l) => l.trim());
+  if (!r.error && r.status === 0) return lines;
+  const why = r.error ? r.error.message : String(r.stderr).trim().split("\n").filter(Boolean).pop() || `exit code ${r.status ?? r.signal}`;
+  return [...lines, `! the session's task — github task resume: ${why}`];
+}
+
+/**
+ * The SessionStart hook: the machine and the project in one output to the session context, then the wait a resumed
+ * session restarts; the code is always 0, errors go to stdout. failed — the latest release couldn't be found: what's
+ * installed is "check unavailable".
  */
 function hook(failed?: unknown) {
   const results: Result[] = [];
@@ -1154,7 +1200,8 @@ function hook(failed?: unknown) {
   // rules load only from the project: a git repository without the flow — how to install it (an ai-dev clone is the
   // canon itself, it isn't absent)
   if (results[1]?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `ai-dev in the project: not installed — install it: ${RUN} install --lang <project language>` });
-  if (!shown.length) return 0;
+  const resume = resumeLines();
+  if (!shown.length && !resume.length) return 0;
   const tail = [];
   if (shown.some((r) => r.behind)) tail.push("Behind — update, tell the user what changed (update lists it), commit the project copy, re-read what was updated.");
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, commit it with the copy; a rule outside the project — fix it yourself.");
@@ -1162,7 +1209,7 @@ function hook(failed?: unknown) {
   if (shown.some((r) => r.compose)) tail.push("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
   if (shown.some((r) => r.code === 2)) tail.push("Check unavailable — work by the current flow and say so.");
   if (shown.some((r) => r.run)) tail.push(SANDBOX_HINT);
-  note(["ai-dev flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...tail].join("\n"));
+  note(["ai-dev flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...resume, ...tail].join("\n"));
   return 0;
 }
 
