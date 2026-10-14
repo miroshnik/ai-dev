@@ -4069,19 +4069,80 @@ function cmdPeriod(args: PeriodArgs): void {
 // CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `est — estimates tasks from the project's history and records the actual from Claude Code, Codex and cloud session transcripts.
+/**
+ * Help — `--help` or `-h` anywhere in the arguments (tests/standards/cli-help): a command's synopsis (the first
+ * paragraph), what it does and examples; `est --help` — the synopses of all. The dispatcher takes only the commands from
+ * here: a command without help can't be called.
+ */
+const HELP: Record<string, string> = {
+  history: `est history [--repo o/r] [--grep WORD] [--all-repos] [--last N]
 
-  est history [--repo o/r] [--grep WORD] [--all-repos] [--last N]
-  est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
-  est fact --sweep [--since 90d] [--repo o/r] [--write]
-  est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]   — recompute the recorded actuals with this model and their epics
-  est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]   — the script picks analogs (github task new runs it); fewer than two — no estimate
-  est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]   — analogs by hand, on the owner's request
-  est estimate <N> [--repo o/r] --type <type> --hours H [--write]   — expert, on the owner's request
-  est backtest [--repo o/r] [--all-repos]   — mechanics vs manual estimates on closed tasks
-  est period --since DATE [--until DATE] [--since DATE [--until DATE]] [--repo o/r] [--gap 30]   — all of the repo's sessions over the period; two periods — side by side, «after / before»
-  est cloud-import <export.json>...   — cloud session events (SKILL.md, «Cloud session») into the sources of the actual
-  <type> — ${EST_TYPES.join(" ")}`;
+Closed tasks with estimate and actual, k (actual/estimate) with the number of pairs, and how many tasks closed in 90 days
+have no actual.
+
+Examples:
+  est history
+  est history --grep export --last 20`,
+  fact: `est fact <N> [--repo o/r] [--write] [--gap 30] [--json]
+est fact --sweep [--since 90d] [--repo o/r] [--write]
+est fact --sweep --model <id> [--since 90d] [--repo o/r] [--write]
+
+The actual of a task from session transcripts: active hours (pauses ≤ --gap minutes), tokens and cost; --write — the
+actual comment and the project fields (github task close runs it). An epic — the sum of its subtasks. --sweep — the
+actuals of closed tasks without one; with --model — recompute the recorded actuals with this model and their epics.
+
+Examples:
+  est fact 42
+  est fact --sweep --since 90d --write`,
+  estimate: `est estimate <N> [--repo o/r] --type <type> [--mult 0.5|1|1.5|2] [--note "reason"] [--tok-mult 0.5|1|1.5|2|3 [--tok-note "reason"]] [--write]
+est estimate <N> [--repo o/r] --type <type> --analogs a,b[,c] [--mult …] [--note …] [--write]
+est estimate <N> [--repo o/r] --type <type> --hours H [--write]
+
+The script picks analogs (github task new runs it); fewer than two — no estimate. --analogs — analogs by hand, --hours —
+an expert estimate: only on the owner's request. Without --write everything is only printed.
+<type> — ${EST_TYPES.join(" ")}
+
+Examples:
+  est estimate 42 --type feat --write
+  est estimate 42 --type fix --analogs 17,23 --mult 1.5 --note "two services"`,
+  backtest: `est backtest [--repo o/r] [--all-repos]
+
+Mechanics vs manual estimates on closed tasks.
+
+Examples:
+  est backtest
+  est backtest --all-repos`,
+  period: `est period --since DATE [--until DATE] [--since DATE [--until DATE]] [--repo o/r] [--gap 30]
+
+All of the repo's sessions over the period: hours, tokens, cost; two periods — side by side, «after / before».
+
+Examples:
+  est period --since 2026-09-01
+  est period --since 2026-08-01 --until 2026-09-01 --since 2026-09-01`,
+  "cloud-import": `est cloud-import <export.json>...
+
+Cloud session events (SKILL.md, «Cloud session») into the sources of the actual.
+
+Examples:
+  est cloud-import session.json`,
+};
+
+/** `est --help`: what the script is and the synopsis of each command. */
+const OVERVIEW = [
+  "est — estimates tasks from the project's history and records the actual from Claude Code, Codex and cloud session transcripts.",
+  "",
+  ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
+  "",
+  "est <command> --help — the command's details and examples",
+].join("\n");
+
+/** The help the arguments ask for (`--help`, `-h`): of the command they start with, otherwise the overview; none — undefined. */
+function helpOf(argv: string[]): string | undefined {
+  if (!argv.some((a) => a === "--help" || a === "-h")) return undefined;
+  const words = `${argv.join(" ")} `;
+  const cmd = Object.keys(HELP).find((c) => words.startsWith(`${c} `));
+  return cmd ? HELP[cmd] : OVERVIEW;
+}
 
 /** Cloud session exports → the state directory; a summary of each, so that it's visible what landed. */
 function cmdCloudImport(files: string[]): void {
@@ -4121,11 +4182,11 @@ function floatArg(v: string | undefined, name: string): number | undefined {
 export function main(argv: string[]): number {
   const cmd = argv[0];
   const rest = argv.slice(1);
+  const help = helpOf(argv);
+  if (help) return console.log(help), 0;
   try {
-    if (!cmd || cmd === "-h" || cmd === "--help") {
-      console.log(USAGE);
-      return cmd ? 0 : 2;
-    }
+    if (!cmd) return console.log(OVERVIEW), 2;
+    if (!Object.hasOwn(HELP, cmd)) throw new EstError(`unknown command «${cmd}»; expected ${Object.keys(HELP).join(", ")} (est --help)`);
     if (cmd === "cloud-import") {
       if (!rest.length) throw new EstError("pass the cloud session export files");
       cmdCloudImport(rest);
@@ -4169,7 +4230,7 @@ export function main(argv: string[]): number {
       cmdEstimate({ number, repo: values.repo, hours: floatArg(values.hours, "--hours"), type: values.type, analogs: values.analogs, mult: floatArg(values.mult, "--mult")!, tokMult: floatArg(values["tok-mult"], "--tok-mult"), tokNote: values["tok-note"], note: values.note, write: values.write });
       return 0;
     }
-    throw new EstError(`unknown command «${cmd}»; expected history, fact, estimate, backtest, period or cloud-import`);
+    throw new EstError(`command «${cmd}» has help but no handler`);
   } catch (e) {
     if (e instanceof EstError) die(e.message);
     if (e && typeof e === "object" && (e as Any).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") die((e as Error).message, 2);

@@ -564,15 +564,20 @@ async function readHosts(): Promise<{ hosts: string[]; error: string | null }> {
 // Server and CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `dashboard — a task page: «Sessions» (tasks in progress and what they wait for) and «Estimate and actual» (a chart by close time).
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const USAGE = `dashboard [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
 
-  dashboard [--repo o/r | --all-repos] [--since 90d] [--port N] [--no-open]
+A task page: «Sessions» (tasks in progress and what they wait for) and «Estimate and actual» (a chart by close time).
 
   --repo o/r    repository (by default — from the directory's git remote origin)
   --all-repos   all repositories in the personal est registry
   --since 90d   default period of the «Estimate and actual» tab (days d, weeks w, months m); without it — all time
   --port N      port (by default — a free one)
-  --no-open     don't open the browser (the same — BROWSER=none; BROWSER=<command> — what to open it with)`;
+  --no-open     don't open the browser (the same — BROWSER=none; BROWSER=<command> — what to open it with)
+
+Examples:
+  dashboard
+  dashboard --all-repos --since 30d`;
 
 // GitHub Projects are unreachable from a Claude Code cloud session, and its localhost isn't visible to the user's
 // browser.

@@ -28,15 +28,19 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 
-const USAGE = `Usage: slot '<command>' [arguments…] | slot --for <PID>
+/** `--help`, `-h` as the first argument — the rest go to the command (tests/standards/cli-help): synopsis, what, examples. */
+const USAGE = `slot '<command>' [arguments…]
+slot --for <PID>
 
-  slot '<command>' [arguments…]   runs the command through sh, the arguments appended to its end, as with npm run;
-                                  waits while two heavy runs are going on the machine, then runs with
-                                  AI_DEV_SLOT_CPUS — a quarter of the cores
-  slot --for <PID>                takes a slot for the shell <PID> of a package.json script, held until the shell
-                                  exits, and prints the export of AI_DEV_SLOT, AI_DEV_SLOT_CPUS for it — slot.sh
-                                  sources this: ". .agents/skills/slot/scripts/slot.sh && <command>"
-No queue in CI and inside a slot. The exit code is the command's; with --for — 0, nothing printed without the queue.
+Runs the command through sh, the arguments appended to its end, as with npm run; waits while two heavy runs are going on
+the machine, then runs with AI_DEV_SLOT_CPUS — a quarter of the cores. --for — takes a slot for the shell <PID> of a
+package.json script, held until the shell exits, and prints the export of AI_DEV_SLOT, AI_DEV_SLOT_CPUS for it —
+slot.sh sources this: ". .agents/skills/slot/scripts/slot.sh && <command>". No queue in CI and inside a slot. The exit
+code is the command's; with --for — 0, nothing printed without the queue.
+
+Examples:
+  slot 'vitest run'
+  slot 'bun test' tests/standards
 `;
 
 /** Heavy runs on the machine at once. */

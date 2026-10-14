@@ -29,7 +29,17 @@ import { parseArgs } from "node:util";
 import { sourceOf } from "./speclib.ts";
 
 const USAGE =
-  "spec-publish.ts [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check] [--root DIR]";
+  "spec-publish [--dir docs/spec] [--branch spec] [--remote origin] [--source <sha>] [--attempts 3] [--interval 5] [--check] [--root DIR]";
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const HELP = `${USAGE}
+
+Publishes the generated documentation (docs/spec) to the spec branch without touching the working copy; the commit
+names the source SHA. Code 0 — published, matches or already newer, 1 — differs with --check or the push was rejected on
+all attempts, 2 — a call error.
+
+Examples:
+  spec-publish --source "$GITHUB_SHA"
+  spec-publish --check`;
 
 // a publish commit without a configured git user (CI) — in the name of the GitHub Actions bot
 const BOT = { name: "github-actions[bot]", email: "41898282+github-actions[bot]@users.noreply.github.com" };
@@ -122,10 +132,7 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
   const v = opts.values;
-  if (v.help) {
-    console.error(USAGE);
-    return 0;
-  }
+  if (v.help) return console.log(HELP), 0;
   try {
     const root = v.root ? path.resolve(v.root) : git(process.cwd(), ["rev-parse", "--show-toplevel"]);
     const dir = path.resolve(root, v.dir);

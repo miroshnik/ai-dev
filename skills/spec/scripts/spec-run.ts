@@ -20,7 +20,16 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 
-const USAGE = "spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]";
+const USAGE = "spec-run --tree <hash> [--timeout 1800] [--interval 15]";
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const HELP = `${USAGE}
+
+The green run that checked the merge commit's tree: its id to stdout, for gh run download of docs-spec-<tree hash>; no
+such run — skip: code 0, stdout empty, the reason in stderr. Code 1 — the run didn't finish by the ceiling, 2 — a call
+error.
+
+Examples:
+  spec-run --tree "$(git rev-parse 'HEAD^{tree}')"`;
 
 interface Artifact {
   name: string;
@@ -88,10 +97,7 @@ export async function main(argv: string[]): Promise<number> {
       throw new Fail(`${(e as Error).message}\n${USAGE}`, 2);
     }
     const v = opts.values;
-    if (v.help) {
-      console.error(USAGE);
-      return 0;
-    }
+    if (v.help) return console.log(HELP), 0;
     if (!v.tree) throw new Fail(`--tree <hash> is required\n${USAGE}`, 2);
     if (!/^[0-9a-f]{40,64}$/.test(v.tree)) throw new Fail(`--tree: a full tree hash is needed (git rev-parse 'HEAD^{tree}'), not «${v.tree}»\n${USAGE}`, 2);
     const timeout = seconds("timeout", v.timeout);

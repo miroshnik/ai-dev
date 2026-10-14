@@ -45,35 +45,98 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const USAGE = `Usage: task-env up [--profile <p>]... | e2e [--profile <p>]... [-- <command>...] | down [<N>] | prune
-       task-env proxy <up | down | status> | check [<dir>]
+/**
+ * Help — `--help` or `-h` before `--` (after it — the e2e command's arguments; tests/standards/cli-help): a command's
+ * synopsis (the first paragraph), what it does and examples; `task-env --help` — the synopses of all. The dispatcher takes
+ * only the commands from here: a command without help can't be called.
+ */
+const HELP: Record<string, string> = {
+  up: `task-env up [--profile <p>]...
 
-  task-env up             bring the task's stack up — the Compose project <project>-<N> by the branch <type>/<N>-slug,
-                          <project> without a number — and print its addresses: env.http services of
-                          .agents/ai-dev.json through the proxy, published ports on 127.0.0.1; the HTTP addresses go
-                          to the compose file's interpolation in TASK_ENV_<SERVICE>_URL; --profile — Compose
-                          profiles; 0 — up, 1 — a service failed (its state and log), 2 — not tried
-  task-env e2e            the e2e stack <project>-<N>-e2e anew with clean volumes (its own addresses in the
-                          interpolation), then the command with its addresses in TASK_ENV_PROJECT,
-                          TASK_ENV_<SERVICE>_URL, TASK_ENV_<SERVICE>_<PORT>; the exit code is the command's; the stack
-                          stays until the next run
-  task-env down [<N>]     take the stacks of task N (default — the branch's) down with their volumes: dev and e2e; a line
-                          per stack: + down, ○ none, ! not removed (code 2); no compose file in the checkout — nothing to
-                          take down, Docker isn't called; task close of the github skill calls it
-  task-env prune          take down the stacks of the project's closed tasks left on the machine (orphans) with their
-                          volumes: the task's state — by GitHub (gh); stacks of open tasks, of the main checkout, of
-                          numbers that aren't tasks and of another repository with the same name — left
+Brings the task's stack up — the Compose project <project>-<N> by the branch <type>/<N>-slug, <project> without a
+number — and prints its addresses: env.http services of .agents/ai-dev.json through the proxy, published ports on
+127.0.0.1; the HTTP addresses go to the compose file's interpolation in TASK_ENV_<SERVICE>_URL; --profile — Compose
+profiles. Code 0 — up, 1 — a service failed (its state and log), 2 — not tried.
 
-  task-env check [<dir>]  holds the compose file in <dir> (default — the current directory) to the task isolation
-                          rules: no container_name, no fixed host port, volumes and networks without name and
-                          external, code by paths relative to the compose file; one ❌ line per violation; 0 — the
-                          rules hold or there is no compose file, 1 — violations, 2 — not checked (no docker compose,
-                          the config doesn't parse)
-  task-env proxy up       start the machine's proxy (Traefik) or bring it to the skill's compose file and wait
-                          until it is healthy; port 80 busy — AI_DEV_PROXY_PORT
-  task-env proxy down     stop and remove the proxy and its network
-  task-env proxy status   running — code 0, not running — 1 with the start command, Docker unavailable — 2
-`;
+Examples:
+  task-env up
+  task-env up --profile worker`,
+  e2e: `task-env e2e [--profile <p>]... [-- <command>...]
+
+The e2e stack <project>-<N>-e2e anew with clean volumes (its own addresses in the interpolation), then the command with
+its addresses in TASK_ENV_PROJECT, TASK_ENV_<SERVICE>_URL, TASK_ENV_<SERVICE>_<PORT>; the exit code is the command's; the
+stack stays until the next run.
+
+Examples:
+  task-env e2e -- npx playwright test
+  task-env e2e --profile worker -- bun test e2e`,
+  down: `task-env down [<N>]
+
+Takes the stacks of task N (default — the branch's) down with their volumes: dev and e2e; a line per stack: + down,
+○ none, ! not removed (code 2); no compose file in the checkout — nothing to take down, Docker isn't called; task close of
+the github skill calls it.
+
+Examples:
+  task-env down
+  task-env down 42`,
+  prune: `task-env prune
+
+Takes down the stacks of the project's closed tasks left on the machine (orphans) with their volumes: the task's state —
+by GitHub (gh); stacks of open tasks, of the main checkout, of numbers that aren't tasks and of another repository with
+the same name — left.
+
+Examples:
+  task-env prune`,
+  check: `task-env check [<dir>]
+
+Holds the compose file in <dir> (default — the current directory) to the task isolation rules: no container_name, no
+fixed host port, volumes and networks without name and external, code by paths relative to the compose file; one ❌ line
+per violation. Code 0 — the rules hold or there is no compose file, 1 — violations, 2 — not checked (no docker compose,
+the config doesn't parse).
+
+Examples:
+  task-env check
+  task-env check services/api`,
+  "proxy up": `task-env proxy up
+
+Starts the machine's proxy (Traefik) or brings it to the skill's compose file and waits until it is healthy; port 80 busy
+— another one in AI_DEV_PROXY_PORT.
+
+Examples:
+  task-env proxy up`,
+  "proxy down": `task-env proxy down
+
+Stops and removes the proxy and its network.
+
+Examples:
+  task-env proxy down`,
+  "proxy status": `task-env proxy status
+
+Running — code 0, not running — 1 with the start command, Docker unavailable — 2.
+
+Examples:
+  task-env proxy status`,
+};
+
+/** `task-env --help`: what the script is and the synopsis of each command. */
+const OVERVIEW = [
+  "task-env — a task's environment: its Docker Compose stack and the machine's proxy of *.localhost addresses",
+  "",
+  ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
+  "",
+  "task-env <command> --help — the command's details and examples",
+].join("\n");
+
+/** The command the arguments start with: `proxy up`, `down`; none — undefined. */
+const commandOf = (argv: string[]) => Object.keys(HELP).find((c) => `${argv.join(" ")} `.startsWith(`${c} `));
+
+/** The help the arguments before `--` ask for (`--help`, `-h`): of their command, otherwise the overview; none — undefined. */
+function helpOf(argv: string[]): string | undefined {
+  const own = argv.includes("--") ? argv.slice(0, argv.indexOf("--")) : argv;
+  if (!own.some((a) => a === "--help" || a === "-h")) return undefined;
+  const cmd = commandOf(own);
+  return cmd ? HELP[cmd] : OVERVIEW;
+}
 
 /** The proxy's compose file: the skill directory's `proxy/compose.yaml`. */
 export const PROXY_FILE = fileURLToPath(new URL("../proxy/compose.yaml", import.meta.url));
@@ -832,15 +895,17 @@ function stackCommand(group: string, args: string[], env: NodeJS.ProcessEnv): nu
 const COMMANDS: Record<string, (env: NodeJS.ProcessEnv) => Result> = { up, down, status };
 
 function main(argv: string[]): number {
+  const help = helpOf(argv);
+  if (help) return process.stdout.write(help + "\n"), 0;
+  const command = commandOf(argv);
+  const usage = () => (process.stderr.write(`${command ? HELP[command] : OVERVIEW}\n`), 2);
+  if (!command) return usage();
   const [group, cmd = "", ...rest] = argv;
   if (group === "check" && !rest.length && !cmd.startsWith("-")) return check(path.resolve(cmd || "."));
-  const stack = group ? stackCommand(group, argv.slice(1), process.env) : undefined;
+  const stack = stackCommand(group!, argv.slice(1), process.env);
   if (stack !== undefined) return stack;
   const fn = group === "proxy" && !rest.length ? COMMANDS[cmd] : undefined;
-  if (!fn) {
-    process.stderr.write(USAGE);
-    return group === "help" || group === "--help" || group === "-h" ? 0 : 2;
-  }
+  if (!fn) return usage();
   const r = fn(process.env);
   (r.code === 2 ? process.stderr : process.stdout).write(r.out + "\n");
   return r.code;

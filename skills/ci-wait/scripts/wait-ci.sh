@@ -4,24 +4,8 @@
 # of outcomes. Run from the repository directory (gh resolves {owner}/{repo}) or set
 # GH_REPO.
 #
-#   wait-ci.sh pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]
-#       Waits for the checks of the PR head (like status), the base branch's required checks — by name, and the run
-#       of each workflow that, by its `on:` at the head SHA, fires on the PR (needs bun).
-#       A conflict with the base — ERROR once the next poll of the same head confirms it: CI won't start on such a
-#       PR; right after a push GitHub still reports the previous head's conflict.
-#
-#   wait-ci.sh status <sha> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
-#       Waits for all checks of a commit: commit statuses (hosting, external services) and
-#       check-runs (GitHub Actions). --context — one check by name, among both.
-#       The SHA is the full one, from git.
-#
-#   wait-ci.sh merged <N> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]
-#       Waits for all checks of the PR's merge commit (like status): takes the SHA from the PR itself — don't
-#       look it up after the merge. PR not merged — ERROR.
-#
-#   wait-ci.sh issue <N> [--interval 60] [--timeout 7200]
-#       Waits for an issue to close — the bug on a red main (github pr premerge, code 3):
-#       PASS when it is closed; no such issue — ERROR.
+#   wait-ci.sh pr <N> | status <sha> | merged <N> | issue <N> [options] — the modes and options: wait-ci.sh --help,
+#   a mode's — wait-ci.sh <mode> --help (the help() function below).
 #
 # An Actions run at the SHA that failed without a single job (workflow not parsed, not started) — FAIL with the file path:
 # it gives no check-run, and without it the outcome came down to hosting statuses alone. An unfinished run without
@@ -40,7 +24,46 @@
 # Exit:  0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call. The outcome is the exit code.
 set -uo pipefail
 
-usage() { awk 'NR > 2 && !/^#/ { exit } NR > 2' "$0" >&2; exit 3; }
+# help [mode]: the mode's synopsis, what it does and examples, otherwise the overview (tests/standards/cli-help);
+# printf is a builtin — help runs no commands
+help() {
+  local exits=("Exit: 0 PASS · 1 FAIL · 2 TIMEOUT · 3 ERROR or a wrong call — the outcome is the exit code; stdout — a state" \
+    "line when the state changes and the final line RESULT: PASS|FAIL|TIMEOUT|ERROR …, stderr — gh errors and notes.")
+  case "${1:-}" in
+    pr) printf '%s\n' \
+      "wait-ci pr <N> [--interval 30] [--timeout 1800] [--expect 0] [--wait-all]" "" \
+      "Waits for the checks of the PR head (like status), the base branch's required checks — by name, and the run of each" \
+      "workflow that, by its on: at the head SHA, fires on the PR (needs bun). A conflict with the base — ERROR once the next" \
+      "poll of the same head confirms it: CI won't start on such a PR; right after a push GitHub still reports the previous" \
+      "head's conflict. The first failed check — FAIL right away; --wait-all — FAIL when all have finished." \
+      "${exits[@]}" "" "Examples:" "  wait-ci pr 57" "  wait-ci pr 57 --timeout 3600 --wait-all" ;;
+    status) printf '%s\n' \
+      "wait-ci status <sha> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]" "" \
+      "Waits for all checks of a commit: commit statuses (hosting, external services) and check-runs (GitHub Actions)." \
+      "--context — one check by name, among both. The SHA is the full one, from git." \
+      "${exits[@]}" "" "Examples:" "  wait-ci status \"\$(git rev-parse HEAD)\"" "  wait-ci status \"\$(git rev-parse HEAD)\" --context Vercel --timeout 600" ;;
+    merged) printf '%s\n' \
+      "wait-ci merged <N> [--context <name>] [--interval 20] [--timeout 1200] [--expect 0] [--wait-all]" "" \
+      "Waits for all checks of the PR's merge commit (like status): takes the SHA from the PR itself — don't look it up" \
+      "after the merge. PR not merged — ERROR." \
+      "${exits[@]}" "" "Examples:" "  wait-ci merged 57" "  wait-ci merged 57 --context Vercel" ;;
+    issue) printf '%s\n' \
+      "wait-ci issue <N> [--interval 60] [--timeout 7200]" "" \
+      "Waits for an issue to close — the bug on a red main (github pr premerge, code 3): PASS when it is closed; no such" \
+      "issue — ERROR." \
+      "${exits[@]}" "" "Examples:" "  wait-ci issue 61" ;;
+    *) printf '%s\n' \
+      "wait-ci — waiting for the checks of a PR or a commit with visible progress and the full set of outcomes; run it" \
+      "from the repository directory (gh resolves {owner}/{repo}) or set GH_REPO." "" && \
+      for m in pr status merged issue; do help "$m" | { IFS= read -r line; printf '  %s\n' "$line"; }; done && \
+      printf '%s\n' "" "wait-ci <command> --help — the command's details and examples" ;;
+  esac
+}
+usage() { help "${mode:-}" >&2; exit 3; }
+
+for arg in "$@"; do
+  case "$arg" in --help|-h) help "${1:-}"; exit 0 ;; esac
+done
 
 mode=${1:-}; target=${2:-}
 [ -n "$mode" ] && [ -n "$target" ] || usage

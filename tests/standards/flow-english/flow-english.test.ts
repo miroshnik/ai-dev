@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +6,7 @@ import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import localeModule from "../../../skills/github/scripts/locale.ts";
 import { codeOnly, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
+import { clis, commandsOf, isolated, mapLimit } from "../../lib/cli.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -88,15 +88,17 @@ describe("Код установщика и скриптов скиллов — �
     includes: ["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
   });
 
-  it("справка установщика и скриптов скиллов — на английском", () => {
-    const scripts = sources(ROOT, ["skills", "bin"]).filter((f) => /^const USAGE\b/m.test(f.text)).map((f) => f.file);
-    expect(scripts).toEqual(expect.arrayContaining(["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
-    const help = scripts.map((file) => {
-      const r = spawnSync(process.execPath, [path.join(ROOT, file), "--help"], { cwd: ROOT, encoding: "utf8" });
-      const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
-      return { file, printed: text.trim().length > 0, cyrillic: cyrillicLines(text) };
+  it("справка установщика и скриптов скиллов и их команд — на английском", async () => {
+    const scripts = clis();
+    expect(scripts.map((c) => c.file)).toEqual(expect.arrayContaining(["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
+    const overviews = await mapLimit(scripts, 8, async (cli) => ({ cli, text: (await isolated(cli, ["--help"])).stdout }));
+    const calls = overviews.flatMap(({ cli, text }) => [{ cli, args: [] as string[] }, ...commandsOf(cli.name, text).map((c) => ({ cli, args: c.split(" ") }))]);
+    const help = await mapLimit(calls, 8, async ({ cli, args }) => {
+      const r = await isolated(cli, [...args, "--help"]);
+      const text = `${r.stdout}${r.stderr}`;
+      return { call: [cli.name, ...args].join(" "), printed: text.trim().length > 0, cyrillic: cyrillicLines(text) };
     });
-    expect(help).toEqual(scripts.map((file) => ({ file, printed: true, cyrillic: [] })));
+    expect(help).toEqual(calls.map(({ cli, args }) => ({ call: [cli.name, ...args].join(" "), printed: true, cyrillic: [] })));
   });
 });
 
