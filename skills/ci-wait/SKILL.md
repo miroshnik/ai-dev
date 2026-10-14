@@ -17,9 +17,8 @@ Run it from the repository directory (or with `GH_REPO=owner/repo`); in the
 background — from a directory that will outlive the wait (the main checkout,
 not a worktree that will be removed earlier): a directory removed meanwhile
 gives `ERROR getcwd`. As a background command — **without `| tail` or other
-filters**: the result is the `RESULT:` line in the output file, and the
-heartbeat from stderr is the only way to peek at progress there; a filter
-holds the output back until the end. A background wait dies with the app's
+filters**: the state lines land in the output file as the checks change, a
+filter holds them back until the end. A background wait dies with the app's
 process: a session resumed after a restart gets the command to restart it from
 the `SessionStart` hook (`github task resume`).
 
@@ -48,15 +47,23 @@ don't fill in a short one: for a nonexistent SHA the API silently returns an
 empty status, and the wait hangs until the timeout with a false "not ready".
 
 The name for `--context` is a status context or a check-run name (an Actions
-job); the `CHECK` lines of a run without `--context` print them.
+job); the state lines of a run without `--context` name the awaited ones, all
+of them — `gh pr checks <N>`.
 
 ## How to read the result
 
-- stdout — events only: `CHECK <name>: <bucket>` when a check changes state
-  and the final line `RESULT: PASS|FAIL|TIMEOUT|ERROR …`.
-- stderr — a heartbeat on every poll (how many checks, how many pending, the
-  failed ones, `missing=[…]` — required ones not registered yet); in a
-  background run it lands in the output file, don't drag it into the chat.
+**The result is the exit code: don't read the output file** — neither while
+waiting (the command's completion wakes the session) nor after code `0`
+(PASS); only a non-zero code sends you to its `RESULT:` line.
+
+- stdout — a state line only when the state changes: the time, how long the
+  wait has run, how many checks are done and what is awaited —
+  `12:04:31 +3m10s pr#42@1a2b3c4: 3/5 done; waiting: tests, e2e; missing
+  required: lint` (`no run of workflow: <path>`, `failed: …` with
+  `--wait-all`, `API rate limit — next poll in …`); the final line `RESULT:
+  PASS|FAIL|TIMEOUT|ERROR …`.
+- stderr — `gh` errors and notes (the base branch's required checks, the
+  workflows due on the PR).
 - Exit code: `0` PASS · `1` FAIL (the failed ones are listed) · `2` TIMEOUT ·
   `3` ERROR (a conflict with the base, PR or SHA not found, five `gh` errors
   in a row, a wrong invocation).
@@ -66,10 +73,8 @@ What to do next:
 - **PASS** — before merging a PR, `github pr premerge <N>` (if `main` moved
   after CI — a check of the merge with a fresh one), exit code `0` — merge;
   after the merge — `github task close` (the epic refresh ran in parallel with
-  the wait — the `github` skill, `task actualize`) and the "done" report. A
-  background wait finished with exit code `0` — that is PASS: the next step
-  right away, don't read the output file in a separate turn.
-- **PASS only on the host's checks, without Actions** (the `CHECK` lines are
+  the wait — the `github` skill, `task actualize`) and the "done" report.
+- **PASS only on the host's checks, without Actions** (the state lines named
   only preview and comment statuses) in a repository with CI in Actions —
   suspicious: `gh run list --commit <sha>` — was there a run and how did it
   end.
@@ -85,14 +90,14 @@ What to do next:
   again. Don't merge. Jobs didn't start, with the annotation "recent account
   payments have failed…" — the owner's billing, not the code
   (`docs/pr-checks.md`).
-- **TIMEOUT** — count it neither as a success nor as a failure: check whether
-  the checks registered at all (`gh pr checks <N>`), whether the runner is
-  stuck; `missing required` in the result — a required check never appeared
-  (the workflow didn't start or was renamed); `no run of workflow: <path>` —
-  by its `on:` the workflow should have fired on the PR, but there is no run
-  on the head (Actions disabled, a GitHub incident, a PR from a fork with a
-  file that doesn't parse); a last line `CHECK workflow queued: <path>` — the
-  runner never picked up the run. If needed, repeat with a larger
+- **TIMEOUT** — count it neither as a success nor as a failure; the result
+  names what was still awaited: `no checks yet` — none registered; `waiting:
+  …` — a stuck runner or a long job; `waiting: workflow queued: <path>` — the
+  runner never picked up the run; `missing required` — a required check never
+  appeared (the workflow didn't start or was renamed); `no run of workflow:
+  <path>` — by its `on:` the workflow should have fired on the PR, but there
+  is no run on the head (Actions disabled, a GitHub incident, a PR from a fork
+  with a file that doesn't parse). If needed, repeat with a larger
   `--timeout`.
 - **ERROR `conflict with base`** — nothing to wait for: rebase onto
   `origin/<base>`, `git push --force-with-lease`, `ci-wait` again. Any other
@@ -117,7 +122,13 @@ What to do next:
   hour) is shared by all of the user's sessions — with parallel sessions it
   runs out. The PR head (`pulls/<N>`) is read on every poll: a new push
   changes the SHA. A REST rate limit means waiting until the quota resets
-  (`gh api rate_limit`), not ERROR.
+  (`gh api rate_limit`), not ERROR; that wait doesn't count toward
+  `--timeout` (up to an hour).
+- The poll interval grows with the wait: `--interval` is the first one, then a
+  tenth of the elapsed time, at most 5 minutes — a long deploy is polled
+  several times less often, the quota lasts, and the outcome comes at most a
+  tenth of the wait late. The confirming poll before PASS — at the first
+  interval.
 - A `gh` failure isn't an outcome, in the requests before the first poll too
   (the commit for `status`, the required checks for `pr`): a retry, ERROR
   after five in a row. "Commit not found" is only the API's answer "no" (422,
