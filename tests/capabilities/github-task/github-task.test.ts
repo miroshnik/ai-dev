@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -700,6 +700,150 @@ describe("task status берёт в работу одну задачу на се
     expect(task(f, ["status", "49", "В работе"], REPO, inSession(config)).code).toBe(0);
     expect(existsSync(pinFile(config))).toBe(true);
     expect(repo.git("status", "--porcelain", "--untracked-files=all")).toBe("");
+  });
+});
+
+/**
+ * Ветку worktree (`claude/<слаг>-<хеш>`) агент переименовывал в ветку задачи сам, `git branch -m`, — и 11 раз получал
+ * `could not lock config file .git/config` (#438): `.git/config` общий у всех worktree репозитория, его держит git
+ * другого чекаута. git переименовывает ссылку, а секцию ветки в конфиге (upstream) — нет, код 128; повтор `git branch
+ * -m` старого имени уже не находит. `task status N "В работе" --branch <ветка задачи>` переименовывает тем же вызовом,
+ * что берёт задачу, и повторяет запись секции, пока конфиг занят.
+ */
+describe("task status --branch переименовывает ветку worktree в ветку задачи", () => {
+  // чекаут сессии — worktree от origin/main с upstream, как его заводит инструмент: .git/config — общий с основным чекаутом
+  function worktree() {
+    const { dir, cleanup } = tmpDir();
+    temp.push(cleanup);
+    const origin = path.join(dir, `${REPO}.git`);
+    mkdirSync(path.dirname(origin), { recursive: true });
+    execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+    const main = path.join(dir, "main");
+    mkdirSync(main);
+    const repo = gitRepo(main);
+    repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
+    repo.git("remote", "add", "origin", origin);
+    repo.git("push", "-q", "-u", "origin", "main");
+    const work = path.join(dir, "wt");
+    repo.git("worktree", "add", "-q", "--track", "-b", "claude/x-1", work, "origin/main");
+    // путь блокировки — как его называет git: настоящий, без симлинков временного каталога (/var → /private/var на macOS)
+    return { work, main, lock: path.join(realpathSync(main), ".git", "config.lock") };
+  }
+  const config = (cwd: string, key: string) => {
+    try {
+      return execFileSync("git", ["config", "--get", key], { cwd, encoding: "utf8" }).trim();
+    } catch {
+      return null;
+    }
+  };
+
+  it("ветка worktree переименована в ветку задачи вместе с её настройкой — upstream остался у ветки", () => {
+    const { work } = worktree();
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work });
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"]]);
+    expect(git(work, "branch", "--show-current")).toBe("fix/49-config-lock");
+    expect(config(work, "branch.fix/49-config-lock.merge")).toBe("refs/heads/main");
+    expect(config(work, "branch.claude/x-1.merge")).toBe(null);
+    expect(r.out).toContain("+ branch claude/x-1 → fix/49-config-lock");
+  });
+
+  it("блокировка .git/config при переименовании ветки — повтор, ветка и её настройка переименованы", () => {
+    const { work, lock } = worktree();
+    writeFileSync(lock, "");
+    let waits = 0;
+    // git другого чекаута отпускает конфиг через две паузы
+    const sleep = () => void (++waits === 2 && rmSync(lock));
+    const r = task(new FakeGitHub(REC), ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work, sleep });
+    expect(r.code).toBe(0);
+    expect(waits).toBe(2);
+    expect(git(work, "branch", "--show-current")).toBe("fix/49-config-lock");
+    expect(config(work, "branch.fix/49-config-lock.merge")).toBe("refs/heads/main");
+    expect(config(work, "branch.claude/x-1.merge")).toBe(null);
+    expect(r.out).toContain("+ branch claude/x-1 → fix/49-config-lock (.git/config was locked: 2 retries)");
+  });
+
+  it("блокировка не снята за время повторов — ветка переименована, строка ! с файлом блокировки и командой, которая доделает настройку; код 1, блокировка не тронута", () => {
+    const { work, lock } = worktree();
+    writeFileSync(lock, "");
+    let waits = 0;
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work, sleep: () => void waits++ });
+    expect(r.code).toBe(1);
+    expect(waits).toBe(19);
+    expect(statusSet(f)).toEqual([[49, "В работе"]]);
+    expect(git(work, "branch", "--show-current")).toBe("fix/49-config-lock");
+    expect(existsSync(lock)).toBe(true);
+    expect(r.out).toMatch(
+      new RegExp(`^! branch renamed to fix/49-config-lock, its section in \\.git/config is not: ${lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is held by another git process \\(\\d+ s\\) — not removed; finish: git config --rename-section branch\\.claude/x-1 branch\\.fix/49-config-lock$`, "m"),
+    );
+  });
+
+  it("ошибка git не из-за блокировки — без повторов: строка !, код 1", () => {
+    const { work } = worktree();
+    git(work, "branch", "fix/49-config-lock", "origin/main");
+    let waits = 0;
+    const r = task(new FakeGitHub(REC), ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work, sleep: () => void waits++ });
+    expect(r.code).toBe(1);
+    expect(waits).toBe(0);
+    expect(git(work, "branch", "--show-current")).toBe("claude/x-1");
+    expect(r.out).toContain("! git branch -m claude/x-1 fix/49-config-lock: fatal: a branch named 'fix/49-config-lock' already exists");
+  });
+
+  it("повторный вызов на ветке задачи — без изменений: строка =", () => {
+    const { work } = worktree();
+    const args = ["status", "49", "В работе", "--branch", "fix/49-config-lock"];
+    task(new FakeGitHub(REC), args, REPO, { run: noEst, cwd: work });
+    const r = task(new FakeGitHub(REC), args, REPO, { run: noEst, cwd: work });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("= branch fix/49-config-lock");
+  });
+
+  it("--branch не ветка этой задачи по канону — ошибка до изменений", () => {
+    const { work } = worktree();
+    for (const branch of ["fix/50-config-lock", "claude/x-2", "wip/49-config-lock", "fix/49-Конфиг", "fix/49-Config-Lock"]) {
+      const f = new FakeGitHub(REC);
+      const r = task(f, ["status", "49", "В работе", "--branch", branch], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(2);
+      expect(r.err).toBe(`error: --branch «${branch}»: expected a branch of #49 by the canon — [<area>/]<type>/49-<slug>, type feat|fix|docs|refactor|perf|test|chore|ci|build|research, slug — Latin kebab-case`);
+      expect(f.mutations).toEqual([]);
+      expect(git(work, "branch", "--show-current")).toBe("claude/x-1");
+    }
+  });
+
+  it("--branch не с «В работе» и у эпика — ошибка до изменений: ветку заводят, беря задачу в работу, у эпика ветки нет", () => {
+    const { work } = worktree();
+    const f = new FakeGitHub(REC);
+    const backlog = task(f, ["status", "49", "Бэклог", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work });
+    expect(backlog.code).toBe(2);
+    expect(backlog.err).toBe("error: --branch — only with «В работе»: the branch is renamed when the task is taken into work");
+    const epic = task(f, ["status", "45", "В работе", "--branch", "fix/45-config-lock"], REPO, { run: noEst, cwd: work });
+    expect(epic.code).toBe(2);
+    expect(epic.err).toBe("error: --branch: #45 is an epic — an epic has no branch");
+    expect(f.mutations).toEqual([]);
+    expect(git(work, "branch", "--show-current")).toBe("claude/x-1");
+  });
+
+  it("текущая ветка уже есть на origin (main) или HEAD отсоединён — не трогается, строка ○", () => {
+    const { work, main } = worktree();
+    const onMain = task(new FakeGitHub(REC), ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: main });
+    expect(onMain.code).toBe(0);
+    expect(onMain.out).toContain("○ branch main is already on origin — left alone: a pushed branch is renamed together with its PR, by hand");
+    expect(git(main, "branch", "--show-current")).toBe("main");
+    git(work, "switch", "-q", "--detach");
+    const detached = task(new FakeGitHub(REC), ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work });
+    expect(detached.code).toBe(0);
+    expect(detached.out).toContain("○ branch left alone: HEAD is detached — a task branch from a fresh origin/main: git fetch origin && git switch -c fix/49-config-lock origin/main --no-track");
+    expect(git(work, "branch", "--list", "fix/49-config-lock")).toBe("");
+  });
+
+  it("каталог — не чекаут репозитория задачи — ветка не трогается, строка ○", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: scratch() });
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[49, "В работе"]]);
+    expect(r.out).toContain("○ branch left alone: the current directory is not a checkout of miroshnik/ai-dev");
   });
 });
 
