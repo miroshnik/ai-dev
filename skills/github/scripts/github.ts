@@ -18,6 +18,8 @@
  *                          subagent's prompt (or "not needed"); --assignment — the subagent's whole assignment
  *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the task's
  *                          stacks (task-env) and the merged branch removed
+ *   github task queue    — the dispatcher session's ready tasks with the prompts of their executors (subagents);
+ *                          --assignment — an executor's whole assignment
  *   github pr labels     — decision labels for the task from "Closes #N" by the PR diff, for its epic — the union
  *   github pr premerge   — before the merge: the default branch moved after the PR's CI — typecheck and test:spec on
  *                          the merge with it
@@ -379,6 +381,7 @@ export const Q = {
       labels(first: 20) { nodes { name } }
       parent { id number }
       subIssues(first: 100) { nodes { number state title } }
+      blockedBy(first: 50) { nodes { number state } }
       milestone { id number title issues(states: OPEN) { totalCount } }
       closedByPullRequestsReferences(first: 20, includeClosedPrs: true) { nodes { number state merged headRefName baseRefName } }
       projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: "${STATUS}") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } }
@@ -503,7 +506,7 @@ fragment Head on PullRequest {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${PR_SHOW} } }
 }`,
   IssueSearch: `query IssueSearch($q: String!) {
-  search(query: $q, type: ISSUE, first: 20) { nodes { ... on Issue { number title state } } }
+  search(query: $q, type: ISSUE, first: 100) { nodes { ... on Issue { number title state } } }
 }`,
   ProjectItems: `query ProjectItems($id: ID!, $after: String) {
   node(id: $id) {
@@ -1358,6 +1361,8 @@ interface Issue {
   labels: string[];
   parent: { id: string; number: number } | null;
   subIssues: { number: number; state: string; title: string }[];
+  /** The tasks blocking this one (blocked by), closed ones included. */
+  blockers: { number: number; state: string }[];
   /** The task's milestone and the number of open tasks in it (including this one if it's open). */
   milestone: { id: string; number: number; title: string; open: number } | null;
   /** PRs that close the task ("Closes #N"), closed ones included: whether merged, head and base. */
@@ -1381,6 +1386,7 @@ function loadIssue(io: Io, slug: string, number: number): Issue {
     labels: (i.labels?.nodes ?? []).map((l: Any) => l.name),
     parent: i.parent ? { id: i.parent.id, number: i.parent.number } : null,
     subIssues: i.subIssues?.nodes ?? [],
+    blockers: (i.blockedBy?.nodes ?? []).map((b: Any) => ({ number: b.number, state: b.state })),
     milestone: i.milestone ? { id: i.milestone.id, number: i.milestone.number, title: i.milestone.title, open: i.milestone.issues?.totalCount ?? 0 } : null,
     prs: (i.closedByPullRequestsReferences?.nodes ?? []).map((p: Any) => ({ number: p.number, state: p.state ?? "", merged: Boolean(p.merged), head: p.headRefName ?? "", base: p.baseRefName ?? "main" })),
     items: (i.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: it.status?.name ?? null })),
@@ -1498,6 +1504,9 @@ function pinnedTask(io: Io): { file: string; line: string; task: { slug: string;
 function pinTask(io: Io, slug: string, number: number): void {
   const file = pinFile(io);
   if (!file) return io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — the task isn't pinned");
+  if (isDispatcher(io)) {
+    return io.out(`○ dispatcher session: #${number} isn't pinned — its executor is a subagent with the session's id, est links the work by «${N.subagentPrompt.task} #${number}» in the assignment`);
+  }
   const task = `${slug}#${number}`;
   const created = (f: string, text: string) => {
     try {
@@ -1521,6 +1530,21 @@ function pinTask(io: Io, slug: string, number: number): void {
   const runs = `${held.task.slug}#${held.task.number}`;
   if (runs !== task) throw new GhError(`the session runs ${runs}; #${number} — in a new session, first prompt: #${number} (pin: ${file} — a mistaken one is removed by a human)`);
 }
+
+/**
+ * The dispatcher marker — `<config directory>/dispatchers/<session id>` with the queue command (`task queue`): the
+ * session hands tasks out to background subagents, and they share its id — a pin would refuse the second executor and
+ * give est the whole session as one task. The session isn't identified — null.
+ */
+function dispatcherFile(io: Io): string | null {
+  const id = io.env.CLAUDE_CODE_SESSION_ID;
+  return id ? path.join(configDir(io.env), "dispatchers", id) : null;
+}
+
+const isDispatcher = (io: Io) => {
+  const file = dispatcherFile(io);
+  return !!file && existsSync(file);
+};
 
 /** The epic prefix — the part of the title before " · ": the titles of the epic and all its subtasks start with it. */
 export function epicPrefix(title: string): string | null {
@@ -1906,6 +1930,132 @@ export function cmdTaskAnswer(io: Io, slug: string, number: number, k: number, a
  * The five epic-refresh checks — from the skill's reference.md, the one place of the canon: the list between
  * "Five checks:" and "What was fixed", an item per check.
  */
+/** The dispatcher's selection: the epic's tasks or the repository's open ones, narrowed by type and Priority. */
+export interface QueueFilter {
+  epic?: number;
+  type?: string;
+  priority?: string[];
+}
+
+/** How many executors run at once by default: `slot` lets two heavy runs through, a third executor writes code meanwhile. */
+export const QUEUE_EXECUTORS = 3;
+
+const priorityRank = (p: string | null) => PRIORITIES.indexOf((p ?? DEFAULT_PRIORITY) as (typeof PRIORITIES)[number]);
+
+/** The executor's prompt: the task first (`est` links the subagent's work by it), the whole assignment — from the script. */
+function executorPrompt(slug: string, number: number, epic: number | null): string {
+  return locale.fill(N.queue.prompt, {
+    task: N.subagentPrompt.task,
+    number,
+    repo: slug,
+    epic: epic === null ? "" : locale.fill(N.queue.epic, { epicWord: N.subagentPrompt.epic, epic }),
+    command: `bun --no-env-file ${import.meta.path} task queue --assignment ${number} --repo ${slug}`,
+  });
+}
+
+/**
+ * The dispatcher's queue: the session takes no task itself — its ready tasks go to background executors (subagents),
+ * K at a time; the queue is re-read after each answer, so tasks that appeared meanwhile are picked up. Ready — open,
+ * not an epic, not "In progress", no open blockers, no open PR (linked, or by the task branch and "Closes #N" among
+ * recent PRs); order — Priority, then the number. Marks the session as a dispatcher (`dispatcherFile`).
+ */
+export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
+  const pin = pinnedTask(io);
+  if (pin) throw new GhError(`the session runs ${pin} — a dispatcher is a separate session: the request goes into a new one`);
+  const want = o.type === undefined ? undefined : typeAliases()[o.type.toLowerCase()];
+  if (o.type !== undefined && (!want || want === N.issueTypes.epic)) throw new GhError(`--type: ${N.issueTypes.task} or ${N.issueTypes.bug}`);
+  const bad = (o.priority ?? []).filter((p) => !(PRIORITIES as readonly string[]).includes(p));
+  if (bad.length) throw new GhError(`--priority: ${PRIORITIES.join(", ")}, not ${bad.join(", ")}`);
+  const ctx = taskContext(io, slug);
+  const org = ctx.repo.owner.org;
+  if (!org && (o.type !== undefined || o.priority?.length)) throw new GhError("--type and --priority — only in an organization: a personal account has no issue types and no Priority");
+  let numbers: number[];
+  if (o.epic !== undefined) {
+    const epic = loadIssue(io, slug, o.epic);
+    if (!isEpic(epic, org)) throw new GhError(`#${o.epic} is not an epic — --epic takes an epic`);
+    if (epic.state !== "OPEN") throw new GhError(`epic #${o.epic} is closed`);
+    numbers = epic.subIssues.filter((x) => x.state === "OPEN").map((x) => x.number);
+  } else {
+    const found = graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open` }).search.nodes as Any[];
+    if (found.length >= 100) io.out("○ the search gave 100 open tasks — the queue sees only them: narrow it with --epic");
+    numbers = found.filter((x) => x?.state === "OPEN").map((x) => x.number);
+  }
+  const [owner, name] = slug.split("/");
+  const recent = (graphql(io, Q.RecentPrs, { owner, name })?.repository?.pullRequests?.nodes ?? []).filter((p: Any) => p.state === "OPEN");
+  const openPr = (i: Issue) =>
+    i.prs.find((p) => p.state === "OPEN")?.number ?? recent.find((p: Any) => isTaskBranch(p.headRefName ?? "", i.number) || closingInBody(p.body ?? "").includes(i.number))?.number;
+  const ready: Issue[] = [];
+  const running: Issue[] = [];
+  const waiting: string[] = [];
+  for (const n of numbers.sort((a, b) => a - b)) {
+    const i = loadIssue(io, slug, n);
+    if (i.state !== "OPEN") continue;
+    const label = `#${i.number} ${q(i.title)}`;
+    if (isEpic(i, org)) {
+      waiting.push(`○ ${label} — an epic: its tasks — task queue --epic ${i.number}`);
+      continue;
+    }
+    if (want && typeAliases()[(i.type ?? "").toLowerCase()] !== want) continue;
+    if (o.priority?.length && !o.priority.includes(i.priority ?? DEFAULT_PRIORITY)) continue;
+    const status = itemIn(ctx, i)?.status ?? null;
+    if (status === N.status.inProgress) {
+      running.push(i);
+      continue;
+    }
+    const blockers = i.blockers.filter((b) => b.state === "OPEN").map((b) => `#${b.number}`);
+    const pr = openPr(i);
+    if (status === N.status.done) waiting.push(`○ ${label} — ${STATUS} ${q(status)}, but the task is open`);
+    else if (blockers.length) waiting.push(`○ ${label} — blocked by ${blockers.join(", ")}`);
+    else if (pr !== undefined) waiting.push(`○ ${label} — open PR #${pr}`);
+    else ready.push(i);
+  }
+  ready.sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.number - b.number);
+  const args = [o.epic !== undefined && `--epic ${o.epic}`, o.type !== undefined && `--type ${o.type}`, o.priority?.length && `--priority ${o.priority.join(",")}`].filter(Boolean).join(" ");
+  const file = dispatcherFile(io);
+  if (file) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — markers aren't committed into it
+    writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
+    writeFileSync(file, `bun --no-env-file ${import.meta.path} task queue ${args ? `${args} ` : ""}--repo ${slug}\n`);
+  } else io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — not marked as a dispatcher: task status in the executors would pin their tasks");
+  const scope = [o.epic !== undefined ? `epic #${o.epic}` : "open tasks", want && `type ${q(want)}`, o.priority?.length && `Priority ${o.priority.join("|")}`].filter(Boolean).join(", ");
+  io.out(`Queue ${slug} (${scope}): ready ${ready.length}, ${q(N.status.inProgress)} ${running.length}, not ready ${waiting.length}`);
+  for (const i of ready) {
+    io.out(`+ #${i.number} ${q(i.title)}${org ? ` (${i.priority ?? DEFAULT_PRIORITY})` : ""}`);
+    io.out(`  ${executorPrompt(slug, i.number, i.parent?.number ?? null)}`);
+  }
+  for (const i of running) io.out(`= #${i.number} ${q(i.title)} — ${q(N.status.inProgress)}`);
+  for (const line of waiting) io.out(line);
+  if (ready.length) {
+    io.out(
+      `Next: each ready task above — a background subagent in its own worktree while fewer than ${QUEUE_EXECUTORS} run (a number from the request replaces it); ` +
+        "the indented line is its whole prompt. After each executor's answer — task queue again: new tasks get in.",
+    );
+  } else if (running.length) io.out("Next: no ready tasks — wait for the executors' answers; after each — task queue again.");
+  else io.out(`Queue is empty: nothing ready, nothing ${q(N.status.inProgress)} — the dispatcher's summary (merged, questions, the not ready ones above) and the last line.`);
+  return 0;
+}
+
+/** The executor's whole assignment (`task queue --assignment N`): the task by the canon, what a subagent does otherwise, the answer form. */
+export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
+  const issue = loadIssue(io, slug, number);
+  const vars = {
+    task: N.subagentPrompt.task,
+    number,
+    title: issue.title,
+    repo: slug,
+    epic: issue.parent ? locale.fill(N.queue.epic, { epicWord: N.subagentPrompt.epic, epic: issue.parent.number }) : "",
+    script: `bun --no-env-file ${import.meta.path}`,
+    waitCi: `bash ${WAIT_CI}`,
+    inProgress: N.status.inProgress,
+    done: N.lastLine.done,
+    questions: N.sections.questions,
+  };
+  const lines = [N.queue.lead, N.queue.resume, N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.found, N.queue.question, N.queue.answer];
+  for (const line of lines) io.out(locale.fill(line, vars));
+  return 0;
+}
+
 function actualizeChecks(): string[] {
   const file = path.resolve(import.meta.dir, "../reference.md");
   const m = existsSync(file) ? /Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(readFileSync(file, "utf8")) : null;
@@ -2206,6 +2356,13 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
  * the task branch, as in `task close`. No pin — no line and no request: the session has no task. Read-only.
  */
 export function cmdTaskResume(io: Io): number {
+  const dispatcher = dispatcherFile(io);
+  if (dispatcher && existsSync(dispatcher)) {
+    io.out(
+      `Dispatcher session: its executors (background subagents) died with the app's process — re-read the queue: ${readFileSync(dispatcher, "utf8").trim()}; ` +
+        `its tasks ${q(N.status.inProgress)} — executors again with the same prompt: they continue on the task's branch`,
+    );
+  }
   const pin = pinnedTask(io);
   if (!pin) return 0;
   // not a pin — the session has no task, as for est and the dashboard; the line names the file for a human
@@ -2992,6 +3149,19 @@ of an open task — the deploy and task close; no pin — nothing (code 0). Read
 
 Examples:
   github task resume`,
+  "task queue": `github task queue [--epic N] [--type Task|Bug] [--priority Urgent,High] [--repo owner/repo]
+github task queue --assignment <N> [--repo owner/repo]
+
+The dispatcher session's queue: ready tasks (open, not an epic, not In progress, no open blockers, no open PR) by
+Priority, then number, each with its executor's prompt; the rest — In progress (=) and ○ lines with the reason. Marks the
+session as a dispatcher (dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the
+executors are subagents with the session's id; refused in a session with a pinned task. --type and --priority — in an
+organization. --assignment N (read-only, the executor's first call) — its whole assignment.
+
+Examples:
+  github task queue --epic 40
+  github task queue --type Bug --priority Urgent,High
+  github task queue --assignment 42`,
   "task close": `github task close <N> [--no-git] [--repo owner/repo]
 
 After the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write), Status Done, the
@@ -3135,6 +3305,15 @@ export function main(argv: string[], io: Io): number {
         const epic = values.epic === undefined ? undefined : issueNumber(values.epic, "--epic");
         const labels = (values.labels ?? "").split(",").map((x) => x.trim()).filter(Boolean);
         return cmdTaskNew(io, slug, { title: values.title, body, type: values.type ?? N.issueTypes.task, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels, branchType: values["branch-type"] });
+      }
+      if (cmd === "queue") {
+        if (values.assignment) {
+          if (positionals.length !== 1) throw new GhError("task queue --assignment <N>: one task number");
+          return cmdTaskAssignment(io, slug, issueNumber(positionals[0], "task queue --assignment"));
+        }
+        if (positionals.length) throw new GhError(`extra arguments: ${positionals.join(" ")} — the queue is chosen by --epic, --type and --priority`);
+        const priority = values.priority === undefined ? undefined : values.priority.split(",").map((x) => x.trim()).filter(Boolean);
+        return cmdTaskQueue(io, slug, { epic: values.epic === undefined ? undefined : issueNumber(values.epic, "--epic"), type: values.type, priority });
       }
       const number = issueNumber(positionals[0], `task ${cmd}`);
       if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "), values.branch);

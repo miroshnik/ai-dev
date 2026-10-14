@@ -1891,3 +1891,132 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
     expect(r.out.split("\n").at(-1)).toContain("«All done. The session can be closed.»");
   });
 });
+
+/**
+ * Сессия-диспетчер берёт не задачу, а очередь: «сделай все задачи эпика», «поправь все баги High». Готовые задачи уходят
+ * фоновым исполнителям-субагентам по K сразу, после каждого ответа очередь читается заново — так подхватываются новые.
+ */
+describe("task queue раздаёт задачи эпика или фильтра исполнителям", () => {
+  const created = (r: { out: string }) => Number(/^Created #(\d+)/.exec(r.out)![1]);
+  const subtask = (f: FakeGitHub, repo: string, title: string, ...more: string[]) => created(task(f, ["new", "--branch-type", "feat", "--title", title, "--epic", "45", ...more], repo));
+  /** Строки вывода без промптов исполнителей (у них отступ). */
+  const heads = (out: string) => out.split("\n").filter((l) => !l.startsWith("  "));
+  /** Очередь в сессии агента: без id сессии скрипт не пометил бы её диспетчером и сказал бы об этом строкой ○. */
+  const queue = (f: FakeGitHub, args: string[], repo = REPO) => task(f, ["queue", ...args], repo, inSession(scratch()));
+
+  it("готовые задачи эпика — по Priority, затем по номеру, у каждой — промпт исполнителя «Задача #N»", () => {
+    const f = new FakeGitHub(asOrg(REC));
+    f.status(47, "Бэклог");
+    f.setPriority(47, "High");
+    const low = subtask(f, ORG, "Низкая", "--priority", "Low");
+    const urgent = subtask(f, ORG, "Срочная", "--priority", "Urgent");
+    const medium = subtask(f, ORG, "Обычная");
+    const r = queue(f, ["--epic", "45"], ORG);
+    expect(r.code).toBe(0);
+    const lines = r.out.split("\n");
+    expect(lines[0]).toBe("Queue acme/ai-dev (epic #45): ready 4, «В работе» 0, not ready 0");
+    expect(lines.filter((l) => l.startsWith("+ ")).map((l) => Number(/^\+ #(\d+)/.exec(l)![1]))).toEqual([urgent, 47, medium, low]);
+    expect(lines[1]).toBe(`+ #${urgent} «GitHub · Срочная» (Urgent)`);
+    expect(lines[2]).toStartWith(`  Задача #${urgent} в acme/ai-dev (эпик #45): ты исполнитель сессии-диспетчера. Задание целиком печатает \`bun --no-env-file `);
+    expect(lines[2]).toContain(`task queue --assignment ${urgent} --repo acme/ai-dev\``);
+    expect(lines.at(-1)).toStartWith("Next: each ready task above — a background subagent in its own worktree while fewer than 3 run");
+  });
+
+  it("не готовые — строкой ○ с причиной: blocked by открытой задачей, открытый PR, эпик; «В работе» — отдельной строкой", () => {
+    const f = new FakeGitHub(REC);
+    f.status(42, "Бэклог");
+    f.status(47, "В работе");
+    f.status(49, "Готово");
+    const blocked = subtask(f, REPO, "Заблокирована", "--blocked-by", "47");
+    const linked = subtask(f, REPO, "С PR");
+    const branch = subtask(f, REPO, "С веткой");
+    const ready = subtask(f, REPO, "Готова");
+    f.prs[200] = { files: [], closes: [linked], head: `feat/${linked}-pr`, model: null, state: "OPEN" };
+    f.prs[201] = { files: [], closes: [], head: `fix/${branch}-branch`, model: null, state: "OPEN" };
+    const r = queue(f, []);
+    expect(r.code).toBe(0);
+    expect(heads(r.out)).toEqual([
+      "Queue miroshnik/ai-dev (open tasks): ready 2, «В работе» 1, not ready 5",
+      `+ #42 «${f.issue(42).title}»`,
+      `+ #${ready} «GitHub · Готова»`,
+      `= #47 «${f.issue(47).title}» — «В работе»`,
+      `○ #45 «${f.issue(45).title}» — an epic: its tasks — task queue --epic 45`,
+      `○ #49 «${f.issue(49).title}» — Status «Готово», but the task is open`,
+      `○ #${blocked} «GitHub · Заблокирована» — blocked by #47`,
+      `○ #${linked} «GitHub · С PR» — open PR #200`,
+      `○ #${branch} «GitHub · С веткой» — open PR #201`,
+      expect.stringMatching(/^Next: each ready task above/),
+    ]);
+  });
+
+  it("--type и --priority отбирают задачи в организации; в личном аккаунте — ошибка до чтения задач", () => {
+    const f = new FakeGitHub(asOrg(REC));
+    f.status(47, "Бэклог");
+    const bug = created(task(f, ["new", "--title", "Падает", "--type", "Баг", "--priority", "High"], ORG));
+    created(task(f, ["new", "--title", "Мелочь", "--type", "Баг", "--priority", "Low"], ORG));
+    created(task(f, ["new", "--branch-type", "feat", "--title", "Срочная фича", "--priority", "Urgent"], ORG));
+    const r = queue(f, ["--type", "bug", "--priority", "Urgent,High"], ORG);
+    expect(r.code).toBe(0);
+    expect(heads(r.out).slice(0, 2)).toEqual(["Queue acme/ai-dev (open tasks, type «Баг», Priority Urgent|High): ready 1, «В работе» 0, not ready 1", `+ #${bug} «Падает» (High)`]);
+    const personal = task(new FakeGitHub(REC), ["queue", "--type", "Bug"]);
+    expect(personal.code).toBe(2);
+    expect(personal.err).toBe("error: --type and --priority — only in an organization: a personal account has no issue types and no Priority");
+    expect(task(f, ["queue", "--priority", "P1"], ORG).err).toBe("error: --priority: Urgent, High, Medium, Low, not P1");
+  });
+
+  it("--assignment N — задание исполнителю: первая строка «Задача #N», отличия субагента, форма ответа", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["queue", "--assignment", "47"]);
+    expect(r.code).toBe(0);
+    const lines = r.out.split("\n");
+    expect(lines[0]).toStartWith("Задача #47 «GitHub · Задача одной командой — github task» в miroshnik/ai-dev (эпик #45): ты исполнитель сессии-диспетчера — сделай задачу целиком по канону");
+    expect(lines).toContain("Ты субагент, а не сессия:");
+    expect(r.out).toContain("последнюю строку («Всё сделано. Сессию можно закрывать.») не пиши");
+    expect(r.out).toContain("pr <PR> --timeout 540");
+    expect(lines.at(-1)).toBe("Ответ диспетчеру — одной строкой: `влито #<PR>` · `вопрос: <вопрос, варианты, рекомендация>` · `сломалось: <что и где остановилось>`.");
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("сессия-диспетчер: task status «В работе» в ней задачу не закрепляет — исполнители-субагенты делят id сессии", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    expect(task(f, ["queue", "--epic", "45"], REPO, inSession(config)).code).toBe(0);
+    expect(readFileSync(path.join(config, "dispatchers", SESSION), "utf8")).toMatch(/ task queue --epic 45 --repo miroshnik\/ai-dev\n$/);
+    const r = task(f, ["status", "47", "В работе"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("○ dispatcher session: #47 isn't pinned — its executor is a subagent with the session's id, est links the work by «Задача #47» in the assignment");
+    expect(task(f, ["status", "49", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(statusSet(f).filter(([n]) => n !== 45)).toEqual([[47, "В работе"], [49, "В работе"]]);
+    expect(existsSync(pinFile(config))).toBe(false);
+  });
+
+  it("в сессии с закреплённой задачей — отказ (код 2) до чтения очереди: диспетчер — отдельная сессия", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    const r = task(f, ["queue", "--epic", "45"], REPO, inSession(config));
+    expect(r.code).toBe(2);
+    expect(r.err).toBe("error: the session runs miroshnik/ai-dev#49 — a dispatcher is a separate session: the request goes into a new one");
+    expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
+  });
+
+  it("task resume в сессии-диспетчере называет команду очереди: исполнители умерли с процессом приложения", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["queue", "--epic", "45"], REPO, inSession(config));
+    const r = task(f, ["resume"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/^Dispatcher session: its executors \(background subagents\) died with the app's process — re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/ai-dev; its tasks «В работе» — executors again with the same prompt/);
+  });
+
+  it("очередь пуста и в работе ничего — строка с последним шагом диспетчера", () => {
+    const f = new FakeGitHub(REC);
+    f.closed(47);
+    const r = queue(f, ["--epic", "45"]);
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")).toEqual([
+      "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 0, not ready 0",
+      "Queue is empty: nothing ready, nothing «В работе» — the dispatcher's summary (merged, questions, the not ready ones above) and the last line.",
+    ]);
+  });
+});
