@@ -117,7 +117,9 @@ What to do next:
   when the head is moved back to the earlier commit, and re-running a job
   adds a new one. The result follows the latest check-run of a name from the
   same app, otherwise an early `cancelled` gives a false FAIL while the latest
-  one is green.
+  one is green; a name from several apps gets the worst of their states.
+  `github task show` reads a check by the same table (standard
+  `check-run-state`).
 - REST only: `gh pr checks` goes to GraphQL, whose quota (5000 points per
   hour) is shared by all of the user's sessions — with parallel sessions it
   runs out. The PR head (`pulls/<N>`) is read on every poll: a new push
