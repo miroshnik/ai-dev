@@ -118,9 +118,11 @@ const USAGE = `Usage: ai-dev <command> [-g]
                      the mode (auto) and the language, holds the compose file to the task isolation rules (❌ per
                      violation, ○ — not checked: no docker compose; the task-env skill) and warns (!) if a script in
                      slot calls turbo and turbo.json doesn't pass the queue variables to tasks (the exit code stays
-                     the same); for the machine names the task-env proxy of *.localhost addresses — running or not,
-                     with the start command (with Docker on the machine; the exit code stays the same), and, run from
-                     the agent's Bash in Claude Code, a session without the agent's Bash environment
+                     the same); a project that needs update — the update in a task of its own, not in a task
+                     session: the task new command of the github skill, one task per project; for the machine names
+                     the task-env proxy of *.localhost addresses — running or not, with the start command (with
+                     Docker on the machine; the exit code stays the same), and, run from the agent's Bash in Claude
+                     Code, a session without the agent's Bash environment
   check --hook       the machine and the project at once for the Claude Code SessionStart hook: the exit code is
                      always 0, errors go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE —
                      zsh without errors on a glob without matches and on =word, timeout from bin/shims
@@ -1000,6 +1002,17 @@ function composeCheck(root: string): { lines: string[]; violations: boolean } {
   return notChecked(`task-env: ${r.stderr.trim().split("\n")[0] || `exit code ${r.status ?? r.signal}`}`);
 }
 
+/** The github skill script in the project's flow copy: `check` names its `task new` for the update task. */
+const GITHUB_SCRIPT = ".agents/skills/github/scripts/github.ts";
+
+/**
+ * The project's update is a task of its own, one per project: a task session doesn't update the copy — thousands of
+ * lines don't belong in its branch. The title is constant, in the project language (the `updateTask` key of this
+ * package's github skill dictionary): `task new` refuses a second open task with the same title and names the open one.
+ */
+const updateTaskLine = (root: string) =>
+  `The task — one per project, an open one is named by the refusal: bun --no-env-file ${GITHUB_SCRIPT} task new --title "${locale.names(languageOf(root)).updateTask}" --branch-type chore`;
+
 /** The check failed: what and why. */
 const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `ai-dev ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
 
@@ -1064,8 +1077,12 @@ function check(global: boolean): Result {
       ...capped(changeLines(stale, root, global)),
       ...(stale.length && ignored.length ? [`Git ${lost}`] : []),
       ...capped(changeLines(ignored, root, global)),
-      // update won't fix a personal rule — what to do is said in the ❌ line
-      ...(stale.length || fixable ? [`${stale.length ? "Update" : "Fix"}: ${RUN} update${global ? " -g" : ""}${fixable ? " — adds exceptions to .gitignore" : ""}`] : []),
+      // update won't fix a personal rule — what to do is said in the ❌ line; the project — in a task of its own
+      ...(stale.length || fixable
+        ? global
+          ? [`${stale.length ? "Update" : "Fix"}: ${RUN} update -g${fixable ? " — adds exceptions to .gitignore" : ""}`]
+          : [`${stale.length ? "Update" : "Fix"} in a task of its own, not in this session's task: ${RUN} update${fixable ? " — adds exceptions to .gitignore" : ""}`, updateTaskLine(root)]
+        : []),
       ...project,
     ].join("\n"),
   };
@@ -1275,15 +1292,23 @@ function hook(failed?: unknown) {
       results.push(withMachine(global, unavailable(global, e), shell));
     }
   }
+  const [machine, project] = results;
   const shown = results.filter((r) => !r.absent);
   // rules load only from the project: a git repository without the flow — how to install it (an ai-dev clone is the
   // canon itself, it isn't absent)
-  if (results[1]?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `ai-dev in the project: not installed — install it: ${RUN} install --lang <project language>` });
+  if (project?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `ai-dev in the project: not installed — install it: ${RUN} install --lang <project language>` });
   const resume = resumeLines();
   if (!shown.length && !resume.length) return 0;
   const tail = [];
-  if (shown.some((r) => r.behind)) tail.push("Behind — update, tell the user what changed (update lists it), commit the project copy, re-read what was updated.");
-  if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, commit it with the copy; a rule outside the project — fix it yourself.");
+  // the machine's update touches only ~/.agents and the hook — the session does it; the project's — the copy in the
+  // branch: a task of its own (updateTaskLine), the session works by the current flow
+  if (machine?.behind) tail.push("The machine is behind — update -g, tell the user what changed (update lists it), re-read what was updated.");
+  if (project?.run) {
+    tail.push(
+      "The project's flow needs update — not in a task session: recommend it to the user and give a chip for its task (task new above; no chips — the first prompt #N), work by the current flow. The update task's session — update, tell the user what changed, commit the copy into its branch, re-read what was updated.",
+    );
+  }
+  if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, committed with the copy in the update task; a rule outside the project — fix it yourself.");
   // the session has no task yet at its start, and one session is one task: the fix goes into a task of its own
   if (shown.some((r) => r.compose)) tail.push("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
   if (shown.some((r) => r.code === 2)) tail.push("Check unavailable — work by the current flow and say so.");
@@ -1320,7 +1345,7 @@ function update(global: boolean) {
   note(
     [
       ...whatChanged(from),
-      "Commit the project copy as a separate commit into the current task's branch:",
+      "Commit the project copy into the update task's branch:",
       `  git add -A .agents .claude/rules .claude/skills AGENTS.md${changed.map((f) => ` ${f}`).join("")} && git commit -m "chore(agents): ${commitSubject(root, version)}"`,
     ].join("\n"),
   );

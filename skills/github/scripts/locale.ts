@@ -152,6 +152,11 @@ export interface Names {
   };
   /** The description of a flow copy commit that `update` suggests: "ai-dev flow <tag>". */
   updateCommit: string;
+  /**
+   * The title of the project's flow update task that `check` suggests: "Update the ai-dev flow" — constant, so
+   * `task new` refuses a second open one.
+   */
+  updateTask: string;
   standardIssue: string;
   autoAnswer: string;
   lastLine: { done: string; questions: string; remaining: string };

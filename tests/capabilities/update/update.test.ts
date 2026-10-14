@@ -49,6 +49,12 @@ const dropSha = (root: string) => editManifest(root, { sha: undefined });
 const MODE_ASK = "  tasks: with permission\n  language: en\n";
 const MODE_AUTO = "  tasks: entirely by itself\n  language: en\n";
 
+// скрипт скилла github в копии флоу проекта: команда задачи обновления в выводе check
+const GITHUB = ".agents/skills/github/scripts/github.ts";
+// хвост хука: флоу проекта обновляет своя задача, машину — сама сессия
+const PROJECT_UPDATE = "The project's flow needs update — not in a task session";
+const MACHINE_BEHIND = "The machine is behind — update -g";
+
 // машина с `install -g --link` из клона; origin клона — upstream, куда тест коммитит новое в main
 function linkedClone() {
   mkdirSync(path.join(sb.home, ".claude"), { recursive: true });
@@ -78,6 +84,19 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(r.stdout).toContain("- .agents/skills/ci-wait/");
     expect(r.stdout).toContain("bunx github:miroshnik/ai-dev update\n");
     expect(snapshot(sb.proj)).toEqual(before);
+  });
+
+  /**
+   * Копия — тысячи строк, в ветке задачи им не место: обновление — своя задача, одна на проект. Название постоянное, на
+   * языке проекта: открытую задачу `task new` второй раз не заводит — отказывает с её номером.
+   */
+  it("проверка проекта с отставшим флоу рекомендует обновление и не велит обновлять в сессии задачи", () => {
+    aiDev(sb, ["install", "--lang", "ru"]);
+    const r = aiDev(sb, ["check"], { bin: newer.bin });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("Update in a task of its own, not in this session's task: bunx github:miroshnik/ai-dev update\n");
+    expect(r.stdout).toContain(`The task — one per project, an open one is named by the refusal: bun --no-env-file ${GITHUB} task new --title "Обновить флоу ai-dev" --branch-type chore\n`);
+    expect(existsSync(path.join(sb.proj, GITHUB))).toBe(true);
   });
 
   it("update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально", () => {
@@ -180,7 +199,7 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: en\n$/) });
     const behind = check(newer.bin);
     expect(behind.code).toBe(1);
-    expect(behind.stdout).toEndWith("bunx github:miroshnik/ai-dev update\n" + MODE_AUTO);
+    expect(behind.stdout).toEndWith(`task new --title "Update the ai-dev flow" --branch-type chore\n${MODE_AUTO}`);
     editManifest(sb.proj, { auto: undefined });
     expect(check()).toMatchObject({ code: 0, stdout: expect.stringMatching(/in the project: up to date[^\n]*\n {2}tasks: with permission\n {2}language: en\n$/) });
     expect(aiDev(sb, ["install", "-g"]).code).toBe(0);
@@ -211,7 +230,7 @@ describe("Копия в проекте сверяется со свежим ai-d
  * несоответствие флоу, как отставание: чинит тот же `update` (capability `install` — как).
  */
 describe("Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением", () => {
-  it("check: код 1, ❌ с путём и правилом, команда update; check ничего не меняет", () => {
+  it("check: код 1, ❌ с путём и правилом, команда update — в задаче обновления, как и при отставании; check ничего не меняет", () => {
     aiDev(sb, ["install"]);
     writeFileSync(path.join(sb.proj, ".gitignore"), "CLAUDE.md\n");
     const before = snapshot(sb.proj);
@@ -220,7 +239,8 @@ describe("Файл флоу, который игнорирует git проек�
     expect(r.stdout).toContain("in the project: up to date");
     expect(r.stdout).toContain("git ignores flow files");
     expect(r.stdout).toContain("  ❌ .agents/ai-dev/claude/CLAUDE.md — .gitignore:1 «CLAUDE.md»\n");
-    expect(r.stdout).toContain("bunx github:miroshnik/ai-dev update — adds exceptions to .gitignore\n");
+    expect(r.stdout).toContain("Fix in a task of its own, not in this session's task: bunx github:miroshnik/ai-dev update — adds exceptions to .gitignore\n");
+    expect(r.stdout).toContain(`${GITHUB} task new --title "Update the ai-dev flow" --branch-type chore\n`);
     expect(r.stdout).toEndWith(MODE_ASK);
     expect(snapshot(sb.proj)).toEqual(before);
   });
@@ -254,6 +274,7 @@ describe("Файл флоу, который игнорирует git проек�
     expect(r.stdout).toContain("  ❌ .claude/ — ~/personal-ignore:1 «.claude/»: the directory is excluded outside the project");
     expect(r.stdout).toContain("fix the rule");
     expect(r.stdout).not.toContain("ai-dev update");
+    expect(r.stdout).not.toContain("task new");
   });
 });
 
@@ -853,6 +874,21 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.stdout).toContain("ai-dev in the project: behind");
   });
 
+  /** Машина — скиллы в ~/.agents, ветку задачи её обновление не трогает; копия проекта — трогает. */
+  it("хук: флоу проекта отстал — рекомендовать обновление и чип на его задачу, в сессии задачи не обновлять; отстала только машина — update -g в сессии", () => {
+    aiDev(sb, ["install", "-g"]);
+    aiDev(sb, ["install"]);
+    bunxServes(newer.bin);
+    const both = runHook().stdout;
+    expect(both).toContain(`${PROJECT_UPDATE}: recommend it to the user and give a chip for its task (task new above; no chips — the first prompt #N), work by the current flow.`);
+    expect(both).toContain(MACHINE_BEHIND);
+    expect(both).not.toContain("commit the project copy");
+    aiDev(sb, ["install"], { bin: newer.bin });
+    const machine = runHook().stdout;
+    expect(machine).toContain(`${MACHINE_BEHIND}, tell the user what changed (update lists it), re-read what was updated.`);
+    expect(machine).not.toContain(PROJECT_UPDATE);
+  });
+
   it("в git-репозитории без флоу вывод хука зовёт поставить его в проект; вне git-репозитория строки про проект нет", () => {
     aiDev(sb, ["install", "-g"]);
     bunxServes(base.bin);
@@ -896,7 +932,8 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("❌ .agents/ai-dev/claude/CLAUDE.md");
     expect(r.stdout).toContain("Git ignores flow files — update adds exceptions to .gitignore");
-    expect(r.stdout).not.toContain("Behind —");
+    expect(r.stdout).toContain(PROJECT_UPDATE);
+    expect(r.stdout).not.toContain(MACHINE_BEHIND);
   });
 
   /** Правка compose-файла — не текущая задача сессии: в начале сессии задачи ещё нет, а «одна сессия — одна задача». */
@@ -910,7 +947,8 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.code).toBe(0);
     expect(r.stdout).toContain(COMPOSE_VIOLATION);
     expect(r.stdout).toContain("The compose file breaks task isolation — each ❌ line names the rule and the service (the task-env skill); fixing it is a task of its own in the project.");
-    expect(r.stdout).not.toContain("Behind —");
+    expect(r.stdout).not.toContain(PROJECT_UPDATE);
+    expect(r.stdout).not.toContain(MACHINE_BEHIND);
     composeFile("services:\n  db:\n    image: postgres\n");
     expect(runHook().stdout).not.toContain("compose");
   });

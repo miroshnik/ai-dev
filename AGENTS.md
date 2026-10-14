@@ -50,14 +50,19 @@ tags `vYYYY.MM.DD` (a same-day patch is `.N`); a `--link` clone follows
 clone); the `check` line about flow changes not yet released is a reminder to
 them; the agent cuts a release only when the owner asks.
 
-- **Behind** — `update` (`-g` for the machine): a `--link` clone does `git
-  pull --ff-only`, a copy is reinstalled. `update` lists what changed — every
+- **The machine is behind** — `update -g`: a `--link` clone does `git pull
+  --ff-only`, a copy is reinstalled. `update` lists what changed — every
   release it skipped with the list of its GitHub Release: I tell the user,
-  briefly, in the project language. Commit the project copy as a
-  separate `chore(agents): …` commit with the ai-dev tag (`update` prints the
-  command) into the current task's branch, without asking; no task branch —
-  don't commit, say so. Then re-read what was updated and follow it, not what
-  was loaded at the start.
+  briefly, in the project language. Then I re-read what was updated and
+  follow it, not what was loaded at the start.
+- **The project needs `update`** (behind, git ignores flow files) — not in a
+  task session: the copy is thousands of lines in the task's branch. I
+  recommend the update to the user and give a chip for its task — one per
+  project, `check` prints its `github task new` (an open one — its number
+  from the refusal); the session works by the current flow. The update
+  task's session runs `update`, tells what changed, commits the copy as
+  `chore(agents): …` with the ai-dev tag (`update` prints the command) into
+  its branch, without asking, and re-reads what was updated.
 - **`update` refused** (clone not on `main`, dirty) or **the check is
   unavailable** — don't fix the clone; work by the current flow and say so.
 - **A cloud session** doesn't update — it works by the copy in the project.
