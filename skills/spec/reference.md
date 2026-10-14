@@ -208,6 +208,12 @@ says so. `Source:` older than the diff base (publishing on a PR merge
 was skipped, `spec-run`) — the line names both commits: the lists may contain
 tests of PRs merged between them. A merge that didn't change the spec doesn't
 create a gap: `spec-publish` confirms the publication with a new `Source:`.
+A partial run's report (`bun test <one folder>`): a head file with an
+`invariant`, `examples`, `deadCode` or `architecture` call but no test in the
+report wasn't run — its tests from `tests.json` aren't compared and aren't
+«Removed»; a line under «Base» names the folders and asks for a full run's
+report, `--json` lists the tests in `unreported`. A file without the call in
+the head — the check is removed, its tests are removed.
 
 A test's identity is the folder path + the `describe` chain + `it`: a move
 between files of one folder isn't a change, a move to another folder is
