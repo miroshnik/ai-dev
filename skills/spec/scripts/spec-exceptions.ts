@@ -6,11 +6,7 @@
  * deleted; which file belongs where — the `exceptionFile` rule (speclib). The import in the folder's files
  * (`import exceptions from "./exceptions.ts"`) becomes the harness's `const exceptions = exceptionsIn()`, the path to the
  * old file in `package.json` and the CI workflow (`spec-claims --exceptions`) — the path to the directory. What can't be
- * rewritten (a reference from another folder, no harness import) — a `!` line. spec-doc name exceptions
- * (`{ file, name }`) — an array in the folder's `names.exceptions.ts`, the shared
- * `tests/standards/spec-names/exceptions.ts` or the `--names-exceptions` file from `package.json` and the CI workflow —
- * are split into the `names.exceptions/` directories of their tests' decision folders (a `<name>.json` file), the
- * `--names-exceptions` flag is removed. A repeated run changes nothing.
+ * rewritten (a reference from another folder, no harness import) — a `!` line. A repeated run changes nothing.
  *
  *   bun spec-exceptions.ts [--root DIR]
  *
@@ -22,13 +18,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-import { decisionFolder, EXCEPTIONS_DIR, exceptionFile, NAMES_DIR, type NameException, TESTS, writeNameException } from "./speclib.ts";
+import { EXCEPTIONS_DIR, exceptionFile, TESTS } from "./speclib.ts";
 
 const USAGE = "spec-exceptions.ts [--root DIR]";
-// the flag of the former shared spec-doc name exceptions file in the project's scripts and CI: `--names-exceptions <path>`
-const NAMES_FLAG = /[ \t]+--names-exceptions(?:=|[ \t]+)([^\s"']+)/g;
 const CODE = /\.[cm]?[jt]sx?$/;
-const SKIP_DIRS = new Set(["node_modules", ".git", EXCEPTIONS_DIR, NAMES_DIR]);
+const SKIP_DIRS = new Set(["node_modules", ".git", EXCEPTIONS_DIR]);
 
 interface Entry {
   item: string;
@@ -136,15 +130,11 @@ export async function main(argv: string[]): Promise<number> {
     const x = exceptionFile(f);
     return x?.legacy ? x : null;
   };
-  const legacy = files.filter((f) => legacyOf(f)?.dir === EXCEPTIONS_DIR);
+  const legacy = files.filter((f) => legacyOf(f) !== null);
   const configs = ["package.json", ...walk(root, ".github/workflows").filter((f) => /\.ya?ml$/.test(f))].filter((f) => existsSync(path.join(root, f)));
-  // name exceptions: the folders' files, the shared file (it is also exceptions.ts — below, by its contents) and the ones named by the flag
-  const flagged = configs.flatMap((f) => [...readFileSync(path.join(root, f), "utf8").matchAll(NAMES_FLAG)].map((m) => m[1]!));
-  const names = [...new Set([...files.filter((f) => legacyOf(f)?.dir === NAMES_DIR), ...flagged.filter((f) => existsSync(path.join(root, f)))])];
   const out: string[] = [];
   const manual: string[] = [];
   const moved: string[] = [];
-  const movedNames: string[] = [];
 
   for (const rel of legacy) {
     let list: unknown;
@@ -157,10 +147,6 @@ export async function main(argv: string[]): Promise<number> {
     if (!Array.isArray(list)) {
       console.error(`spec-exceptions: ${rel} — export default [{ item, issue, reason }] is needed`);
       return 2;
-    }
-    if (list.length && list.every((x) => x && typeof x === "object" && typeof x.item !== "string" && typeof x.name === "string")) {
-      if (!names.includes(rel)) names.push(rel);
-      continue;
     }
     const bad = list.findIndex((x) => !x || typeof x !== "object" || typeof x.item !== "string");
     if (bad >= 0) {
@@ -208,30 +194,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  // name exceptions — a file per name into the decision folder of its test; a test outside the tree — to the former file's decision folder
-  for (const rel of names) {
-    let list: unknown;
-    try {
-      list = await loadLegacy(path.join(root, rel));
-    } catch (e) {
-      console.error(`spec-exceptions: ${rel} doesn't load: ${(e as Error).message}`);
-      return 2;
-    }
-    const isName = (x: Partial<NameException> | null) => !!x && typeof x.file === "string" && typeof x.name === "string" && Number.isInteger(x.issue);
-    if (!Array.isArray(list) || !list.every(isName)) {
-      console.error(`spec-exceptions: ${rel} — export default [{ file, name, issue, reason }] is needed`);
-      return 2;
-    }
-    const written = (list as NameException[]).map((x) =>
-      writeNameException(root, decisionFolder(x.file) ?? legacyOf(rel)?.folder ?? path.posix.dirname(rel), { file: x.file, name: x.name, issue: x.issue, reason: String(x.reason ?? "") }),
-    );
-    rmSync(path.join(root, rel));
-    movedNames.push(rel);
-    out.push(`- ${rel} → ${[...new Set(written.map((w) => `${path.posix.dirname(w)}/`))].join(", ")} (${written.length})`, ...written.map((w) => `+ ${w}`));
-  }
-
-  // the path to the former file in the project's scripts and CI (spec-claims --exceptions) — by the path to the directory; the
-  // flag of the former name exceptions file (spec-doc --names-exceptions) — away: the exceptions are already in the directories
+  // the path to the former file in the project's scripts and CI (spec-claims --exceptions) — by the path to the directory
   for (const file of configs) {
     let text = readFileSync(path.join(root, file), "utf8");
     for (const rel of moved) {
@@ -241,10 +204,6 @@ export async function main(argv: string[]): Promise<number> {
       text = text.replace(re, dir);
       out.push(`~ ${file}: ${rel} → ${dir}`);
     }
-    text = text.replace(NAMES_FLAG, (_all, rel: string) => {
-      out.push(`~ ${file}: --names-exceptions ${rel} removed`);
-      return "";
-    });
     if (text !== readFileSync(path.join(root, file), "utf8")) writeFileSync(path.join(root, file), text);
   }
 
@@ -257,7 +216,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
 
-  if (!moved.length && !movedNames.length) out.push("no exceptions.ts in decision folders — nothing to move");
+  if (!moved.length) out.push("no exceptions.ts in decision folders — nothing to move");
   for (const l of [...out, ...manual]) console.log(l);
   return manual.length ? 1 : 0;
 }

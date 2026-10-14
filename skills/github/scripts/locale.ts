@@ -268,8 +268,6 @@ interface SpecNames {
     todo: string;
     outside: string;
     outsideIntro: string;
-    nameDebt: string;
-    nameReason: string;
     none: string;
     rules: string;
   };
@@ -314,6 +312,7 @@ interface SpecNames {
     harnessColumn: string;
     total: string;
     outsideFiles: string;
+    notStatements: string;
     scenarios: string;
     noScenarios: string;
     becameTests: string;
@@ -337,7 +336,6 @@ interface SpecNames {
     deadCode: string;
     deadCodeNamed: string;
     architecture: string;
-    nameException: string;
     modelTitle: string;
     exceptionsTitle: string;
     checksTitle: string;

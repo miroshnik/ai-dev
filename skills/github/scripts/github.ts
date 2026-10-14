@@ -2211,16 +2211,16 @@ export interface PrFile {
   deletions: number;
 }
 
-// the former exceptions format — an array in one file: the harness's exceptions.ts, spec-doc's names.exceptions.ts
-const LEGACY_EXCEPTIONS = /^(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
+// the former exceptions format — an array in one file: the harness's exceptions.ts
+const LEGACY_EXCEPTIONS = /^exceptions\.(ts|mts|js|mjs|json)$/;
 
 /**
  * Which decision folder's exceptions file is it? A copy of the spec skill's `exceptionFile` rule (`speclib.ts`):
  * skills are installed one by one, an import between them would break github without spec; the
- * `tests/standards/exception-files` standard checks both copies against one table. The `exceptions/`
- * (`names.exceptions/`) directory of a `tests/<kind>/<name>` folder, a `.json` file — the folder's exception; another
- * file in the directory and a directory in a subfolder — an error; `exceptions.*` (`names.exceptions.*`) in a folder
- * or a subfolder — the former format; outside decision folders and hidden ones — null.
+ * `tests/standards/exception-files` standard checks both copies against one table. The `exceptions/` directory of a
+ * `tests/<kind>/<name>` folder, a `.json` file — the folder's exception; another file in the directory and a directory
+ * in a subfolder — an error; `exceptions.*` in a folder or a subfolder — the former format; outside decision folders
+ * and hidden ones — null.
  */
 export function exceptionFile(p: string): { folder: string; dir: string; legacy: boolean; error?: string } | null {
   const parts = p.split("/");
@@ -2228,10 +2228,10 @@ export function exceptionFile(p: string): { folder: string; dir: string; legacy:
   const folder = parts.slice(0, 3).join("/");
   const inner = parts.slice(3);
   if (inner.some((s) => s.startsWith("."))) return null;
-  const at = inner.findIndex((s, i) => (i < inner.length - 1 ? s === "exceptions" || s === "names.exceptions" : LEGACY_EXCEPTIONS.test(s)));
+  const at = inner.findIndex((s, i) => (i < inner.length - 1 ? s === "exceptions" : LEGACY_EXCEPTIONS.test(s)));
   if (at < 0) return null;
-  if (at === inner.length - 1) return { folder, dir: inner[at]!.startsWith("names.") ? "names.exceptions" : "exceptions", legacy: true };
-  const dir = inner[at]!;
+  const dir = "exceptions";
+  if (at === inner.length - 1) return { folder, dir, legacy: true };
   if (at > 0) return { folder, dir, legacy: false, error: "the exceptions directory is in a subfolder" };
   if (inner.length > 2 || !p.endsWith(".json")) return { folder, dir, legacy: false, error: "an exception is not a .json file" };
   return { folder, dir, legacy: false };
@@ -2240,8 +2240,8 @@ export function exceptionFile(p: string): { folder: string; dir: string; legacy:
 /**
  * A mechanical edit doesn't change a decision: the file is deleted, renamed without content changes, or it's an
  * exceptions file of a decision folder that spec reads as an exception (`exceptionFile` without an error): a file in
- * `exceptions/`, the former `exceptions.ts` (the exceptions ratchet), a name exception in `names.exceptions/`
- * (spec-doc). It gives no decision label — otherwise with mass edits a task gets labels of decisions it didn't change.
+ * `exceptions/`, the former `exceptions.ts` (the exceptions ratchet). It gives no decision label — otherwise with mass
+ * edits a task gets labels of decisions it didn't change.
  */
 function mechanical(f: PrFile): boolean {
   if (f.changeType === "DELETED") return true;

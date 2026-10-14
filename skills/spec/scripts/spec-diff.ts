@@ -4,7 +4,7 @@
  * parsing of the files at the two revisions (git cat-file, no runs and no checkouts). Prints a markdown section for the
  * PR body: removed (first), changed (renamed in the same file), added, moved into the tree (a test vanished from a file
  * outside tests/ and appeared in the tree under the same name — a summary by folders); plus test files changed outside
- * the tests/ tree.
+ * the tests/ tree and the number of the PR's new names that aren't statements in the project language.
  *
  *   bun spec-diff.ts [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json]
  *                    [--scenarios issue.md | -]
@@ -504,22 +504,20 @@ export function reportedChecks(fresh: Test[], generated: Set<Test>, sourced: Che
   return [...out.values()];
 }
 
-// the exceptions file — by the exceptionFile rule (speclib), as the harness and spec-doc read it:
-// exceptions/<item>.json — a harness exception, names.exceptions/<name>.json — names; the former exceptions.* and
-// names.exceptions.* — an array (the base revision of the move is still on them); a misplaced file isn't read as an
-// exception — we don't show it either
+// the exceptions file — by the exceptionFile rule (speclib), as the harness reads it: exceptions/<item>.json — a harness
+// exception; the former exceptions.* — an array (the base revision of the move is still on it); a misplaced file isn't
+// read as an exception — we don't show it either
 const readable = (rel: string) => {
   const x = L.exceptionFile(rel);
   return x && !x.error ? x : null;
 };
 
-/** exceptions.* entry: a harness registry item (`rule` — a convention) or a test name (spec-names: `file`, `name`). */
-type ExceptionEntry = { item?: string; rule?: string; file?: string; name?: string; issue: number; reason: string };
+/** exceptions.* entry: a harness registry item, `rule` — a convention. */
+type ExceptionEntry = { item: string; rule?: string; issue: number; reason: string };
 
 /** Exception line: what's excepted, the task and the reason — each entry has its own, identical ones aren't merged. */
 function exceptionLine(folder: string, e: ExceptionEntry): string {
-  const what = e.item !== undefined ? e.item : locale.fill(N.spec.diff.nameException, { name: e.name ?? "", file: e.file ?? "" });
-  return `\`${folder}\` · ${what} (${e.rule ? `${e.rule}, ` : ""}#${e.issue}) — ${e.reason}`;
+  return `\`${folder}\` · ${e.item} (${e.rule ? `${e.rule}, ` : ""}#${e.issue}) — ${e.reason}`;
 }
 const CODE = /\.[cm]?[jt]sx?$/;
 
@@ -678,6 +676,19 @@ function summaryLines(removed: Test[], changed: [Test, Test][], added: Test[], l
 /** More tests in the lists than the threshold — a summary by folders instead of the lists. */
 const summarized = (removed: Test[], changed: [Test, Test][], added: Test[], limit: number) => removed.length + changed.length + added.length > limit;
 
+/**
+ * Names the PR brings in that aren't statements in the project language: `it` and `describe` names of new and renamed
+ * tests that the same file didn't have at the base — per file, without repeats. Not an error (#447): a number in the PR
+ * body, spec-doc names each one in a warning.
+ */
+export function newNotStatements(fresh: Test[], base: Test[], lang: string): number {
+  const key = (t: Test, n: string) => t.path + "\0" + n;
+  const had = new Set(base.flatMap((t) => [...t.describes, t.name].map((n) => key(t, n))));
+  const out = new Set<string>();
+  for (const t of fresh) for (const n of [...t.describes, t.name]) if (!had.has(key(t, n)) && !L.isStatement(n, lang)) out.add(key(t, n));
+  return out.size;
+}
+
 /** The line about test files changed outside the `tests/` tree. */
 const outsideFilesLine = (outFiles: string[]): string =>
   locale.fill(N.spec.diff.outsideFiles, { tests: L.TESTS, files: outFiles.map((p) => `\`${p}\``).join(", ") });
@@ -685,6 +696,7 @@ const outsideFilesLine = (outFiles: string[]): string =>
 /**
  * The section for the PR body; `note` — a line under the base (where the harness tests come from). A test not among the
  * task's scenarios (`extra`) is a mark in the list: the test itself is already there, we don't print it a second time.
+ * `notStatements` — the number of the PR's new names that aren't statements: a line after the lists.
  */
 export function render(
   baseLabel: string,
@@ -693,7 +705,7 @@ export function render(
   added: Test[],
   outFiles: string[],
   moved: Moved[] = [],
-  opts: { limit?: number; harness?: Set<Test>; extra?: Set<Test>; note?: string } = {},
+  opts: { limit?: number; harness?: Set<Test>; extra?: Set<Test>; note?: string; notStatements?: number } = {},
 ): string {
   const lines = [N.prSpecSection, "", locale.fill(N.spec.diff.base, { base: baseLabel }), ""];
   if (opts.note) lines.push(opts.note, "");
@@ -702,6 +714,7 @@ export function render(
     return lines.join("\n") + "\n";
   }
   const limit = opts.limit ?? SUMMARY_LIMIT;
+  const names = opts.notStatements ? [locale.fill(N.spec.diff.notStatements, { n: opts.notStatements }), ""] : [];
   if (summarized(removed, changed, added, limit)) {
     // a removed test is a removed requirement: named one by one in the PR body while there aren't more of them than
     // the threshold
@@ -709,6 +722,7 @@ export function render(
     lines.push(...summaryLines(removed, changed, added, limit, opts.harness));
     if (moved.length) lines.push(...movedLines(moved));
     if (outFiles.length) lines.push(outsideFilesLine(outFiles), "");
+    lines.push(...names);
     return lines.join("\n").trimEnd() + "\n";
   }
   const mark = (t: Test) => (opts.extra?.has(t) ? ` — ${N.spec.diff.extraMark}` : "");
@@ -723,10 +737,11 @@ export function render(
   }
   if (moved.length) lines.push(...movedLines(moved));
   if (outFiles.length) lines.push(outsideFilesLine(outFiles), "");
+  lines.push(...names);
   return lines.join("\n").trimEnd() + "\n";
 }
 
-function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[], moved: Moved[]): string {
+function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], added: Test[], outFiles: string[], moved: Moved[], notStatements: number): string {
   const d = (t: Test) => ({ file: t.path, folder: L.folderOf(t), describes: t.describes, name: t.name });
   return (
     JSON.stringify(
@@ -737,6 +752,7 @@ function asJson(baseLabel: string, removed: Test[], changed: [Test, Test][], add
         added: added.map(d),
         moved: moved.map((m) => ({ from: m.from, ...d(m.test) })),
         out_of_tree_files: outFiles,
+        not_statements: notStatements,
       },
       null,
       2,
@@ -934,6 +950,7 @@ export async function main(argv: string[]): Promise<number> {
   const harness = new Set<Test>(); // tests only from the report — generated by the harness, not in the sources
   let checks: HarnessDescribe[];
   let sourced: Check[]; // harness calls in the head's sources: their describes aren't "report only"
+  let notStatements: number;
   try {
     const { top, root, prefix } = findRoot(v.root);
     const base = v["no-merge-base"] ? v.base : gitText(["merge-base", v.base, v.worktree ? "HEAD" : v.head], top).trim();
@@ -969,6 +986,7 @@ export async function main(argv: string[]): Promise<number> {
     const changedOut = outOfTreeFiles(base, v.head, top, prefix, v.worktree);
     const { pool, count, gone } = outOfTreePool(base, v.head, top, root, prefix, changedOut, v.worktree);
     ({ removed, changed, added, moved } = diff(baseTests, headTests, pool));
+    notStatements = newNotStatements([...added, ...changed.map(([, n]) => n)], baseTests, LANG);
     outFiles = unmovedFiles(changedOut, moved, count, gone);
     // lint disables — only in changed code files: a removed or added exception is always in the PR diff
     const changedAll = (
@@ -1006,8 +1024,8 @@ export async function main(argv: string[]): Promise<number> {
   const match = scenarios ? matchScenarios(scenarios, fresh, [...checks, ...reportedChecks(fresh, harness, sourced)], harness) : { found: [], extra: fresh };
 
   const label = v["no-merge-base"] ? v.base : `${v.base} (merge-base)`;
-  const shown = { limit, harness: v.report?.length ? harness : undefined, extra: scenarios ? new Set(match.extra) : undefined, note: harnessNote };
-  let text = v.json ? asJson(label, removed, changed, added, outFiles, moved) : render(label, removed, changed, added, outFiles, moved, shown);
+  const shown = { limit, harness: v.report?.length ? harness : undefined, extra: scenarios ? new Set(match.extra) : undefined, note: harnessNote, notStatements };
+  let text = v.json ? asJson(label, removed, changed, added, outFiles, moved, notStatements) : render(label, removed, changed, added, outFiles, moved, shown);
   if (v.json) {
     const j = JSON.parse(text);
     j.decisions = Object.fromEntries(

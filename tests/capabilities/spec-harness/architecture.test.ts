@@ -106,7 +106,7 @@ describe("Модель архитектуры проверяется кодом:
     });
   });
 
-  // название — утверждение по-русски: «src/app → app» без слов spec-doc --strict не принимает
+  // название — утверждение по-русски: о «src/app → app» без слов spec-doc предупреждает
   it("каталог кода — в модуле: название — утверждение; вне модулей — упавший тест", async () => {
     writeTree(dir, { ...code, "src/stray.js": "export const s = 1;\n", "src/scripts/seed.js": "export const s = 1;\n" });
     const r = await outcomes((it) => architecture(it, { root: dir, model }));

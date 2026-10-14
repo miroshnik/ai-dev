@@ -52,17 +52,12 @@ const at = (folder: string, dir: string, legacy = false, error = false) => ({ fo
 /** Таблица путей: файл и ответ на «файл исключений какой папки решения?». */
 const TABLE: { path: string; want: Answer; why: string }[] = [
   { path: `${A}/exceptions/importLegacy.json`, want: at(A, "exceptions"), why: "исключение — файл в exceptions/ папки" },
-  { path: "tests/capabilities/billing/names.exceptions/returns-201.json", want: at("tests/capabilities/billing", "names.exceptions"), why: "исключение названия" },
   { path: "tests/architecture/boundaries/exceptions/src-db.json", want: at("tests/architecture/boundaries", "exceptions"), why: "правило архитектуры — тоже папка решения" },
   { path: `${A}/exceptions/a.txt`, want: at(A, "exceptions", false, true), why: "не JSON" },
   { path: `${A}/exceptions/importLegacy.ts`, want: at(A, "exceptions", false, true), why: "модуль вместо JSON" },
   { path: `${A}/exceptions/old/a.json`, want: at(A, "exceptions", false, true), why: "вложенный каталог" },
-  { path: `${A}/names.exceptions/writes-row.ts`, want: at(A, "names.exceptions", false, true), why: "исключение названия не JSON" },
   { path: `${A}/sub/exceptions/a.json`, want: at(A, "exceptions", false, true), why: "каталог в подпапке — не читается" },
-  { path: `${A}/sub/names.exceptions/a.json`, want: at(A, "names.exceptions", false, true), why: "каталог названий в подпапке" },
   ...["ts", "mts", "js", "mjs", "json"].map((ext) => ({ path: `${A}/exceptions.${ext}`, want: at(A, "exceptions", true), why: "прежний файл, любое расширение" })),
-  { path: `${A}/names.exceptions.ts`, want: at(A, "names.exceptions", true), why: "прежний файл названий" },
-  { path: `${A}/names.exceptions.json`, want: at(A, "names.exceptions", true), why: "прежний файл названий" },
   { path: `${A}/sub/exceptions.ts`, want: at(A, "exceptions", true), why: "прежний файл подпапки — исключения папки решения" },
   { path: "tests/capabilities/exceptions/exceptions.ts", want: at("tests/capabilities/exceptions", "exceptions", true), why: "решение с именем exceptions" },
   { path: "tests/capabilities/exceptions/a.json", want: null, why: "файл решения с именем exceptions" },
@@ -73,6 +68,9 @@ const TABLE: { path: string; want: Answer; why: string }[] = [
   { path: "tests/lib/exceptions.ts", want: null, why: "вне папок решений" },
   { path: "tests/standards/exceptions.ts", want: null, why: "файл прямо в каталоге вида" },
   { path: "src/exceptions/not-found.ts", want: null, why: "код проекта" },
+  // названий в исключениях больше нет (#447): оставшийся каталог — не исключения, его удаляют
+  { path: `${A}/names.exceptions/writes-row.json`, want: null, why: "бывший каталог исключений названий" },
+  { path: `${A}/names.exceptions.ts`, want: null, why: "бывший файл исключений названий" },
 ];
 
 const show = (a: Answer) => (a ? `${a.folder}/${a.dir}/${a.legacy ? " прежний" : ""}${a.error ? " ошибка" : ""}` : "не исключения");
@@ -100,7 +98,7 @@ describe("Файл исключений папки решения распозн
     registry: "скрипты, распознающие файлы исключений",
     items: registry,
     key: (s) => s.key,
-    includes: ["github/github", "spec/harness", "spec/spec-diff", "spec/spec-doc", "spec/spec-exceptions", "spec/speclib"],
+    includes: ["github/github", "spec/harness", "spec/spec-diff", "spec/spec-exceptions", "spec/speclib"],
     name: (s) => (s.answer ? `${s.key} распознаёт файл исключений по таблице путей` : `${s.key} распознаёт файл исключений правилом exceptionFile, без своего`),
     check: (s) => {
       if (s.answer) {
@@ -134,17 +132,14 @@ describe("Файл исключений папки решения распозн
       `${A}/exceptions/a.txt`,
       `${A}/exceptions/importLegacy.ts`,
       `${A}/exceptions/old/a.json`,
-      `${A}/names.exceptions/writes-row.ts`,
       `${A}/sub/exceptions/a.json`,
-      `${A}/sub/names.exceptions/a.json`,
       `${A}/exceptions.mts`,
       `${A}/exceptions.js`,
       `${A}/exceptions.mjs`,
       `${A}/exceptions.json`,
-      `${A}/names.exceptions.ts`,
-      `${A}/names.exceptions.json`,
       `${A}/sub/exceptions.ts`,
       `${A}/exceptions/.gitkeep`,
+      `${A}/names.exceptions/writes-row.json`,
     ]);
   });
 });

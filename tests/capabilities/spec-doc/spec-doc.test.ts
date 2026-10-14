@@ -416,7 +416,8 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
 
   // перед PR e2e ради сверки названий не прогоняют (#191); форма отчёта — вывод `playwright test --list --reporter=json`:
   // пути от rootDir конфига, у тестов нет результатов, статус skipped
-  it("Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, --strict ловит не-утверждение", () => {
+  it("Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, не-утверждение — предупреждение", () => {
+    writeTree(dir, { "tests/capabilities/billing/billing.md": "Биллинг.\n" });
     writeFileSync(path.join(dir, "r.json"), billing());
     const list = (title: string, projectName: string) => ({ title, tests: [{ projectName, results: [], status: "skipped", annotations: [] }] });
     const e2e = {
@@ -426,8 +427,8 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
     };
     const report = { config: { rootDir: path.join(dir, "tests") }, suites: [{ title: e2e.file, file: e2e.file, specs: [], suites: [e2e] }] };
     const r = doc(".spec-playwright.json", JSON.stringify(report), "r.json", "--stdout", "--strict");
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain("the name isn't a statement in the project language (ru): «loginForm» (tests/capabilities/billing/billing.e2e.ts)");
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("warning: the name isn't a statement in the project language (ru): «loginForm» (tests/capabilities/billing/billing.e2e.ts)");
     expect(r.stdout).toContain("#### Вход");
     expect(r.stdout).toContain("- ⏭️ через форму — пропущен (2 варианта)");
     expect(r.stdout.indexOf("выставляется за месяц")).toBeLessThan(r.stdout.indexOf("через форму"));
@@ -506,7 +507,7 @@ describe("Отчёты Vitest, Playwright и bun test — в любом соче
   });
 
   // bun пишет хук (beforeAll, afterAll) пропущенного describe отдельным testcase «(unnamed)» без line: без Docker
-  // describe с ним пропускаются, и --strict падал на имени хука при зелёных тестах
+  // describe с ним пропускаются, и spec-doc требовал назвать хук при зелёных тестах
   describe("bun test: хук describe — testcase «(unnamed)» без строки", () => {
     const file = "tests/capabilities/probe/probe.test.ts";
     const junit = (cases: string) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -545,7 +546,7 @@ describe.skipIf(true)("Стек в Docker", () => {
       expect(r.code).toBe(0);
     });
 
-    it("тест без имени, который выполнялся, — по-прежнему ошибка `--strict`", () => {
+    it("тест без имени, который выполнялся, spec-doc называет предупреждением", () => {
       const r = doc(
         "bun.xml",
         junit(`      <testcase name="(unnamed)" classname="Стек в Docker" file="${file}"><failure message="нет сети">trace</failure></testcase>
@@ -554,8 +555,7 @@ describe.skipIf(true)("Стек в Docker", () => {
         "--strict",
       );
       expect(r.stdout).toContain("- ❌ (unnamed) — падает");
-      expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «(unnamed)» (${file})`);
-      expect(r.code).toBe(1);
+      expect(r.stderr).toContain(`warning: the name isn't a statement in the project language (ru): «(unnamed)» (${file})`);
     });
   });
 
@@ -670,25 +670,6 @@ describe("Нарушение структуры спеки видно при с�
     // главный файл другого пакета — на диске, его тестов в этом отчёте нет: главный файл у папки есть
     writeTree(dir, { [`${EXPORT}/api/export.test.ts`]: `import { it } from "bun:test";\nit("отдаёт файл", () => {});\n` });
     expect(doc("r.json", report, "--stdout", "--strict").code).toBe(0);
-  });
-
-  // Название — требование; идентификатор или английская фраза не говорят читателю спеки, что система делает
-  it("название describe или it без русских слов — идентификатор, имя функции или файла — spec-doc называет его и файл", () => {
-    writeTree(dir, { "tests/capabilities/billing/billing.md": "Биллинг.\n" });
-    const report = vitestReport(dir, {
-      [MAIN]: [
-        [["createInvoice"], "returns 201"],
-        [["createInvoice"], "счёт `createInvoice()` в `invoice.ts` создаётся по заказу"],
-        [["Счета"], "snake_case_name"],
-      ],
-    });
-    const r = doc("r.json", report, "--stdout");
-    expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «createInvoice» (${MAIN})`);
-    expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «returns 201» (${MAIN})`);
-    expect(r.stderr).toContain(`the name isn't a statement in the project language (ru): «snake_case_name» (${MAIN})`);
-    expect(r.stderr).not.toContain("«счёт");
-    expect(r.stderr).not.toContain("«Счета»");
-    expect(doc("r.json", report, "--stdout", "--strict").code).toBe(1);
   });
 });
 
