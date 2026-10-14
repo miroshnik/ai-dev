@@ -929,28 +929,154 @@ describe("Статус ставится, даже если проект ещё �
  * и 12 ходов на пиковом контексте, больше половины — ходы модели: прочитать справочник, собрать задание субагенту.
  * Актуализация от деплоя не зависит и идёт параллельно с ним, а задание печатает скрипт: агенту не нужен справочник.
  * Нет эпика или открытых задач в нём — актуализировать нечего, субагент не нужен.
+ *
+ * Субагент сам собирал то, что знает скрипт (#435): в одном проекте 248 запусков, ~35 вызовов на запуск, из них 40% —
+ * `gh`. Механику — blocked by на выполненных задачах, метку вопросов без открытых вопросов, milestone без открытых задач
+ * — делает `task actualize`; тексты задач эпика и файлы PR кладёт в задание, его печатает `--assignment` — первым
+ * вызовом субагента: сессия на пиковом контексте не переписывает десятки КБ в вызов субагента.
  */
-describe("task actualize печатает задание субагенту актуализации блока", () => {
+describe("task actualize делает механику актуализации блока и печатает задание субагенту", () => {
   const REFERENCE = readFileSync(new URL("../../../skills/github/reference.md", import.meta.url), "utf8");
   // пять проверок канона — список между «Five checks:» и «What was fixed» в справочнике
-  const CHECKS = /Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(REFERENCE)?.[1] ?? "";
+  const CHECKS = (/Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(REFERENCE)?.[1] ?? "").split(/\n(?=\d\. )/);
+  const LEAD = "Задача #46 (эпик #45): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.";
+  const merged46 = (f: FakeGitHub, files: FakeGitHub["prs"][number]["files"] = []) => (f.prs[77] = { files, closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true });
+  /** Подзадача эпика #45 — новая открытая задача (#50, #51, …). */
+  const subtask = (f: FakeGitHub, title: string, ...more: string[]) => task(f, ["new", "--branch-type", "feat", "--title", title, "--epic", "45", ...more]).out.match(/^Created #(\d+)/)![1]!;
 
-  it("скрипт печатает готовое задание субагенту актуализации: задача, эпик, открытые задачи эпика, пять проверок", () => {
+  it("сессия получает от скрипта короткий промпт субагенту: строка «Задача #N (эпик #M)» и команда, которая печатает задание", () => {
     const f = new FakeGitHub(REC);
-    f.prs[77] = { files: [], closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true };
+    merged46(f);
     const r = task(f, ["actualize", "46"]);
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
     const lines = r.out.split("\n");
+    expect(lines.at(-3)).toBe("Next: a subagent in the background — the two lines below are its whole prompt, pass them as is.");
     // номер задачи — после слова «Задача»: est привязывает работу субагента к задаче, эпик после «эпик» — нет
-    expect(lines[0]).toBe("Задача #46 (эпик #45): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.");
+    expect(lines.at(-2)).toBe(LEAD);
+    expect(lines.at(-1)).toMatch(/^Задание целиком — тексты открытых задач эпика, файлы PR, .* печатает `bun --no-env-file \S+\/skills\/github\/scripts\/github\.ts task actualize 46 --assignment --repo miroshnik\/ai-dev`: позови первым, вне песочницы/);
+    // механике нечего править — ни мутаций, ни комментария к эпику
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("задание субагенту содержит тексты эпика и его открытых задач, файлы PR и проверки по смыслу — 1, 3 и 5", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f, ["skills/github/scripts/github.ts", { path: "docs/old.md", changeType: "DELETED", additions: 0, deletions: 12 }]);
+    f.issue(45).body = "Цель эпика: проект по канону.";
+    f.issue(47).body = "Задача одной командой.\n\n## Сценарии\n\n1. task new заводит задачу";
+    const closed = subtask(f, "Закрытая задача", "--body", "Текст закрытой задачи");
+    f.closed(Number(closed));
+    const before = f.mutations.length;
+    const r = task(f, ["actualize", "46", "--assignment"]);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    const lines = r.out.split("\n");
+    expect(lines[0]).toBe(LEAD);
     expect(lines).toContain("Репозиторий miroshnik/ai-dev. Выкачено: #46 «GitHub · Проект по канону — github project check и fix», PR #77 (`gh pr view 77`, `gh pr diff 77`).");
-    expect(lines).toContain("Эпик #45 «GitHub · Скилл github: проект и задачи по канону одной командой». Открытые задачи эпика — его подзадачи (sub-issues), а не список в описании эпика:");
-    expect(lines).toContain("- #47 «GitHub · Задача одной командой — github task»");
-    expect(CHECKS.match(/^\d\. \*\*/gm)).toHaveLength(5);
-    expect(r.out).toContain(CHECKS);
+    expect(r.out).toContain("Файлы PR #77:\n- skills/github/scripts/github.ts (+1 −1)\n- docs/old.md (deleted, +0 −12)");
+    expect(r.out).toContain("## Эпик #45 «GitHub · Скилл github: проект и задачи по канону одной командой»\n~~~~markdown\nЦель эпика: проект по канону.\n~~~~");
+    expect(r.out).toContain("## Открытые задачи эпика — его подзадачи (sub-issues), а не список в описании эпика");
+    expect(r.out).toContain("### #47 «GitHub · Задача одной командой — github task»\n~~~~markdown\nЗадача одной командой.\n\n## Сценарии\n\n1. task new заводит задачу\n~~~~");
+    // закрытая задача эпика в задание не идёт
+    expect(r.out).not.toContain("Текст закрытой задачи");
+    // механику проверок 2 и 4 сделал скрипт — субагенту из пяти проверок канона остаются проверки по смыслу
+    expect(CHECKS).toHaveLength(5);
+    expect(CHECKS.every((c, i) => c.startsWith(`${i + 1}. **`))).toBe(true);
+    for (const i of [0, 2, 4]) expect(r.out).toContain(CHECKS[i]!);
+    for (const i of [1, 3]) expect(r.out).not.toContain(CHECKS[i]!);
     expect(r.out).toContain("#46, эпик #45 и их milestone не закрывать — это сделает task close после тебя");
     expect(r.out).toContain("Что поправил — одной строкой в комментарии к эпику #45");
+    // задание печатается, ничего не меняя
+    expect(f.mutations.length).toBe(before);
+  });
+
+  it("blocked by на закрытой задаче снимает сам task actualize, на открытой — оставляет", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f);
+    f.blockedBy[47] = [46, 49];
+    const r = task(f, ["actualize", "46"]);
+    expect(byOp(f, "RemoveBlockedBy")).toEqual([{ issueId: f.issue(47).id, blockingIssueId: f.issue(46).id }]);
+    expect(f.blockedBy[47]).toEqual([49]);
+    expect(r.out).toContain("+ #47: blocked by #46 (closed) removed");
+  });
+
+  it("blocked by на влитой, но ещё открытой задаче — её PR влит — снимается тоже", () => {
+    const f = new FakeGitHub(REC);
+    f.prs[78] = { files: [], closes: [47], head: "feat/47-task", base: "main", model: null, merged: true };
+    const next = subtask(f, "Экспорт", "--blocked-by", "47");
+    expect(f.blockedBy[Number(next)]).toEqual([47]);
+    const r = task(f, ["actualize", "47"]);
+    expect(f.blockedBy[Number(next)]).toEqual([]);
+    expect(r.out).toContain(`+ #${next}: blocked by #47 (merged) removed`);
+  });
+
+  it("метку вопросов у задачи эпика без открытых вопросов снимает сам task actualize, с открытым вопросом — оставляет", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f);
+    f.labelIssue(47, "вопросы");
+    f.issue(47).body = "## Вопросы\n\n1. ✅ Формат?\n   Ответ: PDF.\n";
+    const other = Number(subtask(f, "Экспорт", "--body", "## Вопросы\n\n1. ✅ Формат? Ответ: PDF.\n2. Срок?\n"));
+    f.labelIssue(other, "вопросы");
+    // метка на английском (проект сменил язык) — тоже метка вопросов; раздела нет — открытых вопросов нет
+    f.labelIssue(45, "questions");
+    const r = task(f, ["actualize", "46"]);
+    expect(byOp(f, "RemoveLabels")).toEqual([
+      { labelableId: f.issue(45).id, labelIds: [f.labelId("questions")] },
+      { labelableId: f.issue(47).id, labelIds: [f.labelId("вопросы")] },
+    ]);
+    expect(f.issue(47).labels.nodes).toEqual([]);
+    expect(f.issue(other).labels.nodes).toEqual([{ name: "вопросы" }]);
+    expect(r.out).toContain("+ #47: label «вопросы» removed — no open questions");
+  });
+
+  it("milestone задач эпика без открытых задач закрывает сам task actualize, milestone самой задачи оставляет task close", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f);
+    const own = f.milestone("GitHub · 0 · Проект");
+    f.issueMilestones[46] = own.id;
+    const done = Number(subtask(f, "Сделанная"));
+    const stage = f.milestone("GitHub · 1 · Задачи");
+    f.issueMilestones[done] = stage.id;
+    f.closed(done);
+    const later = f.milestone("GitHub · 2 · Дальше");
+    f.issueMilestones[47] = later.id;
+    const r = task(f, ["actualize", "46"]);
+    expect(f.closedMilestones).toEqual([stage.number]);
+    expect(r.out).toContain("+ milestone «GitHub · 1 · Задачи» closed: no open tasks left");
+  });
+
+  it("правки скрипта — одной строкой в комментарии к эпику; повторный запуск ничего не правит и не комментирует", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f);
+    f.blockedBy[47] = [46];
+    f.labelIssue(47, "вопросы");
+    const r = task(f, ["actualize", "46"]);
+    expect(byOp(f, "AddComment")).toEqual([{ subjectId: f.issue(45).id, body: "Актуализация после #46, скрипт: у #47 снят blocked by на выполненных #46; у #47 снята метка «вопросы»: открытых вопросов нет." }]);
+    expect(r.out).toContain("+ epic #45: a comment with the script's fixes");
+    const before = f.mutations.length;
+    task(f, ["actualize", "46"]);
+    expect(f.mutations.length).toBe(before);
+  });
+
+  it("ответ на открытый вопрос в комментарии и копии связей в тексте задание называет, а не правит", () => {
+    const f = new FakeGitHub(REC);
+    merged46(f);
+    f.issue(45).body = "Цель.\n\n## План\n\n- #46 «Проект»\n- [ ] #47 «Задача»\n- #12 чужая задача — не подзадача";
+    f.issue(47).body = "Задача.\n\nПосле #46 — сначала проект.\n⛔ ждёт решения\n\n## Вопросы\n\n1. Формат?\n2. ✅ Срок? Ответ: неделя.\n3. Цвет?\n";
+    f.comments[47] = [
+      { body: "Ответы владельца:\n1. ✅ PDF\n2. ✅ месяц", url: "https://github.com/miroshnik/ai-dev/issues/47#issuecomment-1" },
+      { body: "1. ✅ PDF и CSV", url: "https://github.com/miroshnik/ai-dev/issues/47#issuecomment-2" },
+    ];
+    expect(task(f, ["actualize", "46"]).out).not.toContain("+ ");
+    expect(f.mutations).toEqual([]);
+    const r = task(f, ["actualize", "46", "--assignment"]);
+    expect(r.out).toContain("## Копии связей в тексте — убрать: связи держит GitHub (sub-issue, blocked by)\n- #45: «- #46 «Проект»»\n- #45: «- [ ] #47 «Задача»»\n- #47: «После #46 — сначала проект.»\n- #47: «⛔ ждёт решения»");
+    // #12 — не подзадача эпика: пункт списка с ней — не копия связи
+    expect(r.out).not.toContain("- #45: «- #12");
+    // ответ — из последнего комментария; на уже отмеченный вопрос 2 и на вопрос без ответа 3 — ничего
+    expect(r.out).toContain("- #47, вопрос 1: «PDF и CSV» — https://github.com/miroshnik/ai-dev/issues/47#issuecomment-2");
+    expect(r.out).not.toContain("вопрос 2");
+    expect(r.out).not.toContain("вопрос 3");
     expect(f.mutations).toEqual([]);
   });
 
@@ -961,28 +1087,33 @@ describe("task actualize печатает задание субагенту ак
     expect(r.out).toBe("○ refresh not needed: #49 has no epic. Next: task close 49 — after the deploy, where the merge deploys.");
   });
 
-  it("в эпике нет открытых задач, кроме этой, — скрипт пишет, что актуализация не нужна", () => {
+  it("в эпике нет открытых задач, кроме этой, — субагент без проверок по смыслу не нужен: механика и строка «актуализация не нужна»", () => {
     const f = new FakeGitHub(REC);
+    f.prs[78] = { files: [], closes: [47], head: "feat/47-task", base: "main", model: null, merged: true };
+    const stage = f.milestone("GitHub · 0 · Проект");
+    f.issueMilestones[46] = stage.id;
     const r = task(f, ["actualize", "47"]);
     expect(r.code).toBe(0);
-    expect(r.out).toBe("○ refresh not needed: epic #45 has no open tasks besides #47. Next: task close 47 — after the deploy, where the merge deploys.");
+    expect(f.closedMilestones).toEqual([stage.number]);
+    expect(r.out.split("\n").at(-1)).toBe("○ refresh not needed: epic #45 has no open tasks besides #47. Next: task close 47 — after the deploy, where the merge deploys.");
+    expect(task(f, ["actualize", "47", "--assignment"]).out).toBe("○ refresh not needed: epic #45 has no open tasks besides #47. Next: task close 47 — after the deploy, where the merge deploys.");
   });
 
   it("задачи эпика в задании — его подзадачи (sub-issues): список задач в описании эпика туда не попадает", () => {
     const f = new FakeGitHub(REC);
     f.issue(45).body = "## План\n\n- #48 «GitHub · Старая задача из плана»\n- #49 «GitHub · Задача без эпика»";
-    const r = task(f, ["actualize", "46"]);
-    expect(r.out).toContain("- #47 «GitHub · Задача одной командой — github task»");
-    expect(r.out).not.toContain("#48");
-    expect(r.out).not.toContain("#49");
+    const r = task(f, ["actualize", "46", "--assignment"]);
+    expect(r.out).toContain("### #47 «GitHub · Задача одной командой — github task»");
+    expect(r.out).not.toContain("### #48");
+    expect(r.out).not.toContain("### #49");
   });
 
   it("новая открытая подзадача эпика попадает в задание", () => {
     const f = new FakeGitHub(REC);
-    task(f, ["new", "--branch-type", "feat", "--title", "Экспорт счетов", "--epic", "45"]);
-    const r = task(f, ["actualize", "47"]);
-    expect(r.out).toContain("- #50 «GitHub · Экспорт счетов»");
-    expect(r.out).not.toContain("- #47 ");
+    subtask(f, "Экспорт счетов");
+    const r = task(f, ["actualize", "47", "--assignment"]);
+    expect(r.out).toContain("### #50 «GitHub · Экспорт счетов»");
+    expect(r.out).not.toContain("### #47 ");
   });
 });
 
@@ -1588,10 +1719,20 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
   it("задание субагенту в проекте на en начинается с «Task #N (epic #M)» — по нему est привязывает работу к задаче", () => {
     const f = englishBoard(new FakeGitHub(REC));
     f.prs[77] = { files: [], closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true };
-    const lines = task(f, ["actualize", "46"], REPO, { cwd: checkoutWith(EN) }).out.split("\n");
+    const prompt = task(f, ["actualize", "46"], REPO, { cwd: checkoutWith(EN) }).out.split("\n");
+    expect(prompt.at(-2)).toBe("Task #46 (epic #45): epic refresh after the merge — bring the epic's open tasks in line with what shipped.");
+    const lines = task(f, ["actualize", "46", "--assignment"], REPO, { cwd: checkoutWith(EN) }).out.split("\n");
     expect(lines[0]).toBe("Task #46 (epic #45): epic refresh after the merge — bring the epic's open tasks in line with what shipped.");
-    expect(lines).toContain("Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой». The epic's open tasks — its sub-issues, not a list in the epic's description:");
+    expect(lines).toContain("## Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой»");
     expect(lines.at(-1)).toBe("Answer — fixes one per line with task numbers and questions to the owner, if any; otherwise «The block is current».");
+  });
+
+  it("проект на en: правки скрипта в комментарии к эпику — по-английски", () => {
+    const f = englishBoard(new FakeGitHub(REC));
+    f.prs[77] = { files: [], closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true };
+    f.blockedBy[47] = [46];
+    task(f, ["actualize", "46"], REPO, { cwd: checkoutWith(EN) });
+    expect(byOp(f, "AddComment").map((c) => c.body)).toEqual(["Refresh after #46, script: #47: blocked by done #46 removed."]);
   });
 
   it("проект на en: комментарий о PR, с которым GitHub не связал задачу, — по-английски", () => {

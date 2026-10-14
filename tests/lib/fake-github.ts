@@ -45,6 +45,10 @@ export class FakeGitHub {
   issueMilestones: Record<number, string> = {};
   /** Номера milestone, закрытых REST-запросом `PATCH repos/…/milestones/<n>`. */
   closedMilestones: number[] = [];
+  /** Задача → номера задач, которыми она заблокирована (blocked by): их меняют AddBlockedBy и RemoveBlockedBy. */
+  blockedBy: Record<number, number[]> = {};
+  /** Задача → её комментарии (TaskText), старые первыми. */
+  comments: Record<number, { body: string; url: string }[]> = {};
   /**
    * Основная ветка `main` (MergeRules) — как у ai-dev после fix: ruleset «ai-dev» без strict, с обязательным `tests`;
    * у влитых PR `tests` зелёный, `spec-publish` пропущен. Чеки головы PR: имя → вывод чека или IN_PROGRESS.
@@ -95,6 +99,7 @@ export class FakeGitHub {
       }
     }
     if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
+    if (op === "TaskText") return JSON.stringify(this.taskText(variables.number));
     if (op === "IssueSearch") return JSON.stringify(this.search(variables.q));
     if (op === "RepoLabels") {
       // у метки — её открытые задачи, как issues(states: OPEN) у GitHub
@@ -154,11 +159,48 @@ export class FakeGitHub {
         .filter(([, p]) => p.closes.includes(number))
         .map(([n, p]) => ({ number: Number(n), state: p.state ?? (p.merged ? "MERGED" : "OPEN"), merged: Boolean(p.merged), headRefName: p.head, baseRefName: p.base ?? "main" })),
     };
+    const m = this.milestoneOf(number);
+    out.milestone = m && { id: m.id, number: m.number, title: m.title, issues: m.issues };
+    return { data: { repository: { issue: out } } };
+  }
+  /** Milestone задачи: закрыт ли он и сколько в нём открытых задач — по состоянию записей. */
+  private milestoneOf(number: number): Any {
     const mid = this.issueMilestones[number];
     const m = mid ? this.taskContext.milestones.nodes.find((x: Any) => x.id === mid) : null;
-    const openIn = (id: string) => this.allIssues().filter((x) => x.state === "OPEN" && this.issueMilestones[x.number] === id).length;
-    out.milestone = m ? { id: m.id, number: m.number, title: m.title, issues: { totalCount: openIn(m.id) } } : null;
-    return { data: { repository: { issue: out } } };
+    if (!m) return null;
+    const open = this.allIssues().filter((x) => x.state === "OPEN" && this.issueMilestones[x.number] === mid).length;
+    return { id: m.id, number: m.number, title: m.title, state: this.closedMilestones.includes(m.number) ? "CLOSED" : "OPEN", issues: { totalCount: open } };
+  }
+  /** Id метки по имени: метка репозитория — её id, метка из записи — выдуманный, но постоянный. */
+  labelId(name: string): string {
+    return this.labels.find((l) => l.name === name)?.id ?? `LA_${name}`;
+  }
+  // текст задачи для актуализации эпика: описание, метки с id, milestone, blocked by, комментарии, подзадачи
+  private taskText(number: number): Any {
+    const i = this.issue(number);
+    if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
+    const milestone = (n: number) => {
+      const m = this.milestoneOf(n);
+      return m && { number: m.number, title: m.title, state: m.state, issues: m.issues };
+    };
+    return {
+      data: {
+        repository: {
+          issue: {
+            id: i.id,
+            number,
+            title: i.title,
+            state: i.state,
+            body: i.body ?? "",
+            labels: { nodes: i.labels.nodes.map((l: Any) => ({ id: this.labelId(l.name), name: l.name })) },
+            milestone: milestone(number),
+            blockedBy: { nodes: (this.blockedBy[number] ?? []).map((b) => ({ id: this.issue(b).id, number: b, state: this.issue(b).state })) },
+            comments: { nodes: this.comments[number] ?? [] },
+            subIssues: { nodes: i.subIssues.nodes.map((s: Any) => ({ number: s.number, title: this.issue(s.number)?.title ?? "", state: s.state, milestone: milestone(s.number) })) },
+          },
+        },
+      },
+    };
   }
   // поиск GitHub по заголовку: подстрока в кавычках, is:open — только открытые
   private search(q: string): Any {
@@ -428,6 +470,7 @@ export class FakeGitHub {
         id,
         number,
         title: input.title,
+        body: input.body ?? "",
         state: "OPEN",
         stateReason: null,
         url: `https://github.com/${this.repo.nameWithOwner}/issues/${number}`,
@@ -466,13 +509,27 @@ export class FakeGitHub {
       }
       return { addLabelsToLabelable: { clientMutationId: null } };
     },
+    RemoveLabels: ({ labelableId, labelIds }: Any) => {
+      const i = this.allIssues().find((x) => x.id === labelableId);
+      i.labels.nodes = i.labels.nodes.filter((n: Any) => !labelIds.includes(this.labelId(n.name)));
+      return { removeLabelsFromLabelable: { clientMutationId: null } };
+    },
     DeleteLabel: ({ id }: Any) => {
       const l = this.labels.find((x) => x.id === id)!;
       this.labels = this.labels.filter((x) => x.id !== id);
       for (const i of this.allIssues()) i.labels.nodes = i.labels.nodes.filter((n: Any) => n.name !== l.name);
       return { deleteLabel: { clientMutationId: null } };
     },
-    AddBlockedBy: ({ issueId }: Any) => ({ addBlockedBy: { issue: { id: issueId } } }),
+    AddBlockedBy: ({ issueId, blockingIssueId }: Any) => {
+      const [i, b] = [issueId, blockingIssueId].map((id) => this.allIssues().find((x) => x.id === id).number);
+      (this.blockedBy[i] ??= []).push(b);
+      return { addBlockedBy: { issue: { id: issueId } } };
+    },
+    RemoveBlockedBy: ({ issueId, blockingIssueId }: Any) => {
+      const [i, b] = [issueId, blockingIssueId].map((id) => this.allIssues().find((x) => x.id === id).number);
+      this.blockedBy[i] = (this.blockedBy[i] ?? []).filter((x) => x !== b);
+      return { removeBlockedBy: { issue: { id: issueId } } };
+    },
     SetIssueField: ({ issueId, issueFields }: Any) => {
       const i = this.allIssues().find((x) => x.id === issueId);
       const opt = this.repo.owner.issueFields.nodes.flatMap((f: Any) => f.options ?? []).find((o: Any) => o.id === issueFields[0].singleSelectOptionId);
