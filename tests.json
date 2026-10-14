@@ -2750,6 +2750,13 @@
   "describes": [
    "task close убирает влитое"
   ],
+  "name": "ветка чекаута — задачи, но без влитого PR и не влита — не тронута, ветка влитого PR задачи убрана"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
   "name": "регистр owner/repo в origin не важен: из чекаута Miroshnik/AI-Dev task close убирает ветку и снимает стеки задачи"
  },
  {
@@ -2765,6 +2772,13 @@
    "task close убирает влитое"
   ],
   "name": "текущий каталог — не чекаут репозитория задачи: ветки и стеки задачи не трогаются"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
+  "name": "у задачи два влитых PR — task close удаляет обе их ветки, локальные и удалённые"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
