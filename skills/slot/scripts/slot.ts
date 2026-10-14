@@ -17,6 +17,10 @@
  * No queue in CI (the machine is given to the run) and inside a slot (AI_DEV_SLOT): a script that calls another script
  * through the queue would otherwise wait for itself.
  *
+ * A package.json script takes its slot with `--for <shell PID>` (slot.sh next to this file): the ticket carries the
+ * script's shell, not this process, and the queue variables are printed for the shell to export — the command runs
+ * as a plain command of the script, visible to tools that read package.json (knip).
+ *
  * Runs under Bun (`bun slot.ts`), only node: APIs.
  */
 import { spawn } from "node:child_process";
@@ -24,12 +28,15 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 
-const USAGE = `Usage: slot '<command>' [arguments…]
+const USAGE = `Usage: slot '<command>' [arguments…] | slot --for <PID>
 
   slot '<command>' [arguments…]   runs the command through sh, the arguments appended to its end, as with npm run;
                                   waits while two heavy runs are going on the machine, then runs with
                                   AI_DEV_SLOT_CPUS — a quarter of the cores
-No queue in CI and inside a slot. The exit code is the command's.
+  slot --for <PID>                takes a slot for the shell <PID> of a package.json script, held until the shell
+                                  exits, and prints the export of AI_DEV_SLOT, AI_DEV_SLOT_CPUS for it — slot.sh
+                                  sources this: ". .agents/skills/slot/scripts/slot.sh && <command>"
+No queue in CI and inside a slot. The exit code is the command's; with --for — 0, nothing printed without the queue.
 `;
 
 /** Heavy runs on the machine at once. */
@@ -126,6 +133,15 @@ function holder(t: Ticket) {
   return `${cwd}: ${cmd.length > 80 ? cmd.slice(0, 79) + "…" : cmd}${t.since ? ` (${duration(Date.now() - t.since)})` : ""}`;
 }
 
+/**
+ * The command of the package.json script that sourced slot.sh, for whoever waits for its slot: npm and bun give the
+ * script's text in npm_lifecycle_script — without the slot.sh prefix it is the command; otherwise the script's name.
+ */
+function scriptCommand() {
+  const text = process.env.npm_lifecycle_script;
+  return text ? text.replace(/^\.\s+\S*slot\.sh\s*&&\s*/, "") : process.env.npm_lifecycle_event;
+}
+
 /** The command through sh with the environment on top of our own; signals go to it. Exit code — its code, killed by a signal — 128 + number. */
 function run(command: string, env: Record<string, string>) {
   return new Promise<number>((resolve) => {
@@ -143,16 +159,23 @@ async function main(argv: string[]): Promise<number> {
   const [first, ...rest] = argv;
   if (first === "-h" || first === "--help") return process.stdout.write(USAGE), 0;
   if (!first) return process.stderr.write(USAGE), 2;
+  // --for: the slot is the shell's — it holds the ticket, gets the variables and runs the command itself
+  const shell = first === "--for" ? Number(rest[0]) : 0;
+  if (first === "--for" && !(rest.length === 1 && Number.isInteger(shell) && shell > 0 && alive(shell))) {
+    return process.stderr.write(`slot: --for takes the PID of a running shell, got ${rest.join(" ") || "nothing"}\n${USAGE}`), 2;
+  }
   const command = [first, ...rest.map(quote)].join(" ");
+  // without the queue the command goes at once; a script's shell has nothing to export
+  const free = () => (shell ? 0 : run(command, {}));
   const ci = process.env.CI && !/^(0|false)$/i.test(process.env.CI);
-  if (ci || process.env.AI_DEV_SLOT) return run(command, {});
+  if (ci || process.env.AI_DEV_SLOT) return free();
 
   const dirs = places();
-  const name = `${String(Date.now()).padStart(15, "0")}-${process.pid}`;
+  const name = `${String(Date.now()).padStart(15, "0")}-${shell || process.pid}`;
   let file = "";
   const enqueue = () => {
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ cwd: process.cwd(), cmd: command, since: Date.now() }));
+    writeFileSync(file, JSON.stringify({ cwd: process.cwd(), cmd: shell ? scriptCommand() : command, since: Date.now() }));
   };
   const refused: string[] = [];
   for (const dir of dirs) {
@@ -167,9 +190,13 @@ async function main(argv: string[]): Promise<number> {
   }
   if (!file) {
     process.stderr.write(`slot: running without the queue — no place takes the ticket: ${refused.join(", ")}\n`);
-    return run(command, {});
+    return free();
   }
-  const drop = () => rmSync(file, { force: true });
+  // the shell's ticket stays when we exit with its slot: the queue removes it when the shell is gone
+  let held = false;
+  const drop = () => {
+    if (!held) rmSync(file, { force: true });
+  };
   process.on("exit", drop);
   // while waiting, a signal removes the ticket and exits; in a slot, signals go to the command (run)
   const quit = (s: NodeJS.Signals) => (drop(), process.exit(128 + os.constants.signals[s]));
@@ -180,6 +207,8 @@ async function main(argv: string[]): Promise<number> {
   let told = "";
   let toldAt = 0;
   for (;;) {
+    // the shell is gone while waiting (killed) — its ticket would be put back forever
+    if (shell && !alive(shell)) return 1;
     let q = queue(dirs);
     let i = q.findIndex((t) => t.name === name);
     if (i < 0) {
@@ -205,7 +234,13 @@ async function main(argv: string[]): Promise<number> {
   }
   for (const s of SIGNALS) process.off(s, quit);
   if (told) process.stderr.write(`slot: waited ${duration(Date.now() - t0)}\n`);
-  const code = await run(command, { AI_DEV_SLOT: name, AI_DEV_SLOT_CPUS: String(CPUS) });
+  const env = { AI_DEV_SLOT: name, AI_DEV_SLOT_CPUS: String(CPUS) };
+  if (shell) {
+    held = true;
+    process.stdout.write(`export ${Object.entries(env).map(([k, v]) => `${k}=${v}`).join(" ")}\n`);
+    return 0;
+  }
+  const code = await run(command, env);
   drop();
   return code;
 }

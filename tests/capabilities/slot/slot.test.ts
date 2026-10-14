@@ -1,5 +1,5 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,8 @@ import { tmpDir } from "../../lib/spec.ts";
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 const SLOT = fileURLToPath(new URL("../../../skills/slot/scripts/slot.ts", import.meta.url));
+/** Начало скрипта package.json после установки флоу: его shell подключает slot.sh, затем идёт команда. */
+const SCRIPT = ". .agents/skills/slot/scripts/slot.sh && ";
 /** Ждать события дольше этого — ошибка с объяснением, а не таймаут теста без него. */
 const PATIENCE = 30_000;
 
@@ -29,6 +31,9 @@ beforeEach(() => {
   mkdirSync(tmp);
   running = [];
   locked = [];
+  // копия скилла в проекте: slot.sh зовёт slot.ts по пути от корня проекта, как после установки
+  mkdirSync(path.join(dir, ".agents/skills/slot"), { recursive: true });
+  symlinkSync(path.dirname(SLOT), path.join(dir, ".agents/skills/slot/scripts"));
 });
 afterEach(() => {
   for (const d of locked) chmodSync(d, 0o755);
@@ -47,11 +52,11 @@ afterEach(() => {
 
 /**
  * Окружение slot: своя очередь в каталоге теста — и в конфигурации, и во временных каталогах, иначе тест встал бы в
- * очередь машины; прогон самого теста может идти в CI, внутри слота или в Claude Code — не в счёт.
+ * очередь машины; прогон самого теста может идти в CI, внутри слота, в Claude Code или скриптом `bun run` — не в счёт.
  */
 function envOf(extra: Record<string, string> = {}) {
   const env: Record<string, string | undefined> = { ...process.env, AI_DEV_CONFIG_DIR: config, TMPDIR: tmp, ...extra };
-  for (const k of ["CI", "AI_DEV_SLOT", "AI_DEV_SLOT_CPUS", "CLAUDE_TMPDIR"]) if (!(k in extra)) delete env[k];
+  for (const k of ["CI", "AI_DEV_SLOT", "AI_DEV_SLOT_CPUS", "CLAUDE_TMPDIR", "npm_lifecycle_script", "npm_lifecycle_event"]) if (!(k in extra)) delete env[k];
   return env;
 }
 
@@ -74,8 +79,11 @@ interface Queued {
 }
 
 /** `slot` фоном: своя группа процессов — тест убивает её целиком. */
-function start(args: string[], extra: Record<string, string> = {}): Queued {
-  const proc = spawn("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), detached: true });
+const start = (args: string[], extra: Record<string, string> = {}) => track(spawn("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), detached: true }));
+/** Скрипт package.json фоном: shell, как у `npm run`, подключает slot.sh и идёт командой. */
+const startScript = (cmd: string, extra: Record<string, string> = {}) => track(spawn("sh", ["-c", SCRIPT + cmd], { cwd: dir, env: envOf(extra), detached: true }));
+
+function track(proc: ChildProcess): Queued {
   running.push(proc);
   let out = "";
   let err = "";
@@ -85,9 +93,12 @@ function start(args: string[], extra: Record<string, string> = {}): Queued {
   return { out: () => out, err: () => err, proc, done };
 }
 
-/** Команда в слоте, которая идёт, пока тест её не отпустит: `started-<имя>` — началась, `release-<имя>` — закончить. */
-const hold = (name: string, extra: Record<string, string> = {}) =>
-  start([`touch started-${name}; while [ ! -f release-${name} ]; do sleep 0.02; done`], extra);
+/** Команда, которая идёт, пока тест её не отпустит: `started-<имя>` — началась, `release-<имя>` — закончить. */
+const holding = (name: string) => `touch started-${name}; while [ ! -f release-${name} ]; do sleep 0.02; done`;
+/** Команда в слоте до отпускания. */
+const hold = (name: string, extra: Record<string, string> = {}) => start([holding(name)], extra);
+/** Скрипт package.json в слоте до отпускания. */
+const holdScript = (name: string, extra: Record<string, string> = {}) => startScript(holding(name), extra);
 const started = (name: string) => existsSync(path.join(dir, `started-${name}`));
 const release = (name: string) => writeFileSync(path.join(dir, `release-${name}`), "");
 
@@ -101,6 +112,11 @@ const waiting = (q: Queued, name: string) => until(() => q.err().includes("slot:
 /** Синхронный `slot`; таймаут — чтобы зависание в очереди упало с объяснением, а не таймаутом теста. */
 function run(args: string[], extra: Record<string, string> = {}) {
   return spawnSync("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
+}
+
+/** Синхронный скрипт package.json: `sh -c` с slot.sh перед командой. */
+function runScript(cmd: string, extra: Record<string, string> = {}) {
+  return spawnSync("sh", ["-c", SCRIPT + cmd], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
 }
 
 describe("Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода", () => {
@@ -180,6 +196,91 @@ describe("Команда в слоте — как без него, с долей
 
   it("код выхода — код команды", () => {
     expect(exitOf(run(["exit 3"]))).toBe(3);
+  });
+});
+
+/**
+ * Скрипт package.json не отдаёт команду slot.ts строкой: его shell подключает slot.sh, тот берёт слот на этот shell и
+ * экспортирует переменные очереди, а команда остаётся обычной командой скрипта — её видят инструменты, читающие
+ * package.json (knip, tests/capabilities/install).
+ */
+describe("Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта", () => {
+  it("скрипты стоят в общей очереди: слот держит shell скрипта, пока тот не вышел", async () => {
+    const [a, b] = [holdScript("a"), holdScript("b")];
+    await until(() => started("a") && started("b"), "два скрипта стартовали");
+    const c = hold("c");
+    await waiting(c, "третья");
+    expect(started("c")).toBe(false);
+    release("a");
+    expect(await a.done).toBe(0);
+    await until(() => started("c"), "третья стартовала после первого скрипта");
+    for (const n of ["b", "c"]) release(n);
+    expect([await b.done, await c.done]).toEqual([0, 0]);
+  });
+
+  it("команда скрипта получает четверть ядер и слот своего shell; вложенный скрипт идёт сразу", async () => {
+    hold("a");
+    await until(() => started("a"), "один слот занят");
+    // скрипт занимает второй слот: вложенный без отметки «уже в слоте» ждал бы его вечно
+    const r = runScript(`echo "$AI_DEV_SLOT_CPUS|$AI_DEV_SLOT|$$" && sh -c '${SCRIPT}echo inner'`);
+    expect(exitOf(r)).toBe(0);
+    const [cpus, slot, shell] = r.stdout.split("\n")[0]!.split("|");
+    expect(cpus).toBe(String(Math.max(1, Math.floor(os.availableParallelism() / 4))));
+    expect(slot).toMatch(new RegExp(`^\\d+-${shell}$`));
+    expect(r.stdout.split("\n")[1]).toBe("inner");
+    release("a");
+  });
+
+  it("ожидающий видит команду скрипта, а не slot.sh", async () => {
+    holdScript("a", { npm_lifecycle_script: SCRIPT + holding("a") });
+    hold("b");
+    await until(() => started("a") && started("b"), "оба слота заняты");
+    const c = hold("c");
+    await waiting(c, "третья");
+    expect(c.err()).toContain(`: ${holding("a")}`);
+    expect(c.err()).not.toContain("slot.sh");
+    for (const n of ["a", "b", "c"]) release(n);
+    expect(await c.done).toBe(0);
+  });
+
+  it("в CI скрипт идёт сразу, без очереди и её переменных", async () => {
+    hold("a");
+    hold("b");
+    await until(() => started("a") && started("b"), "оба слота заняты");
+    const r = runScript('echo "ci[$AI_DEV_SLOT_CPUS]"', { CI: "true" });
+    expect(exitOf(r)).toBe(0);
+    expect(r.stdout).toBe("ci[]\n");
+    for (const n of ["a", "b"]) release(n);
+  });
+
+  it("slot не запустился — скрипт падает с его кодом, команда не идёт", () => {
+    const sh = execFileSync("sh", ["-c", "command -v sh"], { encoding: "utf8" }).trim();
+    const r = spawnSync(sh, ["-c", `${SCRIPT}echo ran`], { cwd: dir, env: envOf({ PATH: path.join(dir, "no-bun") }), encoding: "utf8", timeout: PATIENCE });
+    expect(exitOf(r)).toBe(127);
+    expect(r.stdout).toBe("");
+  });
+
+  it("shell скрипта убит, пока ждал, — его slot выходит, а не ждёт за мёртвого", async () => {
+    hold("a");
+    hold("b");
+    await until(() => started("a") && started("b"), "оба слота заняты");
+    const shell = spawn("sleep", ["60"], { detached: true });
+    running.push(shell);
+    const w = start(["--for", String(shell.pid)]);
+    await waiting(w, "слот за shell");
+    process.kill(shell.pid!, "SIGKILL");
+    await until(() => w.proc.exitCode !== null, "slot вышел после убитого shell");
+    expect(w.proc.exitCode).toBe(1);
+    expect(w.out()).toBe("");
+    for (const n of ["a", "b"]) release(n);
+  });
+
+  it("--for без PID живого процесса — код 2 с объяснением", () => {
+    for (const args of [["--for"], ["--for", "0"], ["--for", "x"]]) {
+      const r = run(args);
+      expect(exitOf(r)).toBe(2);
+      expect(r.stderr).toContain("--for takes the PID of a running shell");
+    }
   });
 });
 
