@@ -220,9 +220,9 @@ Skills are installed with the flow; the agent picks them up by itself — from t
 
 ### [`github`](skills/github/SKILL.md) — project and tasks by the canon
 
-Checks and fixes the GitHub project and the default-branch rule, creates a task with all its fields in one command, shows a task with its epic, blockers, PR checks and open questions in one output and puts an answer at a question, before merging checks the PR's merge with a fresh `main` if it moved after CI, after merging does the epic refresh's mechanics and prints the subagent's prompt, and closes the task in one call — `est` actual, Done, epic and milestone, the task's Compose stacks and the merged branch removed — sets decision labels from the PR diff and names the wait a resumed session restarts for its task.
+Checks and fixes the GitHub project and the default-branch rule, creates a task with all its fields in one command, shows a task with its epic, blockers, PR checks and open questions in one output and puts an answer at a question, before merging checks the PR's merge with a fresh `main` if it moved after CI, after merging does the epic refresh's mechanics and prints the subagent's prompt, and closes the task in one call — `est` actual, Done, epic and milestone, the task's Compose stacks and the merged branch removed — sets decision labels from the PR diff, names the wait a resumed session restarts for its task, and gives a dispatcher session its queue — the ready tasks of an epic or a filter in order, each with the prompt of its executor, a background subagent.
 
-`github project check` · `github project fix` · `github task new | show | answer | status | drop | actualize | close | resume` · `github pr labels | premerge`
+`github project check` · `github project fix` · `github task new | show | answer | status | drop | actualize | close | resume | queue` · `github pr labels | premerge`
 
 ### [`est`](skills/est/SKILL.md) — estimates from actuals
 
