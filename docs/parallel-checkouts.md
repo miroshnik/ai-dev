@@ -210,6 +210,11 @@ the project: the deploy doesn't run, and the site quietly falls behind
   `git -c user.name=… -c user.email=… commit`.
 - **Git experiments** (hooks, settings, history) — `git clone` into a temp
   folder, not in the shared repository.
+- **A branch rename writes the config too** — the branch's section
+  (upstream): another checkout's git holds the lock, `git branch -m` fails
+  with `could not lock config file`, the ref renamed, the section not. The
+  task branch — `github task status <N> "In progress" --branch …`: it retries
+  on the lock.
 - **After a commit** — `git log -1 --format=%ae`: the author is who it should
   be. Someone else — first `git config --show-origin user.email`: where it
   came from, rather than a fix by feel.

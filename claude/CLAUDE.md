@@ -8,8 +8,10 @@ project's `CLAUDE.md`.
 - Session transcripts (`~/.claude/projects/<path-with-dashes>*/`) are the
   source of actuals for the `est` skill; `~/.claude/settings.json` must have
   `"cleanupPeriodDays": 365`, otherwise history is cleaned before it's needed.
-- The app's worktree names the branch `claude/<slug>-<hash>` — rename it
-  before the first push (`git branch -m <type>/<issue>-<slug>`). The session
+- The app's worktree names the branch `claude/<slug>-<hash>` — it is renamed
+  when the task is taken: `github task status <N> "In progress" --branch
+  <type>/<N>-<slug>` (a bare `git branch -m` fails on `.git/config` locked by
+  a parallel worktree and leaves the upstream behind). The session
   panel shows the worktree branch, its diff to `main` and the "Create PR"
   button from git state, not GitHub: after a merge it is accurate only if the
   checkout is moved to `origin/main` (`github task close` does that).
