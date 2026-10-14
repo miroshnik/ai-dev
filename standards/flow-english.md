@@ -37,7 +37,7 @@
 
 ## Флоу написан по-английски: в его документах нет кириллицы
 
-<details><summary>✅ 26 тестов</summary>
+<details><summary>✅ 28 тестов</summary>
 
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/testing.md, skills/spec/SKILL.md, skills/github/reference.md
@@ -55,6 +55,7 @@
 - ✅ в skills/ci-wait/SKILL.md нет кириллицы
 - ✅ в skills/dashboard/SKILL.md нет кириллицы
 - ✅ в skills/est/SKILL.md нет кириллицы
+- ✅ в skills/est/reference.md нет кириллицы
 - ✅ в skills/github/SKILL.md нет кириллицы
 - ✅ в skills/github/reference.md нет кириллицы
 - ✅ в skills/slot/SKILL.md нет кириллицы
@@ -65,6 +66,7 @@
 - ✅ в skills/spec/migration.md нет кириллицы
 - ✅ в skills/spec/reference.md нет кириллицы
 - ✅ в skills/task-env/SKILL.md нет кириллицы
+- ✅ в skills/task-env/reference.md нет кириллицы
 
 </details>
 
@@ -121,7 +123,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ нарушитель не проходит: цитата вывода, которого нет
 - ✅ цитату «## Questions» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «### Task scenarios» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «$ per 1M tokens» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «$ per 1M tokens» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «+ manually: N h» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «30 days» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «90 days» из skills/dashboard/SKILL.md печатает или пишет скрипт
@@ -130,8 +132,8 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «\<entry> is called by a capability test» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «\<module> imports \<package>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «\<module> uses allowed package \<package>» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «\<title> — added» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «\<title> — removed» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «\<title> — added» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «\<title> — removed» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Actual (cloud): …» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Actual (cloud)» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Actual unavailable (cloud)» из skills/est/SKILL.md печатает или пишет скрипт
@@ -141,70 +143,70 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «All done, but there are questions…» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «All done. The session can be closed.» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Architecture model» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Base» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Became tests» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Bug» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Base» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «Became tests» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «Bug» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «CI red» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «CI running» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Changed» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Closed by PR #M: GitHub didn't link the PR to the task» из skills/github/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Closes #N» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Closed by PR #M: GitHub didn't link the PR to the task» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «Closes #N» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «Cloud session … not imported — est cloud-import» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cost by model» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Cost, $» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Decided auto» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Epic» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Epic» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «Estimate and actual» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Estimate, h» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Estimate» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Exceptions» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Folder» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Folder» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Item closed» из skills/github/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Moved into the tree» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Next:» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Item closed» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «Moved into the tree» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «Next:» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «No estimate: …» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «No estimate» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «No estimate» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «Not counted again: N h already in the actual of #M» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Of them, from the harness» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Of them, from the harness» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Outside the tree» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Overlap with the actual of #M … — recompute #M» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Refresh» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Remaining: …» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Removed» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Sessions» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Task #N (epic #M)» из skills/github/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Task #N …» из skills/github/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Task #N» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Task #N (epic #M)» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «Task #N …» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «Task #N» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «Task» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Tests beyond scenarios» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Tests beyond scenarios» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Tokens, M» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Waiting for the owner» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «What it's made of» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «What the system does» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Which rules the code obeys» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «`<base>` is red: \<check | typecheck | test:spec>» из skills/github/SKILL.md печатает или пишет скрипт
-- ✅ цитату «`<base>` is red…» из skills/github/SKILL.md печатает или пишет скрипт
-- ✅ цитату «`main` is red…» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «What it's made of» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «What the system does» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «Which rules the code obeys» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «`<base>` is red: \<check | typecheck | test:spec>» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «`<base>` is red…» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «`main` is red…» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «a mark belongs in one element's file» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «a proxy without the API?» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «actual unavailable» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «after / before» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «after / before» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «agent Bash: not set up» из claude/CLAUDE.md печатает или пишет скрипт
 - ✅ цитату «all knip findings are of known kinds» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «all time» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «allowed: …» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «allowed» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «already newer» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «analogs» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «architecture model» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «beyond scenarios» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «allowed» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «already newer» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «analogs» из skills/est/reference.md печатает или пишет скрипт
+- ✅ цитату «architecture model» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «beyond scenarios» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «can be closed» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «can't listen on 127.0.0.1 …» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «client \<pkg> of storage \<s> is in container \<c>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «closed in 90 days without an actual: N» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «cloud, state not visible» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «code without a consumer» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «code without a consumer» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «declare the external system» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «dependency \<a> → \<b> is within a container» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «deployable unit \<id> is container \<c>» из skills/spec/checks.md печатает или пишет скрипт
@@ -213,8 +215,8 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «element files from fileOf exist» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «entry points» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «entry-point ids do not repeat in the registry» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «epic» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «estimate» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «epic» из skills/est/reference.md печатает или пишет скрипт
+- ✅ цитату «estimate» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «exception: \<entry> (#N)» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «exception: \<key> (#N)» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «exceptions are \<element>.json files in the decision folder's exceptions/» из skills/spec/checks.md печатает или пишет скрипт
@@ -222,8 +224,8 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «exceptions in \<file>: \<rules> (#N)» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «exceptions with a rule belong to the folder's invariant rules» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «forms» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «from project …» из skills/est/SKILL.md печатает или пишет скрипт
-- ✅ цитату «from the report» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «from project …» из skills/est/reference.md печатает или пишет скрипт
+- ✅ цитату «from the report» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «header \<H> … is read only by adapter \<a>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «human reply» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «ids from the log are in the registry» из skills/spec/checks.md печатает или пишет скрипт
@@ -233,16 +235,16 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «isn't read — names aren't exceptions any more, delete it» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «key \<K> of external system \<x> is read only by adapter \<a>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «library \<m> is in containers \<c1, c2>» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «main tree … not fully checked — publishing skipped» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «main tree … not fully checked — publishing skipped» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «marks with a rule belong to the folder's invariant rules» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «merge» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «module \<m> is in container \<c>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «move it to outside» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «mutations» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «new decision» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «new decision» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «no calls to unlisted binaries» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «no changes — … confirmed for …» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «no changes» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «no changes — … confirmed for …» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «no changes» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «no dependencies without an import» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no duplicate exports» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no enum members without a consumer» из skills/spec/checks.md печатает или пишет скрипт
@@ -257,10 +259,10 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «no types without a consumer» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no unresolved imports» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no unused catalog entries» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «none» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «none» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «not allowed: …» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «not allowed» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «not empty» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «not allowed» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «not empty» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «not imported» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «not written: …» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «one record per element» из skills/spec/checks.md печатает или пишет скрипт
@@ -268,7 +270,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «outside scope: \<element>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «outside scope: \<key>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «outside scope: …» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «outside scope» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «outside scope» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «perimeter» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «proxy …: routes not read» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «questions» из skills/dashboard/SKILL.md печатает или пишет скрипт
@@ -276,13 +278,13 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «remove the exception: delete \<file>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «remove the exception» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «remove the mark in \<file>:\<line>» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «repo» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «repo» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт
-- ✅ цитату «unsplit: N h» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «unsplit: N h» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «working» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «workspace package \<path> is in the code roots» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «…» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «…» из skills/github/reference.md печатает или пишет скрипт
 - ✅ вне охвата: api/DATABASE_URL is declared
   > пример названия с подставленным элементом: шаблон «{name} is declared» — в en.json
 - ✅ вне охвата: host \<h> is only in adapter \<a>

@@ -36,12 +36,11 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 80 тестов</summary>
+<details><summary>✅ 130 тестов</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
 - ✅ нарушитель не проходит: ссылка на переименованный раздел AGENTS.md
-- ✅ AGENTS.md: AGENTS.md, «Project knowledge and handoff» — есть такой раздел
 - ✅ AGENTS.md: README.md, «Installation» — есть такой раздел
 - ✅ AGENTS.md: README.md, «Repository layout» — есть такой раздел
 - ✅ AGENTS.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел
@@ -78,30 +77,64 @@
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «Period summary» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «The estimate of a new task» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Actual — how sessions are found» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Actual — the comment» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Backtest» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Cloud session import» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Codex sessions» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Double counting and shared commits» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Estimate — the mechanics» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Linking — details» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Manual re-estimate» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Period summary» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Repository registry» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Tokens and cost» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Unit and comment language» — есть такой раздел
+- ✅ skills/est/SKILL.md: skills/est/reference.md, «Writing and reruns» — есть такой раздел
+- ✅ skills/est/reference.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел
+- ✅ skills/est/reference.md: skills/est/reference.md, «Actual — the comment» — есть такой раздел
 - ✅ skills/est/scripts/est.ts: skills/est/SKILL.md, «Cloud session» — есть такой раздел
+- ✅ skills/est/scripts/est.ts: skills/est/reference.md, «Cloud session import» — есть такой раздел
 - ✅ skills/github/SKILL.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел
 - ✅ skills/github/SKILL.md: AGENTS.md, «Language» — есть такой раздел
 - ✅ skills/github/SKILL.md: AGENTS.md, «Session and branch — one task» — есть такой раздел
 - ✅ skills/github/SKILL.md: AGENTS.md, «Task tracking» — есть такой раздел
-- ✅ skills/github/SKILL.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел
+- ✅ skills/github/SKILL.md: skills/github/reference.md, «Git, PRs and merging — full rules» — есть такой раздел
 - ✅ skills/github/SKILL.md: skills/github/reference.md, «Manual commands» — есть такой раздел
+- ✅ skills/github/SKILL.md: skills/github/reference.md, «Project check and fix» — есть такой раздел
+- ✅ skills/github/SKILL.md: skills/github/reference.md, «Red main» — есть такой раздел
+- ✅ skills/github/SKILL.md: skills/github/reference.md, «Task and PR commands» — есть такой раздел
+- ✅ skills/github/SKILL.md: skills/github/reference.md, «task queue» — есть такой раздел
 - ✅ skills/github/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел
 - ✅ skills/github/reference.md: AGENTS.md, «Estimate and actual — the `est` skill» — есть такой раздел
 - ✅ skills/github/reference.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел
+- ✅ skills/github/reference.md: AGENTS.md, «Language» — есть такой раздел
+- ✅ skills/github/reference.md: AGENTS.md, «Session and branch — one task» — есть такой раздел
 - ✅ skills/github/reference.md: AGENTS.md, «Task tracking» — есть такой раздел
-- ✅ skills/github/reference.md: skills/github/SKILL.md, «What is checked» — есть такой раздел
+- ✅ skills/github/reference.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел
+- ✅ skills/github/reference.md: skills/github/reference.md, «Epic refresh on task close» — есть такой раздел
+- ✅ skills/github/reference.md: skills/github/reference.md, «Git, PRs and merging — full rules» — есть такой раздел
 - ✅ skills/github/reference.md: skills/github/reference.md, «Manual commands» — есть такой раздел
 - ✅ skills/github/reference.md: skills/github/reference.md, «Milestones — sets of tasks» — есть такой раздел
 - ✅ skills/github/reference.md: skills/github/reference.md, «Project (GitHub Projects)» — есть такой раздел
+- ✅ skills/github/reference.md: skills/github/reference.md, «What is checked» — есть такой раздел
 - ✅ skills/github/scripts/github.ts: AGENTS.md, «Session and branch» — есть такой раздел
 - ✅ skills/github/scripts/github.ts: AGENTS.md, «Task tracking» — есть такой раздел
 - ✅ skills/github/scripts/github.ts: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «Checks» — есть такой раздел
-- ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «Reports for spec-doc» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «spec-doc» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «spec-exceptions» — есть такой раздел
-- ✅ skills/spec/SKILL.md: skills/spec/canon.md, «A decision is the unit of the spec, a folder is its home» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Limitations to know about» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Report formats» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Wiring into a repository» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Writing prose» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «spec-break» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «spec-diff output» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «spec-doc output» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «spec-exceptions» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «spec-publish» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/reference.md, «spec-run» — есть такой раздел
 - ✅ skills/spec/canon.md: AGENTS.md, «Epic refresh on task close» — есть такой раздел
 - ✅ skills/spec/canon.md: AGENTS.md, «Task tracking» — есть такой раздел
 - ✅ skills/spec/canon.md: AGENTS.md, «Tests and code» — есть такой раздел
@@ -109,11 +142,28 @@
 - ✅ skills/spec/checks.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/ci.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/migration.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/SKILL.md, «Reports for spec-doc» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/canon.md, «A decision is the unit of the spec, a folder is its home» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/reference.md, «Report formats» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/reference.md, «Wiring into the project's CI» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/reference.md, «spec-diff: static parsing, not two reports» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/reference.md, «spec-doc output» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
-- ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Labels of a task stack's service» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «A stack that didn't come up» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Checked on the machine» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Exit codes» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Labels of a task stack's service» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Override and compose files» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Stacks of closed tasks» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Taking a task's stacks down» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «The proxy» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «What the compose file check reads» — есть такой раздел
+- ✅ skills/task-env/reference.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
+- ✅ skills/task-env/reference.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
+- ✅ skills/task-env/reference.md: skills/task-env/reference.md, «Labels of a task stack's service» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
 - ✅ tests/capabilities/task-env/task-env.md: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
