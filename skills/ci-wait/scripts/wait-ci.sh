@@ -25,6 +25,7 @@
 # An Actions run at the SHA that failed without a single job (workflow not parsed, not started) — FAIL with the file path:
 # it gives no check-run, and without it the outcome came down to hosting statuses alone. An unfinished run without
 # check-runs (queued) — pending: there is a run at the SHA, but it has no checks yet.
+# The spec publish job (spec-publish) is not a check: neither awaited nor a FAIL — only by --context.
 # An empty list of checks — pending; PASS counts when a snapshot without pending repeats
 # two polls in a row (late-registering checks don't slip through) and there are no fewer checks
 # than --expect. The first failed check — FAIL right away; --wait-all — FAIL when all have finished.
@@ -66,6 +67,10 @@ rate_limited() { grep -qi 'rate limit' <<<"$1"; }
 # no check-runs); such a run is a failed check with the file path and a link. An unfinished run without check-runs
 # (queued) — pending with the path: there is a run at the SHA, and without this line the outcome came down to hosting
 # statuses (#360).
+# The spec publish job (the spec skill, ci.md; "<job> / spec-publish" — the same job in a reusable workflow) — publishing
+# the documentation, not a check: it is neither awaited nor a FAIL, only by --context (#443). The same names — in the
+# github skill's premerge (SPEC_PUBLISH): its red isn't a red main.
+SPEC_PUBLISH='^(.+ / )?spec-publish$'
 ran='[]'
 checks() {
   local statuses runs wruns
@@ -73,7 +78,7 @@ checks() {
   runs=$(gh api "repos/{owner}/{repo}/commits/$1/check-runs?per_page=100" 2>&1) || { out=$runs; return 1; }
   wruns=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$1&per_page=100" 2>&1) || { out=$wruns; return 1; }
   ran=$(jq -c '[(.workflow_runs // [])[].path] | unique' <<<"$wruns")
-  out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --argjson w "$wruns" --arg ctx "$context" '
+  out=$(jq -n --argjson s "$statuses" --argjson r "$runs" --argjson w "$wruns" --arg ctx "$context" --arg publish "$SPEC_PUBLISH" '
     [ $s.statuses[] | { name: .context,
         bucket: (if .state == "success" then "pass" elif .state == "pending" then "pending" else "fail" end) } ]
     + [ $r.check_runs | group_by([.name, .app.id]) | map(max_by(.id)) | .[] | { name,
@@ -92,7 +97,7 @@ checks() {
             | { name: "workflow \(if .name == .path then "not parsed" else "failed without jobs" end): \(.path) \(.html_url)",
                 bucket: "fail" }
           end ]
-    | if $ctx == "" then . else map(select(.name == $ctx)) end' 2>&1)
+    | if $ctx != "" then map(select(.name == $ctx)) else map(select(.name | test($publish) | not)) end' 2>&1)
 }
 
 # required: names of the base branch's required checks — a ruleset and classic protection. No rules

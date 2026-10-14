@@ -144,6 +144,11 @@ What to do next:
   `synchronize`, a negation in branches can't be decided without the diff —
   such a workflow isn't awaited; a file that doesn't parse is awaited: a PR
   from a fork doesn't even get the "dummy".
+- The spec publish job (`spec-publish`, also `<job> / spec-publish` from a
+  reusable workflow — the `spec` skill, `ci.md`) isn't a check: it publishes
+  the documentation, so it is neither awaited nor a FAIL — after a merge the
+  deploy and `main`'s checks are awaited without it (#443). `--context
+  spec-publish` waits for it like any check.
 - A failed check means the result is already known: a long check next to it
   (a preview deploy) won't change it, so FAIL comes at once.
 - PASS counts only when a snapshot without pending repeats for two polls in
