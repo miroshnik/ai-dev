@@ -14600,6 +14600,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "tests/standards/skill-imports/skill-imports.md: AGENTS.md, «Language» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "tests/standards/task-branch/task-branch.md: AGENTS.md, «Session and branch» — есть такой раздел"
  },
  {
@@ -14713,6 +14720,121 @@
    "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
   ],
   "name": "реестр «скрипты скиллов, которые читают каталог закреплений sessions/» не пуст"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта",
+   "примеры"
+  ],
+  "name": "`import type`, `export … from`, `import()` и `require()` чужого скилла — его импорт"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта",
+   "примеры"
+  ],
+  "name": "место нарушения — файл и строка импорта"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта",
+   "примеры"
+  ],
+  "name": "файл своего скилла, комментарий и путь к соседнему скрипту для запуска процессом — не импорт другого скилла"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`ci-wait` не импортирует другие скиллы"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`dashboard` импортирует из других скиллов `est`, `github`, `task-env` — и только их"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`est` импортирует из других скиллов `github` — и только их"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`github` не импортирует другие скиллы"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`slot` не импортирует другие скиллы"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`spec` импортирует из других скиллов `github` — и только их"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "`task-env` не импортирует другие скиллы"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "нарушитель не проходит: `github` импортирует `est`"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "нарушитель не проходит: в списке у `est` зависимость `github`, а импорта нет"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "нарушитель не проходит: скилла нет в списке зависимостей"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "нарушитель не проходит: скрипт скилла импортирует файл вне каталога скиллов"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "реестр «скиллы» находит dashboard, est, github, spec"
+ },
+ {
+  "path": "tests/standards/skill-imports/skill-imports.test.ts",
+  "describes": [
+   "Скрипт скилла импортирует другой скилл только по списку зависимостей стандарта"
+  ],
+  "name": "реестр «скиллы» не пуст"
  },
  {
   "path": "tests/standards/spawn-no-jit/spawn-no-jit.test.ts",
