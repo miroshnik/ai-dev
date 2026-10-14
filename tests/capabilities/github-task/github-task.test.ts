@@ -916,7 +916,23 @@ describe("task close закрывает задачу одной командой
     const f = new FakeGitHub(REC);
     mergedPr(f, 47);
     const last = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
-    expect(last).toContain("In auto mode after «Всё сделано. Сессию можно закрывать.» — archive the session where the agent has the tool; after the other two lines — don't.");
+    expect(last).toContain("In auto mode after «Всё сделано. Сессию можно закрывать.» — archive the session where the agent has the tool");
+    expect(last).toContain("; after the other two lines — don't.");
+  });
+
+  /**
+   * Живая фоновая задача сессии — ожидание, наблюдатель за его выводом, субагент — держит архивацию: «still has live
+   * work», 24 отказа в 17 сессиях (#437). На строке «всё сделано» всё нужное уже завершилось, оставшееся — забытое;
+   * его остановка сразу давала архивацию. Команда задач сессии не видит — называет шаг словами.
+   */
+  it("последняя строка вывода называет остановку своих фоновых задач перед архивацией в режиме auto", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 47);
+    const last = task(f, ["close", "47", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
+    expect(last).toContain(
+      "archive the session where the agent has the tool, first stopping its own background tasks still running " +
+        "(a wait, a watcher over its output, a subagent): a live one blocks archiving;",
+    );
   });
 
   /**
