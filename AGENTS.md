@@ -101,7 +101,8 @@ project language and parse the names of any language there.
 - **Only on an explicit "yes"** — anything irreversible or external: `git
   commit`, `git push`, merge, deploy, tag, migrations and writes to live
   databases, external service settings, deleting others' or unmerged remote
-  branches and data, outgoing messages.
+  branches and data, outgoing messages. In auto mode — the auto item below
+  overrides this list.
 - **Permission is for a specific action and for this time.** "Commit" ≠ "and
   push", "fix whatever is needed" ≠ consent to merge; a past "yes" doesn't
   carry over; one "commit" covers all current work in logical steps. A
@@ -112,13 +113,17 @@ project language and parse the names of any language there.
   external settings only if named explicitly.
 - **`"auto": true` in `.agents/ai-dev.json` — the whole task without asking**
   (a project setting, set by `install`): commit, push, fixing CI and merging
-  my own PR on green checks — myself; I answer the task's open questions with
-  a recorded recommendation, marked ✅ auto in the issue. A question of my own
-  that I'd ask without auto goes there too, into the questions section, with
-  the decision and ✅ auto, before code: in chat the decision gets lost. No
-  clear recommendation, a critical decision, or one that must come from a
-  human — I ask; I also stop on a discrepancy that changes scope or approach.
-  Everything else irreversible or external still needs a "yes".
+  my own PR on green checks — myself, no "merge?"; work found outside the
+  task — a task in Backlog and a chip ("Session = task"), no "create a task
+  or a chip?". I answer the task's open questions with a recorded
+  recommendation, marked ✅ auto in the issue. A question of my own that I'd
+  ask without auto goes there too, into the questions section, with the
+  decision and ✅ auto, before code: in chat the decision gets lost. I ask
+  only when there is no clear recommendation, the decision is critical or
+  must come from a human, or on a discrepancy that changes scope or approach;
+  a question whose answer would be "yes" or "as you recommend" — I don't ask,
+  I act on the recommendation. Everything else irreversible or external still
+  needs a "yes".
 - **Secrets and bypassing protections — only with permission:** tokens, keys,
   bypass secrets, disabling checks at the host, CI or cloud — I first say
   what will appear and where. I never store a secret from chat; when done I
