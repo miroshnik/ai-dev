@@ -325,7 +325,9 @@ aren't on `main`, ignoring run time and position in the file) — code `1` with
 them. A red check on the default branch's last commit — a check-run (the last
 run of each name: `failure`, `timed_out`, `startup_failure`; a cancelled one
 isn't red) or a host status (`failure`, `error`) — the same code `3` before
-checking the merge; checks not read — an `○` line, the check goes on. With
+checking the merge; checks not read — an `○` line, the check goes on. The spec
+publish job (`spec-publish`, `<job> / spec-publish`) isn't a check of `main`:
+red, it is an `○` line and not counted (#443). With
 code `3` the session doesn't merge and doesn't fix it in its PR: one bug for
 everyone — an open issue titled «`<base>` is red…» (REST
 search) that names the failed check (or script) — the whole name: `test` isn't

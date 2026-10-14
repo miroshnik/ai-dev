@@ -396,6 +396,23 @@ describe("pr premerge: main красный — не этот PR: не влива
     expect(proc.calls).toEqual([]);
   });
 
+  it("упавшая публикация спеки на последнем коммите main не даёт premerge код 3", () => {
+    const p = project({ pr: { "uses.txt": "a\n" } });
+    const publish = [
+      { name: "spec-publish", conclusion: "failure" },
+      { name: "ci / spec-publish", conclusion: "failure" }, // тот же job в реюзабельном workflow
+      { name: "tests", conclusion: "success" },
+    ];
+    const r = premerge(fakeGh(p.head, { main: { runs: publish } }).gh, p.work);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("○ ci / spec-publish, spec-publish red on the last commit of main (c0ffee1) — publishing the documentation, not a check of main: not counted");
+    // рядом с настоящим красным чеком публикация не попадает ни в причину, ни в заголовок бага
+    const red = premerge(fakeGh(p.head, { main: { runs: [...publish, { name: "deploy", conclusion: "failure" }] } }).gh, p.work);
+    expect(red.code).toBe(3);
+    expect(red.out).toContain("main is red: check deploy of the last commit of main (c0ffee1)");
+    expect(red.out).toContain(`--title "main красный: чек deploy"`);
+  });
+
   it("открытый баг «main красный…» — premerge называет его и команду ожидания; бага нет — команду завести", () => {
     const p = project({ pr: { "uses.txt": "a\n" } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
