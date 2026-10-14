@@ -3401,6 +3401,20 @@
   "describes": [
    "task queue убирает worktree исполнителей закрытых задач"
   ],
+  "name": "task queue не убирает чистый worktree исполнителя, чья выданная задача открыта"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
+  "name": "worktree исполнителя закрытой задачи task queue убирает, как прежде"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
   "name": "worktree работающего агента, сессии и агента на ветке задачи не трогаются; блокировка процесса, которого нет, не держит"
  },
  {
