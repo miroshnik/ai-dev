@@ -181,7 +181,9 @@ project language and parse the names of any language there.
   ci build`) plus `research` (a spike without code); the same list is the
   task type in `est`. Slug — Latin, kebab-case, 2–5 words; an area prefix
   adopted in the repository goes first: `backend/fix/263-…`. A branch named
-  by a worktree tool — I rename it before the first push (`git branch -m`).
+  by a worktree tool — renamed before the first push by `github task status
+  <N> "In progress" --branch <type>/<N>-<slug>`: it retries on a
+  `.git/config` locked by a parallel checkout.
 - **PR:** the title is a conventional commit (`feat(scope): description`),
   the body has `Closes #263`. **Merge — rebase only** (`gh pr merge <N>
   --rebase`; `github project fix` turns other methods off): the commits
