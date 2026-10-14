@@ -109,6 +109,12 @@ function shift(vals: number[]): Shift {
 /** Minutes a task waited for CI, the merge's checks and the deploy, and local checks — the waits worth shortening. */
 const waited = (w: Waits) => w.ci + w.merged + w.checks;
 
+/** The waits' share of the actual, 0…1; an actual of zero minutes — none. */
+export function waitShare(w: Waits): number | null {
+  const all = waited(w) + w.rest;
+  return all > 0 ? waited(w) / all : null;
+}
+
 /** $ shares by model of the latest tasks and of the previous ones: a pricing shift next to the cost trend. */
 export interface ModelShift {
   now: [string, number][];
@@ -188,8 +194,23 @@ const PANELS: Panel[] = [
   { key: "usd", title: "Cost per task, $", fact: (p) => p.usd, est: (p) => p.usdEst, tick, fmt: (v) => v.toFixed(v < 10 ? 2 : 0) },
 ];
 
-// Geometry in viewBox units: on the left — scale labels, on the right — the trend end label, at the bottom — the
-// shared time axis.
+/**
+ * Parts of the actual's split, bottom-up: the waits stand on the zero line — comparable across tasks, the rest is on
+ * top; the slot queue is a part of the checks, drawn apart from them.
+ */
+const PARTS: { key: keyof Waits; label: string; min: (w: Waits) => number }[] = [
+  { key: "ci", label: "CI on the PR", min: (w) => w.ci },
+  { key: "merged", label: "after the merge", min: (w) => w.merged },
+  { key: "checks", label: "checks", min: (w) => Math.max(0, w.checks - w.slot) },
+  { key: "slot", label: "slot queue", min: (w) => w.slot },
+  { key: "rest", label: "rest", min: (w) => w.rest },
+];
+const SPLIT_TITLE = "Actual split per task, min";
+const SHARE_LABEL = "waits share, % — right scale";
+const NO_SPLIT = "no split — the actual was recorded before it: a gap on the panel, not 0";
+
+// Geometry in viewBox units: on the left — scale labels, on the right — the trend end label and the split panel's
+// share scale, at the bottom — the shared time axis.
 const W = 1080;
 const LEFT = 56;
 const RIGHT = 64;
@@ -198,7 +219,9 @@ const PLOT = 150;
 const GAP = 18;
 const AXIS = 30;
 const PANEL_H = HEAD + PLOT + GAP;
-const HEIGHT = PANELS.length * PANEL_H + AXIS;
+/** The dot panels and the split panel under them. */
+const ROWS = PANELS.length + 1;
+const HEIGHT = ROWS * PANEL_H + AXIS;
 
 /** Log scale steps covering [lo, hi]: the 1–2–5 series, and if there are more than seven steps — decades only. */
 function logTicks(lo: number, hi: number): number[] {
@@ -211,6 +234,14 @@ function logTicks(lo: number, hi: number): number[] {
   };
   const fine = cover([1, 2, 5]);
   return fine.length > 7 ? cover([1]) : fine;
+}
+
+/** Linear scale steps from zero covering [0, max]: a round step of the 1–2–5 series, five steps or fewer. */
+function linTicks(max: number): number[] {
+  const raw = max / 5;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw)!;
+  return Array.from({ length: Math.ceil(max / step - 1e-9) + 1 }, (_, k) => Number((k * step).toPrecision(12)));
 }
 
 /** Time axis marks — local midnights with a step that keeps them at eight or fewer. */
@@ -239,11 +270,14 @@ function layout(pts: Point[]): Layout {
   return { x: (t) => LEFT + ((t - t0) / (t1 - t0)) * (W - LEFT - RIGHT), ticks: timeTicks(t0, t1) };
 }
 
+/** A task's hover target on a panel: a point's height or a bar's span [top, bottom]; null — none. */
+type Target = number | [number, number] | null;
+
 /**
  * A panel: the grid, "estimate — actual" segments, estimate rings, the trend line and actual points; `ys` — the actual
  * point height for each task.
  */
-function panelSvg(p: Panel, i: number, pts: Point[], lay: Layout): { svg: string; ys: (number | null)[] } {
+function panelSvg(p: Panel, i: number, pts: Point[], lay: Layout): { svg: string; ys: Target[] } {
   const top = i * PANEL_H + HEAD;
   const pos = (v: number | null): v is number => v !== null && v > 0;
   const values = pts.flatMap((pt) => [p.fact(pt), p.est(pt)]).filter(pos);
@@ -275,23 +309,91 @@ function panelSvg(p: Panel, i: number, pts: Point[], lay: Layout): { svg: string
   return { svg: out.join(""), ys };
 }
 
+/** The split panel's legend on its title line: a swatch per part and the share line. */
+function splitLegend(x: number, y: number): string {
+  const out: string[] = [];
+  // label widths are estimated: 12px text, ~6.5 units a character
+  for (const part of PARTS) {
+    out.push(`<rect class="seg ${part.key}" x="${r1(x)}" y="${y - 9}" width="10" height="10" rx="2"/>`, `<text class="legend" x="${r1(x + 14)}" y="${y}">${esc(part.label)}</text>`);
+    x += 14 + part.label.length * 6.5 + 16;
+  }
+  out.push(`<path class="trend" d="M${r1(x)} ${y - 4}h16"/>`, `<text class="legend" x="${r1(x + 20)}" y="${y}">${esc(SHARE_LABEL)}</text>`);
+  return out.join("");
+}
+
+/**
+ * The split panel: a bar per task from the parts of its actual, minutes on a linear scale — stacked parts on a log one
+ * would lie; the line — the rolling median of the waits' share, % on the right scale. A task without the split — a gap,
+ * its hover target is the panel's whole height: the tooltip says why it's empty.
+ */
+function splitSvg(i: number, pts: Point[], lay: Layout): { svg: string; ys: Target[] } {
+  const top = i * PANEL_H + HEAD;
+  const base = top + PLOT;
+  const total = (w: Waits) => PARTS.reduce((s, part) => s + part.min(w), 0);
+  const max = Math.max(0, ...pts.map((p) => (p.waits ? total(p.waits) : 0)));
+  const out = [`<g class="panel" data-panel="waits">`, `<text class="panel-title" x="${LEFT}" y="${top - 10}">${esc(SPLIT_TITLE)}</text>`];
+  if (!(max > 0)) {
+    out.push(`<text class="empty" x="${LEFT}" y="${top + PLOT / 2}">no tasks with the split</text>`, "</g>");
+    return { svg: out.join(""), ys: pts.map(() => null) };
+  }
+  out.push(splitLegend(LEFT + SPLIT_TITLE.length * 7.5 + 24, top - 10));
+  const ticks = linTicks(max);
+  const y = (v: number) => r1(base - (v / ticks[ticks.length - 1]!) * PLOT);
+  const yShare = (s: number) => r1(base - s * PLOT);
+  for (const t of lay.ticks) out.push(`<line class="grid" x1="${r1(lay.x(t))}" x2="${r1(lay.x(t))}" y1="${top}" y2="${base}"/>`);
+  for (const t of ticks) out.push(`<line class="grid" x1="${LEFT}" x2="${W - RIGHT}" y1="${y(t)}" y2="${y(t)}"/>`, `<text class="y-tick" x="${LEFT - 8}" y="${y(t) + 4}">${tick(t)}</text>`);
+  for (const s of [0, 0.5, 1]) out.push(`<text class="y-tick-r" x="${W - 4}" y="${yShare(s) + 4}">${s * 100} %</text>`);
+  const xs = pts.map((p) => r1(lay.x(p.t)));
+  // a bar is as wide as its nearest neighbor allows: tasks closed close together get thin bars, not overlapping ones
+  const width = (k: number) => Math.min(10, Math.max(1.5, 0.7 * Math.min(k ? xs[k]! - xs[k - 1]! : Infinity, k < xs.length - 1 ? xs[k + 1]! - xs[k]! : Infinity)));
+  const order = pts.map((_, k) => k).filter((k) => pts[k]!.waits).sort((a, b) => total(pts[b]!.waits!) - total(pts[a]!.waits!));
+  // taller bars first: a shorter one closed at the same time stays in front of it
+  for (const k of order) {
+    const w = pts[k]!.waits!;
+    const bw = width(k);
+    let below = 0;
+    const segs: string[] = [];
+    for (const part of PARTS) {
+      const m = part.min(w);
+      if (m <= 0) continue;
+      // a 1-unit gap in the surface color separates a part from the one below it
+      const h = r1(y(below) - y(below + m) - (segs.length ? 1 : 0));
+      if (h > 0) segs.push(`<rect class="seg ${part.key}" x="${r1(xs[k]! - bw / 2)}" y="${y(below + m)}" width="${r1(bw)}" height="${h}"/>`);
+      below += m;
+    }
+    out.push(`<g class="bar" data-i="${k}">${segs.join("")}</g>`);
+  }
+  const shares = pts.flatMap((p, k) => {
+    const s = p.waits ? waitShare(p.waits) : null;
+    return s === null ? [] : [{ x: xs[k]!, s }];
+  });
+  const line = trend(shares.map((q) => q.s)).flatMap((v, k) => (v === null ? [] : [{ x: shares[k]!.x, y: yShare(v), v }]));
+  const end = line[line.length - 1];
+  if (end) {
+    const d = line.map((q, k) => `${k ? "L" : "M"}${q.x} ${q.y}`).join("");
+    out.push(`<path class="halo" d="${d}"/>`, `<path class="trend" d="${d}"/>`, `<text class="end-label" x="${end.x + 10}" y="${end.y + 4}">${Math.round(end.v * 100)} %</text>`);
+  }
+  out.push("</g>");
+  return { svg: out.join(""), ys: pts.map((p) => (p.waits ? [y(total(p.waits)), base] : [top, base])) };
+}
+
 interface Chart {
   svg: string;
-  /** Points for the tooltip: the abscissa and the actual heights per panel in viewBox units. */
-  hover: { x: number; y: (number | null)[] }[];
+  /** Points for the tooltip: the abscissa and the hover targets per panel in viewBox units. */
+  hover: { x: number; y: Target[] }[];
 }
 
 function chart(pts: Point[]): Chart {
   if (!pts.length) return { svg: "", hover: [] };
   const lay = layout(pts);
-  const panels = PANELS.map((p, i) => panelSvg(p, i, pts, lay));
-  const axisY = PANELS.length * PANEL_H - GAP;
+  const panels = [...PANELS.map((p, i) => panelSvg(p, i, pts, lay)), splitSvg(PANELS.length, pts, lay)];
+  const axisY = ROWS * PANEL_H - GAP;
   const axis = lay.ticks.map((t) => {
     const d = new Date(t * 1000);
     return `<text class="x-tick" x="${r1(lay.x(t))}" y="${axisY + 20}">${two(d.getDate())}.${two(d.getMonth() + 1)}</text>`;
   });
   const svg = [
-    `<svg class="chart" viewBox="0 0 ${W} ${HEIGHT}" role="img" aria-label="Hours, tokens and cost of tasks by close date; the values are in the table below">`,
+    `<svg class="chart" viewBox="0 0 ${W} ${HEIGHT}" role="img" aria-label="Hours, tokens, cost and the split of the actual of tasks by close date; the values are in the table below">`,
     ...panels.map((p) => p.svg),
     `<g class="x-axis">${axis.join("")}</g>`,
     `<line class="crosshair" x1="0" x2="0" y1="${HEAD}" y2="${axisY}" visibility="hidden"/>`,
@@ -300,7 +402,10 @@ function chart(pts: Point[]): Chart {
   return { svg, hover: pts.map((pt, k) => ({ x: r1(lay.x(pt.t)), y: panels.map((p) => p.ys[k] ?? null) })) };
 }
 
-/** The chart: panels with a shared time axis — hours, actual to estimate, tokens, cost; no tasks — an empty string. */
+/**
+ * The chart: panels with a shared time axis — hours, actual to estimate, tokens, cost, the actual's split; no tasks — an
+ * empty string.
+ */
 export function chartSvg(pts: Point[]): string {
   return chart(pts).svg;
 }
@@ -323,8 +428,8 @@ const PRESETS: [string, string][] = [["30d", "30 days"], ["90d", "90 days"], ["a
 
 // Palette — the tested "blue / orange" pair and utility tones for the light and dark themes.
 const CSS = `
-:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--fact:#2a78d6;--trend:#eb6834;--good:#006300;--bad:#b42c2c;--warn:#f2b53a}
-@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--fact:#3987e5;--trend:#d95926;--good:#0ca30c;--bad:#e66767;--warn:#e0a52c}}
+:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--fact:#2a78d6;--trend:#eb6834;--good:#006300;--bad:#b42c2c;--warn:#f2b53a;--w-ci:#2a78d6;--w-merged:#1baf7a;--w-checks:#4a3aa7;--w-slot:#eda100;--w-rest:#d3d2ca}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--fact:#3987e5;--trend:#d95926;--good:#0ca30c;--bad:#e66767;--warn:#e0a52c;--w-ci:#3987e5;--w-merged:#199e70;--w-checks:#9085e9;--w-slot:#c98500;--w-rest:#4a4946}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1180px;margin:0 auto;padding:24px 16px 48px}
@@ -352,7 +457,8 @@ figcaption{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin:0 0 8p
 svg.chart{display:block;width:100%;height:auto;touch-action:pan-y}
 .chart text{font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}
 .chart .panel-title{font-size:13px;font-weight:600;fill:var(--ink)}
-.chart .y-tick{text-anchor:end}.chart .x-tick{text-anchor:middle}
+.chart .y-tick,.chart .y-tick-r{text-anchor:end}.chart .x-tick{text-anchor:middle}
+.chart .legend{fill:var(--ink2)}
 .chart .end-label{fill:var(--ink);font-weight:600}
 .grid{stroke:var(--grid);stroke-width:1}
 .band{fill:var(--ink);opacity:.05}
@@ -362,6 +468,9 @@ svg.chart{display:block;width:100%;height:auto;touch-action:pan-y}
 .fact{fill:var(--fact);stroke:var(--surface);stroke-width:2}
 .fact.hl{r:6}
 .trend{fill:none;stroke:var(--trend);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.halo{fill:none;stroke:var(--surface);stroke-width:5;stroke-linejoin:round;stroke-linecap:round}
+.seg.ci{fill:var(--w-ci)}.seg.merged{fill:var(--w-merged)}.seg.checks{fill:var(--w-checks)}.seg.slot{fill:var(--w-slot)}.seg.rest{fill:var(--w-rest)}
+.bar.hl rect{stroke:var(--ink);stroke-width:1}
 .crosshair{stroke:var(--axis);stroke-width:1}
 #tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,.12);font-size:13px;max-width:320px;z-index:1}
 #tip .head{font-weight:600}#tip .when{color:var(--ink2);margin-bottom:4px}
@@ -375,8 +484,8 @@ td:nth-child(2){white-space:normal;min-width:220px}
 tr.hl td{background:var(--page)}
 ${SESSIONS_CSS}`;
 
-// Tooltip: the task nearest to the cursor (horizontally — four times stricter than vertically), the crosshair and its
-// row in the table.
+// Tooltip: the task nearest to the cursor (horizontally — four times stricter than vertically), the crosshair, its marks
+// and its row in the table.
 const SCRIPT = `
 (() => {
   const svg = document.querySelector("svg.chart"); if (!svg) return;
@@ -385,7 +494,7 @@ const SCRIPT = `
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
   let cur = -1;
   const mark = (i, on) => {
-    svg.querySelectorAll('.fact[data-i="' + i + '"]').forEach((c) => c.classList.toggle("hl", on));
+    svg.querySelectorAll('[data-i="' + i + '"]').forEach((c) => c.classList.toggle("hl", on));
     const row = document.querySelector('tr[data-task="' + CSS.escape(data.pts[i].task) + '"]'); if (row) row.classList.toggle("hl", on);
   };
   const hide = () => { if (cur >= 0) mark(cur, false); cur = -1; tip.hidden = true; cross.setAttribute("visibility", "hidden"); };
@@ -393,7 +502,9 @@ const SCRIPT = `
     const box = svg.getBoundingClientRect(), k = data.w / box.width;
     const x = (ev.clientX - box.left) * k, y = (ev.clientY - box.top) * k;
     let best = -1, dist = Infinity;
-    data.pts.forEach((p, i) => p.y.forEach((py) => { if (py === null) return; const d = (p.x - x) ** 2 + (py - y) ** 2 / 16; if (d < dist) { dist = d; best = i; } }));
+    // a point — by its height, a bar — by its span: anywhere inside it is zero vertical distance
+    const dy = (py) => (Array.isArray(py) ? (y < py[0] ? py[0] - y : y > py[1] ? y - py[1] : 0) : py - y);
+    data.pts.forEach((p, i) => p.y.forEach((py) => { if (py === null) return; const d = (p.x - x) ** 2 + dy(py) ** 2 / 16; if (d < dist) { dist = d; best = i; } }));
     if (best < 0) return hide();
     if (best !== cur) {
       if (cur >= 0) mark(cur, false);
@@ -472,18 +583,18 @@ const LEGEND = [
   `<span class="key"><svg viewBox="0 0 22 12"><circle class="est" cx="11" cy="6" r="3.5"/></svg>estimate</span>`,
   `<span class="key"><svg viewBox="0 0 22 12"><circle class="fact" cx="11" cy="6" r="4"/></svg>actual</span>`,
   `<span class="key"><svg viewBox="0 0 22 12"><path class="trend" d="M1 6L21 6"/></svg>median of the last ${WINDOW} tasks</span>`,
-  `<span>log scales: an equal step is an equal ratio</span>`,
+  `<span>log scales, the split — linear: an equal step is an equal ratio</span>`,
 ].join("");
 
 function table(pts: Point[], many: boolean): string {
-  const head = ["Closed", "Task", "Type", "Estimate, h", "Actual, h", "Actual to estimate", "Tokens, M: forecast", "Tokens, M: actual", "Cost: forecast", "Cost: actual", "Wait for CI, min", "After the merge, min", "Checks, min (slot)", "Coverage"];
+  const head = ["Closed", "Task", "Type", "Estimate, h", "Actual, h", "Actual to estimate", "Tokens, M: forecast", "Tokens, M: actual", "Cost: forecast", "Cost: actual", "Wait for CI, min", "After the merge, min", "Checks, min (slot)", "Rest, min", "Coverage"];
   const min = (v: number) => String(Math.round(v));
   const body = [...pts].reverse().map((p) => {
     const cells = [
       fmtLocal(p.t).slice(0, 10),
       `<a href="${esc(p.url)}">${esc(`${many ? p.repo : ""}#${p.number}`)}</a> ${esc(p.title)}`,
       esc(p.type), dash(p.est, fmtH), fmtH(p.fact), ratio(p), dash(p.tokEst, fmtTok), dash(p.tok, fmtTok), dash(p.usdEst, fmtUsd), dash(p.usd, fmtUsd),
-      p.waits ? min(p.waits.ci) : "—", p.waits ? min(p.waits.merged) : "—", p.waits ? `${min(p.waits.checks)} (${min(p.waits.slot)})` : "—", esc(p.cov),
+      p.waits ? min(p.waits.ci) : "—", p.waits ? min(p.waits.merged) : "—", p.waits ? `${min(p.waits.checks)} (${min(p.waits.slot)})` : "—", p.waits ? min(p.waits.rest) : "—", esc(p.cov),
     ];
     return `<tr data-task="${esc(taskId(p))}">${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
   });
@@ -515,6 +626,13 @@ function shell(o: { tab: Tab; title: string; repos: string[]; sub: string; error
   ].join("");
 }
 
+/** The tooltip's split rows: the parts and the waits' share; no split — why the split panel is empty there. */
+function waitRows(p: Point): [string, string][] {
+  if (!p.waits) return [["Waits", NO_SPLIT]];
+  const s = waitShare(p.waits);
+  return [["Waits, min", waitsBrief(p.waits)], ...(s === null ? [] : [["Waits share", `${Math.round(s * 100)} %`] as [string, string]])];
+}
+
 /** The "Estimate and actual" tab: summary, chart, table. */
 export function page(m: Model): string {
   const pts = m.view.points;
@@ -526,7 +644,7 @@ export function page(m: Model): string {
     w: W,
     pts: pts.map((p, i) => ({
       ...c.hover[i]!, task: taskId(p), head: `${many ? p.repo : ""}#${p.number} ${p.title}`, when: [fmtLocal(p.t), p.type, p.cov === "full" ? "" : `coverage ${p.cov}`].filter(Boolean).join(" · "),
-      rows: [["Hours: estimate → actual", `${pair(p.est, p.fact, fmtH)}${p.est ? ` (${ratio(p)})` : ""}`], ["Tokens, M", pair(p.tokEst, p.tok, fmtTok)], ["Cost", pair(p.usdEst, p.usd, fmtUsd)], ...(p.waits ? [["Waits, min", waitsBrief(p.waits)]] : [])],
+      rows: [["Hours: estimate → actual", `${pair(p.est, p.fact, fmtH)}${p.est ? ` (${ratio(p)})` : ""}`], ["Tokens, M", pair(p.tokEst, p.tok, fmtTok)], ["Cost", pair(p.usdEst, p.usd, fmtUsd)], ...waitRows(p)],
     })),
   };
   const body = pts.length
