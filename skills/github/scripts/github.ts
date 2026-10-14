@@ -7,7 +7,8 @@
  *   github project check — a check against the canon, item by item ✅/❌
  *   github project fix   — bring it to the canon: API, UI steps with links, deleting and renaming — with --confirm
  *   github task new      — a task in one command: type or label, project and Backlog, Priority, epic, blocked by,
- *                          milestone, decision labels (the decision's name, the kind by color) and the estimate (est)
+ *                          milestone, decision labels (the decision's name, the kind by color), the questions label
+ *                          (an open question in the description) and the estimate (est)
  *   github task show     — the task in one output: the description, Status, estimate, the epic, blockers, PRs and
  *                          their checks, open questions
  *   github task answer   — ✅ and the answer at a question of the questions section; none open — the label goes
@@ -70,6 +71,8 @@ export const DEFAULT_PRIORITY = "Medium";
 /** A personal account has no issue types — an epic is marked with a label, the only exception. */
 export const EPIC_LABEL = "epic";
 const epicLabel = () => ({ name: EPIC_LABEL, color: "8250DF", description: N.labels.epicDescription });
+/** Open questions in the task description: `task new` sets it (creates it if missing), the last answer removes it. */
+const questionsLabel = () => ({ name: N.labels.questions, color: "FBCA04", description: N.labels.questionsDescription });
 /**
  * Decision labels: the name is the decision's name (a spec tree folder or a model module), the kind is the color.
  * Decisions of different kinds with one name are one label: the color of the senior kind (the order here), all of them
@@ -1706,7 +1709,9 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const dup = (graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${title.replaceAll('"', "")}"` }).search.nodes as Any[]).find((x) => x?.title === title);
   if (dup) throw new GhError(`an open task with this title already exists: #${dup.number}`);
   const wanted = [...new Set(o.labels ?? [])];
-  const repoLabels = wanted.length ? loadLabels(io, slug) : [];
+  // open questions in the description — the questions label: the dashboard and the queue find the task by it
+  const open = questionItems(o.body).filter((x) => !x.answered).map((x) => x.k);
+  const repoLabels = wanted.length || open.length ? loadLabels(io, slug) : [];
   const has = (n: string) => repoLabels.find((x) => x.name === n);
   // a decision by name comes from the default branch; `kind:name` — also a new one that isn't there yet
   const decisions = wanted.some((l) => legacyDecision(l) || !has(l)) ? loadDecisions(io, slug) : null;
@@ -1753,6 +1758,16 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
     input.labelIds = [...((input.labelIds as string[] | undefined) ?? []), ...ids];
     // the decision will appear in this task's PR — the label says so instead of failing
     done.push(`labels: ${plan.map((x) => x.name).join(", ")}`, ...plan.flatMap((x) => (x.fresh ? [x.fresh] : [])));
+  }
+  if (open.length) {
+    let id = has(N.labels.questions)?.id;
+    if (!id) {
+      id = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...questionsLabel() } }).createLabel.label.id as string;
+      done.push(`created label ${q(N.labels.questions)}`);
+    }
+    // `--labels` may name it too
+    input.labelIds = [...new Set([...((input.labelIds as string[] | undefined) ?? []), id])];
+    done.push(`label ${q(N.labels.questions)} — open questions in the description: ${open.join(", ")}`);
   }
   if (milestone) input.milestoneId = milestone.id;
   if (epic) input.parentIssueId = epic.id;
@@ -3451,9 +3466,10 @@ Examples:
                 [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
                 [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
 
-A task by the canon: type, project and Backlog, Priority, epic, blocked by, milestone, decision labels; sets the
-estimate itself (est estimate --write with --branch-type: feat, fix, docs, refactor, perf, test, chore, ci, build,
-research; a bug without it is fix, an epic isn't estimated) and prints what was created and the next step.
+A task by the canon: type, project and Backlog, Priority, epic, blocked by, milestone, decision labels, the questions
+label when the description has a question without ✅ (created if missing); sets the estimate itself (est estimate
+--write with --branch-type: feat, fix, docs, refactor, perf, test, chore, ci, build, research; a bug without it is
+fix, an epic isn't estimated) and prints what was created and the next step.
 
 Examples:
   github task new --title "Billing · Export invoices to PDF" --branch-type feat --epic 40 --body-file task.md

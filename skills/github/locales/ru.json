@@ -10,6 +10,7 @@
   },
   "labels": {
     "questions": "вопросы",
+    "questionsDescription": "Есть открытые вопросы в разделе «## Вопросы»",
     "epicDescription": "Эпик: большая задача с подзадачами",
     "externalBlocker": "внешний блокер"
   },

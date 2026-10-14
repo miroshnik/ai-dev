@@ -10,6 +10,7 @@
   },
   "labels": {
     "questions": "questions",
+    "questionsDescription": "Open questions in the «## Questions» section",
     "epicDescription": "Epic: a large task with subtasks",
     "externalBlocker": "external blocker"
   },

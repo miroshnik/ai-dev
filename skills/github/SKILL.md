@@ -97,8 +97,9 @@ What the agent gets wrong without the details (all of them — `reference.md`,
   doesn't open the `est` skill.
   `--labels`: a decision from the default branch — by name (`billing`), a new
   decision — `kind:name` (`capability:export`), a regular or slice label — by
-  name, it must exist. Everything is checked before creating: an error (code
-  2) leaves no half-made task.
+  name, it must exist. The `questions` label — `task new` itself, when the
+  description has a question without ✅. Everything is checked before
+  creating: an error (code 2) leaves no half-made task.
 - **`task answer`** — not a rewrite of the description by hand
   (`gh issue edit --body-file`); a question that already has ✅ is refused — a
   changed answer is edited by hand.

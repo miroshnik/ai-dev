@@ -41,8 +41,12 @@ export interface Plural {
 export interface Names {
   issueTypes: { task: string; bug: string; epic: string };
   sections: { questions: string; scenarios: string };
-  /** `externalBlocker` — a task waiting for something outside the repository that isn't an issue: `task queue` skips it. */
-  labels: { questions: string; epicDescription: string; externalBlocker: string };
+  /**
+   * `questions` — a task with open questions in its description (`questionsDescription` — the label's description when
+   * `task new` creates it); `externalBlocker` — a task waiting for something outside the repository that isn't an issue:
+   * `task queue` skips it.
+   */
+  labels: { questions: string; questionsDescription: string; epicDescription: string; externalBlocker: string };
   status: { backlog: string; inProgress: string; done: string };
   fields: { estimate: string; actual: string; tokens: string; cost: string };
   views: { board: string; table: string; roadmap: string };
