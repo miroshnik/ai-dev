@@ -317,6 +317,51 @@ describe("task new ставит метки решений — по имени р
   });
 });
 
+/**
+ * По метке «вопросы» задачу с открытыми вопросами видят дашборд и очередь, а `task answer` снимает её с последним ответом.
+ * Ставили её руками: в пилоте #471 диспетчер — у шести задач, и раз промахнулся номером, поставив её на PR (#536).
+ * Метку ставит `task new` по разделу вопросов в описании — той же мутацией, что заводит задачу.
+ */
+describe("task new ставит метку «вопросы», когда в описании есть открытый вопрос", () => {
+  const OPEN = "Что сделать.\n\n## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. Кодировка?\n3. Разделитель?\n   - запятая\n";
+  const QUESTIONS = { color: "FBCA04", description: "Есть открытые вопросы в разделе «## Вопросы»" };
+
+  it("task new с открытым вопросом в описании ставит задаче метку «вопросы»", () => {
+    const f = new FakeGitHub(REC);
+    Object.assign(f.tree, { capabilities: ["billing"] });
+    const billing = f.label("billing", CAP, "Решение: tests/capabilities/billing");
+    const questions = f.label("вопросы", QUESTIONS.color, QUESTIONS.description);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body", OPEN, "--labels", "billing"]);
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CreateLabel")).toEqual([]);
+    expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([billing.id, questions.id]);
+    expect(issueLabels(f, 50)).toEqual(["billing", "вопросы"]);
+    expect(r.out).toContain("+ label «вопросы» — open questions in the description: 2, 3");
+  });
+
+  it("task new без раздела вопросов или со всеми отвеченными вопросами метку не ставит", () => {
+    const bodies = [[], ["--body", "Что сделать."], ["--body", "## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. ✅ авто Кодировка? **Ответ:** UTF-8.\n"]];
+    for (const body of bodies) {
+      const f = new FakeGitHub(REC);
+      f.label("вопросы", QUESTIONS.color, QUESTIONS.description);
+      const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", ...body]);
+      expect(r.code).toBe(0);
+      expect(byOp(f, "CreateIssue")[0]).not.toHaveProperty("labelIds");
+      expect(issueLabels(f, 50)).toEqual([]);
+      expect(r.out).not.toContain("вопросы");
+    }
+  });
+
+  it("метки «вопросы» в репозитории нет — task new создаёт её и ставит", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body", OPEN]);
+    expect(r.code).toBe(0);
+    expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "вопросы", ...QUESTIONS }]);
+    expect(issueLabels(f, 50)).toEqual(["вопросы"]);
+    expect(r.out).toContain("+ created label «вопросы»");
+  });
+});
+
 const HEAD = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
 // модель в голове PR: модуль web — весь src, domain — его подкаталог и ещё один каталог
 const MODEL = `export default { modules: {
@@ -1177,8 +1222,8 @@ describe("task actualize делает механику актуализации 
     merged46(f);
     f.labelIssue(47, "вопросы");
     f.issue(47).body = "## Вопросы\n\n1. ✅ Формат?\n   Ответ: PDF.\n";
+    // метку вопросов задаче с открытым вопросом ставит сам task new
     const other = Number(subtask(f, "Экспорт", "--body", "## Вопросы\n\n1. ✅ Формат? Ответ: PDF.\n2. Срок?\n"));
-    f.labelIssue(other, "вопросы");
     // метка на английском (проект сменил язык) — тоже метка вопросов; раздела нет — открытых вопросов нет
     f.labelIssue(45, "questions");
     const r = task(f, ["actualize", "46"]);

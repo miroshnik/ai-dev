@@ -474,8 +474,10 @@ decision — `kind:name` (`capability:export`, the label is `export`, the line
 label — created with the kind's color; a regular label must exist, otherwise an
 error before creating. A slice label by name (`api`) is a regular task label,
 not passed to the epic; `kind:name` with a slice label's name is an error
-before creating: a decision with that name isn't marked by a label. Prints
-`Created #N …`, `+` lines and the next step.
+before creating: a decision with that name isn't marked by a label. A question
+without ✅ in the description's questions section — the `questions` label in
+the same mutation (created if missing), a `+` line names the open questions;
+none open — no label. Prints `Created #N …`, `+` lines and the next step.
 
 ### The estimate — by task new itself
 
