@@ -1425,10 +1425,29 @@ function pinFile(io: Io): string | null {
   return id ? path.join(configDir(io.env), "sessions", id) : null;
 }
 
-/** The task pinned to the session (`owner/repo#N`); no pin or the session isn't identified — null. */
-function pinnedTask(io: Io): string | null {
+/**
+ * The session pin: `owner/repo#N` — the task, anything else — not a pin. est has the same parse: github lives without est
+ * (tests/standards/session-pin).
+ */
+export function sessionPin(text: string): { slug: string; number: number } | null {
+  const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(text.trim());
+  return m ? { slug: m[1]!, number: Number(m[2]) } : null;
+}
+
+/** The line `task status` writes into the pin file — sessionPin of every skill reads it back as the same task. */
+export function pinLine(slug: string, number: number): string {
+  return `${slug}#${number}\n`;
+}
+
+/**
+ * The session pin: its file, the line and the task in it — the line isn't `owner/repo#N`, task null: not a pin; no file
+ * or the session isn't identified — null.
+ */
+function pinnedTask(io: Io): { file: string; line: string; task: { slug: string; number: number } | null } | null {
   const file = pinFile(io);
-  return file && existsSync(file) ? readFileSync(file, "utf8").trim() : null;
+  if (!file || !existsSync(file)) return null;
+  const line = readFileSync(file, "utf8").trim();
+  return { file, line, task: sessionPin(line) };
 }
 
 /**
@@ -1452,9 +1471,15 @@ function pinTask(io: Io, slug: string, number: number): void {
   mkdirSync(path.dirname(file), { recursive: true });
   // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — pins aren't committed into it
   created(path.join(path.dirname(file), ".gitignore"), "*\n");
-  if (created(file, `${task}\n`)) return;
-  const held = readFileSync(file, "utf8").trim();
-  if (held !== task) throw new GhError(`the session runs ${held}; #${number} — in a new session, first prompt: #${number} (pin: ${file} — a mistaken one is removed by a human)`);
+  if (created(file, pinLine(slug, number))) return;
+  const held = pinnedTask(io)!;
+  // not a pin — the session is free for est and the dashboard too: the file takes the task
+  if (!held.task) {
+    writeFileSync(file, pinLine(slug, number));
+    return io.out(`○ the session pin ${file} held «${held.line}», not owner/repo#N — replaced with ${task}`);
+  }
+  const runs = `${held.task.slug}#${held.task.number}`;
+  if (runs !== task) throw new GhError(`the session runs ${runs}; #${number} — in a new session, first prompt: #${number} (pin: ${file} — a mistaken one is removed by a human)`);
 }
 
 /** The epic prefix — the part of the title before " · ": the titles of the epic and all its subtasks start with it. */
@@ -1623,8 +1648,8 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
     if (epic) io.out(`Next: ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks' estimates.`);
   }
   // a session with a pinned task won't take a new one into work (pinTask)
-  const held = pinnedTask(io);
-  if (held) io.out(`Next: the session runs ${held} — #${created.number} in a new session, first prompt: #${created.number}.`);
+  const held = pinnedTask(io)?.task;
+  if (held) io.out(`Next: the session runs ${held.slug}#${held.number} — #${created.number} in a new session, first prompt: #${created.number}.`);
   return 0;
 }
 
@@ -1985,9 +2010,9 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
 export function cmdTaskResume(io: Io): number {
   const pin = pinnedTask(io);
   if (!pin) return 0;
-  const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(pin);
-  if (!m) throw new GhError(`the session pin ${pinFile(io)} — expected owner/repo#N, not «${pin}»`);
-  const [slug, number] = [m[1]!, Number(m[2])];
+  // not a pin — the session has no task, as for est and the dashboard; the line names the file for a human
+  if (!pin.task) return io.out(`○ the session pin ${pin.file} — «${pin.line}», not owner/repo#N: the session has no task`), 0;
+  const { slug, number } = pin.task;
   const task = `session task ${slug}#${number}`;
   const issue = loadIssue(io, slug, number);
   if (issue.state !== "OPEN") return io.out(`○ ${task} is closed — no wait to restart`), 0;

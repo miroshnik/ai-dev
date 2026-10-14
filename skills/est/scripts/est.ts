@@ -1736,11 +1736,18 @@ export function guestTranscripts(slug: string, ownPaths: string[], otherPaths: s
   return out;
 }
 
-const PIN_RE = /^[\w.-]+\/[\w.-]+#\d+$/;
+/**
+ * The session pin: `owner/repo#N` — the task, anything else — not a pin. github has the same parse: it lives without est
+ * (tests/standards/session-pin).
+ */
+export function sessionPin(text: string): { slug: string; number: number } | null {
+  const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(text.trim());
+  return m ? { slug: m[1]!, number: Number(m[2]) } : null;
+}
 
 /**
- * Session pinning to tasks: the file is the session id, the line in it is the task `owner/repo#N`; anything else
- * (`.gitignore`) is skipped.
+ * Session pinning to tasks: the file is the session id, the line in it is the task `owner/repo#N` (sessionPin); anything
+ * else (`.gitignore`) is skipped.
  */
 export function loadPins(dir = PINS_DIR): Map<string, string> {
   const out = new Map<string, string>();
@@ -1752,13 +1759,13 @@ export function loadPins(dir = PINS_DIR): Map<string, string> {
   }
   for (const sid of names) {
     if (sid.startsWith(".")) continue;
-    let task: string;
+    let pin: ReturnType<typeof sessionPin>;
     try {
-      task = readFileSync(path.join(dir, sid), "utf8").trim();
+      pin = sessionPin(readFileSync(path.join(dir, sid), "utf8"));
     } catch {
       continue;
     }
-    if (PIN_RE.test(task)) out.set(sid, task);
+    if (pin) out.set(sid, `${pin.slug}#${pin.number}`);
   }
   return out;
 }

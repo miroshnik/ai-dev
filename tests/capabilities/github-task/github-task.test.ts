@@ -604,6 +604,19 @@ describe("task status берёт в работу одну задачу на се
     expect(statusSet(f)).toEqual([[49, "В работе"], [49, "В работе"]]);
   });
 
+  // строку не по форме est и дашборд не считают закреплением — сессия свободна и для github (tests/standards/session-pin)
+  it("файл закрепления не по форме owner/repo#N — сессия свободна: «В работе» перезаписывает его задачей со строкой ○", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    mkdirSync(path.join(config, "sessions"), { recursive: true });
+    writeFileSync(pinFile(config), "49\n");
+    const r = task(f, ["status", "42", "В работе"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(`○ the session pin ${pinFile(config)} held «49», not owner/repo#N — replaced with miroshnik/ai-dev#42`);
+    expect(statusSet(f)).toEqual([[42, "В работе"]]);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#42");
+  });
+
   it("задача с тем же номером в другом репозитории — другая задача: отказ", () => {
     const config = scratch();
     task(new FakeGitHub(REC), ["status", "49", "В работе"], REPO, inSession(config));
@@ -1635,14 +1648,17 @@ describe("task resume называет, какое ожидание переза
     expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/ai-dev#49 is closed — no wait to restart" });
   });
 
-  it("закрепление не по форме owner/repo#N — ошибка (код 2) с путём файла", () => {
+  // как в est и дашборде: строка не по форме — не закрепление (tests/standards/session-pin); путь файла — человеку
+  it("закрепление не по форме owner/repo#N — у сессии нет задачи: строка ○ с путём файла, код 0, без запросов", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
     mkdirSync(path.join(config, "sessions"), { recursive: true });
     writeFileSync(pinFile(config), "49\n");
-    const r = task(f, ["resume"], REPO, inSession(config));
-    expect(r.code).toBe(2);
-    expect(r.err).toBe(`error: the session pin ${pinFile(config)} — expected owner/repo#N, not «49»`);
+    let calls = 0;
+    const gh = (args: string[], stdin?: string) => (calls++, f.gh(args, stdin));
+    const r = task(f, ["resume"], REPO, { ...inSession(config), gh });
+    expect(r).toEqual({ code: 0, out: `○ the session pin ${pinFile(config)} — «49», not owner/repo#N: the session has no task`, err: "" });
+    expect(calls).toBe(0);
   });
 });
 

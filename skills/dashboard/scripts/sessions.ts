@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { questionItems } from "../../github/scripts/github.ts";
 import locale from "../../github/scripts/locale.ts";
-import { branchIssueNumber, cloudSessionsIn, encodePath, EST_DIR, EstError, PROJECTS_DIR } from "../../est/scripts/est.ts";
+import { branchIssueNumber, cloudSessionsIn, encodePath, EstError, loadPins, PROJECTS_DIR } from "../../est/scripts/est.ts";
 import { addressUrl, hostProject, taskAddress } from "../../task-env/scripts/task-env.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- #280 schemaless JSON from transcripts and GitHub
@@ -616,26 +616,12 @@ table.autos td:not(:first-child){min-width:220px}
 // ----------------------------------------------------------------------------
 
 /**
- * Pins of tasks to sessions: `owner/repo#N` → session ids (the `sessions/<id>` files of the configuration directory).
+ * Pins of tasks to sessions: `owner/repo#N` → session ids — est reads the `sessions/<id>` files of the configuration
+ * directory (loadPins): the dashboard imports est anyway, its own parse would be a third copy (tests/standards/session-pin).
  */
-export function readPins(dir = path.join(EST_DIR, "sessions")): Record<string, string[]> {
+export function readPins(dir?: string): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const id of names) {
-    if (id.startsWith(".")) continue;
-    let task: string;
-    try {
-      task = readFileSync(path.join(dir, id), "utf8").trim();
-    } catch {
-      continue;
-    }
-    if (task) (out[task] ??= []).push(id);
-  }
+  for (const [id, task] of loadPins(dir)) (out[task] ??= []).push(id);
   return out;
 }
 
