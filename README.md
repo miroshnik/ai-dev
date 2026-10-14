@@ -163,7 +163,7 @@ bunx github:miroshnik/ai-dev install -g
 Keeping the flow up to date:
 
 ```bash
-bunx github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation), 2 — can't check; changes nothing
+bunx github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation, standards or architecture without a test:spec script), 2 — can't check; changes nothing
 bunx github:miroshnik/ai-dev update -g   # bring it to the latest release
 ```
 

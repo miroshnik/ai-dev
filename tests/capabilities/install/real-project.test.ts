@@ -40,13 +40,16 @@ describe("Флоу работает в проекте, устроенном ка
     expect(diff.stdout).not.toContain(".agents/");
     // тесты идут через slot; ключ из .env.local до них не доходит — иначе «без ключа … не уходит в оплату» красный
     expect(failed(app.run("test"))).toBeNull();
+    expect(failed(app.run("test:spec"))).toBeNull();
     expect(failed(app.run("test:e2e"))).toBeNull();
     expect(failed(app.run("spec:claims"))).toBeNull();
+    // отчёт test:spec — вход spec:doc наравне с юнитами: стандарты в спеке, хотя test их не гоняет
     expect(failed(app.run("spec:doc"))).toBeNull();
   });
 
   it("spec-claims и deadCode на фикстуре зелёные и краснеют на её поломке", () => {
     expect(failed(app.run("test"))).toBeNull();
+    expect(failed(app.run("test:spec"))).toBeNull();
     expect(failed(app.run("test:e2e"))).toBeNull();
     expect(failed(app.run("spec:claims"))).toBeNull();
     // поломка: маршрут без теста и модуль пакета, который никто не импортирует
@@ -54,10 +57,12 @@ describe("Флоу работает в проекте, устроенном ка
       "src/server.ts": app.read("src/server.ts").replace("\n};\n", '\n  "DELETE /orders/:id": ({ id = "" }) => orders.delete(id),\n};\n'),
       "packages/prices/src/discount.ts": "export const discount = (net: number): number => Math.round(net * 0.9);\n",
     });
-    const test = app.run("test");
-    expect(test.code).toBe(1);
-    expect(test.output).toContain("(fail) Нет кода без потребителя > нет файлов без потребителя");
-    expect(test.output).toContain("packages/prices/src/discount.ts");
+    // deadCode — стандарт: краснеет test:spec, test его не гоняет
+    expect(failed(app.run("test"))).toBeNull();
+    const spec = app.run("test:spec");
+    expect(spec.code).toBe(1);
+    expect(spec.output).toContain("(fail) Нет кода без потребителя > нет файлов без потребителя");
+    expect(spec.output).toContain("packages/prices/src/discount.ts");
     const claims = app.run("spec:claims");
     expect(claims.code).toBe(1);
     expect(claims.output).toContain("not called by capability tests: 1");

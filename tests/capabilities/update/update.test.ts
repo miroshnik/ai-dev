@@ -337,6 +337,108 @@ describe("check проекта держит compose-файл правил изо
   });
 });
 
+const writePkg = (fields: Record<string, unknown>) => writeFileSync(path.join(sb.proj, "package.json"), JSON.stringify({ name: "x", private: true, ...fields }, null, 2) + "\n");
+// решение в корне спеки — каталог с тестом, как у проекта
+function decision(rel: string) {
+  mkdirSync(path.join(sb.proj, rel), { recursive: true });
+  writeFileSync(path.join(sb.proj, rel, `${path.basename(rel)}.test.ts`), "");
+}
+// обёртка slot, которую ставит install: скрипт берёт слот своим shell, команда — как есть
+const inSlot = (cmd: string) => `. .agents/skills/slot/scripts/slot.sh && ${cmd}`;
+const NO_TEST_SPEC = (roots: string) => `  ❌ package.json: no test:spec script — pr premerge doesn't run ${roots} on the merge with a moved main; `;
+// готовые строки скриптов: test:spec, а если test гоняет те же корни — и test без них
+const ADD_SPEC = (spec: string) => `add to "scripts": "test:spec": ${JSON.stringify(spec)}\n`;
+const PUT_PAIR = (spec: string, test: string) => `put in "scripts" — test without them, they don't run twice: "test:spec": ${JSON.stringify(spec)}, "test": ${JSON.stringify(test)}\n`;
+
+/**
+ * Без скрипта `test:spec` `pr premerge` проверяет слияние с ушедшим main одним typecheck или ничем, а стандарты и
+ * архитектура — там, где ломают два зелёных PR, — не идут: в одном проекте 89 запусков premerge ничего не проверили,
+ * в другом стандарт покраснел на main сразу после мержа (#442).
+ */
+describe("check проекта со стандартами или архитектурой требует скрипт test:spec — быструю проверку pr premerge", () => {
+  it("проект со стандартами без скрипта test:spec — check называет нарушение и строку для package.json", () => {
+    writePkg({ devDependencies: { vitest: "^4.0.0" }, scripts: { test: "vitest run" } });
+    aiDev(sb, ["install"]);
+    decision("tests/standards/naming");
+    const before = snapshot(sb.proj);
+    const r = aiDev(sb, ["check"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("in the project: up to date");
+    const spec = inSlot("vitest run tests/standards");
+    const test = inSlot("vitest run --exclude 'tests/standards/**'");
+    expect(r.stdout).toContain(NO_TEST_SPEC("tests/standards") + PUT_PAIR(spec, test));
+    expect(r.stdout).toEndWith(MODE_ASK);
+    expect(snapshot(sb.proj)).toEqual(before);
+    // готовые строки как есть в package.json — актуально: они уже в очереди slot, update их не переписывает
+    const pkg = JSON.parse(read(path.join(sb.proj, "package.json")));
+    writePkg({ ...pkg, scripts: { ...pkg.scripts, "test:spec": spec, test } });
+    const fixed = aiDev(sb, ["check"]);
+    expect(fixed.code).toBe(0);
+    expect(fixed.stdout).not.toContain("test:spec");
+  });
+
+  it("test:spec — раннер команды test, без неё — по зависимостям: vitest, jest, bun test в проекте на Bun, без раннера — vitest; по корням спеки, что есть", () => {
+    aiDev(sb, ["install"]);
+    const cases: [fields: Record<string, unknown>, roots: string[], files: string[], cmd: string][] = [
+      [{ devDependencies: { jest: "^30.0.0" } }, ["tests/architecture/layers"], [], "jest tests/architecture"],
+      [{ packageManager: "bun@1.4.3" }, ["tests/standards/naming", "tests/architecture/layers"], [], "bun test tests/standards tests/architecture"],
+      [{}, ["tests/standards/naming"], ["bun.lock"], "bun test tests/standards"],
+      [{ devDependencies: { vitest: "^4.0.0" } }, ["tests/standards/naming"], ["bun.lock"], "vitest run tests/standards"],
+      [{}, ["tests/standards/naming"], [], "vitest run tests/standards"],
+      // раннер команды test — сильнее зависимостей
+      [{ devDependencies: { vitest: "^4.0.0" }, scripts: { test: inSlot("jest --ci") } }, ["tests/standards/naming"], [], "jest tests/standards"],
+      [{ devDependencies: { jest: "^30.0.0" }, scripts: { test: inSlot("bun test") } }, ["tests/standards/naming"], [], "bun test tests/standards"],
+    ];
+    for (const [fields, roots, files, cmd] of cases) {
+      rmSync(path.join(sb.proj, "tests"), { recursive: true, force: true });
+      rmSync(path.join(sb.proj, "bun.lock"), { force: true });
+      writePkg(fields);
+      for (const rel of roots) decision(rel);
+      for (const f of files) writeFileSync(path.join(sb.proj, f), "{}\n");
+      const r = aiDev(sb, ["check"]);
+      expect(r.code).toBe(1);
+      expect(r.stdout).toContain(NO_TEST_SPEC(roots.map((d) => d.split("/").slice(0, 2).join("/")).join(", ")));
+      expect(r.stdout).toContain(`"test:spec": ${JSON.stringify(inSlot(cmd))}`);
+    }
+  });
+
+  /**
+   * Стандарты и архитектура идут один раз — в `test:spec`, своём джобе CI; `test` их не повторяет (скилл `spec`,
+   * `checks.md`): один `test:spec` без исключения — те же тесты дважды. Исключение дописывается к фильтру, который у
+   * `test` уже есть, — уровень `test:slow` держит там свои файлы.
+   */
+  it("рядом со строкой test:spec — исключение тех же корней из test фильтром раннера: стандарты не идут дважды", () => {
+    aiDev(sb, ["install"]);
+    decision("tests/standards/naming");
+    const cases: [deps: Record<string, string>, test: string | undefined, line: string][] = [
+      [{ vitest: "^4.0.0" }, "vitest run", PUT_PAIR(inSlot("vitest run tests/standards"), inSlot("vitest run --exclude 'tests/standards/**'"))],
+      [{ jest: "^30.0.0" }, "jest --ci", PUT_PAIR(inSlot("jest tests/standards"), inSlot("jest --ci --testPathIgnorePatterns=tests/standards/"))],
+      // фильтр медленного уровня остаётся, исключение корней — следом
+      [{}, "bun test --path-ignore-patterns='**/*.slow.test.ts'", PUT_PAIR(inSlot("bun test tests/standards"), inSlot("bun test --path-ignore-patterns='**/*.slow.test.ts' --path-ignore-patterns='tests/standards/**'"))],
+      // test корни уже не гоняет или его нет — одна строка test:spec
+      [{ vitest: "^4.0.0" }, "vitest run --exclude 'tests/standards/**'", ADD_SPEC(inSlot("vitest run tests/standards"))],
+      [{ vitest: "^4.0.0" }, undefined, ADD_SPEC(inSlot("vitest run tests/standards"))],
+      // test — не вызов раннера: фильтр не к чему дописать — словами
+      [{ vitest: "^4.0.0" }, "turbo run test", `${ADD_SPEC(inSlot("vitest run tests/standards")).trimEnd()}; exclude tests/standards from test with the runner's filter — they don't run twice\n`],
+    ];
+    for (const [deps, test, line] of cases) {
+      writePkg({ devDependencies: deps, ...(test === undefined ? {} : { scripts: { test: inSlot(test) } }) });
+      const r = aiDev(sb, ["check"]);
+      expect(r.code).toBe(1);
+      expect(r.stdout).toContain(NO_TEST_SPEC("tests/standards") + line);
+    }
+  });
+
+  it("проект без стандартов и архитектуры — check не требует test:spec", () => {
+    writePkg({ scripts: { test: "vitest run" } });
+    aiDev(sb, ["install"]);
+    decision("tests/capabilities/export");
+    const r = aiDev(sb, ["check"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toContain("test:spec");
+  });
+});
+
 describe("Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude")));
 
@@ -968,6 +1070,22 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.stdout).not.toContain(MACHINE_BEHIND);
     composeFile("services:\n  db:\n    image: postgres\n");
     expect(runHook().stdout).not.toContain("compose");
+  });
+
+  /** Скрипт в package.json — тоже не текущая задача сессии: на старте её ещё нет, а «одна сессия — одна задача». */
+  it("вывод хука называет нехватку test:spec и что её добавление — отдельная задача проекта; со скриптом подсказки нет", () => {
+    aiDev(sb, ["install", "-g"]);
+    writePkg({ devDependencies: { vitest: "^4.0.0" } });
+    aiDev(sb, ["install"]);
+    bunxServes(base.bin);
+    decision("tests/standards/naming");
+    const r = runHook();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(NO_TEST_SPEC("tests/standards") + ADD_SPEC(inSlot("vitest run tests/standards")));
+    expect(r.stdout).toContain("No test:spec script — pr premerge doesn't run standards and architecture on the merge; the ❌ line names the package.json scripts; adding them is a task of its own in the project.");
+    expect(r.stdout).not.toContain("Behind —");
+    writePkg({ devDependencies: { vitest: "^4.0.0" }, scripts: { "test:spec": inSlot("vitest run tests/standards") } });
+    expect(runHook().stdout).not.toContain("test:spec");
   });
 
   /**
