@@ -1,7 +1,15 @@
-import { describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { codeOnly } from "../../../skills/spec/scripts/harness.ts";
-import { parseJs, scanJs } from "../../../skills/spec/scripts/speclib.ts";
+import { parseJs, parseJunit, scanJs, type Test } from "../../../skills/spec/scripts/speclib.ts";
+import { REPO } from "../../lib/ai-dev.ts";
+import { tmpDir } from "../../lib/spec.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const names = (src: string) => parseJs("tests/capabilities/x/a.test.ts", src).map((t) => [...t.describes, t.name].join(" › "));
 
@@ -205,5 +213,35 @@ describe("Названия берутся из исходников парсер
     const src = `describe("без тела", suiteFn);
     it("верхний", () => {});`;
     expect(names(src)).toEqual(["верхний"]);
+  });
+
+  /**
+   * Тест, который сканер теряет молча, выпадает из спеки и диффа PR без следа. Тесты, которые харнесс порождает при
+   * регистрации, и имена с подстановкой сканер не называет по замыслу: в таких файлах его тесты — часть отчёта, в
+   * остальных — весь отчёт.
+   */
+  // сверка — на тестах самого ai-dev (#446; молча терялся it.each<T> — #275): `-t` с именем, которого нет, регистрирует
+  // все тесты без запуска, и JUnit перечисляет их пропущенными — полсекунды вместо минут прогона
+  it("сканер названий тестов видит столько же тестов, сколько отчёт JUnit", () => {
+    const { dir, cleanup } = tmpDir();
+    try {
+      const xml = path.join(dir, "list.xml");
+      spawnSync(process.execPath, ["test", "--reporter=junit", `--reporter-outfile=${xml}`, "-t", "(?!)"], { cwd: REPO, encoding: "utf8" });
+      const key = (t: Test) => [...t.describes, t.name].join(" › ");
+      const reported = new Map<string, Set<string>>();
+      for (const t of parseJunit(readFileSync(xml, "utf8"), REPO)) reported.set(t.path, (reported.get(t.path) ?? new Set()).add(key(t)));
+      expect(reported.size).toBeGreaterThan(40);
+      const gaps: string[] = [];
+      for (const [file, inReport] of reported) {
+        const scan = scanJs(file, readFileSync(path.join(REPO, file), "utf8"));
+        const seen = new Set(scan.tests.map(key));
+        for (const k of seen) if (!inReport.has(k)) gaps.push(`${file}: сканер видит, отчёт — нет: ${k}`);
+        if (scan.checks.length || scan.unnamed.length) continue;
+        for (const k of inReport) if (!seen.has(k)) gaps.push(`${file}: в отчёте, сканер не видит: ${k}`);
+      }
+      expect(gaps).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 });
