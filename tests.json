@@ -2804,6 +2804,55 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "main клона разошёлся с origin — перемотки нет, строка ! с ошибкой git; факт и «Готово» — как обычно"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "task close задачи ai-dev считает факт кодом из влитого main, а не из отставшего клона"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "в клоне правка отслеживаемого файла — не трогается, строка ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "клон не на main — не трогается, строка ○; факт — его кодом"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "клон уже на влитом main — строка =, ничего не меняется"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "клон — чекаут другого репозитория: влитый PR задачи скриптов не меняет — не трогается, без строки"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close подтягивает клон скриптов до влитого main перед фактом"
+  ],
+  "name": "неотслеживаемые файлы в клоне перемотке не мешают"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task close снимает стеки задачи"
   ],
   "name": "--no-git стеки снимает: флаг — про ветки"
