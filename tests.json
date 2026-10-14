@@ -2890,6 +2890,13 @@
   "describes": [
    "task close убирает влитое"
   ],
+  "name": "task close в worktree агента не просит убрать его руками — его уберёт следующий task queue диспетчера"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close убирает влитое"
+  ],
   "name": "task close из чекаута репозитория с тем же префиксом имени (ai-dev-tools при ai-dev) — не чекаут задачи: ни стеки, ни ветки не трогаются"
  },
  {
@@ -3304,6 +3311,34 @@
    "task queue раздаёт задачи эпика или фильтра исполнителям"
   ],
   "name": "сессия-диспетчер: task status «В работе» в ней задачу не закрепляет — исполнители-субагенты делят id сессии"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
+  "name": "worktree работающего агента, сессии и агента на ветке задачи не трогаются; блокировка процесса, которого нет, не держит"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
+  "name": "worktree с незакоммиченными изменениями или невлитыми коммитами остаётся, строка называет причину"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
+  "name": "ветка worktree-agent-* без worktree: без невлитых коммитов удаляется, с невлитыми — остаётся строкой ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
+  "name": "чистый worktree исполнителя закрытой задачи убирается со строкой о нём"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
