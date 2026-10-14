@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { questionItems } from "../../github/scripts/github.ts";
 import locale from "../../github/scripts/locale.ts";
 import { branchIssueNumber, cloudSessionsIn, encodePath, EST_DIR, EstError, PROJECTS_DIR } from "../../est/scripts/est.ts";
 import { addressUrl, hostProject, taskAddress } from "../../task-env/scripts/task-env.ts";
@@ -194,24 +195,12 @@ export function questionOf(answer: string, strict = false): string | null {
   return strict && !/\?[\s*_)»"]*$/.test(last) ? null : last;
 }
 
-/** The issue's questions section — `sections.questions` of any language of the dictionary. */
-const QUESTIONS_RE = new RegExp(`^(?:${alt(locale.every((n) => n.sections.questions))})\\s*$`);
-
 /**
  * A task's open questions — the first lines of the items of the questions section ("## Questions" in any language of
- * the dictionary) without ✅.
+ * the dictionary) without ✅; the section is parsed by the github skill, as `task actualize` parses it.
  */
 export function openQuestions(body: string): string[] {
-  const lines = body.split(/\r?\n/);
-  const from = lines.findIndex((l) => QUESTIONS_RE.test(l));
-  if (from < 0) return [];
-  const items: string[][] = [];
-  for (const line of lines.slice(from + 1)) {
-    if (/^##\s/.test(line)) break;
-    if (/^\d+\.\s/.test(line)) items.push([line]);
-    else if (items.length && line.trim()) items[items.length - 1]!.push(line);
-  }
-  return items.filter((it) => !it.some((l) => l.includes("✅"))).map((it) => it[0]!.trim());
+  return questionItems(body).filter((x) => !x.answered).map((x) => x.text);
 }
 
 // ----------------------------------------------------------------------------
