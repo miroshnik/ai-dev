@@ -202,7 +202,7 @@ description is rewritten.
 bun --no-env-file <skill dir>/scripts/github.ts task new --title "…" --branch-type <type> [--body-file F | --body "…"] [--type Task|Bug|Epic] \
     [--epic N] [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low] \
     [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
-bun --no-env-file <skill dir>/scripts/github.ts task status <N> "In progress"   # Backlog | In progress | Done
+bun --no-env-file <skill dir>/scripts/github.ts task status <N> "In progress" [--branch <type>/<N>-<slug>]   # Backlog | In progress | Done
 bun --no-env-file <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
 bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
 bun --no-env-file <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
@@ -213,7 +213,7 @@ bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               #
 | Moment | Action |
 |---|---|
 | New task, an epic's subtask, an epic | first — whether one already exists (`gh issue list --search`); `task new --branch-type <type>` — it sets the estimate itself (an epic isn't estimated: its estimate is the sum of its subtasks, `reference.md`) |
-| Took into work · reopened | a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress"` — a separate call, no pipeline (`tail` hides the refusal code), before creating the branch |
+| Took into work · reopened | a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress" --branch <type>/N-<slug>` — a separate call, no pipeline (`tail` hides the refusal code): it renames the worktree tool's branch into the task branch |
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed assignment; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
@@ -274,6 +274,21 @@ a mistaken one is removed by a human, by deleting the file. `est` counts the
 actual by the pin: the whole session goes to this task. No variable (not
 Claude Code) — the line `○ session not recognized …`, the
 status is set, no guard.
+
+**`task status --branch <type>/<N>-<slug>`** — only with In progress, not for
+an epic: the current branch of a worktree tool (`claude/<slug>-<hash>`)
+becomes the task branch together with its section in `.git/config`
+(upstream) — `+ branch <old> → <new>`. The name is checked by the canon before
+any changes (`[<area>/]<type>/<N>-<slug>`, the slug — Latin kebab-case),
+otherwise code 2. `.git/config` is shared by all worktrees of the repository,
+and another checkout's git holds its lock: a bare `git branch -m` renames the
+ref, not the section, with code 128, and its repeat no longer finds the old
+name (#438). The script repeats the step that failed on the lock (~10 s);
+still locked — a `!` line with the lock file, its age and the command that
+finishes the rename, code 1; the lock isn't removed — another process holds
+it. Already on the task branch — `=`; a branch already on origin (`main`, a
+pushed one), a detached HEAD, a directory that isn't a checkout of the
+repository — an `○` line, the branch is left alone.
 
 **`pr labels`** — decision labels from the PR's changed files (API):
 `tests/capabilities|standards|architecture/<name>/…` — a decision label, a code

@@ -27,7 +27,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -1613,18 +1613,25 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   return 0;
 }
 
-export function cmdTaskStatus(io: Io, slug: string, number: number, name: string): number {
+export function cmdTaskStatus(io: Io, slug: string, number: number, name: string, branch?: string): number {
   // status: a name in any dictionary language; checked before reading the project; the option is in the board's language
   if (!statusAliases()[name.toLowerCase()]) throw new GhError(`status: ${statusOptions().join(", ")}`);
+  if (branch !== undefined && statusAliases()[name.toLowerCase()] !== N.status.inProgress) throw new GhError(`--branch — only with ${q(N.status.inProgress)}: the branch is renamed when the task is taken into work`);
+  if (branch !== undefined && (taskBranch(branch)?.issue !== number || !TASK_SLUG_RE.test(branch))) {
+    throw new GhError(`--branch ${q(branch)}: expected a branch of #${number} by the canon — [<area>/]<type>/${number}-<slug>, type ${TASK_TYPES.join("|")}, slug — Latin kebab-case`);
+  }
   const ctx = taskContext(io, slug);
   const status = statusAliases()[name.toLowerCase()]!;
   const issue = loadIssue(io, slug, number);
+  const epicTask = isEpic(issue, ctx.repo.owner.org);
+  if (branch !== undefined && epicTask) throw new GhError(`--branch: #${number} is an epic — an epic has no branch`);
   // an epic isn't pinned: its session plans and hands out work, and the first subtask also sets the epic "In progress"
-  if (status === N.status.inProgress && !isEpic(issue, ctx.repo.owner.org)) pinTask(io, slug, number);
+  if (status === N.status.inProgress && !epicTask) pinTask(io, slug, number);
   const item = ensureItem(io, ctx, issue);
   setStatus(io, ctx, item.id, status);
   io.out(`+ #${issue.number}: ${STATUS} ${q(status)}${item.added ? " (added to the project)" : ""}`);
-  if (!issue.parent) return 0;
+  const code = branch === undefined || renameBranch(io, slug, branch) ? 0 : 1;
+  if (!issue.parent) return code;
   const epic = loadIssue(io, slug, issue.parent.number);
   const epicStatus = itemIn(ctx, epic)?.status ?? null;
   if (status === N.status.inProgress && epic.state === "OPEN" && (epicStatus === null || epicStatus === N.status.backlog)) {
@@ -1635,7 +1642,7 @@ export function cmdTaskStatus(io: Io, slug: string, number: number, name: string
   if (status === N.status.done && epic.state === "OPEN" && epic.subIssues.length && epic.subIssues.every((x) => x.state === "CLOSED")) {
     io.out(`Next: all subtasks of epic #${epic.number} are closed — close the epic and set it to ${q(N.status.done)}.`);
   }
-  return 0;
+  return code;
 }
 
 export function cmdTaskDrop(io: Io, slug: string, number: number, duplicateOf?: number): number {
@@ -1796,6 +1803,60 @@ export function taskBranch(branch: string): { type: string; issue: number } | nu
   return m ? { type: m[1]!.toLowerCase(), issue: parseInt(m[2]!, 10) } : null;
 }
 const isTaskBranch = (branch: string, number: number) => taskBranch(branch)?.issue === number;
+/** The slug of a branch `task status --branch` creates: Latin kebab-case after `<N>-` (AGENTS.md, "Session and branch"). */
+const TASK_SLUG_RE = /\/\d{1,6}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Attempts to write the shared `.git/config` while another checkout's git holds its lock: 20 with 0.5 s between — ~10 s. */
+const CONFIG_LOCK_TRIES = 20;
+const CONFIG_LOCK_PAUSE_MS = 500;
+const CONFIG_LOCKED = /could not lock config file (.+)$/m;
+
+/**
+ * The worktree tool's branch (`claude/<slug>-<hash>`) becomes the task branch — `task status N "In progress" --branch`.
+ * `git branch -m` renames the ref, then the branch's section in `.git/config` (upstream): the config is shared by all
+ * worktrees of the repository, another checkout's git holds its lock — the ref is renamed, the section is not, code 128,
+ * and a repeated `git branch -m` no longer finds the old name (#438). So the step that failed on the lock is repeated —
+ * the whole rename or, once the ref is renamed, `git config --rename-section`; still locked — the command that finishes
+ * it, the lock isn't removed: another process holds it. A branch already on origin (main, a pushed one) is renamed
+ * together with its PR, by hand — left alone. Returns false when something is left undone.
+ */
+function renameBranch(io: Io, slug: string, target: string): boolean {
+  const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd);
+  const has = (ref: string) => git("rev-parse", "--verify", "--quiet", ref).status === 0;
+  if (!checkoutOf(originUrl(io), slug)) return (io.out(`○ branch left alone: the current directory is not a checkout of ${slug}`), true);
+  const current = git("branch", "--show-current").stdout.trim();
+  if (!current) {
+    const base = git("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD").stdout.trim() || "origin/main";
+    return (io.out(`○ branch left alone: HEAD is detached — a task branch from a fresh ${base}: git fetch origin && git switch -c ${target} ${base} --no-track`), true);
+  }
+  if (current === target) return (io.out(`= branch ${target}`), true);
+  if (has(`refs/remotes/origin/${current}`)) return (io.out(`○ branch ${current} is already on origin — left alone: a pushed branch is renamed together with its PR, by hand`), true);
+  let renamed = false;
+  let lock = "";
+  for (let k = 0; k < CONFIG_LOCK_TRIES; k++) {
+    if (k) (io.sleep ?? pause)(CONFIG_LOCK_PAUSE_MS);
+    const args = renamed ? ["config", "--rename-section", `branch.${current}`, `branch.${target}`] : ["branch", "-m", current, target];
+    const r = git(...args);
+    // a branch without a section (no upstream) — nothing to rename in the config
+    if (r.status === 0 || (renamed && /no such section/.test(r.stderr))) {
+      return (io.out(`+ branch ${current} → ${target}${k ? ` (.git/config was locked: ${k} retries)` : ""}`), true);
+    }
+    const locked = CONFIG_LOCKED.exec(r.stderr);
+    if (!locked) return (io.out(`! git ${args.join(" ")}: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? `code ${r.status}`}`), false);
+    lock = `${path.resolve(io.cwd ?? process.cwd(), locked[1]!.trim())}.lock`;
+    renamed ||= !has(`refs/heads/${current}`) && has(`refs/heads/${target}`);
+  }
+  let age = "";
+  try {
+    age = ` (${Math.round((Date.now() - statSync(lock).mtimeMs) / 1000)} s)`;
+  } catch {
+    // released right after the last attempt — the command below finishes the rename anyway
+  }
+  const what = renamed ? `renamed to ${target}, its section in .git/config is not` : `${current} is not renamed`;
+  const finish = renamed ? `git config --rename-section branch.${current} branch.${target}` : `git branch -m ${current} ${target}`;
+  io.out(`! branch ${what}: ${lock} is held by another git process${age} — not removed; finish: ${finish}`);
+  return false;
+}
 
 /**
  * The task's PRs that GitHub didn't link to it: among the latest open and merged PRs into the default branch — the
@@ -2380,7 +2441,7 @@ const USAGE = `github — the repository's GitHub project and tasks by the AGENT
   github task new      --title "…" --branch-type <type> [--body "…" | --body-file F] [--type Task|Bug|Epic] [--epic N]
                        [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
                        [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
-  github task status   <N> <Backlog|In progress|Done> [--repo owner/repo]
+  github task status   <N> <Backlog|In progress|Done> [--branch <type>/<N>-<slug>] [--repo owner/repo]
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github task actualize <N> [--repo owner/repo]
   github task close    <N> [--no-git] [--repo owner/repo]
@@ -2396,6 +2457,8 @@ task  — a task by the canon; new sets the estimate itself (est estimate --writ
         a bug without it is fix, an epic isn't estimated) and prints what was created and the next step.
 task status — In progress pins the task to the session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev):
         another task in the same session — a refusal (code 2), it needs a new session; a human removes the pin.
+        --branch — the worktree tool's branch becomes the task branch (git branch -m with its .git/config section);
+        a .git/config locked by another checkout — retried ~10 s, then a ! line with the command that finishes it (code 1).
 task actualize — right after the merge, in parallel with the deploy: prints the assignment for the epic-refresh subagent
         (the task, the epic, its open tasks, the five checks); no epic or no open tasks in it — "refresh not needed".
 task close — after the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write),
@@ -2488,6 +2551,7 @@ export function main(argv: string[], io: Io): number {
           "duplicate-of": { type: "string" },
           labels: { type: "string" },
           "branch-type": { type: "string" },
+          branch: { type: "string" },
           "no-git": { type: "boolean", default: false },
         },
       });
@@ -2503,7 +2567,7 @@ export function main(argv: string[], io: Io): number {
         return cmdTaskNew(io, slug, { title: values.title, body, type: values.type ?? N.issueTypes.task, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels, branchType: values["branch-type"] });
       }
       const number = issueNumber(positionals[0], `task ${cmd}`);
-      if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "));
+      if (cmd === "status") return cmdTaskStatus(io, slug, number, positionals.slice(1).join(" "), values.branch);
       if (positionals.length > 1) throw new GhError(`extra arguments: ${positionals.slice(1).join(" ")}`);
       if (cmd === "close") return cmdTaskClose(io, slug, number, { git: !values["no-git"] });
       if (cmd === "actualize") return cmdTaskActualize(io, slug, number);
