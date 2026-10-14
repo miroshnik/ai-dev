@@ -23,6 +23,19 @@ the skill's copy in the project: `.agents/skills/spec/scripts/harness.ts` (from
   `esModuleInterop` or `module: nodenext`; TypeScript 6+ always enables
   `esModuleInterop`.
 
+**Standards and architecture run once — `test:spec`.** They are static checks
+over the code: no app, browser or database, the same result in any job and
+environment. One run per CI run is enough: the `test:spec` script in a fast job
+of its own; `test` excludes them with the runner's own filter (Vitest
+`--exclude`, Jest `--testPathIgnorePatterns`), the e2e run doesn't take them —
+Playwright's `testDir` holds the browser tests only (a standard that itself
+needs a browser is one of them and runs there, once). Measured in a project
+where they ran inside the unit and e2e jobs: about 14% of the unit time and
+37% of e2e, the longest branch of the run. The entry-point reconciliation
+isn't one of them: `spec-claims` reads the logs of all runs, after them
+(below). Scripts — `SKILL.md`, "Wiring into a repository"; the workflow —
+`ci.md`.
+
 **`invariant` — registry + invariant.** A behavior convention ("every mutation
 writes an audit record", "every route checks a permission") is checked on every
 element of a registry taken from the code, not on a single example:
