@@ -32,7 +32,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -1592,23 +1592,45 @@ const isDispatcher = (io: Io) => {
 };
 
 /**
- * The tasks handed out to the dispatcher's executors — `<marker>.tasks`, a line `owner/repo#N` per `task queue
- * --assignment N` in the session (#513): the executor's first call, In progress comes later, after the task's
+ * The tasks handed out to the dispatcher's executors — `<marker>.tasks`, a line `owner/repo#N <worktree>` per `task
+ * queue --assignment N` in the session (#513): the executor's first call, In progress comes later, after the task's
  * questions, and till then the queue gave the task out as ready. A separate file: executors append to it in parallel,
  * the queue rewrites the marker. It lives for the session: after the app restarts, the stopped executors are continued
  * with `SendMessage` (`task resume`) — dropped, it would make a task not yet In progress ready for a second executor.
+ * The worktree — the checkout the executor called its assignment in (#533): the queue keeps it while the task is open.
  */
 const handedOutFile = (io: Io) => {
   const file = dispatcherFile(io);
   return file && `${file}.tasks`;
 };
 
-/** The numbers of the repository's tasks handed out to this dispatcher's executors (`handedOutFile`). */
-function handedOut(io: Io, slug: string): Set<number> {
+/** A hand-out: the task and its executor's worktree; the assignment called outside a checkout — null. */
+interface HandOut {
+  number: number;
+  worktree: string | null;
+}
+
+/** The repository's tasks handed out to this dispatcher's executors (`handedOutFile`); a line without a worktree — `null`. */
+function handedOut(io: Io, slug: string): HandOut[] {
   const file = handedOutFile(io);
-  if (!file || !existsSync(file)) return new Set();
+  if (!file || !existsSync(file)) return [];
   const lines = readFileSync(file, "utf8").split("\n").map((l) => l.trim());
-  return new Set(lines.filter((l) => l.startsWith(`${slug}#`)).map((l) => Number(l.slice(slug.length + 1))).filter(Number.isInteger));
+  return lines
+    .filter((l) => l.startsWith(`${slug}#`))
+    .map((l) => {
+      const [number, ...worktree] = l.slice(slug.length + 1).split(" ");
+      return { number: Number(number), worktree: worktree.join(" ").trim() || null };
+    })
+    .filter((h) => Number.isInteger(h.number) && h.number > 0);
+}
+
+/** A path without symbolic links (`/var` → `/private/var` on macOS) — a worktree's and a hand-out's compare so; gone — as is. */
+function realPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
 }
 
 /** The epic prefix — the part of the title before " · ": the titles of the epic and all its subtasks start with it. */
@@ -2030,7 +2052,8 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
  * not an epic, not in work, no open blockers (other repositories' too), no external blocker label; order — Priority,
  * then the number. In work (`=`) — "In progress", an open PR (linked, or by the task branch and "Closes #N" among
  * recent PRs) named with its link, or handed out to an executor of this session (`handedOutFile`). Marks the session
- * as a dispatcher (`dispatcherFile`).
+ * as a dispatcher (`dispatcherFile`). Before the queue — finished agents' worktrees (`pruneAgentWorktrees`) but those of
+ * executors whose handed-out tasks are open.
  */
 export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   // a line that isn't a pin leaves the session free, as for est and the dashboard (tests/standards/session-pin)
@@ -2059,11 +2082,18 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   const openPr = (i: Issue) =>
     i.prs.find((p) => p.state === "OPEN")?.number ?? recent.find((p: Any) => isTaskBranch(p.headRefName ?? "", i.number) || closingInBody(p.body ?? "").includes(i.number))?.number;
   const handed = handedOut(io, slug);
+  /** Issue states the queue has read; a hand-out's task outside the queue is read when its worktree is up for removal. */
+  const states = new Map<number, string>();
+  const isOpen = (n: number) => {
+    if (!states.has(n)) states.set(n, loadIssue(io, slug, n).state);
+    return states.get(n) === "OPEN";
+  };
   const ready: Issue[] = [];
   const running: string[] = [];
   const waiting: string[] = [];
   for (const n of numbers.sort((a, b) => a - b)) {
     const i = loadIssue(io, slug, n);
+    states.set(i.number, i.state);
     if (i.state !== "OPEN") continue;
     const label = `#${i.number} ${q(i.title)}`;
     if (isEpic(i, org)) {
@@ -2077,7 +2107,7 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     // lost it from both lists), or handed out to an executor of this session that hasn't set In progress yet
     const pr = openPr(i);
     const work = [status === N.status.inProgress ? q(N.status.inProgress) : "", pr === undefined ? "" : `open PR #${pr} https://github.com/${slug}/pull/${pr}`].filter(Boolean);
-    if (!work.length && handed.has(i.number)) work.push("handed out to an executor of this session");
+    if (!work.length && handed.some((h) => h.number === i.number)) work.push("handed out to an executor of this session");
     if (work.length) {
       running.push(`= ${label} — ${work.join(", ")}`);
       continue;
@@ -2098,7 +2128,9 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
     writeFileSync(file, `bun --no-env-file ${import.meta.path} task queue ${args ? `${args} ` : ""}--repo ${slug}\n`);
   } else io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — not marked as a dispatcher: task status in the executors would pin their tasks");
-  pruneAgentWorktrees(io, slug);
+  // the executor the dispatcher continues with SendMessage — an answered question, a restart — has no lock (#533)
+  const executors = handed.flatMap((h) => (h.worktree === null ? [] : [{ number: h.number, worktree: realPath(h.worktree) }]));
+  pruneAgentWorktrees(io, slug, (dir) => executors.some((h) => h.worktree === realPath(dir) && isOpen(h.number)));
   const scope = [o.epic !== undefined ? `epic #${o.epic}` : "open tasks", want && `type ${q(want)}`, o.priority?.length && `Priority ${o.priority.join("|")}`].filter(Boolean).join(", ");
   io.out(`Queue ${slug} (${scope}): ready ${ready.length}, ${q(N.status.inProgress)} ${running.length}, not ready ${waiting.length}`);
   for (const i of ready) {
@@ -2172,9 +2204,11 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * (a running agent): clean and without commits outside origin/<base> (`git cherry` — a rebase merge gives new SHAs) —
  * removed with their branch, a `+` line each; uncommitted changes or unmerged commits — left, a `○` line with the
  * reason. A `worktree-agent-*` branch without a worktree — the same by its commits. A session's worktree, an agent's on
- * a task branch (its task isn't closed) — not touched, no line. The directory isn't a checkout of the repository — nothing.
+ * a task branch (its task isn't closed), an executor's whose handed-out task is open (`kept`, #533: Claude Code unlocks
+ * an agent's worktree when it ends its answer — a question too — and doesn't lock it again when the agent is continued
+ * with `SendMessage` after a restart) — not touched, no line. The directory isn't a checkout of the repository — nothing.
  */
-function pruneAgentWorktrees(io: Io, slug: string): void {
+function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolean): void {
   if (!checkoutOf(originUrl(io), slug)) return;
   const git = (cwd: string | undefined, ...args: string[]) => (io.run ?? realRun)("git", args, cwd);
   const listed = git(io.cwd, "worktree", "list", "--porcelain");
@@ -2198,7 +2232,7 @@ function pruneAgentWorktrees(io: Io, slug: string): void {
   };
   const agents = all
     .filter((w) => AGENT_WORKTREE.test(w.path) && w.path !== here && !w.prunable && (w.branch === null || AGENT_BRANCH.test(w.branch)))
-    .filter((w) => w.locked === null || !lockHolds(w.locked))
+    .filter((w) => (w.locked === null || !lockHolds(w.locked)) && !kept(w.path))
     .sort((a, b) => a.path.localeCompare(b.path));
   for (const w of agents) {
     const status = git(w.path, "status", "--porcelain");
@@ -2252,11 +2286,17 @@ function taskBranchesHere(io: Io, slug: string, number: number): string[] {
  * The executor's whole assignment (`task queue --assignment N`): the task by the canon, what a subagent does otherwise, the
  * answer form. The restart line — only when it is true: the task is In progress and has a branch `<type>/N-<slug>`
  * (#511); printed always, it misled the executor of a Backlog task, who argued with it in the answer. In a dispatcher
- * session the task is recorded as handed out (`handedOutFile`): the queue no longer gives it out as ready.
+ * session the task is recorded as handed out with the executor's worktree (`handedOutFile`): the queue no longer gives
+ * it out as ready and keeps the worktree while the task is open.
  */
 export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
-  if (isDispatcher(io)) appendFileSync(handedOutFile(io)!, `${slug}#${number}\n`);
+  if (isDispatcher(io)) {
+    // the executor's worktree — the checkout it calls the assignment in: the queue keeps it while the task is open (#533)
+    const top = (io.run ?? realRun)("git", ["rev-parse", "--show-toplevel"], io.cwd);
+    const worktree = top.status === 0 ? top.stdout.trim() : "";
+    appendFileSync(handedOutFile(io)!, `${slug}#${number}${worktree ? ` ${worktree}` : ""}\n`);
+  }
   const restart = itemIn(taskContext(io, slug), issue)?.status === N.status.inProgress ? taskBranchesHere(io, slug, number) : [];
   const vars = {
     task: N.subagentPrompt.task,
@@ -3480,10 +3520,11 @@ progress, an open PR with its link, handed out to an executor of this session) a
 label's — from the latest «External blocker: …» comment). Marks the session as a dispatcher
 (dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the executors are subagents
 with the session's id; refused in a session with a pinned task. Before the queue, in the repository's checkout —
-finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-agent-*, not locked by a live process):
-clean and merged (git cherry) — removed with the branch (+), otherwise left (○ with the reason); loose worktree-agent-*
-branches — the same. --type and --priority — in an organization. --assignment N (the executor's first call; read-only
-on GitHub) — its whole assignment; in a dispatcher session it records the task as handed out (dispatchers/<id>.tasks).
+finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-agent-*, not locked by a live process,
+not an executor's whose handed-out task is open): clean and merged (git cherry) — removed with the branch (+),
+otherwise left (○ with the reason); loose worktree-agent-* branches — the same. --type and --priority — in an
+organization. --assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a dispatcher
+session it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks).
 
 Examples:
   github task queue --epic 40

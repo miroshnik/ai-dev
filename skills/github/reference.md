@@ -684,7 +684,10 @@ whose pid is gone doesn't hold), clean and without commits outside
 `origin/<base>` by `git cherry` — removed with its branch, a `+` line;
 uncommitted changes or unmerged commits — left, an `○` line with the reason; a
 `worktree-agent-*` branch without a worktree — the same by its commits. A
-session's worktree and an agent's on a task branch — untouched, no line.
+session's worktree, an agent's on a task branch and an executor's whose
+handed-out task is open — untouched, no line (#533): Claude Code unlocks the
+worktree when the agent ends its answer, a question too, and doesn't lock it
+again for an executor continued with `SendMessage` after a restart.
 `--epic N` — the epic's open sub-issues,
 otherwise the repository's open tasks (the first 100 of the search);
 `--type`, `--priority` — only in an organization. It marks the session as a
@@ -694,7 +697,8 @@ session's id, a pin would refuse the second and give `est` the whole session as
 one task. A session with a pinned task — a refusal (code 2): the dispatcher is
 a separate session, named by meaning, without a number. `--assignment N` —
 read-only on GitHub, the executor's first call; in a dispatcher session it
-records the task as handed out — a line `owner/repo#N` in
+records the task as handed out — a line `owner/repo#N <worktree>` (the
+checkout the assignment is called in) in
 `dispatchers/<id>.tasks`, `=` in the queue for the whole session (an
 executor's answer leaves the task not ready either: merged closes it, a question
 waits for the owner, failed isn't restarted; after the app restarts the executor

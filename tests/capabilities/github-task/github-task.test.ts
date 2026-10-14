@@ -2462,7 +2462,8 @@ describe("task queue убирает worktree исполнителей закры
       git(work, ...AUTHOR, "cherry-pick", sha);
       git(work, "push", "-q", "origin", "main");
     };
-    const queue = () => task(new FakeGitHub(REC), ["queue", "--epic", "45"], REPO, { ...inSession(scratch()), run: noEst, cwd: work }).out.split("\n");
+    /** Очередь диспетчера; его выдачи исполнителям — в каталоге конфигурации `config`, задачи — в `f`. */
+    const queue = (f = new FakeGitHub(REC), config = scratch()) => task(f, ["queue", "--epic", "45"], REPO, { ...inSession(config), run: noEst, cwd: work }).out.split("\n");
     /** Строки о worktree и ветках агентов — до заголовка очереди. */
     const cleanupLines = (out: string[]) => out.slice(0, out.findIndex((l) => l.startsWith("Queue ")));
     const worktrees = () =>
@@ -2526,6 +2527,44 @@ describe("task queue убирает worktree исполнителей закры
     expect(d.cleanupLines(d.queue())).toEqual([`+ worktree ${orphan} removed: clean, nothing outside origin/main`]);
     expect(d.worktrees()).toEqual([d.work, running, session, taskBranch].sort());
     expect(d.branches()).toEqual(["worktree-agent-a1"]);
+  });
+
+  /**
+   * Исполнитель, которого диспетчер ещё продолжит через `SendMessage`, держит чистый worktree на ветке `worktree-agent-*`
+   * без блокировки (#533): ответив «вопрос» до «В работе» — блокировку Claude Code снял, когда он закончил ответ; на шаге
+   * вопросов после перезапуска приложения — продолженному сообщением блокировку не ставят. Очередь убрала бы worktree с
+   * веткой, а ответ владельца пришёл бы исполнителю без каталога. Выдача (`--assignment` в сессии-диспетчере) помнит
+   * worktree исполнителя — каталог, где он позвал задание.
+   */
+  function handedOutTo(d: ReturnType<typeof dispatcher>) {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const config = scratch();
+    // очередь пометила сессию диспетчером; исполнитель позвал задание из своего worktree и ответил — блокировки нет
+    d.queue(f, config);
+    const executor = d.add("agent-a1", ["-b", "worktree-agent-a1"], "main");
+    expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), run: noEst, cwd: executor }).code).toBe(0);
+    return { f, config, executor };
+  }
+
+  it("task queue не убирает чистый worktree исполнителя, чья выданная задача открыта", () => {
+    const d = dispatcher();
+    const { f, config, executor } = handedOutTo(d);
+    const out = d.queue(f, config);
+    expect(d.cleanupLines(out)).toEqual([]);
+    expect(out).toContain(`= #47 «${f.issue(47).title}» — handed out to an executor of this session`);
+    expect(d.worktrees()).toEqual([d.work, executor].sort());
+    expect(d.branches()).toEqual(["worktree-agent-a1"]);
+  });
+
+  // без перегиба: выдача держит worktree, пока задача открыта, — закрыл её исполнитель, worktree уходит
+  it("worktree исполнителя закрытой задачи task queue убирает, как прежде", () => {
+    const d = dispatcher();
+    const { f, config, executor } = handedOutTo(d);
+    f.closed(47);
+    expect(d.cleanupLines(d.queue(f, config))).toEqual([`+ worktree ${executor} removed with branch worktree-agent-a1: clean, nothing outside origin/main`]);
+    expect(d.worktrees()).toEqual([d.work]);
+    expect(d.branches()).toEqual([]);
   });
 
   it("ветка worktree-agent-* без worktree: без невлитых коммитов удаляется, с невлитыми — остаётся строкой ○", () => {
