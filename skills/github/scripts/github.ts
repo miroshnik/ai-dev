@@ -389,7 +389,7 @@ export const Q = {
       labels(first: 20) { nodes { name } }
       parent { id number }
       subIssues(first: 100) { nodes { number state title } }
-      blockedBy(first: 50) { nodes { number state } }
+      blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
       milestone { id number title issues(states: OPEN) { totalCount } }
       closedByPullRequestsReferences(first: 20, includeClosedPrs: true) { nodes { number state merged headRefName baseRefName } }
       projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: "${STATUS}") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } }
@@ -404,7 +404,7 @@ export const Q = {
       id number title state body
       labels(first: 20) { nodes { id name } }
       milestone { number title state issues(states: OPEN) { totalCount } }
-      blockedBy(first: 50) { nodes { id number state } }
+      blockedBy(first: 50) { nodes { id number state repository { nameWithOwner } } }
       comments(last: 50) { nodes { body url } }
       subIssues(first: 100) { nodes { number title state milestone { number title state issues(states: OPEN) { totalCount } } } }
     }
@@ -491,7 +491,7 @@ fragment Head on PullRequest {
       milestone { title }
       parent { number title body subIssues(first: 100) { nodes { number state title } } }
       subIssues(first: 100) { nodes { number state title } }
-      blockedBy(first: 20) { nodes { number state title } }
+      blockedBy(first: 20) { nodes { number state title repository { nameWithOwner } } }
       closedByPullRequestsReferences(first: 20, includeClosedPrs: true) { nodes { ${PR_SHOW} } }
       projectItems(first: 20) {
         nodes {
@@ -1392,8 +1392,8 @@ interface Issue {
   labels: string[];
   parent: { id: string; number: number } | null;
   subIssues: { number: number; state: string; title: string }[];
-  /** The tasks blocking this one (blocked by), closed ones included. */
-  blockers: { number: number; state: string }[];
+  /** The issues blocking this one (blocked by), closed ones and other repositories' included. */
+  blockers: Blocker[];
   /** The task's milestone and the number of open tasks in it (including this one if it's open). */
   milestone: { id: string; number: number; title: string; open: number } | null;
   /** PRs that close the task ("Closes #N"), closed ones included: whether merged, head and base. */
@@ -1401,6 +1401,19 @@ interface Issue {
   items: { id: string; projectId: string; status: string | null }[];
   priority: string | null;
 }
+
+/**
+ * A blocker (blocked by): GitHub links an issue of another repository too, of another owner as well — an external
+ * blocker, its number alone would name a task of this repository.
+ */
+interface Blocker {
+  number: number;
+  state: string;
+  repo: string;
+}
+
+/** A blocker in a line: of this repository — `#N`, of another — `owner/repo#N`. */
+const blockerRef = (slug: string, b: { number: number; repo: string }) => (b.repo.toLowerCase() === slug.toLowerCase() ? `#${b.number}` : `${b.repo}#${b.number}`);
 
 function loadIssue(io: Io, slug: string, number: number): Issue {
   const [owner, name] = slug.split("/");
@@ -1417,7 +1430,7 @@ function loadIssue(io: Io, slug: string, number: number): Issue {
     labels: (i.labels?.nodes ?? []).map((l: Any) => l.name),
     parent: i.parent ? { id: i.parent.id, number: i.parent.number } : null,
     subIssues: i.subIssues?.nodes ?? [],
-    blockers: (i.blockedBy?.nodes ?? []).map((b: Any) => ({ number: b.number, state: b.state })),
+    blockers: (i.blockedBy?.nodes ?? []).map((b: Any) => ({ number: b.number, state: b.state, repo: b.repository?.nameWithOwner ?? slug })),
     milestone: i.milestone ? { id: i.milestone.id, number: i.milestone.number, title: i.milestone.title, open: i.milestone.issues?.totalCount ?? 0 } : null,
     prs: (i.closedByPullRequestsReferences?.nodes ?? []).map((p: Any) => ({ number: p.number, state: p.state ?? "", merged: Boolean(p.merged), head: p.headRefName ?? "", base: p.baseRefName ?? "main" })),
     items: (i.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: it.status?.name ?? null })),
@@ -1880,7 +1893,7 @@ export function cmdTaskShow(io: Io, slug: string, number: number): number {
     out.push(`Subtasks: open ${open.length} of ${subs.length}`, ...open.map((x) => `- task #${x.number} ${q(x.title)}`));
   }
   const blockers: Any[] = (i.blockedBy?.nodes ?? []).filter((x: Any) => x.state === "OPEN");
-  if (blockers.length) out.push(`Blocked by: ${blockers.map((x) => `#${x.number} ${q(x.title)}`).join(", ")}`);
+  if (blockers.length) out.push(`Blocked by: ${blockers.map((x) => `${blockerRef(slug, { number: x.number, repo: x.repository?.nameWithOwner ?? slug })} ${q(x.title)}`).join(", ")}`);
   // an epic has no PR of its own
   if (!epic) {
     let prs: ShownPr[] = (i.closedByPullRequestsReferences?.nodes ?? []).filter(Boolean).map((p: Any) => shownPr(p));
@@ -1964,6 +1977,22 @@ export const QUEUE_EXECUTORS = 3;
 
 const priorityRank = (p: string | null) => PRIORITIES.indexOf((p ?? DEFAULT_PRIORITY) as (typeof PRIORITIES)[number]);
 
+/**
+ * The reason of an external blocker that isn't an issue (a release, a PR, another tracker — GitHub links only issues):
+ * the label and the first line of the task's latest comment starting with `comments.externalBlocker` of any dictionary
+ * language. The comments are read only for a labeled task.
+ */
+function externalBlocker(io: Io, slug: string, number: number, label: string): string {
+  const marks = locale.every((n) => n.comments.externalBlocker);
+  const comment = loadTaskText(io, slug, number)
+    .comments.map((c) => c.body.trim())
+    .filter((b) => marks.some((m) => b.startsWith(m)))
+    .at(-1);
+  if (comment === undefined) return `label ${q(label)}, no comment ${q(`${N.comments.externalBlocker} <reason>`)}`;
+  const mark = marks.find((m) => comment.startsWith(m))!;
+  return `label ${q(label)}: ${clip(comment.slice(mark.length).split(/\r?\n/)[0]!.trim())}`;
+}
+
 /** The executor's prompt: the task first (`est` links the subagent's work by it), the whole assignment — from the script. */
 function executorPrompt(slug: string, number: number, epic: number | null): string {
   return locale.fill(N.queue.prompt, {
@@ -1978,8 +2007,9 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
 /**
  * The dispatcher's queue: the session takes no task itself — its ready tasks go to background executors (subagents),
  * K at a time; the queue is re-read after each answer, so tasks that appeared meanwhile are picked up. Ready — open,
- * not an epic, not "In progress", no open blockers, no open PR (linked, or by the task branch and "Closes #N" among
- * recent PRs); order — Priority, then the number. Marks the session as a dispatcher (`dispatcherFile`).
+ * not an epic, not "In progress", no open blockers (other repositories' too), no external blocker label, no open PR
+ * (linked, or by the task branch and "Closes #N" among recent PRs); order — Priority, then the number. Marks the
+ * session as a dispatcher (`dispatcherFile`).
  */
 export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   // a line that isn't a pin leaves the session free, as for est and the dashboard (tests/standards/session-pin)
@@ -2025,10 +2055,12 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
       running.push(i);
       continue;
     }
-    const blockers = i.blockers.filter((b) => b.state === "OPEN").map((b) => `#${b.number}`);
+    const blockers = i.blockers.filter((b) => b.state === "OPEN").map((b) => blockerRef(slug, b));
+    const external = i.labels.find((l) => locale.every((n) => n.labels.externalBlocker).includes(l));
     const pr = openPr(i);
     if (status === N.status.done) waiting.push(`○ ${label} — ${STATUS} ${q(status)}, but the task is open`);
     else if (blockers.length) waiting.push(`○ ${label} — blocked by ${blockers.join(", ")}`);
+    else if (external) waiting.push(`○ ${label} — ${externalBlocker(io, slug, i.number, external)}`);
     else if (pr !== undefined) waiting.push(`○ ${label} — open PR #${pr}`);
     else ready.push(i);
   }
@@ -2148,7 +2180,7 @@ interface TaskText {
   body: string;
   labels: { id: string; name: string }[];
   milestone: MilestoneRef | null;
-  blockedBy: { id: string; number: number; state: string }[];
+  blockedBy: (Blocker & { id: string })[];
   comments: { body: string; url: string }[];
   subIssues: { number: number; title: string; state: string; milestone: MilestoneRef | null }[];
 }
@@ -2167,7 +2199,7 @@ function loadTaskText(io: Io, slug: string, number: number): TaskText {
     body: (i.body ?? "").replace(/\r\n/g, "\n").trim(),
     labels: i.labels?.nodes ?? [],
     milestone: milestone(i.milestone),
-    blockedBy: i.blockedBy?.nodes ?? [],
+    blockedBy: (i.blockedBy?.nodes ?? []).map((b: Any) => ({ id: b.id, number: b.number, state: b.state, repo: b.repository?.nameWithOwner ?? slug })),
     comments: i.comments?.nodes ?? [],
     subIssues: (i.subIssues?.nodes ?? []).map((x: Any) => ({ number: x.number, title: x.title, state: x.state, milestone: milestone(x.milestone) })),
   };
@@ -2183,11 +2215,12 @@ function refreshMechanics(io: Io, slug: string, r: { number: number; merged: boo
   const fixes: string[] = [];
   const tasks = [r.epic, ...r.open];
   for (const t of tasks) {
-    const done = t.blockedBy.filter((b) => b.state === "CLOSED" || (b.number === r.number && r.merged));
+    // an external blocker is done only when closed: the merged task is of this repository
+    const done = t.blockedBy.filter((b) => b.state === "CLOSED" || (r.merged && blockerRef(slug, b) === `#${r.number}`));
     if (!done.length) continue;
     for (const b of done) mutate(io, { op: "RemoveBlockedBy", input: { issueId: t.id, blockingIssueId: b.id } });
-    io.out(`+ #${t.number}: blocked by ${done.map((b) => `#${b.number} (${b.state === "CLOSED" ? "closed" : "merged"})`).join(", ")} removed`);
-    fixes.push(locale.fill(N.actualize.unblocked, { task: t.number, blockers: nums(done) }));
+    io.out(`+ #${t.number}: blocked by ${done.map((b) => `${blockerRef(slug, b)} (${b.state === "CLOSED" ? "closed" : "merged"})`).join(", ")} removed`);
+    fixes.push(locale.fill(N.actualize.unblocked, { task: t.number, blockers: done.map((b) => blockerRef(slug, b)).join(", ") }));
   }
   const questionLabels = locale.every((n) => n.labels.questions);
   for (const t of tasks) {
@@ -3280,8 +3313,9 @@ Examples:
   "task queue": `github task queue [--epic N] [--type Task|Bug] [--priority Urgent,High] [--repo owner/repo]
 github task queue --assignment <N> [--repo owner/repo]
 
-The dispatcher session's queue: ready tasks (open, not an epic, not In progress, no open blockers, no open PR) by
-Priority, then number, each with its executor's prompt; the rest — In progress (=) and ○ lines with the reason. Marks the
+The dispatcher session's queue: ready tasks (open, not an epic, not In progress, no open blockers — other repositories'
+too —, no external blocker label, no open PR) by Priority, then number, each with its executor's prompt; the rest — In
+progress (=) and ○ lines with the reason (the label's — from the latest «External blocker: …» comment). Marks the
 session as a dispatcher (dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the
 executors are subagents with the session's id; refused in a session with a pinned task. --type and --priority — in an
 organization. --assignment N (read-only, the executor's first call) — its whole assignment.

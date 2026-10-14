@@ -98,8 +98,10 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
   union.
 - **A big task is an epic** (prefix `<Prefix> · …`) **+ subtasks**
   (sub-issues); **dependencies only as GitHub links** (sub-issue, blocked
-  by): a task with an open *blocked by* isn't taken. Before creating — check
-  it doesn't exist (`gh issue list --search`).
+  by — on another repository's issue too; a blocker that isn't an issue — the
+  `external blocker` label, the reason in a comment): a task with an open
+  *blocked by* or that label isn't taken. Before creating — check it doesn't
+  exist (`gh issue list --search`).
 - **What GitHub keeps natively isn't repeated in an issue's text** —
   sub-issues, blocked by, `Status`, milestone, labels, fields, the PR: a copy
   goes stale; an epic's description has no list of subtasks or stages.

@@ -10,7 +10,8 @@
   },
   "labels": {
     "questions": "questions",
-    "epicDescription": "Epic: a large task with subtasks"
+    "epicDescription": "Epic: a large task with subtasks",
+    "externalBlocker": "external blocker"
   },
   "status": {
     "backlog": "Backlog",
@@ -36,7 +37,8 @@
   "comments": {
     "state": "State",
     "actual": "Actual:",
-    "closedByPr": "Closed by PR {prs}: GitHub didn't link the PR to the task"
+    "closedByPr": "Closed by PR {prs}: GitHub didn't link the PR to the task",
+    "externalBlocker": "External blocker:"
   },
   "subagentPrompt": {
     "task": "Task",
