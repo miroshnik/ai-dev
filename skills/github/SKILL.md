@@ -1,6 +1,6 @@
 ---
 name: github
-description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task status`, `task drop`; `task actualize` prints the epic-refresh subagent's assignment right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
+description: GitHub project and tasks by the AGENTS.md canon in one command — `project check` verifies the project, default-branch rule and merge method (✅/❌), `project fix` brings them to the canon (rebase-only merge, required checks, UI steps in the browser); `task new` creates a task with type, decision labels, project, Priority, epic, blocked by, milestone and the estimate at once; `task status`, `task drop`; `task actualize` does the epic refresh's mechanics and prints the subagent's prompt right after a merge; `task close` closes a merged task in one call (est actual, Done, epic, milestone, the task's Compose stacks, merged branch); `pr labels` labels by the PR diff; `pr premerge` checks the merge with a fresh default branch and tells a red PR from a red base (code 3). When — once per session before task work; creating a task or subtask; a PR opened, green or merged; taking, finishing, reopening or cancelling a task; asked whether the project is set up, why a task isn't in Done or on the board, why GitHub won't merge a PR — even if "project" and "task" weren't said.
 allowed-tools: Bash(bun *skills/github/scripts/github.ts *) Bash(git remote get-url *)
 ---
 
@@ -204,7 +204,7 @@ bun --no-env-file <skill dir>/scripts/github.ts task new --title "…" --branch-
     [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
 bun --no-env-file <skill dir>/scripts/github.ts task status <N> "In progress" [--branch <type>/<N>-<slug>]   # Backlog | In progress | Done
 bun --no-env-file <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
-bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
+bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the epic refresh's mechanics and the subagent's prompt
 bun --no-env-file <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
 bun --no-env-file <skill dir>/scripts/github.ts task resume                       # the session's task after a restart: which wait to restart
 bun --no-env-file <skill dir>/scripts/github.ts pr labels <PR>                 # decision labels from the PR diff
@@ -215,7 +215,7 @@ bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               #
 |---|---|
 | New task, an epic's subtask, an epic | first — whether one already exists (`gh issue list --search`); `task new --branch-type <type>` — it sets the estimate itself (an epic isn't estimated: its estimate is the sum of its subtasks, `reference.md`) |
 | Took into work · reopened | a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress" --branch <type>/N-<slug>` — a separate call, no pipeline (`tail` hides the refusal code): it renames the worktree tool's branch into the task branch |
-| PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed assignment; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
+| PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed two-line prompt; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Session resumed after the app restarted | the `SessionStart` hook runs `task resume` itself — its line is in the context: run the named command, a background wait died with the process |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
@@ -376,20 +376,30 @@ duplicate with a link) and removes it from the project: otherwise "Item closed"
 would put it in Done and into the epic's estimate. It doesn't touch a completed
 one. A subtask — a hint to recalculate the epic's estimate.
 
-**`task actualize`** — the assignment for the epic-refresh subagent, right
-after the merge: the refresh doesn't depend on the deploy and runs in parallel
-with it, while the session at peak context neither assembles the assignment
-nor reads `reference.md`. It prints the whole assignment — pass it to the
-subagent as is: in the project language, the first line «Task #N (epic #M)»
-(`subagentPrompt` of the dictionary; `est` links the subagent's work to the task
-by it in any language), the task and its merged PR (the
-link, otherwise the branch or "Closes #N" among recent PRs), the epic and its
-open tasks (its sub-issues, not a list in its description), the five checks from `reference.md`, what may be changed (only
-GitHub tasks; the task, the epic and their milestone are closed by
-`task close`), where to write the edits (a comment in the epic) and the answer
-form. No epic, or no open tasks in the epic other than this one — the line
-`○ refresh not needed`, no subagent. Read-only, changes
-nothing. The order after the merge — fewer turns (measurement #285: the extra
+**`task actualize`** — the epic refresh, right after the merge: it doesn't
+depend on the deploy and runs in parallel with it, while the session at peak
+context neither assembles the assignment nor reads `reference.md`. The
+mechanics — itself, `+` lines (#435: the subagent collected it with ~35 calls
+a run): blocked by on done tasks (closed, or this one with its PR merged) is
+removed, the `questions` label without open questions in the section, a
+milestone of the epic's tasks without open tasks is closed (the task's and the
+epic's — by `task close`); the fixes — one line in a comment on the epic. Then
+the subagent's prompt — the two lines after `Next:`, pass them as is: «Task #N
+(epic #M)» (`subagentPrompt` of the dictionary; `est` links the subagent's
+work to the task by it in any language) and the command of its whole
+assignment, `task actualize N --assignment` — read-only, the subagent's first
+call, outside the sandbox: the texts of the epic and its open tasks (its
+sub-issues, not a list in its description) and the PR files run to tens of KB,
+and the session would copy them into the subagent call as output tokens. In
+the assignment, in the project language: the task and its merged PR (the link,
+otherwise the branch or "Closes #N" among recent PRs) with its files, the epic
+and its open tasks with their texts, the copies of links in text and the
+answers to open questions in comments (`k. ✅ …`) the script found — named, not
+edited, the checks by meaning 1, 3 and 5 from `reference.md`, what may be
+changed (only GitHub tasks; the task, the epic and their milestone are closed
+by `task close`), where to write the edits (a comment in the epic) and the
+answer form. No epic, or no open tasks in the epic other than this one — the
+line `○ refresh not needed`, no subagent. The order after the merge — fewer turns (measurement #285: the extra
 turns were `gh pr view` for the SHA and reading the wait result): in one turn,
 as separate calls, — `task actualize N` and a background
 `wait-ci.sh merged <PR>` (where the merge deploys or runs CI on `main`; the

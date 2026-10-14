@@ -195,10 +195,18 @@ with what shipped; the session at peak context doesn't do it itself — each of
 its turns costs several times more. This is part of closing the task, not a
 separate request. The refresh doesn't depend on the deploy: the subagent and
 the deploy wait (`ci-wait`) run in the background in parallel,
-`github task close` — after both. The whole assignment for the subagent — the
-task and its PR, the epic, its open tasks, the five checks below — is printed
-by `github task actualize <N>`; no epic or no open tasks in it — the line
-`○ refresh not needed`, no subagent. Five checks:
+`github task close` — after both. What needs no judgment `github task
+actualize <N>` does itself: blocked by on done tasks is removed (check 4), the
+`questions` label without open questions in the section (check 2), a milestone
+of the epic's tasks without open tasks is closed (check 1; the task's and the
+epic's own — by `task close`); its fixes — one line in a comment on the epic.
+Then it prints the subagent's two-line prompt; the whole assignment — the
+texts of the epic and its open tasks, the PR files, the copies of links in
+text and the answers to open questions in comments the script found (named,
+not edited: a line may carry meaning, a comment's numbering may be its own),
+the checks by meaning 1, 3 and 5 — is printed by `task actualize <N>
+--assignment`, the subagent's first call. No epic or no open tasks in it — the
+line `○ refresh not needed`, no subagent. Five checks:
 
 1. **Done is closed.** No open tasks that are already part of what shipped
    (done — I close it; lost its point — not planned and out of the project).
