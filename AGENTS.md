@@ -47,8 +47,9 @@ of the context. The project's `check` also prints its mode and language.
 A copy (project; machine skills without `--link`) follows ai-dev releases —
 tags `vYYYY.MM.DD` (a same-day patch is `.N`); a `--link` clone follows
 `origin/main`. A release is the owner's step (`ai-dev release` from the
-clone); the `check` line about flow changes not yet released is a reminder to
-them; the agent cuts a release only when the owner asks.
+clone); the `check` line about flow changes not yet released — in an ai-dev
+clone's session — is a reminder to them; the agent cuts a release only when
+the owner asks.
 
 - **The machine is behind** — `update -g`: a `--link` clone does `git pull
   --ff-only`, a copy is reinstalled. `update` lists what changed — every
