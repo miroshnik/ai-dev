@@ -28,7 +28,16 @@ import { exceptionFiles } from "./harness.ts";
 import type { Exception } from "./harness.ts";
 
 const USAGE =
-  "spec-claims.ts --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions tests/standards/entry-points/exceptions] [--standard tests/standards/entry-points] [--report .spec-claims.xml]";
+  "spec-claims --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions tests/standards/entry-points/exceptions] [--standard tests/standards/entry-points] [--report .spec-claims.xml]";
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const HELP = `${USAGE}
+
+Every entry point of the registry is called by at least one capability test (the harness's journal). Code 0 — everything
+is claimed, 1 — there are unclaimed ones or exception errors, 2 — a call error.
+
+Examples:
+  spec-claims --entries tests/standards/entry-points/entries.ts
+  spec-claims --entries entries.json --journal .spec-journal --report .spec-claims.xml`;
 const CAPABILITIES = "tests/capabilities/";
 
 interface Case {
@@ -101,10 +110,8 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
   const v = opts.values;
-  if (v.help || !v.entries) {
-    console.error(USAGE);
-    return v.help ? 0 : 2;
-  }
+  if (v.help) return console.log(HELP), 0;
+  if (!v.entries) return console.error(USAGE), 2;
   let entries: string[];
   let repeated: string[];
   let exceptions: Exception[] = [];

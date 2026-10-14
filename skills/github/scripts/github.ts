@@ -2907,55 +2907,135 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
 // CLI
 // ----------------------------------------------------------------------------
 
-const USAGE = `github — the repository's GitHub project and tasks by the AGENTS.md canon
+/**
+ * Help — `--help` or `-h` anywhere in the arguments (tests/standards/cli-help): a command's synopsis (the first
+ * paragraph), what it does and examples; `github --help` — the synopses of all. The dispatcher takes only the commands
+ * from here: a command without help can't be called.
+ */
+const HELP: Record<string, string> = {
+  "project check": `github project check [--repo owner/repo]
 
-  github project check [--repo owner/repo]
-  github project fix   [--repo owner/repo] [--confirm] [--template owner/N | none]
-  github task new      --title "…" --branch-type <type> [--body "…" | --body-file F] [--type Task|Bug|Epic] [--epic N]
-                       [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
-                       [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
-  github task show     <N> [--repo owner/repo]
-  github task answer   <N> <k> "<answer>" [--auto] [--repo owner/repo]
-  github task status   <N> <Backlog|In progress|Done> [--branch <type>/<N>-<slug>] [--repo owner/repo]
-  github task drop     <N> [--duplicate-of M] [--repo owner/repo]
-  github task actualize <N> [--assignment] [--repo owner/repo]
-  github task close    <N> [--no-git] [--repo owner/repo]
-  github task resume
-  github pr labels     <N> [--repo owner/repo]
-  github pr premerge   <N> [--repo owner/repo]
+Items ✅/❌; code 0 — everything per the canon, 1 — there are ❌. Decision labels — by the default branch's spec tree; a
+new decision's label on an open task and a slice label («Slice: …») with a decision's name — an ○ line, not ❌.
 
-check — items ✅/❌, code 0 — everything per the canon, 1 — there are ❌; decision labels — by the default branch's
-        spec tree, a new decision's label on an open task and a slice label («Slice: …») with a decision's name — an ○ line, not ❌.
-fix   — fixes via the API; prints UI steps with links; deleting and renaming in a project with tasks
-        and organization settings — only with --confirm (after the user's "yes").
-        No project — links the one of the same name, otherwise copies the template (${DEFAULT_TEMPLATE}), otherwise creates one.
-task  — a task by the canon; new sets the estimate itself (est estimate --write with --branch-type: feat, fix, …;
-        a bug without it is fix, an epic isn't estimated) and prints what was created and the next step.
-task show — the task in one output: title, type, Status, estimate, the epic with its open questions and tasks, subtasks,
-        open blockers, the PRs with their checks, open and answered questions, the description; read-only.
-task answer — ✅ and «**Answer:** …» at question k of the questions section (--auto — the auto mark), the numbering
-        unchanged; no open questions left — the questions label is removed; an answered question is refused.
-task status — In progress pins the task to the session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev):
-        another task in the same session — a refusal (code 2), it needs a new session; a human removes the pin.
-        --branch — the worktree tool's branch becomes the task branch (git branch -m with its .git/config section);
-        a .git/config locked by another checkout — retried ~10 s, then a ! line with the command that finishes it (code 1).
-task actualize — right after the merge, in parallel with the deploy: the epic refresh's mechanics (blocked by on done tasks,
-        the questions label without open questions, milestones without open tasks; a comment on the epic) and the
-        subagent's prompt; --assignment (read-only, the subagent's first call) — its whole assignment: the texts of the
-        epic and its open tasks, the PR files, copies of links and answers in comments, the checks by meaning;
-        no epic or no open tasks in it — "refresh not needed".
-task resume — the SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks,
-        a merged PR of an open task — the deploy and task close; no pin — nothing (code 0).
-task close — after the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write),
-        Status Done, the epic and the milestone, the task's stacks taken down with their volumes (task-env down), the
-        merged branch removed (--no-git — without git). Docker and gh don't work in an agent's sandbox — run it outside.
-pr labels — decision labels from the PR diff for the tasks from «Closes #N» and their epics; doesn't remove earlier ones;
-            a decision touched only mechanically (a deletion, a rename without changes, exceptions) and a decision
-            with a slice label's name — an ○ line, no label.
-pr premerge — before gh pr merge, after ci-wait PASS: the default branch moved after the PR's CI — the PR head merged
-            with it in a temporary worktree and ${PREMERGE_SCRIPTS.join(", then ")} from package.json (those that exist, as in CI);
-            code 0 — merge, 1 — don't merge (red, conflict), 2 — couldn't check, 3 — main is red by itself (the same
-            check on bare main, a red check on its last commit): don't merge, one bug for it — wait for it to close.`;
+Examples:
+  github project check
+  github project check --repo acme/shop`,
+  "project fix": `github project fix [--repo owner/repo] [--confirm] [--template owner/N | none]
+
+Fixes via the API and prints UI steps with links; deleting and renaming in a project with tasks and organization
+settings — only with --confirm (after the user's "yes"). No project — links the one of the same name, otherwise copies
+the template (${DEFAULT_TEMPLATE}), otherwise creates one.
+
+Examples:
+  github project fix
+  github project fix --confirm --template none`,
+  "task new": `github task new --title "…" --branch-type <type> [--body "…" | --body-file F] [--type Task|Bug|Epic] [--epic N]
+                [--milestone "…"] [--blocked-by N,N] [--priority Urgent|High|Medium|Low]
+                [--labels <decision>,<kind>:<new decision>,<label>] [--repo owner/repo]
+
+A task by the canon: type, project and Backlog, Priority, epic, blocked by, milestone, decision labels; sets the
+estimate itself (est estimate --write with --branch-type: feat, fix, docs, refactor, perf, test, chore, ci, build,
+research; a bug without it is fix, an epic isn't estimated) and prints what was created and the next step.
+
+Examples:
+  github task new --title "Billing · Export invoices to PDF" --branch-type feat --epic 40 --body-file task.md
+  github task new --title "Login fails on Safari" --type Bug --priority High --body "Steps: …"`,
+  "task show": `github task show <N> [--repo owner/repo]
+
+The task in one output: title, type, Status, estimate, the epic with its open questions and tasks, subtasks, open
+blockers, the PRs with their checks, open and answered questions, the description; read-only.
+
+Examples:
+  github task show 42`,
+  "task answer": `github task answer <N> <k> "<answer>" [--auto] [--repo owner/repo]
+
+✅ and «**Answer:** …» at question k of the questions section (--auto — the auto mark), the numbering unchanged; no open
+questions left — the questions label is removed; an answered question is refused.
+
+Examples:
+  github task answer 42 1 "Only PDF, no CSV yet"
+  github task answer 42 2 "Medium, by recommendation" --auto`,
+  "task status": `github task status <N> <Backlog|In progress|Done> [--branch <type>/<N>-<slug>] [--repo owner/repo]
+
+Status in the project (and the epic's In progress once its first subtask is taken). In progress pins the task to the
+session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): another task in the same session — a refusal
+(code 2), it needs a new session; a human removes the pin. --branch — the worktree tool's branch becomes the task branch
+(git branch -m with its .git/config section); a .git/config locked by another checkout — retried ~10 s, then a ! line
+with the command that finishes it (code 1).
+
+Examples:
+  github task status 42 "In progress" --branch feat/42-invoice-export
+  github task status 42 Backlog`,
+  "task drop": `github task drop <N> [--duplicate-of M] [--repo owner/repo]
+
+Closes the task without doing it (not planned) and removes it from the project.
+
+Examples:
+  github task drop 42
+  github task drop 42 --duplicate-of 17`,
+  "task actualize": `github task actualize <N> [--assignment] [--repo owner/repo]
+
+Right after the merge, in parallel with the deploy: the epic refresh's mechanics (blocked by on done tasks, the questions
+label without open questions, milestones without open tasks; a comment on the epic) and the subagent's prompt;
+--assignment (read-only, the subagent's first call) — its whole assignment: the texts of the epic and its open tasks,
+the PR files, copies of links and answers in comments, the checks by meaning; no epic or no open tasks in it —
+"refresh not needed".
+
+Examples:
+  github task actualize 42
+  github task actualize 42 --assignment`,
+  "task resume": `github task resume
+
+The SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks, a merged PR
+of an open task — the deploy and task close; no pin — nothing (code 0). Read-only.
+
+Examples:
+  github task resume`,
+  "task close": `github task close <N> [--no-git] [--repo owner/repo]
+
+After the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write), Status Done, the
+epic and the milestone, the task's stacks taken down with their volumes (task-env down), the merged branch removed
+(--no-git — without git). Docker and gh don't work in an agent's sandbox — run it outside.
+
+Examples:
+  github task close 42
+  github task close 42 --no-git`,
+  "pr labels": `github pr labels <N> [--repo owner/repo]
+
+Decision labels from the PR diff for the tasks from «Closes #N» and their epics; doesn't remove earlier ones. A decision
+touched only mechanically (a deletion, a rename without changes, exceptions) and a decision with a slice label's name —
+an ○ line, no label.
+
+Examples:
+  github pr labels 57`,
+  "pr premerge": `github pr premerge <N> [--repo owner/repo]
+
+Before gh pr merge, after ci-wait PASS: the default branch moved after the PR's CI — the PR head merged with it in a
+temporary worktree and ${PREMERGE_SCRIPTS.join(", then ")} from package.json (those that exist, as in CI). Code 0 —
+merge, 1 — don't merge (red, conflict), 2 — couldn't check, 3 — main is red by itself (the same check on bare main, a
+red check on its last commit): don't merge, one bug for it — wait for it to close.
+
+Examples:
+  github pr premerge 57`,
+};
+
+/** `github --help`: what the script is and the synopsis of each command. */
+const OVERVIEW = [
+  "github — the repository's GitHub project and tasks by the AGENTS.md canon",
+  "",
+  ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
+  "",
+  "github <command> --help — the command's details and examples",
+].join("\n");
+
+/** The help the arguments ask for (`--help`, `-h`): of the command they start with, otherwise the overview; none — undefined. */
+function helpOf(argv: string[]): string | undefined {
+  if (!argv.some((a) => a === "--help" || a === "-h")) return undefined;
+  const words = `${argv.join(" ")} `;
+  const cmd = Object.keys(HELP).find((c) => words.startsWith(`${c} `));
+  return cmd ? HELP[cmd] : OVERVIEW;
+}
 
 const issueNumber = (s: string | undefined, what: string): number => {
   const m = /^#?(\d+)$/.exec((s ?? "").trim());
@@ -2986,16 +3066,14 @@ function detectRepo(): string {
 }
 
 export function main(argv: string[], io: Io): number {
+  const help = helpOf(argv);
+  if (help) return io.out(help), 0;
   N = locale.names(locale.projectLanguage(io.cwd ?? process.cwd()));
   try {
     const [group, cmd, ...rest] = argv;
-    if (!group || group === "-h" || group === "--help") {
-      io.out(USAGE);
-      return group ? 0 : 2;
-    }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "show", "answer", "status", "drop", "actualize", "close", "resume"], pr: ["labels", "premerge"] };
-    if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected project check|fix, task new|show|answer|status|drop|actualize|close|resume or pr labels|premerge`);
+    if (!group) return io.out(OVERVIEW), 2;
+    if (!Object.hasOwn(HELP, `${group} ${cmd ?? ""}`)) {
+      io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected ${Object.keys(HELP).join(", ")} (github --help)`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {

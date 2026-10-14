@@ -576,7 +576,7 @@ describe.skipIf(true)("Стек в Docker", () => {
   it("без отчётов — код 2 и подсказка", () => {
     const r = runScript("spec-doc", [], dir);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("spec-doc.ts report.json");
+    expect(r.stderr).toContain("spec-doc report.json");
   });
 });
 

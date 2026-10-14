@@ -26,10 +26,20 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 
 const USAGE = [
-  "spec-break.ts --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>",
-  "spec-break.ts --plan breaks.json [--no-baseline] [-- <test command…>]",
-  "spec-break.ts --restore",
+  "spec-break --file <file> --find <fragment> --replace <replacement> [--name <name>] [--no-baseline] -- <test command…>",
+  "spec-break --plan breaks.json [--no-baseline] [-- <test command…>]",
+  "spec-break --restore",
 ].join("\n");
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const HELP = `${USAGE}
+
+Can the check fail: applies the break, runs the test command, expects red and always rolls the break back; ✅ — failed,
+❌ — didn't. Code 0 — failed on every break, 1 — there is a ❌, 2 — a call error, a red baseline run, the journal not
+applied.
+
+Examples:
+  spec-break --file src/audit.ts --find "writeAudit(" --replace "void (" -- bun test tests/standards/audit
+  spec-break --plan breaks.json -- bun test`;
 
 interface Break {
   name: string;
@@ -155,10 +165,7 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
   const v = opts.values;
-  if (v.help) {
-    console.error(USAGE);
-    return 0;
-  }
+  if (v.help) return console.log(HELP), 0;
   const journal = journalPath();
   try {
     restoreJournal(journal);

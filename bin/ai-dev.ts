@@ -99,48 +99,89 @@ const TASK_ENV = path.join(SRC, "skills/task-env/scripts/task-env.ts");
 /** bun start and `docker compose config` take a fraction of a second; the hook has 60 s for everything. */
 const TASK_ENV_TIMEOUT = 30_000;
 
-const USAGE = `Usage: ai-dev <command> [-g]
+/**
+ * Help — `--help` or `-h` anywhere in the arguments (tests/standards/cli-help): a command's synopsis (the first
+ * paragraph), what it does and examples; `ai-dev --help` — the synopses of all. Answered before the launcher goes to the
+ * release (`toRelease`) — by the launcher's own version: no network, at the cost of lagging behind a newer release. The
+ * dispatcher takes only the commands from here (their flags — `FLAGS`).
+ */
+const HELP: Record<string, string> = {
+  install: `ai-dev install [--auto | --no-auto] [--lang <code>]
+ai-dev install -g [--link]
 
-  install            rules, references and all skills of the latest ai-dev release — into the project (the git root
-                     or the current directory); in a terminal asks whether the agent does tasks entirely by itself —
-                     answers by recommendation, commit, push, fixing CI, merge on green checks (auto in
-                     .agents/ai-dev.json, default — no); without a terminal — the --auto or --no-auto flag, without
-                     the flag the previous answer stays; with auto prints the Claude Code permission rule for the
-                     merge — Bash(gh pr merge *) in ~/.claude/settings.json: the owner adds it, install doesn't
-                     change the machine's settings; --lang <code> — the project language the agent works in:
-                     dialog, tasks, prompts, documents (language in .agents/ai-dev.json, a BCP 47 code: ru, en,
-                     pt-BR); in a terminal — a question, en by default, without the flag and a terminal — the
-                     previous one; in an ai-dev clone writes only auto and language
-  install -g         onto the machine only the skills (~/.agents/skills, ~/.claude/skills) and the SessionStart hook;
-                     the rules come from the project, a machine copy of a previous install is removed
-  install -g --link  from an ai-dev clone: symlinks to the clone instead of copies, edits show up immediately
-  check [-g]         whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git
-                     ignores flow files or its compose file breaks task isolation, 2 — the check is unavailable; a
-                     copy is compared with the latest release, a --link clone — with origin/main; for a project names
-                     the mode (auto) and the language, holds the compose file to the task isolation rules (❌ per
-                     violation, ○ — not checked: no docker compose; the task-env skill) and warns (!) if a script in
-                     slot calls turbo and turbo.json doesn't pass the queue variables to tasks (the exit code stays
-                     the same); a project that needs update — the update in a task of its own, not in a task
-                     session: the task new command of the github skill, one task per project; for the machine names
-                     the task-env proxy of *.localhost addresses — running or not, with the start command (with
-                     Docker on the machine; the exit code stays the same), run from the agent's Bash in Claude Code
-                     — a session without the agent's Bash environment, for a --link clone run from an ai-dev clone
-                     — flow commits not in a release yet
-  check --hook       the machine and the project at once for the Claude Code SessionStart hook: the exit code is
-                     always 0, errors go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE —
-                     zsh without errors on a glob without matches and on =word, timeout from bin/shims
-  update [-g]        bring it up to date: a --link clone — git pull --ff-only, a copy — install of the latest
-                     release (the project's mode and language are kept; an install of a previous version without a
-                     language gets ru: before the field the flow worked in Russian); in a project install and update
-                     un-ignore flow files from .gitignore patterns with exceptions at its end and wrap the
-                     package.json checks (lint, typecheck, test, test:*) in the machine queue slot; prints what
-                     changed: every release after the installed one, newest first, with the list of changes of its
-                     GitHub Release (a --link clone — the flow commits it pulled)
-  release [--dry-run]  from an ai-dev clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow
-                     changes since the previous release; --dry-run — only show them
+Rules, references and all skills of the latest ai-dev release — into the project (the git root or the current
+directory); in a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
+fixing CI, merge on green checks (auto in .agents/ai-dev.json, default — no); without a terminal — the --auto or
+--no-auto flag, without the flag the previous answer stays; with auto prints the Claude Code permission rule for the
+merge — Bash(gh pr merge *) in ~/.claude/settings.json: the owner adds it, install doesn't change the machine's
+settings. --lang <code> — the project language the agent works in: dialog, tasks, prompts, documents (language in
+.agents/ai-dev.json, a BCP 47 code: ru, en, pt-BR); in a terminal — a question, en by default, without the flag and a
+terminal — the previous one. In an ai-dev clone writes only auto and language.
+-g — onto the machine only the skills (~/.agents/skills, ~/.claude/skills) and the SessionStart hook; the rules come
+from the project, a machine copy of a previous install is removed. --link — from an ai-dev clone: symlinks to the clone
+instead of copies, edits show up immediately.
 
-Run: ${RUN} <command> [-g]
-`;
+Examples:
+  ai-dev install --auto --lang en
+  ai-dev install -g`,
+  check: `ai-dev check [-g]
+ai-dev check --hook
+
+Whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git ignores flow files or its
+compose file breaks task isolation, 2 — the check is unavailable; a copy is compared with the latest release, a --link
+clone — with origin/main. For a project names the mode (auto) and the language, holds the compose file to the task
+isolation rules (❌ per violation, ○ — not checked: no docker compose; the task-env skill) and warns (!) if a script in
+slot calls turbo and turbo.json doesn't pass the queue variables to tasks (the exit code stays the same); a project that
+needs update — the update in a task of its own, not in a task session: the task new command of the github skill, one
+task per project. For the machine names the task-env proxy of *.localhost addresses — running or not, with the start
+command (with Docker on the machine; the exit code stays the same), run from the agent's Bash in Claude Code — a
+session without the agent's Bash environment, for a --link clone run from an ai-dev clone — flow commits not in a
+release yet.
+--hook — the machine and the project at once for the Claude Code SessionStart hook: the exit code is always 0, errors
+go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE — zsh without errors on a glob without matches
+and on =word, timeout from bin/shims.
+
+Examples:
+  ai-dev check
+  ai-dev check -g`,
+  update: `ai-dev update [-g]
+
+Brings it up to date: a --link clone — git pull --ff-only, a copy — install of the latest release (the project's mode
+and language are kept; an install of a previous version without a language gets ru: before the field the flow worked in
+Russian); in a project install and update un-ignore flow files from .gitignore patterns with exceptions at its end and
+wrap the package.json checks (lint, typecheck, test, test:*) in the machine queue slot; prints what changed: every
+release after the installed one, newest first, with the list of changes of its GitHub Release (a --link clone — the
+flow commits it pulled).
+
+Examples:
+  ai-dev update
+  ai-dev update -g`,
+  release: `ai-dev release [--dry-run]
+
+From an ai-dev clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow changes since the previous
+release; --dry-run — only show them.
+
+Examples:
+  ai-dev release --dry-run`,
+};
+
+/** `ai-dev --help`: the synopsis of each command and how to run it. */
+const OVERVIEW = [
+  "ai-dev — the flow's rules and skills: install, check, update, release",
+  "",
+  ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
+  "",
+  "ai-dev <command> --help — the command's details and examples",
+  `Run: ${RUN} <command>`,
+].join("\n");
+
+/** The help the arguments ask for (`--help`, `-h`): of the command they start with, otherwise the overview; none — undefined. */
+function helpOf(argv: string[]): string | undefined {
+  if (!argv.some((a) => a === "--help" || a === "-h")) return undefined;
+  const words = `${argv.join(" ")} `;
+  const cmd = Object.keys(HELP).find((c) => words.startsWith(`${c} `));
+  return cmd ? HELP[cmd] : OVERVIEW;
+}
 
 /**
  * Dry run (`check`): instead of writing to disk the install collects here what it would change, the flow files the
@@ -1655,7 +1696,8 @@ const FLAGS: Record<string, string[]> = { install: ["-g", "--global", "--link", 
 
 function main(argv: string[]) {
   const [cmd = "", ...args] = argv;
-  if (cmd === "help" || cmd === "-h" || cmd === "--help") return note(USAGE.trimEnd()), 0;
+  const help = helpOf(argv) ?? (cmd === "help" ? OVERVIEW : undefined);
+  if (help) return note(help), 0;
   const global = args.includes("-g") || args.includes("--global");
   const hookMode = cmd === "check" && args.includes("--hook");
   // the launcher restarts before it checks the command and flags (`toRelease`): bunx keeps it as old as its first run,
@@ -1673,10 +1715,10 @@ function main(argv: string[]) {
   }
   // --lang with a value — only for install: for the other commands it's an unknown flag
   const { lang, rest: flags } = cmd === "install" ? takeLang(args) : { lang: undefined, rest: args };
-  const allowed = Object.hasOwn(FLAGS, cmd) ? FLAGS[cmd] : undefined;
+  const allowed = Object.hasOwn(HELP, cmd) ? FLAGS[cmd] : undefined;
   const unknown = allowed ? flags.filter((f) => !allowed.includes(f)) : [];
   if (!allowed || unknown.length) {
-    process.stderr.write((!allowed && cmd ? `unknown command: ${cmd}\n\n` : unknown.length ? `unknown flag: ${unknown[0]}\n\n` : "") + USAGE);
+    process.stderr.write((!allowed && cmd ? `unknown command: ${cmd}\n\n` : unknown.length ? `unknown flag: ${unknown[0]}\n\n` : "") + OVERVIEW + "\n");
     return 2;
   }
   if (lang !== undefined && (global || !LANGUAGE_CODE.test(lang))) {

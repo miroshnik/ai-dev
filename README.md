@@ -251,7 +251,7 @@ A browser page the script serves itself, with two tabs. Sessions (the main one) 
 
 Waits for all checks of a PR or a commit (a merge commit — by the PR number) — CI, deploy, an external check — with visible progress and PASS / FAIL / TIMEOUT / ERROR outcomes instead of `gh pr checks --watch` and `sleep` in a loop; an Actions run that didn't become a check (the workflow wasn't parsed or didn't start on the PR) is not a PASS; it also waits for a bug about a red `main` to close.
 
-`wait-ci.sh`
+`wait-ci pr | status | merged | issue`
 
 ### [`slot`](skills/slot/SKILL.md) — the machine's heavy runs in a queue
 

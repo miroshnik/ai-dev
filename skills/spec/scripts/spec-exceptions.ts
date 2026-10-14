@@ -20,7 +20,17 @@ import { parseArgs } from "node:util";
 
 import { EXCEPTIONS_DIR, exceptionFile, TESTS } from "./speclib.ts";
 
-const USAGE = "spec-exceptions.ts [--root DIR]";
+const USAGE = "spec-exceptions [--root DIR]";
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const HELP = `${USAGE}
+
+Moves exceptions to the "file per item" format: each exceptions.ts of a decision folder — into its exceptions/ directory,
+a file per exception; a repeated run changes nothing. Code 0 — moved or nothing to move, 1 — something is left to fix by
+hand, 2 — a call error.
+
+Examples:
+  spec-exceptions
+  spec-exceptions --root packages/api`;
 const CODE = /\.[cm]?[jt]sx?$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", EXCEPTIONS_DIR]);
 
@@ -119,10 +129,7 @@ export async function main(argv: string[]): Promise<number> {
     console.error(`spec-exceptions: ${(e as Error).message}\n${USAGE}`);
     return 2;
   }
-  if (values.help) {
-    console.error(USAGE);
-    return 0;
-  }
+  if (values.help) return console.log(HELP), 0;
   const root = path.resolve(values.root ?? ".");
   const files = walk(root, TESTS);
   // former files — by the exceptionFile rule: in the decision folder or its subfolder, they move to the decision folder's directory

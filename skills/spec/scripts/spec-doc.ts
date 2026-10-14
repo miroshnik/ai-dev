@@ -633,7 +633,17 @@ function leftoverNames(root: string, rel = L.TESTS): string[] {
 }
 
 const USAGE =
-  "spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]";
+  "spec-doc report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]";
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
+const HELP = `${USAGE}
+
+Documentation from runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML from bun test): a page per folder of
+tests/capabilities, tests/architecture and tests/standards with prose from JSDoc and <folder>.md, by default into
+docs/spec; --strict — code 1 when a file's header doesn't go into the documentation.
+
+Examples:
+  spec-doc .spec-report.json --strict
+  spec-doc .spec-report.xml e2e-report.json --stdout`;
 
 export async function main(argv: string[]): Promise<number> {
   let opts;
@@ -655,10 +665,8 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
   const { values, positionals } = opts;
-  if (values.help || !positionals.length) {
-    console.error(USAGE);
-    return values.help ? 0 : 2;
-  }
+  if (values.help) return console.log(HELP), 0;
+  if (!positionals.length) return console.error(USAGE), 2;
   const root = findRoot(values.root);
   LANG = locale.projectLanguage(root);
   N = locale.names(LANG);

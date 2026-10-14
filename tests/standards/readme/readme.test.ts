@@ -1,9 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { invariant } from "../../../skills/spec/scripts/harness.ts";
+import { clis, commandsOf, isolated, mapLimit } from "../../lib/cli.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -44,39 +48,28 @@ const reference = (file: string): Part => ({
   mention: new RegExp(`\\]\\(docs/${escape(file)}\\)`),
 });
 
-const usageOf = (source: string) => /const USAGE = `([\s\S]*?)`;/.exec(source)?.[1] ?? "";
-
 /** Исполняемые скрипты скиллов — со строкой #!: библиотеки скилла (harness.ts, speclib.ts) README не перечисляет. */
-function executables(): { skill: string; name: string; source: string }[] {
-  const skills = readdirSync(path.join(ROOT, "skills")).filter((n) => existsSync(path.join(ROOT, "skills", n, "SKILL.md")));
-  return skills.flatMap((s) => {
-    const dir = path.join(ROOT, "skills", s, "scripts");
-    // подкаталог (vendor/ — чужой код файлом) — не скрипт
-    const names = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name) : [];
-    return names.map((n) => ({ skill: s, name: n.replace(/\.[^.]+$/, ""), source: read(`skills/${s}/scripts/${n}`) })).filter((x) => x.source.startsWith("#!"));
-  });
-}
+const SKILL_CLIS = clis().filter((c) => c.file.startsWith("skills/"));
+/** Обзор каждого скрипта — его `--help`: оттуда команды, как их видит агент. */
+const OVERVIEWS = new Map((await mapLimit(clis(), 8, async (c) => [c.name, (await isolated(c, ["--help"])).stdout] as const)).map(([n, o]) => [n, o]));
 
 /** Реестр из кода: скиллы, команды из справки установщика, исполняемые скрипты скиллов, справочники docs/. */
 function parts(): Part[] {
   const skills = readdirSync(path.join(ROOT, "skills")).filter((n) => existsSync(path.join(ROOT, "skills", n, "SKILL.md")));
-  const commands = [...new Set([...usageOf(read("bin/ai-dev.ts")).matchAll(/^ {2}([a-z]+)\b/gm)].map((m) => m[1]!))];
-  const scripts = executables().map((x) => script(x.skill, x.name));
+  const commands = commandsOf("ai-dev", OVERVIEWS.get("ai-dev") ?? "");
+  const scripts = SKILL_CLIS.map((c) => script(c.file.split("/")[1]!, c.name));
   const references = readdirSync(path.join(ROOT, "docs")).filter((n) => n.endsWith(".md"));
   return [...skills.map(skill), ...commands.map(command), ...scripts, ...references.map(reference)];
 }
 
 /**
- * Подкоманды из справки скрипта: слова после его имени до первого аргумента — `  github task close <N>` → `task close`;
+ * Подкоманды из обзора скрипта: слова после его имени до первого аргумента — `  github task close <N>` → `task close`;
  * цифра в слове — его часть (`task-env e2e`).
  */
-function subcommandsOf(scriptName: string, usage: string): Part[] {
-  const lines = [...usage.matchAll(new RegExp(`^ {2}${escape(scriptName)}((?: [a-z][a-z0-9-]*)+)`, "gm"))].map((m) => m[1]!.trim());
-  return [...new Set(lines)].map((words) => subcommand(scriptName, words.split(" ")));
-}
+const subcommandsOf = (scriptName: string, overview: string): Part[] => commandsOf(scriptName, overview).map((words) => subcommand(scriptName, words.split(" ")));
 
-/** Реестр из кода: подкоманды из справки каждого исполняемого скрипта скилла; скрипт без подкоманд назван как скрипт. */
-const subcommands = (): Part[] => executables().flatMap((x) => subcommandsOf(x.name, usageOf(x.source)));
+/** Реестр из кода: подкоманды из обзора каждого исполняемого скрипта скилла; скрипт без подкоманд назван как скрипт. */
+const subcommands = (): Part[] => SKILL_CLIS.flatMap((c) => subcommandsOf(c.name, OVERVIEWS.get(c.name) ?? ""));
 
 /** Строки вне блоков кода: ссылка и заголовок в ``` — пример, а не разметка. */
 function prose(md: string): string[] {
