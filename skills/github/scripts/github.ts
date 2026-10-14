@@ -2416,8 +2416,18 @@ const WAIT_CI = path.resolve(import.meta.dir, "../../ci-wait/scripts/wait-ci.sh"
 const RED_RUN = new Set(["failure", "timed_out", "startup_failure"]);
 const RED_STATUS = new Set(["failure", "error"]);
 
-/** Red checks of the default branch's last commit — check-runs (the last run of each name) and hosting statuses. */
-function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: string[] } {
+/**
+ * The spec publish job (the `spec` skill, `ci.md`; `<job> / spec-publish` — the same job in a reusable workflow) —
+ * publishing the documentation, not a check of the branch: its red isn't a red main (#443). The same names — in
+ * ci-wait's `wait-ci.sh` (`SPEC_PUBLISH`).
+ */
+const SPEC_PUBLISH = /^(?:.+ \/ )?spec-publish$/;
+
+/**
+ * Red checks of the default branch's last commit — check-runs (the last run of each name) and hosting statuses;
+ * `publish` — the red spec publish jobs, apart.
+ */
+function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: string[]; publish: string[] } {
   const ref = encodeURIComponent(base);
   const latest = new Map<string, Any>();
   for (const r of restCall(io, ["api", `repos/${slug}/commits/${ref}/check-runs?per_page=100`]).check_runs ?? []) {
@@ -2428,7 +2438,8 @@ function redChecksOf(io: Io, slug: string, base: string): { sha: string; names: 
     ...[...latest.values()].filter((r) => r.status === "completed" && RED_RUN.has(r.conclusion)).map((r) => r.name as string),
     ...(status.statuses ?? []).filter((x: Any) => RED_STATUS.has(x.state)).map((x: Any) => x.context as string),
   ];
-  return { sha: String(status.sha ?? ""), names: [...new Set(names)].sort() };
+  const red = [...new Set(names)].sort();
+  return { sha: String(status.sha ?? ""), names: red.filter((n) => !SPEC_PUBLISH.test(n)), publish: red.filter((n) => SPEC_PUBLISH.test(n)) };
 }
 
 /**
@@ -2516,6 +2527,9 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
 
   try {
     const red = redChecksOf(io, slug, base);
+    if (red.publish.length) {
+      io.out(`○ ${red.publish.join(", ")} red on the last commit of ${base} (${red.sha.slice(0, 7)}) — publishing the documentation, not a check of ${base}: not counted`);
+    }
     if (red.names.length) {
       const checks = (names: string[]) => `${names.length > 1 ? "checks" : "check"} ${names.join(", ")}`;
       // in the bug title — in the project language
