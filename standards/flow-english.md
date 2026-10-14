@@ -104,7 +104,7 @@
 - ✅ в skills/spec/scripts/vendor/babel-parser.cjs нет кириллицы
 - ✅ в skills/spec/scripts/vendor/babel-parser.d.cts нет кириллицы
 - ✅ в skills/task-env/scripts/task-env.ts нет кириллицы
-- ✅ справка установщика и скриптов скиллов — на английском
+- ✅ справка установщика и скриптов скиллов и их команд — на английском
 
 </details>
 
