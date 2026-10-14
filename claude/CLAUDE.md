@@ -33,7 +33,10 @@ project's `CLAUDE.md`.
   to restart — `github task resume` with the session id from the hook's input.
   The hook's exit code is always 0 — otherwise Claude Code doesn't put the
   output into context; timeout 60 s, an error doesn't block the session. No
-  hook output in context — run `check` by hand.
+  hook output in context — run `check` by hand. The hook also writes the
+  agent's Bash environment to `$CLAUDE_ENV_FILE`: zsh passes a glob without
+  matches and `====` as is, `timeout` works without coreutils; the
+  «agent Bash: not set up» line — it didn't, follow the line.
 - `set_session_title` renames the session; in auto mode `archive_session`
   with `self` archives it: as the last action, after the "can be closed" line
   — the conversation ends with it. Before it — `TaskStop` for each own
@@ -44,11 +47,6 @@ project's `CLAUDE.md`.
   directory is `${CLAUDE_SKILL_DIR}`; a same-named machine skill wins over the
   project's. `SKILL.md` frontmatter also reads `when_to_use`,
   `argument-hint`, `allowed-tools`.
-- Bash on macOS is zsh: a variable isn't split into words (`G="bun x.ts";
-  $G task new` — "command not found", and `| grep` hides the error) — use
-  `G=x.ts; bun $G …` or `${=G}`, a comma-joined list — `${(j:,:)arr}`;
-  `echo ====` and a glob without matches (`--include=*.ts`) are errors: quote
-  them.
 - The Bash sandbox: `gh` in it fails on TLS (`x509: OSStatus -26276`). A
   skill script that calls `gh` (`github`, `est`, `dashboard`, `spec-run`) —
   at once a separate call with `dangerouslyDisableSandbox`: no
