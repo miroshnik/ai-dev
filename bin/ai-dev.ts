@@ -56,7 +56,7 @@ import path from "node:path";
 import { isatty } from "node:tty";
 import { fileURLToPath } from "node:url";
 
-import { specRoots } from "../skills/github/scripts/github.ts";
+import { packageManager, specRoots } from "../skills/github/scripts/github.ts";
 import locale from "../skills/github/scripts/locale.ts";
 import { COMPOSE_FILES, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
@@ -516,10 +516,10 @@ const SLOT_STRING = /^(?:node|bun)(?: --no-env-file)? \.agents\/skills\/slot\/sc
 const unslot = (cmd: string) => SLOT_WRAPPED.exec(cmd)?.[1] ?? SLOT_STRING.exec(cmd)?.[1]?.replaceAll("'\\''", "'") ?? cmd;
 /**
  * Yarn 2+ runs package.json scripts in its own shell (`@yarnpkg/shell`) — without `.`, `eval` and `export`, slot.sh
- * can't be sourced there: the command stays a string argument of slot.ts, hidden from knip, but in the queue.
+ * can't be sourced there: the command stays a string argument of slot.ts, hidden from knip, but in the queue. Yarn 2+
+ * or not — the project's package manager by `packageManager` of the github skill (tests/standards/package-manager).
  */
-const yarnShell = (root: string, pkg: { packageManager?: unknown }) =>
-  existsSync(path.join(root, ".yarnrc.yml")) || /^yarn@(?!1\.)\d/.test(String(pkg.packageManager ?? ""));
+const yarnShell = (root: string) => packageManager(root).berry;
 /**
  * Check scripts that go through the machine queue: `lint`, `typecheck`, `test`, `test:*`. Not `build` — hosting and
  * Docker run it, where the skill's copy may be missing; not watch — long-running, it would hold a slot for long.
@@ -544,7 +544,7 @@ function slotScripts(root: string, skills: string[]) {
   const file = path.join(root, "package.json");
   if (!skills.includes("slot") || !existsSync(file)) return false;
   const text = readFileSync(file, "utf8");
-  let pkg: { scripts?: Record<string, unknown>; packageManager?: unknown };
+  let pkg: { scripts?: Record<string, unknown> };
   try {
     pkg = JSON.parse(text);
   } catch {
@@ -552,7 +552,7 @@ function slotScripts(root: string, skills: string[]) {
   }
   const scripts = pkg.scripts;
   if (!scripts || typeof scripts !== "object") return false;
-  const yarn = yarnShell(root, pkg);
+  const yarn = yarnShell(root);
   const wrap = slotWrap(yarn);
   const outside: string[] = [];
   const previous: string[] = [];
@@ -1077,14 +1077,15 @@ const RUNNERS = {
  * or by nothing, and a standard broken by two green PRs reaches main (#442). A mismatch that update doesn't fix — the
  * commands are the project's: a `❌` line with the ready scripts, in the slot wrapper `slotScripts` puts (its
  * `slotWrap`). `test:spec` — the runner of the `test` command, otherwise by the dependencies (Vitest, Jest, `bun test`
- * in a project on Bun, otherwise Vitest — the spec skill's example), over the roots the project has; next to it —
- * `test` with the same roots excluded by the runner's filter, added to the command under the wrapper (`unslot`): the
- * roots run once, in `test:spec` (the spec skill, "Wiring into a repository"). `test` doesn't run them (names them
- * already) or there is none — `test:spec` alone; `test` isn't a single runner call — the exclusion in words.
+ * in a project on Bun — by `packageManager` of the github skill, otherwise Vitest — the spec skill's example), over the
+ * roots the project has; next to it — `test` with the same roots excluded by the runner's filter, added to the command
+ * under the wrapper (`unslot`): the roots run once, in `test:spec` (the spec skill, "Wiring into a repository").
+ * `test` doesn't run them (names them already) or there is none — `test:spec` alone; `test` isn't a single runner call
+ * — the exclusion in words.
  */
 function specScript(root: string): { lines: string[]; missing: boolean } {
   const roots = specRoots(root);
-  let pkg: { scripts?: Record<string, unknown>; dependencies?: object; devDependencies?: object; packageManager?: unknown } = {};
+  let pkg: { scripts?: Record<string, unknown>; dependencies?: object; devDependencies?: object } = {};
   try {
     pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) ?? {};
   } catch {
@@ -1093,10 +1094,10 @@ function specScript(root: string): { lines: string[]; missing: boolean } {
   if (!roots.length || pkg.scripts?.["test:spec"]) return { lines: [], missing: false };
   const test = typeof pkg.scripts?.test === "string" ? unslot(pkg.scripts.test) : undefined;
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-  const bun = String(pkg.packageManager ?? "").startsWith("bun@") || ["bun.lock", "bun.lockb"].some((f) => existsSync(path.join(root, f)));
+  const pm = packageManager(root);
   const byTest = Object.values(RUNNERS).find((r) => test !== undefined && r.re.test(test));
-  const runner = byTest ?? ("vitest" in deps ? RUNNERS.vitest : "jest" in deps ? RUNNERS.jest : bun ? RUNNERS.bun : RUNNERS.vitest);
-  const wrap = existsSync(path.join(root, SLOT_TS)) ? slotWrap(yarnShell(root, pkg)) : (cmd: string) => cmd;
+  const runner = byTest ?? ("vitest" in deps ? RUNNERS.vitest : "jest" in deps ? RUNNERS.jest : pm.name === "bun" ? RUNNERS.bun : RUNNERS.vitest);
+  const wrap = existsSync(path.join(root, SLOT_TS)) ? slotWrap(pm.berry) : (cmd: string) => cmd;
   const spec = `"test:spec": ${JSON.stringify(wrap([runner.spec, ...roots].join(" ")))}`;
   const lead = `  ❌ package.json: no test:spec script — pr premerge doesn't run ${roots.join(", ")} on the merge with a moved main`;
   // the roots test runs too — they would run twice, in test and in test:spec

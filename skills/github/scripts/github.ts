@@ -2783,8 +2783,7 @@ export const specRoots = (dir: string) => SPEC_ROOTS.filter((d) => statSync(path
  * having moved.
  */
 const MERGE_REF_SLACK_MS = 60_000;
-const LOCKFILES: [file: string, pm: string][] = [["bun.lock", "bun"], ["bun.lockb", "bun"], ["pnpm-lock.yaml", "pnpm"], ["yarn.lock", "yarn"], ["package-lock.json", "npm"]];
-const INSTALL: Record<string, string[]> = { bun: ["bun", "install", "--frozen-lockfile"], pnpm: ["pnpm", "install", "--frozen-lockfile"], yarn: ["yarn", "install", "--frozen-lockfile"], npm: ["npm", "ci"] };
+const INSTALL: Record<PackageManager["name"], string[]> = { bun: ["bun", "install", "--frozen-lockfile"], pnpm: ["pnpm", "install", "--frozen-lockfile"], yarn: ["yarn", "install", "--frozen-lockfile"], npm: ["npm", "ci"] };
 /**
  * Failure lines: a test — bun `(fail)`, Vitest `FAIL` and `×`, Jest `●`, Playwright `✘`; a compiler error —
  * `error TS2304:`.
@@ -2797,15 +2796,46 @@ const FAILED_LINE = /^\s*(\(fail\)|FAIL\s|×|✗|✘|●\s)|\berror TS\d+:/;
 const BUN_CHECK_ERROR = /<error file="([^"]+)" line="(\d+)" column="(\d+)" code="(TS\d+)">\n([^\n]*)/g;
 const asTsc = (out: string) => out.replace(BUN_CHECK_ERROR, "$1($2,$3): error $4: $5");
 
+/** The project's package manager: its command, Yarn 2+ and the lockfile dependencies are installed from. */
+export interface PackageManager {
+  name: "bun" | "pnpm" | "yarn" | "npm";
+  /** Yarn 2+: package.json scripts run in its own shell (`@yarnpkg/shell`) — without `.`, `eval` and `export`. */
+  berry: boolean;
+  /** The manager's own lockfile, otherwise the first one in order; none — null. */
+  lockfile: string | null;
+}
+
 /**
- * The project's commands in a directory: the package manager — `packageManager` in package.json, otherwise by the
- * lockfile; dependencies are installed from the lockfile without changing it, no lockfile — no install.
+ * The project's package manager in dir — the one answer of the flow: `pr premerge` (`projectCommands`), the slot
+ * wrapper and the `test:spec` runner of the project's `check` (bin/ai-dev.ts) take it here,
+ * `tests/standards/package-manager`. The manager — `packageManager` in package.json, otherwise the lockfile in the
+ * order below, otherwise `.yarnrc.yml` — Yarn, otherwise npm. Yarn 2+ — `yarn@2+` in `packageManager`, Yarn by the
+ * files — with `.yarnrc.yml`: `packageManager` decides the version too.
+ */
+export function packageManager(dir: string): PackageManager {
+  const lockfiles = [["bun.lock", "bun"], ["bun.lockb", "bun"], ["pnpm-lock.yaml", "pnpm"], ["yarn.lock", "yarn"], ["package-lock.json", "npm"]] as const;
+  const has = (file: string) => existsSync(path.join(dir, file));
+  let field = "";
+  try {
+    field = String(JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"))?.packageManager ?? "");
+  } catch {
+    // no package.json or not JSON — no field
+  }
+  const declared = /^(bun|pnpm|yarn|npm)@(\d*)/.exec(field);
+  const found = lockfiles.filter(([file]) => has(file));
+  const yarnrc = has(".yarnrc.yml");
+  const name = (declared?.[1] as PackageManager["name"] | undefined) ?? found[0]?.[1] ?? (yarnrc ? "yarn" : "npm");
+  const berry = name === "yarn" && (declared ? Number(declared[2]) >= 2 : yarnrc);
+  return { name, berry, lockfile: (found.find(([, pm]) => pm === name) ?? found[0])?.[0] ?? null };
+}
+
+/**
+ * The project's commands in a directory: the package manager — `packageManager`; dependencies are installed from the
+ * lockfile without changing it, no lockfile — no install.
  */
 export function projectCommands(dir: string): { install: string[] | null; run: (script: string) => string[] } {
-  const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
-  const lock = LOCKFILES.find(([f]) => existsSync(path.join(dir, f)));
-  const pm = /^(bun|pnpm|yarn|npm)@/.exec(pkg.packageManager ?? "")?.[1] ?? lock?.[1] ?? "npm";
-  return { install: lock ? INSTALL[pm]! : null, run: (script) => [pm, "run", script] };
+  const pm = packageManager(dir);
+  return { install: pm.lockfile ? INSTALL[pm.name] : null, run: (script) => [pm.name, "run", script] };
 }
 
 const tail = (r: RunResult, n = 20) => `${r.stdout}\n${r.stderr}`.split("\n").filter((l) => l.trim()).slice(-n);
