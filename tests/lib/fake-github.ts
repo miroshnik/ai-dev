@@ -40,7 +40,7 @@ export class FakeGitHub {
    * задачи, с которыми GitHub связал PR (`closes`; тело может называть и другие), голова, модель архитектуры в ней (ModelAt);
    * `merged`, `state`, `base` — для `task close`.
    */
-  prs: Record<number, { files: (string | FakePrFile)[]; closes: number[]; body?: string; head: string; model: string | null; merged?: boolean; state?: string; base?: string; draft?: boolean; checks?: Record<string, string> }> = {};
+  prs: Record<number, { files: (string | FakePrFile)[]; closes: number[]; body?: string; head: string; model: string | null; merged?: boolean; state?: string; base?: string; draft?: boolean; checks?: Record<string, string | string[]> }> = {};
   /** Задача → числовые поля проекта по имени поля (IssueShow): оценка, факт. */
   numbers: Record<number, Record<string, number>> = {};
   /** Задача → id milestone (IssueRef.milestone); открытые задачи milestone считаются по состоянию записей. */
@@ -250,13 +250,26 @@ export class FakeGitHub {
     };
     return { data: { repository: { issue } } };
   }
-  /** PR с чеками последнего коммита, как их отдаёт statusCheckRollup: имя → вывод чека или IN_PROGRESS. */
+  /**
+   * PR с чеками последнего коммита, как их отдаёт statusCheckRollup: имя → вывод чека или IN_PROGRESS, список — прогоны
+   * одного имени по порядку создания (перезапуски); id растёт с созданием, приложение — GitHub Actions.
+   */
   private prShow(number: number): Any {
     const p = this.prs[number]!;
     return { number, state: p.state ?? (p.merged ? "MERGED" : "OPEN"), merged: Boolean(p.merged), isDraft: Boolean(p.draft), headRefName: p.head, commits: { nodes: [{ commit: { statusCheckRollup: this.rollup(p.checks ?? {}) } }] } };
   }
-  private rollup(checks: Record<string, string>): Any {
-    const nodes = Object.entries(checks).map(([name, v]) => ({ __typename: "CheckRun", name, status: v === "IN_PROGRESS" ? "IN_PROGRESS" : "COMPLETED", conclusion: v === "IN_PROGRESS" ? null : v }));
+  private rollup(checks: Record<string, string | string[]>): Any {
+    let id = 0;
+    const nodes = Object.entries(checks).flatMap(([name, runs]) =>
+      [runs].flat().map((v) => ({
+        __typename: "CheckRun",
+        name,
+        status: v === "IN_PROGRESS" ? "IN_PROGRESS" : "COMPLETED",
+        conclusion: v === "IN_PROGRESS" ? null : v,
+        databaseId: ++id,
+        checkSuite: { app: { databaseId: 15368 } },
+      })),
+    );
     return nodes.length ? { contexts: { nodes } } : null;
   }
   // поиск GitHub по заголовку: подстрока в кавычках, is:open — только открытые
