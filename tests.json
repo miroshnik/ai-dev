@@ -2963,7 +2963,7 @@
   "describes": [
    "task resume называет, какое ожидание перезапустить закреплённой задаче сессии"
   ],
-  "name": "закрепление не по форме owner/repo#N — ошибка (код 2) с путём файла"
+  "name": "закрепление не по форме owner/repo#N — у сессии нет задачи: строка ○ с путём файла, код 0, без запросов"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3118,6 +3118,13 @@
    "task status берёт в работу одну задачу на сессию"
   ],
   "name": "та же задача «В работе» повторно — без отказа"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "файл закрепления не по форме owner/repo#N — сессия свободна: «В работе» перезаписывает его задачей со строкой ○"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -13239,6 +13246,97 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "est: owner/repo#N — задача, другое — не закрепление"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "github: owner/repo#N — задача, другое — не закрепление"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "нарушитель не проходит: разбор без якорей: задача — первое owner/repo#N в строке"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "реестр «скрипты скиллов с разбором закрепления» находит est, github"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "реестр «скрипты скиллов с разбором закрепления» не пуст"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "строку, которую пишет github task status, каждая копия разбирает как ту же задачу"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Закрепление разбирается одинаково в github, est и dashboard: owner/repo#N — задача, другое — не закрепление"
+  ],
+  "name": "таблица ловит расхождения разбора без якорей: лишний сегмент пути, хвост за номером, вторая строка"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
+  ],
+  "name": "skills/est/scripts/est.ts разбирает закрепление через sessionPin"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
+  ],
+  "name": "skills/github/scripts/github.ts разбирает закрепление через sessionPin"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
+  ],
+  "name": "нарушитель не проходит: скрипт берёт строку файла закрепления как есть"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
+  ],
+  "name": "нарушитель не проходит: скрипт обходит PINS_DIR est своим разбором"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
+  ],
+  "name": "реестр «скрипты скиллов, которые читают каталог закреплений sessions/» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts"
+ },
+ {
+  "path": "tests/standards/session-pin/session-pin.test.ts",
+  "describes": [
+   "Скрипт, читающий каталог sessions/, разбирает закрепление через sessionPin"
+  ],
+  "name": "реестр «скрипты скиллов, которые читают каталог закреплений sessions/» не пуст"
  },
  {
   "path": "tests/standards/spawn-no-jit/spawn-no-jit.test.ts",
