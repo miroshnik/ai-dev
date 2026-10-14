@@ -1498,8 +1498,9 @@ describe("task close закрывает задачу одной командой
   });
 });
 
-// репозиторий задачи: bare origin с путём вида …/<slug>.git — для скрипта репозиторий GitHub slug, чекаут на ветке задачи
-function checkout(branch: string, { merged = true, slug = REPO } = {}) {
+// репозиторий задачи: bare origin с путём вида …/<slug>.git — для скрипта репозиторий GitHub slug, чекаут на ветке задачи;
+// before — ветки, влитые в main до неё (первый PR задачи, когда чекаут — на ветке доправки)
+function checkout(branch: string, { merged = true, slug = REPO, before = [] as string[] } = {}) {
   const { dir, cleanup } = tmpDir();
   const origin = path.join(dir, `${slug}.git`);
   mkdirSync(path.dirname(origin), { recursive: true });
@@ -1511,6 +1512,14 @@ function checkout(branch: string, { merged = true, slug = REPO } = {}) {
   repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
   repo.git("remote", "add", "origin", origin);
   repo.git("push", "-q", "-u", "origin", "main");
+  for (const b of before) {
+    repo.git("switch", "-q", "-c", b);
+    repo.commit({ [`${b.replace(/\W/g, "-")}.txt`]: "b\n" }, b);
+    repo.git("push", "-q", "-u", "origin", b);
+    repo.git("switch", "-q", "main");
+    repo.git("-c", "user.email=spec@example.test", "-c", "user.name=spec", "merge", "-q", "--no-ff", "-m", `merge ${b}`, b);
+    repo.git("push", "-q", "origin", "main");
+  }
   repo.git("switch", "-q", "-c", branch);
   repo.commit({ "a.txt": "a\n" }, "work");
   repo.git("push", "-q", "-u", "origin", branch);
@@ -1559,6 +1568,50 @@ describe("task close убирает влитое", () => {
       expect(git(work, "branch", "--list", "fix/49-x")).toBe("");
       expect(git(origin, "branch", "--list", "fix/49-x")).toBe("");
       expect(r.out).toContain("+ remote branch fix/49-x deleted");
+    } finally {
+      cleanup();
+    }
+  });
+
+  /**
+   * Задача — один PR, а доправка к влитому PR — та же задача (канон): у задачи бывает два влитых PR. Доправку GitHub с
+   * задачей не связывает — в её коммитах и теле «Refs #N», а не «Closes» — и close убирал одну ветку: ветку чекаута
+   * (доправки), а ветку первого PR — ни локальную, ни удалённую (#435).
+   */
+  it("у задачи два влитых PR — task close удаляет обе их ветки, локальные и удалённые", () => {
+    const { work, origin, cleanup } = checkout("docs/49-y", { before: ["feat/49-x"] });
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "feat/49-x", base: "main", model: null, merged: true };
+      f.prs[78] = { files: [], closes: [], head: "docs/49-y", base: "main", body: "Refs #49", model: null, merged: true };
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(git(work, "branch", "--show-current")).toBe("");
+      expect(git(work, "rev-parse", "HEAD")).toBe(git(work, "rev-parse", "origin/main"));
+      for (const b of ["feat/49-x", "docs/49-y"]) {
+        expect(git(work, "branch", "--list", b)).toBe("");
+        expect(git(origin, "branch", "--list", b)).toBe("");
+        expect(r.out).toContain(`+ local branch ${b} deleted`);
+        expect(r.out).toContain(`+ remote branch ${b} deleted`);
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  /** «Влита» — по PR или `git cherry` (скилл github): ветка чекаута без влитого PR не убирается из-за чужого влитого PR. */
+  it("ветка чекаута — задачи, но без влитого PR и не влита — не тронута, ветка влитого PR задачи убрана", () => {
+    const { work, origin, cleanup } = checkout("fix/49-y", { merged: false, before: ["feat/49-x"] });
+    try {
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "feat/49-x", base: "main", model: null, merged: true };
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("○ branch fix/49-y is not merged into origin/main — left alone");
+      expect(git(work, "branch", "--show-current")).toBe("fix/49-y");
+      expect(git(origin, "branch", "--list", "fix/49-y")).toContain("fix/49-y");
+      expect(git(work, "branch", "--list", "feat/49-x")).toBe("");
+      expect(git(origin, "branch", "--list", "feat/49-x")).toBe("");
     } finally {
       cleanup();
     }

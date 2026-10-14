@@ -100,7 +100,7 @@ added to the project right on creation (`github task new`). Required:
   - took a task into work — I set In progress before starting the work;
   - finished (PR merged / task closed) — `github task close <N>` sets Done
     together with the actual, the epic, the milestone and removing the merged
-    branch;
+    branches;
   - the task was reopened (the bug came back, the PR was reverted) — I set
     In progress again (or Backlog if no one is working on it); an already
     closed milestone and epic I reopen as well;
@@ -750,10 +750,14 @@ checkout: the dev and e2e stacks `<project>-<N>` and `<project>-<N>-e2e` go
 with their volumes, its lines (`+`, `○`, `!`) are printed as is; no compose
 file in the checkout — an `○` line, Docker isn't called; a failure — a `!`
 line, the rest is done, and `task-env prune` finds the stack later; the merged
-branch — per the "Right after a PR merge" item of section "Git, PRs and
-merging — full rules" below: the checkout moves off the task's branch to
-`origin/<base>` detached, the local and remote branches are deleted; not
-merged or someone else's — an `○` line, nothing is touched. The directory
+branches — per the "Right after a PR merge" item of section "Git, PRs and
+merging — full rules" below: the branch of every merged PR of the task —
+linked or found by the branch and "Closes #N", as above: a follow-up fix to a
+merged PR is the same task, and GitHub doesn't link it — and the checkout's
+task branch; the checkout moves off a removed branch to `origin/<base>`
+detached, the local and remote branches are deleted; a branch without a
+merged PR is merged only by `git cherry`; not merged or someone else's — an
+`○` line, nothing is touched. The directory
 isn't a checkout of the repository — neither stacks nor branches are touched
 (an `○` line: both are named by the checkout's `origin`); a checkout — the
 `owner/repo` of its `origin` equals the task's repository, case aside, not a
