@@ -1472,7 +1472,7 @@ export function parseCodexFile(file: string): Session {
 }
 
 
-/** A cloud session export: what the browser snippet of SKILL.md, "Cloud session", saves. */
+/** A cloud session export: what the browser snippet of reference.md, "Cloud session import", saves. */
 export interface CloudExport {
   v: number;
   session: string;
@@ -4154,7 +4154,7 @@ function cmdCloudImport(files: string[]): void {
     } catch (e) {
       throw new EstError(`${f}: ${(e as Error).message}`);
     }
-    if (!isCloudExport(data)) throw new EstError(`${f}: not a cloud session export (needs session, repo, events — the snippet from SKILL.md est)`);
+    if (!isCloudExport(data)) throw new EstError(`${f}: not a cloud session export (needs session, repo, events — the snippet of reference.md est, «Cloud session import»)`);
     const s = parseCloudFile(f);
     const dst = cloudPath(data.repo, data.session);
     mkdirSync(path.dirname(dst), { recursive: true });
