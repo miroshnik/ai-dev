@@ -3638,6 +3638,20 @@
   "name": "установка прошлой версии без поля language — install без флага пишет ru"
  },
  {
+  "path": "tests/capabilities/install/real-project.test.ts",
+  "describes": [
+   "Флоу работает в проекте, устроенном как настоящий, а не только в тестах ai-dev"
+  ],
+  "name": "spec-claims и deadCode на фикстуре зелёные и краснеют на её поломке"
+ },
+ {
+  "path": "tests/capabilities/install/real-project.test.ts",
+  "describes": [
+   "Флоу работает в проекте, устроенном как настоящий, а не только в тестах ai-dev"
+  ],
+  "name": "установка флоу в проект с .env.local, CJS package.json и workspace проходит, и скрипты флоу работают в нём"
+ },
+ {
   "path": "tests/capabilities/release/release.test.ts",
   "describes": [
    "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
@@ -4056,6 +4070,13 @@
    "Названия берутся из исходников парсером — без прогона"
   ],
   "name": "регулярку с обратной кавычкой после строчного комментария сканер пропускает"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/parse-source.test.ts",
+  "describes": [
+   "Названия берутся из исходников парсером — без прогона"
+  ],
+  "name": "сканер названий тестов видит столько же тестов, сколько отчёт JUnit"
  },
  {
   "path": "tests/capabilities/spec-diff/parse-source.test.ts",
@@ -13091,6 +13112,13 @@
   "describes": [
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
+  "name": "tests/capabilities/install/real-project.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
   "name": "tests/capabilities/release/release.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
@@ -13113,6 +13141,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/spec-claims/spec-claims.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-diff/parse-source.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
