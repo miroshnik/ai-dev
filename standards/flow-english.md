@@ -114,7 +114,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 169 тестов</summary>
+<details><summary>✅ 168 тестов</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -160,7 +160,6 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Harness checks» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Item closed» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Moved into the tree» из skills/spec/SKILL.md печатает или пишет скрипт
-- ✅ цитату «Names that aren't statements (exceptions)» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Next:» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «No estimate: …» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «No estimate» из skills/github/SKILL.md печатает или пишет скрипт
@@ -227,6 +226,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «is declared» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «is denied here (an agent's sandbox?)» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «is read» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «isn't read — names aren't exceptions any more, delete it» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «key \<K> of external system \<x> is read only by adapter \<a>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «library \<m> is in containers \<c1, c2>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «main tree … not fully checked — publishing skipped» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -235,7 +235,6 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «module \<m> is in container \<c>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «move it to outside» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «mutations» из skills/spec/checks.md печатает или пишет скрипт
-- ✅ цитату «name exceptions — a file per name in names.exceptions/» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «new decision» из skills/github/SKILL.md печатает или пишет скрипт
 - ✅ цитату «no calls to unlisted binaries» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no changes — … confirmed for …» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -294,7 +293,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 
 ## Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи
 
-<details><summary>✅ 300 тестов</summary>
+<details><summary>✅ 298 тестов</summary>
 
 - ✅ у каждого языка те же ключи, что у en, и ни одного пустого названия
 - ✅ в en.json нет кириллицы
@@ -510,10 +509,10 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ название spec.diff.modelTitle скрипты читают из словаря
 - ✅ название spec.diff.moved скрипты читают из словаря
 - ✅ название spec.diff.movedFolder скрипты читают из словаря
-- ✅ название spec.diff.nameException скрипты читают из словаря
 - ✅ название spec.diff.noScenarios скрипты читают из словаря
 - ✅ название spec.diff.noSpecBase скрипты читают из словаря
 - ✅ название spec.diff.noTest скрипты читают из словаря
+- ✅ название spec.diff.notStatements скрипты читают из словаря
 - ✅ название spec.diff.outsideFiles скрипты читают из словаря
 - ✅ название spec.diff.outsideMark скрипты читают из словаря
 - ✅ название spec.diff.registry скрипты читают из словаря
@@ -533,8 +532,6 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ название spec.doc.failingCount скрипты читают из словаря
 - ✅ название spec.doc.intro скрипты читают из словаря
 - ✅ название spec.doc.mark скрипты читают из словаря
-- ✅ название spec.doc.nameDebt скрипты читают из словаря
-- ✅ название spec.doc.nameReason скрипты читают из словаря
 - ✅ название spec.doc.none скрипты читают из словаря
 - ✅ название spec.doc.outside скрипты читают из словаря
 - ✅ название spec.doc.outsideIntro скрипты читают из словаря

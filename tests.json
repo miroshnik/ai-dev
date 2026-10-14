@@ -282,6 +282,20 @@
  {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
+   "Публикация спеки — не проверка: её исход и незавершённость не решают ожидание"
+  ],
+  "name": "публикацию спеки, названную в --context, ждут, как любой чек"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
+   "Публикация спеки — не проверка: её исход и незавершённость не решают ожидание"
+  ],
+  "name": "упавшая публикация спеки не делает ожидание после мержа FAIL"
+ },
+ {
+  "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
+  "describes": [
    "Разовый сбой API до начала опроса — повтор, как в опросе, а не исход «не найден»"
   ],
   "name": "коммита нет в репозитории — ERROR сразу, а не ожидание до таймаута"
@@ -1659,6 +1673,13 @@
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
   "describes": [
+   "pr premerge: main красный — не этот PR: не вливать и не чинить в своём PR"
+  ],
+  "name": "упавшая публикация спеки на последнем коммите main не даёт premerge код 3"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
    "pr premerge: main не ушёл после зелёного CI — CI проверил это слияние"
   ],
   "name": "CI считается с самого раннего check suite головы PR"
@@ -2137,7 +2158,7 @@
   "describes": [
    "pr labels ставит задаче метки решений по диффу PR, эпику — объединение"
   ],
-  "name": "`pr labels`: правка только файлов `names.exceptions/` не даёт метку решения"
+  "name": "`pr labels`: удаление оставшихся файлов `names.exceptions/` не даёт метку решения"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -4060,6 +4081,34 @@
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
   "describes": [
+   "Названия, которые не утверждения, — число в теле PR"
+  ],
+  "name": "--json — число в поле `not_statements`"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Названия, которые не утверждения, — число в теле PR"
+  ],
+  "name": "новые названия — утверждения: строки о названиях нет, старое не-утверждение не считается"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Названия, которые не утверждения, — число в теле PR"
+  ],
+  "name": "сводка большого PR тоже называет число"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
+   "Названия, которые не утверждения, — число в теле PR"
+  ],
+  "name": "тело PR называет число названий, которые не утверждения"
+ },
+ {
+  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
+  "describes": [
    "Переезд тестов в дерево — сводкой по папкам, а не тысячами «добавлен»"
   ],
   "name": "--worktree: перенос до коммита тоже сворачивается"
@@ -4132,13 +4181,6 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
-  "name": "spec-diff: исключение названия файлом в `names.exceptions/` — добавленное и снятое"
- },
- {
-  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
-  "describes": [
-   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
-  ],
   "name": "без изменений модели, исключений и проверок — разделов нет"
  },
  {
@@ -4195,13 +4237,6 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
-  "name": "перенос `names.exceptions.ts` в каталог — раздела «Исключения» нет"
- },
- {
-  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
-  "describes": [
-   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
-  ],
   "name": "перенос exceptions.ts в каталог — раздела «Исключения» нет"
  },
  {
@@ -4230,13 +4265,6 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
-  "name": "снято N исключений названий — в разделе N строк"
- },
- {
-  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
-  "describes": [
-   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
-  ],
   "name": "снято одно из двух одинаковых отключений линта в файле — в разделе одна строка"
  },
  {
@@ -4244,14 +4272,7 @@
   "describes": [
    "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
   ],
-  "name": "снятое исключение названия из папки решения — в разделе «Исключения»"
- },
- {
-  "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
-  "describes": [
-   "Решения вне названий тестов — модель, исключения, проверки харнесса — видны в дельте спеки"
-  ],
-  "name": "снятое исключение названия — с файлом теста и названием, без «undefined»"
+  "name": "удалённый каталог `names.exceptions/` — не исключения: раздела «Исключения» нет"
  },
  {
   "path": "tests/capabilities/spec-diff/spec-diff.test.ts",
@@ -4573,14 +4594,14 @@
   "describes": [
    "Название — утверждение на языке проекта"
   ],
-  "name": "spec-doc в проекте на en принимает английское утверждение и отвергает идентификатор"
+  "name": "spec-doc в проекте на en принимает английское утверждение и предупреждает об идентификаторе"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
    "Название — утверждение на языке проекта"
   ],
-  "name": "в проекте на en долг названий в оглавлении и причина от --names-baseline — по-английски"
+  "name": "название describe или it без русских слов — идентификатор, имя функции или файла — spec-doc называет его и файл"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
@@ -4592,65 +4613,30 @@
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+   "Название, которое не утверждение, — предупреждение, а не ошибка"
   ],
-  "name": "`--names-baseline` пишет файл на название и удаляет ненужные"
+  "name": "каталог `names.exceptions/` и прежний `names.exceptions.ts` spec-doc не читает и просит удалить, код выхода не меняется"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+   "Название, которое не утверждение, — предупреждение, а не ошибка"
   ],
-  "name": "`names.exceptions.ts` — ошибка с подсказкой `spec-exceptions`"
+  "name": "название, которое не утверждение, — предупреждение, spec-doc --strict выходит с кодом 0"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+   "Название, которое не утверждение, — предупреждение, а не ошибка"
   ],
-  "name": "исключение на название, которое стало утверждением или пропало, — spec-doc просит удалить его файл"
+  "name": "тест вне дерева по-прежнему даёт spec-doc --strict код 1"
  },
  {
   "path": "tests/capabilities/spec-doc/names.test.ts",
   "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
+   "Название, которое не утверждение, — предупреждение, а не ошибка"
   ],
-  "name": "исключение названия не в папке своего теста — ошибка --strict"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "исключение названия — файл в `names.exceptions/` папки решения"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "исключения названий видны в оглавлении спеки — это долг"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "каталог `names.exceptions/` в подпапке папки решения — ошибка с местом каталога"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "старое название из исключений не валит --strict, новое — валит"
- },
- {
-  "path": "tests/capabilities/spec-doc/names.test.ts",
-  "describes": [
-   "Названия-утверждения вводятся постепенно: старые — исключениями с задачей"
-  ],
-  "name": "файл в `names.exceptions/` — не исключение названия: ошибка с путём"
+  "name": "флагов `--names-baseline` и `--names-exceptions` нет — ошибка вызова"
  },
  {
   "path": "tests/capabilities/spec-doc/sequence.test.ts",
@@ -4804,13 +4790,6 @@
   "describes": [
    "Нарушение структуры спеки видно при сборке, --strict — код 1"
   ],
-  "name": "название describe или it без русских слов — идентификатор, имя функции или файла — spec-doc называет его и файл"
- },
- {
-  "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
-  "describes": [
-   "Нарушение структуры спеки видно при сборке, --strict — код 1"
-  ],
   "name": "папка без главного файла `<папка>.test.ts` — spec-doc называет, где его ждёт"
  },
  {
@@ -4862,14 +4841,14 @@
    "Отчёты Vitest, Playwright и bun test — в любом сочетании",
    "bun test: хук describe — testcase «(unnamed)» без строки"
   ],
-  "name": "тест без имени, который выполнялся, — по-прежнему ошибка `--strict`"
+  "name": "тест без имени, который выполнялся, spec-doc называет предупреждением"
  },
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
   "describes": [
    "Отчёты Vitest, Playwright и bun test — в любом сочетании"
   ],
-  "name": "Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, --strict ловит не-утверждение"
+  "name": "Playwright `--list` без прогона: названия e2e сверяются вместе с юнитами, не-утверждение — предупреждение"
  },
  {
   "path": "tests/capabilities/spec-doc/spec-doc.test.ts",
@@ -5031,20 +5010,6 @@
    "Страница стандарта показывает примеры и исключения"
   ],
   "name": "элемент вне охвата — причина под строкой теста"
- },
- {
-  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
-  "describes": [
-   "Исключения названий spec-doc переезжают в names.exceptions/ той же командой"
-  ],
-  "name": "`spec-exceptions` переносит `names.exceptions.ts` в каталог"
- },
- {
-  "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
-  "describes": [
-   "Исключения названий spec-doc переезжают в names.exceptions/ той же командой"
-  ],
-  "name": "`spec-exceptions` раскладывает общий файл `spec-names` по папкам тестов и убирает `--names-exceptions` из `package.json` и CI"
  },
  {
   "path": "tests/capabilities/spec-exceptions/spec-exceptions.test.ts",
@@ -6158,6 +6123,20 @@
    "Отклонённый пуш — повтор поверх новой головы, а не падение"
   ],
   "name": "после перечитывания ветка уже собрана из потомка — пропуск «already newer», код 0, ветка не меняется"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Следующая публикация поверх нашей до сверки — не расхождение"
+  ],
+  "name": "после пуша в ветке нет нашего коммита — код 1: опубликовано не то, что собрано"
+ },
+ {
+  "path": "tests/capabilities/spec-publish/spec-publish.test.ts",
+  "describes": [
+   "Следующая публикация поверх нашей до сверки — не расхождение"
+  ],
+  "name": "пуш прошёл, а до сверки поверх легла следующая публикация — код 0, наш коммит в истории ветки"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -7555,13 +7534,6 @@
   "describes": [
    "Файл исключений папки решения распознаётся одинаково в spec и github"
   ],
-  "name": "spec/spec-doc распознаёт файл исключений правилом exceptionFile, без своего"
- },
- {
-  "path": "tests/standards/exception-files/exception-files.test.ts",
-  "describes": [
-   "Файл исключений папки решения распознаётся одинаково в spec и github"
-  ],
   "name": "spec/spec-exceptions распознаёт файл исключений правилом exceptionFile, без своего"
  },
  {
@@ -7590,7 +7562,7 @@
   "describes": [
    "Файл исключений папки решения распознаётся одинаково в spec и github"
   ],
-  "name": "реестр «скрипты, распознающие файлы исключений» находит github/github, spec/harness, spec/spec-diff, spec/spec-doc, spec/spec-exceptions, spec/speclib"
+  "name": "реестр «скрипты, распознающие файлы исключений» находит github/github, spec/harness, spec/spec-diff, spec/spec-exceptions, spec/speclib"
  },
  {
   "path": "tests/standards/exception-files/exception-files.test.ts",
@@ -9277,13 +9249,6 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
-  "name": "название spec.diff.nameException скрипты читают из словаря"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
-  ],
   "name": "название spec.diff.noScenarios скрипты читают из словаря"
  },
  {
@@ -9299,6 +9264,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название spec.diff.noTest скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название spec.diff.notStatements скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -9432,20 +9404,6 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название spec.doc.mark скрипты читают из словаря"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
-  ],
-  "name": "название spec.doc.nameDebt скрипты читают из словаря"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
-  ],
-  "name": "название spec.doc.nameReason скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -10250,13 +10208,6 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
-  "name": "цитату «Names that aren't statements (exceptions)» из skills/spec/SKILL.md печатает или пишет скрипт"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
-  ],
   "name": "цитату «Next:» из skills/github/SKILL.md печатает или пишет скрипт"
  },
  {
@@ -10719,6 +10670,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «isn't read — names aren't exceptions any more, delete it» из skills/spec/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «key <K> of external system <x> is read only by adapter <a>» из skills/spec/checks.md печатает или пишет скрипт"
  },
  {
@@ -10769,13 +10727,6 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «mutations» из skills/spec/checks.md печатает или пишет скрипт"
- },
- {
-  "path": "tests/standards/flow-english/flow-english.test.ts",
-  "describes": [
-   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
-  ],
-  "name": "цитату «name exceptions — a file per name in names.exceptions/» из skills/spec/SKILL.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
