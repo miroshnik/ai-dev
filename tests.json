@@ -639,6 +639,13 @@
  {
   "path": "tests/capabilities/dashboard/dashboard.test.ts",
   "describes": [
+   "Ожидания задач — в est history и на дашборде"
+  ],
+  "name": "est history и дашборд показывают ожидания задач и их медианы"
+ },
+ {
+  "path": "tests/capabilities/dashboard/dashboard.test.ts",
+  "describes": [
    "Сводка — точность оценок и цена задачи"
   ],
   "name": "доля $ по моделям последних 10 задач и предыдущих 10: тренд стоимости смешивает флоу с тарифом модели"
@@ -1753,6 +1760,55 @@
    "Факт — активные часы работы над задачей по её сессиям"
   ],
   "name": "сессия на чужой ветке не привязывается — покрытие none, факт недоступен"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "вид ожидания — по команде: wait-ci, gh pr checks --watch, проверки и команда под slot; текст heredoc и чтение файлов — не ожидание"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "интервал перед промптом пользователя в факт не входит, сколько бы он ни длился"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "исполнитель диспетчера, ждущий ответа владельца, — ожидание ввода: в факт не входит"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "ожидание CI дольше 30 минут входит в факт"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "ожидание одобрения разрешения в диалоге — ожидание ввода; разрешение по правилу — время вызова"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "ожидание фоновой команды ci-wait до уведомления сессии — ожидание CI"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Факт — всё время задачи, кроме ожидания ввода, с разбивкой ожиданий"
+  ],
+  "name": "факт делит время на ожидание CI на PR, после мержа и деплоя, локальные проверки с очередью slot и остальное"
  },
  {
   "path": "tests/capabilities/est/est.test.ts",
@@ -10083,6 +10139,20 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название est.fact.waits скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название est.fact.waitsSlot скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название est.hours скрипты читают из словаря"
  },
  {
@@ -12491,6 +12561,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «kept» из skills/est/reference.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «key <K> of external system <x> is read only by adapter <a>» из skills/spec/checks.md печатает или пишет скрипт"
  },
  {
@@ -14600,6 +14677,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/est/SKILL.md: skills/est/reference.md, «Waits» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/est/SKILL.md: skills/est/reference.md, «Writing and reruns» — есть такой раздел"
  },
  {
@@ -14615,6 +14699,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/est/reference.md: skills/est/reference.md, «Actual — the comment» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/est/reference.md: skills/est/reference.md, «Waits» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",

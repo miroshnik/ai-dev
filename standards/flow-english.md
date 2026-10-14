@@ -116,7 +116,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 172 теста</summary>
+<details><summary>✅ 173 теста</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -233,6 +233,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «is denied here (an agent's sandbox?)» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «is read» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «isn't read — names aren't exceptions any more, delete it» из skills/spec/SKILL.md печатает или пишет скрипт
+- ✅ цитату «kept» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «key \<K> of external system \<x> is read only by adapter \<a>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «library \<m> is in containers \<c1, c2>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «main tree … not fully checked — publishing skipped» из skills/spec/reference.md печатает или пишет скрипт
@@ -299,7 +300,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 
 ## Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи
 
-<details><summary>✅ 314 тестов</summary>
+<details><summary>✅ 316 тестов</summary>
 
 - ✅ у каждого языка те же ключи, что у en, и ни одного пустого названия
 - ✅ в en.json нет кириллицы
@@ -396,6 +397,8 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ название est.fact.tokensSplit скрипты читают из словаря
 - ✅ название est.fact.unavailable скрипты читают из словаря
 - ✅ название est.fact.unpriced скрипты читают из словаря
+- ✅ название est.fact.waits скрипты читают из словаря
+- ✅ название est.fact.waitsSlot скрипты читают из словаря
 - ✅ название est.hours скрипты читают из словаря
 - ✅ название est.manual скрипты читают из словаря
 - ✅ название est.reason скрипты читают из словаря
