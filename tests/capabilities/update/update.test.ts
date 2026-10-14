@@ -367,7 +367,7 @@ describe("Копия на машине (-g) сверяется и обновля
     writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
     const r = aiDev(sb, ["check", "-g"]);
     expect(r.code).toBe(1);
-    expect(r.stdout).toContain("  ~ ~/.claude/settings.json\n");
+    expect(r.stdout).toContain("  ~ ~/.claude/settings.json — the SessionStart hook: the flow check and the agent's Bash environment\n");
     expect(aiDev(sb, ["update", "-g"]).code).toBe(0);
     expect(hooks()).toHaveLength(1);
     expect(hooks()[0].command).toContain("github:miroshnik/ai-dev check --hook");

@@ -21,6 +21,9 @@ jobs:
         with:
           fetch-depth: 0 # spec-diff: merge-base с origin/main
       - uses: oven-sh/setup-bun@v2
+      # tests/capabilities/agent-shell запускает Bash-вызов агента в настоящем zsh — оболочке Claude Code на macOS
+      - name: zsh
+        run: command -v zsh || { sudo apt-get update -qq && sudo apt-get install -y -qq zsh; }
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run spec:doc
