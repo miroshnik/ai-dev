@@ -310,8 +310,7 @@ function filesUnder(rel: string, base = process.cwd()): string[] {
  * The calling test folder's exceptions in the wrong place or form (the `exceptionFile` rule): an old `exceptions.ts` of
  * the folder or a subfolder — a failing test with a migration hint; an `exceptions/` directory in a subfolder and
  * non-JSON in the directory — a failing test with the paths. One per folder per run; the check registers it itself — a
- * project that still imports `exceptions.ts` doesn't call `exceptionsIn`. spec-doc's name exceptions
- * (`names.exceptions/`) are checked by spec-doc.
+ * project that still imports `exceptions.ts` doesn't call `exceptionsIn`.
  */
 function legacyExceptions(it: It): void {
   const caller = callerFolder();

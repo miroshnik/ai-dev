@@ -1,8 +1,8 @@
 /**
  * speclib — shared by spec-doc, spec-diff, spec-publish, spec-exceptions and the harness: the tests/ tree, the test
  * model, the publication's `Source:`, parsing of runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML from
- * `bun test`), parsing of test sources with a parser (describe/it/test for TS/JS: names and prose from JSDoc) and the
- * rule for a decision folder's exception files (`exceptionFile`).
+ * `bun test`), parsing of test sources with a parser (describe/it/test for TS/JS: names and prose from JSDoc), the
+ * rule for a decision folder's exception files (`exceptionFile`) and the "a name is a statement" rule (`isStatement`).
  *
  * The scripts run under Bun (`bun script.ts`); the harness imports this module too, and a project's test loads the
  * harness under the project's runner, Node included — so only `node:` APIs and erasable TypeScript
@@ -11,7 +11,7 @@
  * (skills/spec/canon.md) and the standard report formats.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import locale from "../../github/scripts/locale.ts";
@@ -112,21 +112,15 @@ export function decisionFolder(file: string): string | null {
 /** Decision folder exceptions — the `exceptions/` directory, a file per harness registry element (`exceptionsIn`). */
 export const EXCEPTIONS_DIR = "exceptions";
 
-/**
- * spec-doc name exceptions — the decision folder's `names.exceptions/` directory, a file per name: parallel PRs each
- * remove their own file, while in a shared array adjacent lines conflicted.
- */
-export const NAMES_DIR = "names.exceptions";
-
-// the old format — an array in one file: the harness's exceptions.ts, spec-doc's names.exceptions.ts
-const LEGACY_EXCEPTIONS = /^(names\.)?exceptions\.(ts|mts|js|mjs|json)$/;
+// the old format — an array in one file: the harness's exceptions.ts
+const LEGACY_EXCEPTIONS = /^exceptions\.(ts|mts|js|mjs|json)$/;
 
 /** Whose exceptions file it is and in what form. */
 export interface ExceptionFile {
   /** The decision folder `tests/<kind>/<name>` these exceptions belong to. */
   folder: string;
-  /** The folder's exceptions directory: harness registry elements or spec-doc names. */
-  dir: typeof EXCEPTIONS_DIR | typeof NAMES_DIR;
+  /** The folder's exceptions directory. */
+  dir: typeof EXCEPTIONS_DIR;
   /**
    * The old format — an array in one file of the folder or a subfolder: spec-exceptions moves it into the folder's
    * `dir` directory.
@@ -141,12 +135,11 @@ export interface ExceptionFile {
  * in the github skill (`pr labels`: a mechanical edit) is checked against it by the standard
  * `tests/standards/exception-files`.
  *
- * - `tests/<kind>/<name>/exceptions/<element>.json` (`names.exceptions/<name>.json`) — the folder's exception;
+ * - `tests/<kind>/<name>/exceptions/<element>.json` — the folder's exception;
  * - another file in the directory (not `.json`, a nested directory) — an error: an exception is a JSON file;
  * - the directory in a subfolder of the decision folder — an error: there's one directory per folder, `exceptionsIn()`
  *   of a test in any subfolder reads it;
- * - `exceptions.{ts,mts,js,mjs,json}` (`names.exceptions.*`) in the folder or a subfolder — the folder's old exceptions
- *   format;
+ * - `exceptions.{ts,mts,js,mjs,json}` in the folder or a subfolder — the folder's old exceptions format;
  * - outside decision folders, and hidden files — not exceptions (null).
  */
 export function exceptionFile(p: string): ExceptionFile | null {
@@ -154,41 +147,37 @@ export function exceptionFile(p: string): ExceptionFile | null {
   if (folder === null) return null;
   const inner = p.split("/").slice(3);
   if (inner.some((s) => s.startsWith("."))) return null;
-  const at = inner.findIndex((s, i) => (i < inner.length - 1 ? s === EXCEPTIONS_DIR || s === NAMES_DIR : LEGACY_EXCEPTIONS.test(s)));
+  const at = inner.findIndex((s, i) => (i < inner.length - 1 ? s === EXCEPTIONS_DIR : LEGACY_EXCEPTIONS.test(s)));
   if (at < 0) return null;
-  if (at === inner.length - 1) return { folder, dir: inner[at]!.startsWith(`${NAMES_DIR}.`) ? NAMES_DIR : EXCEPTIONS_DIR, legacy: true };
-  const dir = inner[at] as ExceptionFile["dir"];
-  const what = dir === NAMES_DIR ? "name exceptions" : "exceptions";
-  if (at > 0) return { folder, dir, legacy: false, error: `${what} — only in ${folder}/${dir}/ of the decision folder, not in a subfolder` };
-  if (inner.length > 2 || !p.endsWith(".json")) {
-    const form = dir === NAMES_DIR ? "a name exception is a <name>.json file with { file, name, issue, reason }" : "an exception is an <element>.json file with { item, issue, reason }";
-    return { folder, dir, legacy: false, error: form };
-  }
+  const dir = EXCEPTIONS_DIR;
+  if (at === inner.length - 1) return { folder, dir, legacy: true };
+  if (at > 0) return { folder, dir, legacy: false, error: `exceptions — only in ${folder}/${dir}/ of the decision folder, not in a subfolder` };
+  if (inner.length > 2 || !p.endsWith(".json")) return { folder, dir, legacy: false, error: "an exception is an <element>.json file with { item, issue, reason }" };
   return { folder, dir, legacy: false };
 }
 
-/** A name exception: the test, the name, the task to rewrite it and the reason. */
-export interface NameException {
-  file: string;
-  name: string;
-  issue: number;
-  reason: string;
-}
+// a word: letters, the capital — only the first or all (an abbreviation), parts — joined by an apostrophe or a hyphen
+// ("user's", "e-mail"); letters of a caseless script (ideographs, kana) — a whole word, it has no spaces between words
+const PART = String.raw`(?:\p{Lo}+|\p{Lu}+|\p{L}[\p{Ll}\p{M}]*)`;
+const WORD = new RegExp(String.raw`^${PART}(?:['’-]${PART})*$`, "u");
+// marks around a word in a sentence: quotes and brackets, at the end — also punctuation
+const EDGES = /^["'«“‘([{]+|["'»”’)\]}.,;:!?…]+$/gu;
 
 /**
- * A name exception as a file in `<folder>/names.exceptions/`: the file name is the name in Latin characters (stable,
- * visible in the diff); taken by another exception — a suffix, the same text — the same file. Returns the path from
- * the root.
+ * A name is a statement in the project language; code in backticks doesn't count. `ru` — it has Cyrillic words. Another
+ * language — a phrase: two words or more, or one word (of two letters or more, without a hyphen) as a whole. An
+ * identifier (`parseScenarios`, `foo_bar`, `fooBar`, `foo-bar`), a function or file name, a path, a word with a number
+ * (`returns 201`) isn't a statement: the spec reader won't learn from it what the system does. A rule without an exit
+ * code: spec-doc warns, spec-diff counts the PR's new ones.
  */
-export function writeNameException(root: string, folder: string, x: NameException): string {
-  const dir = `${folder}/${NAMES_DIR}`;
-  const body = JSON.stringify({ file: x.file, name: x.name, issue: x.issue, reason: x.reason }, null, 2) + "\n";
-  const slug = x.name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 100) || "name";
-  let name = slug;
-  for (let n = 2; existsSync(path.join(root, dir, `${name}.json`)) && readFileSync(path.join(root, dir, `${name}.json`), "utf8") !== body; n++) name = `${slug}-${n}`;
-  mkdirSync(path.join(root, dir), { recursive: true });
-  writeFileSync(path.join(root, dir, `${name}.json`), body);
-  return `${dir}/${name}.json`;
+export function isStatement(name: string, lang: string): boolean {
+  const text = name.replace(/`[^`]*`/g, "");
+  if (lang === "ru") return /\p{Script=Cyrillic}/u.test(text);
+  const tokens = text.split(/\s+/).map((t) => t.replace(EDGES, "")).filter(Boolean);
+  const words = tokens.filter((t) => WORD.test(t));
+  if (words.length >= 2) return true;
+  const [only] = words;
+  return tokens.length === 1 && only !== undefined && [...only].length >= 2 && !/['’-]/.test(only);
 }
 
 /** Suite status: any failed → failed; otherwise any passed → passed; otherwise todo/skipped. */

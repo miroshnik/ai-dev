@@ -676,55 +676,17 @@ describe("Решения вне названий тестов — модель, 
     expect(diffFrom(base).stdout).not.toContain("**Исключения");
   });
 
-  // исключения названий пишет spec-doc --names-baseline, и схема у них другая — { file, name }, а не { item }
-  const NAMES = "tests/standards/spec-names/exceptions.ts";
-  const names = (list: object[]) => `export default ${JSON.stringify(list)};\n`;
-
-  it("снятое исключение названия — с файлом теста и названием, без «undefined»", () => {
-    const base = repo.commit({ [NAMES]: names([{ file: BILLING, name: "invoice total", issue: 7, reason: "переписать" }]) });
-    repo.commit({ [NAMES]: names([]) });
-    const out = diffFrom(base).stdout;
-    expect(out).not.toContain("undefined");
-    expect(out).toContain(`**Исключения — снято (1):**\n\n- \`tests/standards/spec-names\` · «invoice total» в \`${BILLING}\` (#7) — переписать\n`);
-  });
-
-  // у исключений baseline одна задача и одна причина на всех: разницу даёт только название
-  it("снято N исключений названий — в разделе N строк", () => {
-    const base = repo.commit({ [NAMES]: names(["a", "b", "c"].map((name) => ({ file: BILLING, name, issue: 7, reason: "переписать" }))) });
-    repo.commit({ [NAMES]: names([]) });
-    const out = diffFrom(base).stdout;
-    expect(out).toContain("**Исключения — снято (3):**");
-    expect(out.match(/^- `tests\/standards\/spec-names` · /gm)).toHaveLength(3);
-  });
-
-  it("снятое исключение названия из папки решения — в разделе «Исключения»", () => {
-    const FOLDER = "tests/capabilities/billing/names.exceptions.ts";
-    const base = repo.commit({ [FOLDER]: names([{ file: BILLING, name: "returns 201", issue: 7, reason: "переписать" }]) });
-    repo.commit({ [FOLDER]: names([]) });
-    expect(diffFrom(base).stdout).toContain(`**Исключения — снято (1):**\n\n- \`tests/capabilities/billing\` · «returns 201» в \`${BILLING}\` (#7) — переписать\n`);
-  });
-
-  it("spec-diff: исключение названия файлом в `names.exceptions/` — добавленное и снятое", () => {
-    const DIR = "tests/capabilities/billing/names.exceptions";
-    const one = (name: string, issue: number) => JSON.stringify({ file: BILLING, name, issue, reason: "переписать" }, null, 2) + "\n";
-    const base = repo.commit({ [`${DIR}/returns-201.json`]: one("returns 201", 7), [`${DIR}/returns-404.json`]: one("returns 404", 7) });
-    repo.commit({ [`${DIR}/returns-201.json`]: null, [`${DIR}/createInvoice.json`]: one("createInvoice", 8) });
-    const out = diffFrom(base).stdout;
-    expect(out).toContain(`**Исключения — снято (1):**\n\n- \`tests/capabilities/billing\` · «returns 201» в \`${BILLING}\` (#7) — переписать\n`);
-    expect(out).toContain(`**Исключения — добавлено (1):**\n\n- \`tests/capabilities/billing\` · «createInvoice» в \`${BILLING}\` (#8) — переписать\n`);
-  });
-
-  // перенос spec-exceptions — то же исключение в другом файле, не снятие и не добавление
-  it("перенос `names.exceptions.ts` в каталог — раздела «Исключения» нет", () => {
-    const FOLDER = "tests/capabilities/billing/names.exceptions.ts";
-    const x = { file: BILLING, name: "returns 201", issue: 7, reason: "переписать" };
-    const base = repo.commit({ [FOLDER]: names([x]) });
-    repo.commit({ [FOLDER]: null, "tests/capabilities/billing/names.exceptions/returns-201.json": JSON.stringify(x, null, 2) + "\n" });
+  // исключений названий больше нет (#447): оставшийся каталог удаляют, и это не снятие исключений
+  it("удалённый каталог `names.exceptions/` — не исключения: раздела «Исключения» нет", () => {
+    const x = JSON.stringify({ file: BILLING, name: "returns 201", issue: 7, reason: "переписать" }) + "\n";
+    const base = repo.commit({ "tests/capabilities/billing/names.exceptions/returns-201.json": x, "tests/capabilities/billing/names.exceptions.ts": `export default [${x}];\n` });
+    repo.commit({ "tests/capabilities/billing/names.exceptions/returns-201.json": null, "tests/capabilities/billing/names.exceptions.ts": null });
     expect(diffFrom(base).stdout).not.toContain("**Исключения");
   });
 
   it("исключения одного элемента из разных соглашений папки — разные строки", () => {
     const EXC = "tests/standards/audit/exceptions.ts";
+    const names = (list: object[]) => `export default ${JSON.stringify(list)};\n`;
     const base = repo.commit({ [EXC]: names(["audit", "cancel"].map((rule) => ({ item: "a", issue: 1, reason: "r", rule }))) });
     repo.commit({ [EXC]: names([]) });
     expect(diffFrom(base).stdout).toContain("**Исключения — снято (2):**\n\n- `tests/standards/audit` · a (audit, #1) — r\n- `tests/standards/audit` · a (cancel, #1) — r\n");
@@ -978,13 +940,13 @@ describe("Большой PR — сводка по папкам, полный с�
   });
 
   it("решения выше порога — число на папку, а не список", () => {
-    const NAMES = "tests/standards/spec-names/exceptions.ts";
-    const list = ["a", "b", "c"].map((name) => ({ file: BILLING, name, issue: 7, reason: "переписать" }));
-    const base = repo.commit({ [NAMES]: `export default ${JSON.stringify(list)};\n` });
-    repo.commit({ [NAMES]: "export default [];\n" });
+    const EXC = "tests/standards/audit/exceptions.ts";
+    const list = ["a", "b", "c"].map((item) => ({ item, issue: 7, reason: "переписать" }));
+    const base = repo.commit({ [EXC]: `export default ${JSON.stringify(list)};\n` });
+    repo.commit({ [EXC]: "export default [];\n" });
     const out = diffFrom(base, "--limit", "2").stdout;
-    expect(out).toContain("**Исключения — снято (3), сводкой:**\n\n- `tests/standards/spec-names` — 3\n");
-    expect(out).not.toContain("«a»");
+    expect(out).toContain("**Исключения — снято (3), сводкой:**\n\n- `tests/standards/audit` — 3\n");
+    expect(out).not.toContain("· a (#7)");
   });
 
   it("порог — целое число больше нуля, иначе ошибка запуска", () => {
@@ -992,6 +954,46 @@ describe("Большой PR — сводка по папкам, полный с�
     const r = diffFrom(base, "--limit", "много");
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("--limit");
+  });
+});
+
+/**
+ * Название, которое не утверждение, PR больше не валит (#447): spec-doc называет его предупреждением, а тело PR — число
+ * таких среди названий, которые PR вводит, чтобы ревьюер видел их без лога CI. Старое название файла — не этого PR.
+ */
+describe("Названия, которые не утверждения, — число в теле PR", () => {
+  const NOTE = "⚠️ **Названия — не утверждения: 2** — новые в этом PR; `spec-doc` называет их предупреждениями.\n";
+
+  it("тело PR называет число названий, которые не утверждения", () => {
+    const base = repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("old_name", () => {}); });`) });
+    repo.commit({
+      [BILLING]: ts(
+        `describe("Счета", () => { it("old_name", () => {}); it("returns 201", () => {}); it("выставляется за месяц", () => {}); }); describe("createInvoice", () => { it("создаёт счёт", () => {}); });`,
+      ),
+    });
+    expect(diffFrom(base).stdout).toContain(NOTE);
+  });
+
+  it("новые названия — утверждения: строки о названиях нет, старое не-утверждение не считается", () => {
+    const base = repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("old_name", () => {}); });`) });
+    repo.commit({ [BILLING]: ts(`describe("Счета", () => { it("old_name", () => {}); it("выставляется за месяц", () => {}); });`) });
+    const out = diffFrom(base).stdout;
+    expect(out).toContain("**Добавлены (1):**");
+    expect(out).not.toContain("не утверждения");
+  });
+
+  it("сводка большого PR тоже называет число", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("выставляется", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("выставляется", () => {}); it("returns 201", () => {}); it("returns 404", () => {});`) });
+    const out = diffFrom(base, "--limit", "1").stdout;
+    expect(out).toContain("Сводка по папкам");
+    expect(out).toContain(NOTE);
+  });
+
+  it("--json — число в поле `not_statements`", () => {
+    const base = repo.commit({ [BILLING]: ts(`it("выставляется", () => {});`) });
+    repo.commit({ [BILLING]: ts(`it("выставляется", () => {}); it("returns 201", () => {});`) });
+    expect(JSON.parse(diffFrom(base, "--json").stdout).not_statements).toBe(1);
   });
 });
 

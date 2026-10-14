@@ -9,7 +9,8 @@
  * JSDoc, the section's tests collapsed into <details> with a counter. Sections go in the order of the main file, then
  * of the packages' main files by package name, the other files follow by path. The header of another file of the
  * folder doesn't go into the documentation — the script names the file, --strict gives code 1. No source — no prose.
- * tests/lib is skipped; tests outside the tree go to the "Outside the tree" section — that's a signal.
+ * tests/lib is skipped; tests outside the tree go to the "Outside the tree" section — that's a signal. A describe or it
+ * name that isn't a statement in the project language — a warning line in stderr, without an exit code.
  *
  *   bun spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict]
  *                   [--meta .spec-meta]
@@ -27,7 +28,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -202,29 +203,6 @@ function hasMain(g: Group, root: string): boolean {
   );
 }
 
-// a word: letters, the capital — only the first or all (an abbreviation), parts — joined by an apostrophe or a hyphen
-// ("user's", "e-mail"); letters of a caseless script (ideographs, kana) — a whole word, it has no spaces between words
-const PART = String.raw`(?:\p{Lo}+|\p{Lu}+|\p{L}[\p{Ll}\p{M}]*)`;
-const WORD = new RegExp(String.raw`^${PART}(?:['’-]${PART})*$`, "u");
-// marks around a word in a sentence: quotes and brackets, at the end — also punctuation
-const EDGES = /^["'«“‘([{]+|["'»”’)\]}.,;:!?…]+$/gu;
-
-/**
- * A name is a statement in the project language; code in backticks doesn't count. `ru` — it has Cyrillic words. Another
- * language — a phrase: two words or more, or one word (of two letters or more, without a hyphen) as a whole. An
- * identifier (`parseScenarios`, `foo_bar`, `fooBar`, `foo-bar`), a function or file name, a path, a word with a number
- * (`returns 201`) isn't a statement: the spec reader won't learn from it what the system does.
- */
-export function isStatement(name: string, lang: string): boolean {
-  const text = name.replace(/`[^`]*`/g, "");
-  if (lang === "ru") return /\p{Script=Cyrillic}/u.test(text);
-  const tokens = text.split(/\s+/).map((t) => t.replace(EDGES, "")).filter(Boolean);
-  const words = tokens.filter((t) => WORD.test(t));
-  if (words.length >= 2) return true;
-  const [only] = words;
-  return tokens.length === 1 && only !== undefined && [...only].length >= 2 && !/['’-]/.test(only);
-}
-
 /** describe and it names that aren't statements — per file, without repeats. */
 function badNames(groups: Map<string, Group>): [string, string][] {
   const seen = new Set<string>();
@@ -233,7 +211,7 @@ function badNames(groups: Map<string, Group>): [string, string][] {
     for (const t of g.tests) {
       for (const n of [...t.describes, t.name]) {
         const k = t.path + "\0" + n;
-        if (seen.has(k) || isStatement(n, LANG)) continue;
+        if (seen.has(k) || L.isStatement(n, LANG)) continue;
         seen.add(k);
         out.push([n, t.path]);
       }
@@ -477,21 +455,6 @@ function outSection(out: Map<string, Test[]>): string[] {
   return lines;
 }
 
-/**
- * An exception for an old name that isn't a statement yet (`src` — its file): `--strict` skips it while the file
- * exists.
- */
-type NameException = L.NameException & { src: string };
-// exceptions in force now (the name still isn't a statement): a debt visible in the table of contents
-let NAME_DEBT: NameException[] = [];
-
-function debtSection(): string[] {
-  if (!NAME_DEBT.length) return [];
-  const lines = ["", `## ${N.spec.doc.nameDebt}`, ""];
-  for (const x of NAME_DEBT) lines.push(`- «${L.mdText(x.name)}» — \`${x.file}\` — #${x.issue} ${L.mdText(x.reason)}`);
-  return lines;
-}
-
 /** The architecture page — next to README, the first line of the "What it's made of" section. */
 const ARCH_PAGE = "architecture.md";
 
@@ -507,7 +470,7 @@ function renderIndex(groups: Map<string, Group>, out: Map<string, Test[]>, model
     if (!names.length && !page) lines.push(N.spec.doc.none);
     for (const n of names) lines.push(indexLine(groups.get(kind + "/" + n)!));
   }
-  lines.push(...debtSection(), ...outSection(out));
+  lines.push(...outSection(out));
   return lines.join("\n") + "\n";
 }
 
@@ -531,7 +494,7 @@ function renderStdout(groups: Map<string, Group>, out: Map<string, Test[]>, mode
     if (!names.length && !page) lines.push(N.spec.doc.none);
     for (const n of names) lines.push(renderGroup(groups.get(kind + "/" + n)!, 3).trimEnd(), "");
   }
-  lines.push(...debtSection(), ...outSection(out));
+  lines.push(...outSection(out));
   return lines.join("\n").trimEnd() + "\n";
 }
 
@@ -651,65 +614,26 @@ function embedMarks(groups: Map<string, Group>, model: Model | null): string[] {
   return problems;
 }
 
-/**
- * The former name exceptions format — a shared file (folders — by the exceptionFile rule); not read, spec-exceptions
- * moves it.
- */
-const SHARED_NAMES = `${L.TESTS}/standards/spec-names/exceptions.ts`;
-const MIGRATE = "migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts";
-// the name exceptions format — as the skill's SKILL.md quotes it
-const NAME_FILES = "name exceptions — a file per name in names.exceptions/ of the decision folder";
+// the former name exceptions — a directory of the decision folder and its old array file: names aren't exceptions any
+// more (#447), nobody reads them
+const NAMES_LEFTOVER = /^names\.exceptions(?:\.(?:ts|mts|js|mjs|json))?$/;
 
-/**
- * Name exceptions — files of the `names.exceptions/` directories of decision folders by the `exceptionFile` rule
- * (speclib); `legacy` — files of the former format; a misplaced or non-JSON file — an error with the path.
- */
-function findNameExceptions(root: string): { list: NameException[]; legacy: string[] } {
-  const list: NameException[] = [];
-  const legacy: string[] = [];
-  const walk = (rel: string) => {
-    let entries;
-    try {
-      entries = readdirSync(path.join(root, rel), { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      const at = `${rel}/${e.name}`;
-      if (e.isDirectory()) {
-        if (e.name !== "node_modules") walk(at);
-        continue;
-      }
-      const x = L.exceptionFile(at);
-      if (at === SHARED_NAMES || (x?.dir === L.NAMES_DIR && x.legacy)) legacy.push(at);
-      else if (x?.dir !== L.NAMES_DIR) continue;
-      else if (x.error) throw new Error(`${at}: ${x.error}`);
-      else list.push(readNameException(root, at));
-    }
-  };
-  walk(L.TESTS);
-  return { list: list.sort((a, b) => a.src.localeCompare(b.src)), legacy: legacy.sort() };
-}
-
-/**
- * A file of the `names.exceptions/` directory — JSON `{ file, name, issue, reason }`, anything else — an error with the
- * path.
- */
-function readNameException(root: string, src: string): NameException {
-  let x: Partial<L.NameException> | null;
+/** Leftover name exceptions under tests/ — the directory or the file, as a path from the root. */
+function leftoverNames(root: string, rel = L.TESTS): string[] {
+  let entries;
   try {
-    x = JSON.parse(readFileSync(path.join(root, src), "utf8")) as Partial<L.NameException> | null;
-  } catch (e) {
-    throw new Error(`${src}: not JSON — ${(e as Error).message}`);
+    entries = readdirSync(path.join(root, rel), { withFileTypes: true });
+  } catch {
+    return [];
   }
-  if (!x || typeof x.file !== "string" || typeof x.name !== "string" || !Number.isInteger(x.issue)) {
-    throw new Error(`${src}: a name exception is { file, name, issue, reason }`);
-  }
-  return { file: x.file, name: x.name, issue: x.issue!, reason: String(x.reason ?? ""), src };
+  return entries
+    .filter((e) => e.name !== "node_modules")
+    .flatMap((e) => (NAMES_LEFTOVER.test(e.name) ? [`${rel}/${e.name}`] : e.isDirectory() ? leftoverNames(root, `${rel}/${e.name}`) : []))
+    .sort();
 }
 
 const USAGE =
-  "spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta] [--names-baseline N]";
+  "spec-doc.ts report.json [report2.xml …] [--root DIR] [--out docs/spec | --stdout] [--strict] [--meta .spec-meta]";
 
 export async function main(argv: string[]): Promise<number> {
   let opts;
@@ -723,8 +647,6 @@ export async function main(argv: string[]): Promise<number> {
         stdout: { type: "boolean", default: false },
         strict: { type: "boolean", default: false },
         meta: { type: "string" },
-        "names-exceptions": { type: "string" },
-        "names-baseline": { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -737,12 +659,6 @@ export async function main(argv: string[]): Promise<number> {
     console.error(USAGE);
     return values.help ? 0 : 2;
   }
-  // the flag of the former shared file: silently skipping it would mean losing the exceptions
-  if (values["names-exceptions"] !== undefined) {
-    console.error(`spec-doc: --names-exceptions is gone: ${NAME_FILES} — ${MIGRATE}`);
-    return 2;
-  }
-
   const root = findRoot(values.root);
   LANG = locale.projectLanguage(root);
   N = locale.names(LANG);
@@ -774,60 +690,9 @@ export async function main(argv: string[]): Promise<number> {
   const { groups, out, libFiles } = build(tests);
   const { missing, headers, legacy, undescribed, unread } = attachDocs(groups, root);
   const noMain = [...groups.values()].filter((g) => !hasMain(g, root)).map(mainPath);
-  // names: old ones — exceptions with a task (a file per name in the decision folder), new violations and unneeded
-  // exceptions — errors
-  let found;
-  try {
-    found = findNameExceptions(root);
-  } catch (e) {
-    console.error(`spec-doc: ${(e as Error).message}`);
-    return 2;
-  }
-  let nameExceptions = found.list;
-  const legacyNames = found.legacy.map((f) => `${f}: ${NAME_FILES} — ${MIGRATE}`);
-  const nameKey = (file: string, name: string) => file + "\0" + name;
-  const bad = badNames(groups);
-  const badKeys = new Set(bad.map(([n, f]) => nameKey(f, n)));
-  if (values["names-baseline"] !== undefined) {
-    const issue = Number(values["names-baseline"]);
-    if (!Number.isInteger(issue) || issue <= 0) {
-      console.error(`spec-doc: --names-baseline is the number of the rewrite issue, not «${values["names-baseline"]}»\n${USAGE}`);
-      return 2;
-    }
-    // exceptions of the former file weren't read: baseline would write them again with a new task
-    if (legacyNames.length) {
-      for (const m of legacyNames) console.error(`spec-doc: ${m}`);
-      return 2;
-    }
-    // unneeded ones — the file goes (an emptied directory too), new ones — a file in the decision folder of their test
-    const stale = nameExceptions.filter((x) => !badKeys.has(nameKey(x.file, x.name)));
-    for (const x of stale) unlinkSync(path.resolve(root, x.src));
-    for (const d of new Set(stale.map((x) => path.posix.dirname(x.src)))) if (!readdirSync(path.resolve(root, d)).length) rmdirSync(path.resolve(root, d));
-    const have = new Set(nameExceptions.map((x) => nameKey(x.file, x.name)));
-    const fresh = bad
-      .filter(([n, f]) => !have.has(nameKey(f, n)))
-      .map(([name, file]) => {
-        const x = { file, name, issue, reason: locale.fill(N.spec.doc.nameReason, { issue }) };
-        return { ...x, src: L.writeNameException(root, L.decisionFolder(file)!, x) };
-      });
-    nameExceptions = [...nameExceptions.filter((x) => badKeys.has(nameKey(x.file, x.name))), ...fresh];
-    console.error(`spec-doc: name exceptions (#${issue}) — added ${fresh.length}, deleted ${stale.length}`);
-  }
-  const excepted = new Set(nameExceptions.map((x) => nameKey(x.file, x.name)));
-  const names = bad.filter(([n, f]) => !excepted.has(nameKey(f, n)));
-  const allNames = new Set([...groups.values()].flatMap((g) => g.tests.flatMap((t) => [...t.describes, t.name].map((n) => nameKey(t.path, n)))));
-  NAME_DEBT = nameExceptions.filter((x) => badKeys.has(nameKey(x.file, x.name)));
-  const home = (x: NameException) => L.decisionFolder(x.file);
-  const staleNames = [
-    ...nameExceptions
-      .filter((x) => !badKeys.has(nameKey(x.file, x.name)))
-      .map((x) => `name exception «${x.name}» (${x.file}) isn't needed — ${allNames.has(nameKey(x.file, x.name)) ? "already a statement" : "the test is gone"}, delete ${x.src}`),
-    // a folder's exception — only for its tests: otherwise the folder's owner clears someone else's debt
-    ...nameExceptions
-      .filter((x) => home(x) !== null && home(x) !== path.posix.dirname(path.posix.dirname(x.src)))
-      .map((x) => `name exception «${x.name}» (${x.file}) isn't in its test's folder: move ${x.src} to ${home(x)}/${L.NAMES_DIR}/`),
-    ...legacyNames,
-  ];
+  // a name that isn't a statement — a warning: the rule stays, the PR isn't red because of it (#447)
+  const names = badNames(groups);
+  const leftovers = leftoverNames(root);
   const marks = embedMarks(groups, model);
 
   if (values.stdout) {
@@ -852,9 +717,8 @@ export async function main(argv: string[]): Promise<number> {
   for (const m of unread) console.error(`spec-doc: ${m}`);
   for (const file of undescribed) console.error(`spec-doc: no description ${file} — why, the reason, the rejected options`);
   for (const file of noMain) console.error(`spec-doc: no main file ${file} — its describe blocks open the page`);
-  for (const [name, file] of names) console.error(`spec-doc: the name isn't a statement in the project language (${LANG}): «${name}» (${file})`);
-  for (const m of staleNames) console.error(`spec-doc: ${m}`);
-  if (NAME_DEBT.length) console.error(`spec-doc: names in exceptions: ${NAME_DEBT.length}`);
+  for (const [name, file] of names) console.error(`spec-doc: warning: the name isn't a statement in the project language (${LANG}): «${name}» (${file})`);
+  for (const at of leftovers) console.error(`spec-doc: warning: ${at} isn't read — names aren't exceptions any more, delete it`);
   for (const file of headers) {
     const [kind, name] = L.classify(file);
     console.error(`spec-doc: a file header doesn't go into the documentation — move it to ${descriptionPath({ kind, name: name! })}: ${file}`);
@@ -864,7 +728,7 @@ export async function main(argv: string[]): Promise<number> {
     console.error(`spec-doc: the folder's main file is ${L.classify(file)[1]}${base.slice("rule".length)}, not ${base} — rename: ${file}`);
   }
   for (const m of marks) console.error(`spec-doc: ${m}`);
-  return (out.size || headers.length || legacy.length || undescribed.length || noMain.length || names.length || staleNames.length || marks.length) && values.strict ? 1 : 0;
+  return (out.size || headers.length || legacy.length || undescribed.length || noMain.length || marks.length) && values.strict ? 1 : 0;
 }
 
 if (import.meta.main) {
