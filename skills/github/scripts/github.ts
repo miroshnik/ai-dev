@@ -2460,7 +2460,8 @@ function renameBranch(io: Io, slug: string, target: string): boolean {
     if (k) (io.sleep ?? pause)(CONFIG_LOCK_PAUSE_MS);
     const args = renamed ? ["config", "--rename-section", `branch.${current}`, `branch.${target}`] : ["branch", "-m", current, target];
     const r = git(...args);
-    // a branch without a section (no upstream) — nothing to rename in the config
+    // a branch without a section (no upstream) — nothing to rename in the config; est reads the `+ branch` line as a
+    // switch of the checkout's branch (gitBranchesIn in skills/est/scripts/est.ts) — the format is shared
     if (r.status === 0 || (renamed && /no such section/.test(r.stderr))) {
       return (io.out(`+ branch ${current} → ${target}${k ? ` (.git/config was locked: ${k} retries)` : ""}`), true);
     }
