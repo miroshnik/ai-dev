@@ -206,6 +206,7 @@ bun --no-env-file <skill dir>/scripts/github.ts task status <N> "In progress" [-
 bun --no-env-file <skill dir>/scripts/github.ts task drop <N> [--duplicate-of M]
 bun --no-env-file <skill dir>/scripts/github.ts task actualize <N>               # right after the merge: the assignment for the epic-refresh subagent
 bun --no-env-file <skill dir>/scripts/github.ts task close <N> [--no-git]         # after merge and deploy: actual, Done, epic, milestone, task stacks and branch removed
+bun --no-env-file <skill dir>/scripts/github.ts task resume                       # the session's task after a restart: which wait to restart
 bun --no-env-file <skill dir>/scripts/github.ts pr labels <PR>                 # decision labels from the PR diff
 bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               # before the merge: the merge with a fresh default branch
 ```
@@ -216,6 +217,7 @@ bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>               #
 | Took into work · reopened | a task without an estimate (created in the GitHub UI) — first `est estimate N --type <branch type> --write`; `task status N "In progress" --branch <type>/N-<slug>` — a separate call, no pipeline (`tail` hides the refusal code): it renames the worktree tool's branch into the task branch |
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed assignment; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
+| Session resumed after the app restarted | the `SessionStart` hook runs `task resume` itself — its line is in the context: run the named command, a background wait died with the process |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
 | PR ready (and after new commits) | `pr labels <PR>` — decision labels for the task and the epic |
 | PR's CI green (`ci-wait` PASS), before `gh pr merge` | `pr premerge <PR>` — a separate call; code `0` — merge, `3` — `main` is red: don't merge, wait for the bug |
@@ -357,6 +359,17 @@ the same wait. A PR that closes any open «`<base>` is red…» bug (`Closes #N`
 in the body) is a fix, without matching the check: the same breakage is named
 by a script one time and by a CI check another; a red `main` doesn't stop it
 (an `○` line), its red merge is code `1`, as usual.
+
+**`task resume`** — a background wait (`ci-wait`) dies with the app's process,
+and a session resumed after a restart doesn't know it (#433). The command reads
+the task pinned to the session (`task status` below; the repository is in the
+pin, not the checkout) and its PRs — linked, otherwise by the task branch, as in
+`task close`: an open PR — `wait-ci.sh pr <PR>` as a background command; only a
+merged one and the task is open — `wait-ci.sh merged <PR>` where the merge
+deploys, then `task close N`; no PR or the task is closed — an `○` line; no pin
+— nothing, without a request to GitHub. Read-only. The Claude Code
+`SessionStart` hook runs it with the session id from its input (`check
+--hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's.
 
 **`task drop`** — closes as not planned (with `--duplicate-of` — as a
 duplicate with a link) and removes it from the project: otherwise "Item closed"

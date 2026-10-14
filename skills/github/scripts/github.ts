@@ -1792,6 +1792,37 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   return 0;
 }
 
+/**
+ * What a resumed session restarts: a background wait (ci-wait) dies with the app's process — at a restart four sessions
+ * lost their waits in one minute, and the owner wrote "continue" 17 times (#433). The SessionStart hook runs this
+ * command: the task pinned to the session (its repository is in the pin, not in the checkout) and its PRs name the
+ * wait — an open PR's checks; a merged PR of an open task — the deploy and `task close`. The PR GitHub didn't link — by
+ * the task branch, as in `task close`. No pin — no line and no request: the session has no task. Read-only.
+ */
+export function cmdTaskResume(io: Io): number {
+  const pin = pinnedTask(io);
+  if (!pin) return 0;
+  const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(pin);
+  if (!m) throw new GhError(`the session pin ${pinFile(io)} — expected owner/repo#N, not «${pin}»`);
+  const [slug, number] = [m[1]!, Number(m[2])];
+  const task = `session task ${slug}#${number}`;
+  const issue = loadIssue(io, slug, number);
+  if (issue.state !== "OPEN") return io.out(`○ ${task} is closed — no wait to restart`), 0;
+  const live = (prs: Issue["prs"]) => prs.filter((p) => p.state === "OPEN" || p.merged);
+  const prs = live(issue.prs).length ? live(issue.prs) : live(unlinkedPrs(io, slug, number).prs);
+  const open = prs.filter((p) => p.state === "OPEN");
+  // the task isn't done while a PR of it is open: a follow-up fix after a merge waits for its own checks
+  for (const p of open) io.out(`Session task ${slug}#${number}: PR #${p.number} is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT_CI} pr ${p.number}`);
+  const merged = prs.filter((p) => p.merged).sort((a, b) => b.number - a.number)[0];
+  if (!open.length && merged)
+    io.out(
+      `Session task ${slug}#${number}: PR #${merged.number} is merged, the task is open — where the merge deploys, the deploy wait as a background command: bash ${WAIT_CI} merged ${merged.number}; ` +
+        `then close the task: bun --no-env-file ${import.meta.path} task close ${number}`,
+    );
+  if (!prs.length) io.out(`○ ${task}: no PR — no wait to restart`);
+  return 0;
+}
+
 // canon task types — a copy of EST_TYPES and BRANCH_CONV_RE from skills/est/scripts/est.ts (and in skills/task-env/scripts/task-env.ts):
 // there's no shared module (a skill is installed alone), the tests/standards/task-branch standard keeps the parsing identical
 const TASK_TYPES = ["feat", "fix", "docs", "refactor", "perf", "test", "chore", "ci", "build", "research"];
@@ -2445,6 +2476,7 @@ const USAGE = `github — the repository's GitHub project and tasks by the AGENT
   github task drop     <N> [--duplicate-of M] [--repo owner/repo]
   github task actualize <N> [--repo owner/repo]
   github task close    <N> [--no-git] [--repo owner/repo]
+  github task resume
   github pr labels     <N> [--repo owner/repo]
   github pr premerge   <N> [--repo owner/repo]
 
@@ -2461,6 +2493,8 @@ task status — In progress pins the task to the session (file sessions/<CLAUDE_
         a .git/config locked by another checkout — retried ~10 s, then a ! line with the command that finishes it (code 1).
 task actualize — right after the merge, in parallel with the deploy: prints the assignment for the epic-refresh subagent
         (the task, the epic, its open tasks, the five checks); no epic or no open tasks in it — "refresh not needed".
+task resume — the SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks,
+        a merged PR of an open task — the deploy and task close; no pin — nothing (code 0).
 task close — after the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write),
         Status Done, the epic and the milestone, the task's stacks taken down with their volumes (task-env down), the
         merged branch removed (--no-git — without git). Docker and gh don't work in an agent's sandbox — run it outside.
@@ -2508,9 +2542,9 @@ export function main(argv: string[], io: Io): number {
       io.out(USAGE);
       return group ? 0 : 2;
     }
-    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "actualize", "close"], pr: ["labels", "premerge"] };
+    const known: Record<string, string[]> = { project: ["check", "fix"], task: ["new", "status", "drop", "actualize", "close", "resume"], pr: ["labels", "premerge"] };
     if (!known[group]?.includes(cmd ?? "")) {
-      io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected project check|fix, task new|status|drop|actualize|close or pr labels|premerge`);
+      io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected project check|fix, task new|status|drop|actualize|close|resume or pr labels|premerge`);
       return 2;
     }
     if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
@@ -2555,6 +2589,11 @@ export function main(argv: string[], io: Io): number {
           "no-git": { type: "boolean", default: false },
         },
       });
+      // the task and its repository — from the session pin: the hook runs it from any directory
+      if (cmd === "resume") {
+        if (positionals.length) throw new GhError(`extra arguments: ${positionals.join(" ")} — task resume takes the task from the session pin`);
+        return cmdTaskResume(io);
+      }
       const slug = repoOf(values.repo);
       if (cmd === "new") {
         if (positionals.length) throw new GhError(`extra arguments: ${positionals.join(" ")}`);

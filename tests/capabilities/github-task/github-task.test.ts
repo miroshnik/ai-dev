@@ -1432,6 +1432,90 @@ describe("task close снимает стеки задачи", () => {
 });
 
 /**
+ * Фоновое ожидание (ci-wait) умирает с процессом приложения: при перезапуске четыре сессии потеряли ожидания в одну
+ * минуту, и владелец 17 раз писал «продолжай» (#433). Хук SessionStart зовёт `task resume` в возобновлённой сессии:
+ * закреплённая задача и её PR называют, какое ожидание перезапустить, — готовой командой, без хода на поиски.
+ */
+describe("task resume называет, какое ожидание перезапустить закреплённой задаче сессии", () => {
+  const WAIT = path.resolve(import.meta.dir, "../../../skills/ci-wait/scripts/wait-ci.sh");
+  const GITHUB = path.resolve(import.meta.dir, "../../../skills/github/scripts/github.ts");
+  const pr = (f: FakeGitHub, p: Partial<FakeGitHub["prs"][number]>) => (f.prs[77] = { files: [], closes: [49], head: "feat/49-x", base: "main", model: null, ...p });
+  /** Сессия с закреплённой задачей #49: `task status` её и закрепляет. */
+  function pinnedSession(f: FakeGitHub) {
+    const io = inSession(scratch());
+    task(f, ["status", "49", "В работе"], REPO, io);
+    f.mutations.length = 0;
+    return io;
+  }
+
+  it("возобновлённая сессия с открытым PR задачи получает команду перезапустить ожидание его чеков", () => {
+    const f = new FakeGitHub(REC);
+    const io = pinnedSession(f);
+    pr(f, { state: "OPEN" });
+    const r = task(f, ["resume"], REPO, io);
+    expect(r.code).toBe(0);
+    expect(r.out).toBe(`Session task miroshnik/ai-dev#49: PR #77 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 77`);
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("возобновлённая сессия с влитым PR и открытой задачей получает команду закрыть задачу", () => {
+    const f = new FakeGitHub(REC);
+    const io = pinnedSession(f);
+    pr(f, { merged: true });
+    const r = task(f, ["resume"], REPO, io);
+    expect(r.code).toBe(0);
+    expect(r.out).toBe(
+      `Session task miroshnik/ai-dev#49: PR #77 is merged, the task is open — where the merge deploys, the deploy wait as a background command: bash ${WAIT} merged 77; then close the task: bun --no-env-file ${GITHUB} task close 49`,
+    );
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("сессия без закреплённой задачи подсказки не получает — и в GitHub не ходит", () => {
+    const f = new FakeGitHub(REC);
+    let calls = 0;
+    const gh = (args: string[], stdin?: string) => (calls++, f.gh(args, stdin));
+    expect(task(f, ["resume"], REPO, { ...inSession(scratch()), gh })).toEqual({ code: 0, out: "", err: "" });
+    expect(task(f, ["resume"], REPO, { gh })).toEqual({ code: 0, out: "", err: "" });
+    expect(calls).toBe(0);
+  });
+
+  it("PR, который GitHub не связал с задачей, находится по ветке задачи", () => {
+    const f = new FakeGitHub(REC);
+    const io = pinnedSession(f);
+    pr(f, { closes: [], state: "OPEN" });
+    expect(task(f, ["resume"], REPO, io).out).toContain(`PR #77 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 77`);
+  });
+
+  it("открытый PR — ожидание его чеков, даже если у задачи уже есть влитый", () => {
+    const f = new FakeGitHub(REC);
+    const io = pinnedSession(f);
+    pr(f, { merged: true });
+    f.prs[78] = { files: [], closes: [49], head: "fix/49-y", base: "main", model: null, state: "OPEN" };
+    expect(task(f, ["resume"], REPO, io).out).toBe(`Session task miroshnik/ai-dev#49: PR #78 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 78`);
+  });
+
+  it("у задачи нет PR или она закрыта — ждать нечего, строка ○", () => {
+    const f = new FakeGitHub(REC);
+    const io = pinnedSession(f);
+    expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/ai-dev#49: no PR — no wait to restart" });
+    pr(f, { state: "CLOSED" });
+    expect(task(f, ["resume"], REPO, io).out).toBe("○ session task miroshnik/ai-dev#49: no PR — no wait to restart");
+    f.closed(49);
+    expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/ai-dev#49 is closed — no wait to restart" });
+  });
+
+  it("закрепление не по форме owner/repo#N — ошибка (код 2) с путём файла", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    mkdirSync(path.join(config, "sessions"), { recursive: true });
+    writeFileSync(pinFile(config), "49\n");
+    const r = task(f, ["resume"], REPO, inSession(config));
+    expect(r.code).toBe(2);
+    expect(r.err).toBe(`error: the session pin ${pinFile(config)} — expected owner/repo#N, not «49»`);
+  });
+});
+
+/**
  * Задачи — на языке проекта (`language` в `.agents/ai-dev.json` чекаута, канон, «Language»): каркас описания, статусы,
  * тип, задание субагенту и комментарии пишутся названиями словаря `skills/github/locales/<язык>.json`, а разбирается
  * название любого его языка. Доска не на языке проекта (скрипт позван не из чекаута, язык сменили без fix) — задача
