@@ -19,9 +19,11 @@ section "Git, PRs and merging — mechanics".
   before merging. I wait with a polling loop over the API: a PR — by its head
   SHA, a commit — by the full SHA (mechanics and traps below; the `ci-wait`
   skill). Green — then also `github pr premerge <N>`: if `main` moved after
-  CI — fast checks on the merge with a fresh `main`; `main` is red by
-  itself — exit code 3, I don't merge: one bug for it, and I wait for it to
-  close (the `github` skill).
+  CI — fast checks on the merge with a fresh `main` (`typecheck`,
+  `test:spec` — the scripts CI runs; standards and architecture go there
+  once, in a job of their own, not inside `test` and e2e — `ci.md` of the
+  `spec` skill); `main` is red by itself — exit code 3, I don't merge: one bug
+  for it, and I wait for it to close (the `github` skill).
   An empty list or `no checks reported` means "not registered yet", not
   "passed"; a failed check means "red" at once, without waiting for the rest.
 - **Actions jobs didn't start** with the annotation "The job was not started
