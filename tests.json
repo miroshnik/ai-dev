@@ -13124,6 +13124,97 @@
   "name": "таблица ловит расхождения разбора до стандарта: подстрока хоста, регистр хоста, порт, зеркало"
  },
  {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов проекта отвечает одна функция: packageManager в package.json сильнее lockfile, без обоих — npm, .yarnrc.yml — Yarn 2+"
+  ],
+  "name": "skills/github/scripts/github.ts: менеджер пакетов проекта — по таблице правила"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов проекта отвечает одна функция: packageManager в package.json сильнее lockfile, без обоих — npm, .yarnrc.yml — Yarn 2+"
+  ],
+  "name": "нарушитель не проходит: обёртка slot до стандарта: .yarnrc.yml — shell Yarn 2+ при любом менеджере"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов проекта отвечает одна функция: packageManager в package.json сильнее lockfile, без обоих — npm, .yarnrc.yml — Yarn 2+"
+  ],
+  "name": "нарушитель не проходит: раннер test:spec до стандарта: bun.lock сильнее packageManager"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов проекта отвечает одна функция: packageManager в package.json сильнее lockfile, без обоих — npm, .yarnrc.yml — Yarn 2+"
+  ],
+  "name": "реестр «скрипты скиллов с ответом на «какой менеджер пакетов у проекта»» находит skills/github/scripts/github.ts"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов проекта отвечает одна функция: packageManager в package.json сильнее lockfile, без обоих — npm, .yarnrc.yml — Yarn 2+"
+  ],
+  "name": "реестр «скрипты скиллов с ответом на «какой менеджер пакетов у проекта»» не пуст"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов проекта отвечает одна функция: packageManager в package.json сильнее lockfile, без обоих — npm, .yarnrc.yml — Yarn 2+"
+  ],
+  "name": "таблица ловит расхождения копий до стандарта: забытый bun.lock у раннера test:spec, забытый .yarnrc.yml у обёртки slot"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Менеджер пакетов у premerge, обёртки slot и раннера test:spec у check — ответ packageManager"
+  ],
+  "name": "premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через slot.sh, check не предлагает bun test"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Скрипт флоу не читает packageManager и не ищет lockfile мимо функции packageManager"
+  ],
+  "name": "skills/github/scripts/github.ts: поле packageManager и lockfile — только в теле packageManager github"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Скрипт флоу не читает packageManager и не ищет lockfile мимо функции packageManager"
+  ],
+  "name": "нарушитель не проходит: вторая функция packageManager в другом скрипте"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Скрипт флоу не читает packageManager и не ищет lockfile мимо функции packageManager"
+  ],
+  "name": "нарушитель не проходит: скрипт флоу ищет lockfile мимо этой функции"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Скрипт флоу не читает packageManager и не ищет lockfile мимо функции packageManager"
+  ],
+  "name": "нарушитель не проходит: скрипт флоу читает packageManager мимо этой функции"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Скрипт флоу не читает packageManager и не ищет lockfile мимо функции packageManager"
+  ],
+  "name": "реестр «скрипты флоу, которые читают поле packageManager или называют lockfile» находит skills/github/scripts/github.ts"
+ },
+ {
+  "path": "tests/standards/package-manager/package-manager.test.ts",
+  "describes": [
+   "Скрипт флоу не читает packageManager и не ищет lockfile мимо функции packageManager"
+  ],
+  "name": "реестр «скрипты флоу, которые читают поле packageManager или называют lockfile» не пуст"
+ },
+ {
   "path": "tests/standards/readme/readme.test.ts",
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет",
@@ -15133,6 +15224,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/standards/harness-load/harness-load.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/package-manager/package-manager.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",

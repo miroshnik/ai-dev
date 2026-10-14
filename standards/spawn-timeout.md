@@ -17,7 +17,7 @@ preload действует только на первый файл прогон�
 
 ## Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT
 
-<details><summary>✅ 40 тестов</summary>
+<details><summary>✅ 41 тест</summary>
 
 - ✅ реестр «тесты ai-dev, которые запускают процессы» не пуст
 - ✅ нарушитель не проходит: файл с node:child_process без таймаута
@@ -56,6 +56,7 @@ preload действует только на первый файл прогон�
 - ✅ tests/standards/fast-tests/fast-tests.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/standards/flow-english/flow-english.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/standards/harness-load/harness-load.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
+- ✅ tests/standards/package-manager/package-manager.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/standards/readme/readme.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/standards/spec-publish-job/spec-publish-job.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ в реестр попадают установщик, скрипты spec и est
