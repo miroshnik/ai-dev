@@ -1941,6 +1941,13 @@
   "describes": [
    "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
   ],
+  "name": "premerge проверяет слияние, когда ссылки refs/pull/<N>/head на origin ещё нет, а коммит головы достижим"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: main ушёл — быстрые проверки на слиянии со свежим main"
+  ],
   "name": "зависимости ставятся по lockfile слияния до test:spec"
  },
  {
@@ -2005,6 +2012,13 @@
    "pr premerge: проверить нельзя — ошибка, не «merge»"
   ],
   "name": "PR не открыт — ошибка (код 2)"
+ },
+ {
+  "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
+  "describes": [
+   "pr premerge: проверить нельзя — ошибка, не «merge»"
+  ],
+  "name": "головы PR нет ни на origin, ни в чекауте — ошибка (код 2), слияние не проверяется"
  },
  {
   "path": "tests/capabilities/github-premerge/github-premerge.test.ts",
