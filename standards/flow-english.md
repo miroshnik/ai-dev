@@ -114,7 +114,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 168 тестов</summary>
+<details><summary>✅ 169 тестов</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -187,6 +187,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «a proxy without the API?» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «actual unavailable» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «after / before» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «agent Bash: not set up» из claude/CLAUDE.md печатает или пишет скрипт
 - ✅ цитату «all knip findings are of known kinds» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «all time» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «allowed: …» из skills/spec/checks.md печатает или пишет скрипт

@@ -1,5 +1,117 @@
 [
  {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "timeout там, где его нет у машины, ведёт себя как GNU timeout"
+  ],
+  "name": "-s — сигнал (KILL — код 137, как у GNU), -k — KILL вдогонку команде, которая сигнал ловит; --preserve-status — код команды"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "timeout там, где его нет у машины, ведёт себя как GNU timeout"
+  ],
+  "name": "`timeout <секунды> <команда>` работает на macOS без coreutils"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "timeout там, где его нет у машины, ведёт себя как GNU timeout"
+  ],
+  "name": "команды нет — 127, неверный срок — 125 с причиной"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "timeout там, где его нет у машины, ведёт себя как GNU timeout"
+  ],
+  "name": "настоящий timeout машины выигрывает у шима"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "timeout там, где его нет у машины, ведёт себя как GNU timeout"
+  ],
+  "name": "убита вся группа команды: внук не держит вывод вызова и ничего не печатает после срока"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "zsh в Bash-вызове агента понимает команды, написанные для bash"
+  ],
+  "name": "== в [ ] — сравнение, а слово с = в начале — строка, а не путь к команде"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "zsh в Bash-вызове агента понимает команды, написанные для bash"
+  ],
+  "name": "Bash-вызов агента с глобом без совпадений передаёт его команде как есть"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "zsh в Bash-вызове агента понимает команды, написанные для bash"
+  ],
+  "name": "`echo ====` в Bash-вызове агента печатает строку"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "zsh в Bash-вызове агента понимает команды, написанные для bash"
+  ],
+  "name": "в bash текст окружения ничего не ломает и не шумит"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "zsh в Bash-вызове агента понимает команды, написанные для bash"
+  ],
+  "name": "глоб с совпадениями по-прежнему раскрывается"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "zsh в Bash-вызове агента понимает команды, написанные для bash"
+  ],
+  "name": "хук на resume перезаписывает файл окружения, а не дописывает второй раз"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "Окружение Bash агента не настроено — об этом говорят check -g и хук"
+  ],
+  "name": "`check -g` называет, если окружение Bash агента не настроено"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "Окружение Bash агента не настроено — об этом говорят check -g и хук"
+  ],
+  "name": "из терминала строки нет: оболочку агента оттуда не видно"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "Окружение Bash агента не настроено — об этом говорят check -g и хук"
+  ],
+  "name": "машина без хука SessionStart — check -g называет, что без него нет и окружения Bash агента"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "Окружение Bash агента не настроено — об этом говорят check -g и хук"
+  ],
+  "name": "окружение Bash агента ставит метку, по которой его узнаёт check -g"
+ },
+ {
+  "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
+  "describes": [
+   "Окружение Bash агента не настроено — об этом говорят check -g и хук"
+  ],
+  "name": "хук без CLAUDE_ENV_FILE или с файлом, который не записать, — строка с причиной; записал — строки нет"
+ },
+ {
   "path": "tests/capabilities/ci-wait/ci-wait.test.ts",
   "describes": [
    "Issue ждут до закрытия — баг на красный main будит сессию, когда его закрыли"
@@ -10411,6 +10523,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «agent Bash: not set up» из claude/CLAUDE.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «all knip findings are of known kinds» из skills/spec/checks.md печатает или пишет скрипт"
  },
  {
@@ -12875,6 +12994,13 @@
    "примеры"
   ],
   "name": "хелпер из модуля tests/lib, который запускает процессы сам или через другой модуль, — тоже нарушение"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/agent-shell/agent-shell.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
