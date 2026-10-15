@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { REPO } from "../../lib/ai-dev.ts";
+import { REPO } from "../../lib/elves.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { fakeGh, type GhArtifact, ghRun, type GhRun, runScript, SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 import { documentsOf, readFragmentFile } from "../../lib/yaml-fragments.ts";

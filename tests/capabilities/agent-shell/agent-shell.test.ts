@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
+import { elves, sandbox, type Sandbox } from "../../lib/elves.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -18,7 +18,7 @@ beforeEach(() => {
   mkdirSync(path.join(sb.home, ".claude"));
   envFile = path.join(sb.home, ".claude/session-env/session/sessionstart-hook-0.sh");
   mkdirSync(path.dirname(envFile), { recursive: true });
-  aiDev(sb, ["install", "-g"]);
+  elves(sb, ["install", "-g"]);
 });
 afterEach(() => sb.cleanup());
 
@@ -30,7 +30,7 @@ const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 
 /** Хук SessionStart в начале сессии: `check --hook` с `CLAUDE_ENV_FILE`, как его зовёт Claude Code. */
 function hook(env: Record<string, string> = { CLAUDE_ENV_FILE: envFile }) {
-  return aiDev(sb, ["check", "--hook"], { env });
+  return elves(sb, ["check", "--hook"], { env });
 }
 
 /**
@@ -133,15 +133,15 @@ describe("Окружение Bash агента не настроено — об 
 
   /** Из Bash агента: Claude Code ставит в нём CLAUDECODE=1, а метку AI_DEV_AGENT_SHELL — окружение хука. */
   it("`check -g` называет, если окружение Bash агента не настроено", () => {
-    const bare = aiDev(sb, ["check", "-g"], { env: { CLAUDECODE: "1" } });
+    const bare = elves(sb, ["check", "-g"], { env: { CLAUDECODE: "1" } });
     expect(bare.code).toBe(0);
     expect(bare.stdout).toContain(`  ${NOT_SET_UP} — this session got no environment from the Elves SessionStart hook`);
     expect(bare.stdout).toContain("quote globs");
-    expect(aiDev(sb, ["check", "-g"], { env: { CLAUDECODE: "1", AI_DEV_AGENT_SHELL: "1" } }).stdout).not.toContain(NOT_SET_UP);
+    expect(elves(sb, ["check", "-g"], { env: { CLAUDECODE: "1", AI_DEV_AGENT_SHELL: "1" } }).stdout).not.toContain(NOT_SET_UP);
   });
 
   it("из терминала строки нет: оболочку агента оттуда не видно", () => {
-    expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain(NOT_SET_UP);
+    expect(elves(sb, ["check", "-g"]).stdout).not.toContain(NOT_SET_UP);
   });
 
   it("окружение Bash агента ставит метку, по которой его узнаёт check -g", () => {
@@ -160,7 +160,7 @@ describe("Окружение Bash агента не настроено — об 
 
   it("машина без хука SessionStart — check -g называет, что без него нет и окружения Bash агента", () => {
     writeFileSync(path.join(sb.home, ".claude/settings.json"), "{}\n");
-    const r = aiDev(sb, ["check", "-g"]);
+    const r = elves(sb, ["check", "-g"]);
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("  ~ ~/.claude/settings.json — the SessionStart hook: the flow check and the agent's Bash environment\n");
   });

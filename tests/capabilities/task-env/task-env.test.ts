@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { composeEnv, hostProject, projectName, PROXY, proxyHosts, stackOf, taskAddress } from "../../../skills/task-env/scripts/task-env.ts";
-import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
+import { elves, sandbox, type Sandbox } from "../../lib/elves.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
 import { calls, COMPOSE, FAKE_GH, run, SCRIPT } from "../../lib/task-env.ts";
@@ -35,11 +35,11 @@ describe("check -g называет прокси на машине: работа
       "esac",
     ].join("\n");
     writeFileSync(path.join(sb.bin, "docker"), script + "\n", { mode: 0o755 });
-    expect(aiDev(sb, ["install", "-g"]).code).toBe(0);
+    expect(elves(sb, ["install", "-g"]).code).toBe(0);
   });
   afterEach(() => sb.cleanup());
 
-  const check = (state: string, extra: Record<string, string> = {}) => aiDev(sb, ["check", "-g"], { env: { FAKE_DOCKER: state, FAKE_DOCKER_LOG: log, ...extra } });
+  const check = (state: string, extra: Record<string, string> = {}) => elves(sb, ["check", "-g"], { env: { FAKE_DOCKER: state, FAKE_DOCKER_LOG: log, ...extra } });
   const START = "start: bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up";
 
   it("`check -g` называет незапущенный прокси и команду его запуска", () => {
@@ -80,7 +80,7 @@ describe("check -g называет прокси на машине: работа
   });
 
   it("хук SessionStart показывает строку прокси вместе с машиной", () => {
-    const r = aiDev(sb, ["check", "--hook"], { env: { FAKE_DOCKER: "none", FAKE_DOCKER_LOG: log } });
+    const r = elves(sb, ["check", "--hook"], { env: { FAKE_DOCKER: "none", FAKE_DOCKER_LOG: log } });
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/Elves on the machine: up to date[^\n]*\n {2}proxy \*\.localhost: not running/);
   });

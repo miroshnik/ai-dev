@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, sandbox, type Sandbox } from "../../lib/ai-dev.ts";
+import { elves, sandbox, type Sandbox } from "../../lib/elves.ts";
 import { realProject, type RealProject } from "../../lib/real-project.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -13,7 +13,7 @@ let app: RealProject;
 beforeEach(() => {
   sb = sandbox();
   app = realProject(sb);
-  expect(aiDev(sb, ["install", "--lang", "ru"]).code).toBe(0);
+  expect(elves(sb, ["install", "--lang", "ru"]).code).toBe(0);
   app.commit("chore(agents): флоу Elves");
 });
 afterEach(() => sb.cleanup());
@@ -28,7 +28,7 @@ const failed = (r: { code: number | null; output: string }) => (r.code === 0 ? n
  */
 describe("Флоу работает в проекте, устроенном как настоящий, а не только в тестах Elves", () => {
   it("установка флоу в проект с .env.local, CJS package.json и workspace проходит, и скрипты флоу работают в нём", () => {
-    const check = aiDev(sb, ["check"]);
+    const check = elves(sb, ["check"]);
     expect(check.stdout + check.stderr).not.toContain("❌");
     expect(check.code).toBe(0);
     // `.gitignore` прячет CLAUDE.md, .claude/ и vendor/ — файлы флоу всё равно в коммите

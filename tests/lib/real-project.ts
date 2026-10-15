@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { REPO, type Sandbox } from "./ai-dev.ts";
+import { REPO, type Sandbox } from "./elves.ts";
 import { gitRepo, writeTree } from "./spec.ts";
 
 const json = (v: unknown) => JSON.stringify(v, null, 2) + "\n";

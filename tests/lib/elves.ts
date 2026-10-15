@@ -57,7 +57,7 @@ export interface Run {
 }
 
 /** `bun <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта; input — на stdin. */
-export function aiDev(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string>; input?: string } = {}): Run {
+export function elves(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string>; input?: string } = {}): Run {
   const r = spawnSync(process.execPath, [opts.bin ?? BIN, ...args], { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8", input: opts.input });
   if (r.error) throw r.error;
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
@@ -67,7 +67,7 @@ export function aiDev(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: s
  * Пакет Elves в dir — те же файлы, что публикует package.json (`files`), из этого клона с правками (null — удалить
  * файл или каталог); git-репозиторий на main с одним коммитом.
  */
-export function aiDevPackage(dir: string, edits: Record<string, string | null> = {}) {
+export function elvesPackage(dir: string, edits: Record<string, string | null> = {}) {
   mkdirSync(path.join(dir, "docs"), { recursive: true });
   for (const rel of ["package.json", "bin", "AGENTS.md", "claude", "skills"]) cpSync(path.join(REPO, rel), path.join(dir, rel), { recursive: true });
   for (const f of readdirSync(path.join(REPO, "docs")).filter((n) => n.endsWith(".md"))) cpSync(path.join(REPO, "docs", f), path.join(dir, "docs", f));
@@ -80,10 +80,10 @@ export function aiDevPackage(dir: string, edits: Record<string, string | null> =
   return { dir, bin: path.join(dir, "bin/elves.ts"), sha, repo };
 }
 
-export type AiDevPackage = ReturnType<typeof aiDevPackage>;
+export type ElvesPackage = ReturnType<typeof elvesPackage>;
 
 /** Копия пакета вместе с `.git` в dir — без процессов git: пакет собирается один раз на файл теста. */
-export function copyPackage(pkg: AiDevPackage, dir: string): AiDevPackage {
+export function copyPackage(pkg: ElvesPackage, dir: string): ElvesPackage {
   cpSync(pkg.dir, dir, { recursive: true });
   return { dir, bin: path.join(dir, "bin/elves.ts"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
 }
