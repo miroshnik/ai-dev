@@ -83,7 +83,8 @@ bun --no-env-file <skill dir>/scripts/github.ts pr premerge <PR>
 | PR merged | in one turn — `task actualize N` and in the background `wait-ci.sh merged <PR>` (it takes the merge SHA itself); a refresh is needed — next turn, in the background, a subagent with the printed two-line prompt; after both — `task close N` (exit code 0 from the wait — right away, don't read the output) |
 | Task closed without a PR | `task actualize N`, the subagent; then `task close N` |
 | Session resumed after the app restarted | the `SessionStart` hook runs `task resume` itself — its line is in the context: run the named command, a background wait died with the process |
-| "Do all tasks of epic #M", "fix all High bugs" | the session is a dispatcher, not a task: `task queue --epic M` (or `--type`, `--priority`), executors — background subagents; below, "Dispatcher" |
+| "Do all tasks of epic #M", "fix all High bugs", a new epic — the owner's "yes" | the session is a dispatcher, its own task stays: `task queue --epic M` (or `--type`, `--priority`), executors — background subagents; below, "Dispatcher" |
+| Another task: work outside the task, a red-main bug, the flow update | `task new`, then the question to the owner «queue #N?»; "yes" — its executor at once, the same as a dispatcher's (`task new` and `task status` in a session with a task print its prompt) |
 | Won't do, duplicate, replaced by others | `task drop N [--duplicate-of M]` |
 | PR ready (and after new commits) | `pr labels <PR>` — decision labels for the task and the epic |
 | PR's CI green (`ci-wait` PASS), before `gh pr merge` | `pr premerge <PR>` — a separate call; code `0` — merge, `3` — `main` is red: don't merge, wait for the bug |
@@ -104,8 +105,9 @@ What the agent gets wrong without the details (all of them — `reference.md`,
   (`gh issue edit --body-file`); a question that already has ✅ is refused — a
   changed answer is edited by hand.
 - **`task status`** — In progress pins the task to the session: another task
-  In progress in the same session is refused (code 2) — it goes to a new
-  session with the printed first prompt; a mistaken pin — a human deletes its
+  In progress in the same session is refused (code 2) with the question
+  «queue #M?» and its executor's prompt; a task handed out to an executor of
+  this session isn't pinned; a mistaken pin — a human deletes its
   file. `--branch` — only
   with In progress, not for an epic; it renames the branch together with its
   `.git/config` section — not a bare `git branch -m`; the lock still held —
@@ -116,7 +118,7 @@ What the agent gets wrong without the details (all of them — `reference.md`,
   merge either, investigate; `3` — **`main` is red, not this PR**: don't merge
   and don't fix it in the PR — one bug for everyone: the printed wait
   `wait-ci.sh issue <N>` (the `ci-wait` skill, as a background command), or
-  the printed `task new --type Bug` command and a chip, then `premerge` again
+  the printed `task new --type Bug` command and «queue it?», then `premerge` again
   (`reference.md`, "Red main").
 - **`task actualize`** — right after the merge, in parallel with the deploy:
   the mechanics itself, then the subagent's prompt — the two lines after
@@ -139,11 +141,11 @@ What the agent gets wrong without the details (all of them — `reference.md`,
 
 ### Dispatcher
 
-"Do all tasks of epic #M", "fix all High bugs" (`AGENTS.md`, "Session and
-branch — one task"): the session takes no task; `task queue` prints ready
+"Do all tasks of epic #M", "fix all High bugs", a "yes" to «run the
+dispatcher on epic #M?» (`AGENTS.md`, "Session and branch — one task"): any
+session, its own task stays pinned; `task queue` prints ready
 tasks, each with an indented line — its executor's prompt; `--type`,
-`--priority` — only in an organization. A session with a pinned task — a
-refusal (code 2): the dispatcher is a separate session. In Claude Code: an executor — `Agent` with
+`--priority` — only in an organization. In Claude Code: an executor — `Agent` with
 `isolation: "worktree"` and `run_in_background: true`, the prompt — the
 indented line as is; at most 3 at once (a number in the request replaces it);
 `=` — a task in work (In progress, an open PR, handed out to an executor of
@@ -159,7 +161,7 @@ new one (`task resume`). Failed — a comment in the task with what
 stopped, no restart; on an external blocker — *blocked by* on its issue or
 the `external blocker` label with the reason (`reference.md`,
 "Dependencies"): the queue shows it as `○`. Queue empty and nothing running — the summary, the last
-line and, in auto mode, archiving. The executor's side (`--assignment`) — `reference.md`,
+line (a session with its own task — after it) and, in auto mode, archiving. The executor's side (`--assignment`) — `reference.md`,
 "task queue".
 
 ## Git, PRs and merging — mechanics
@@ -194,7 +196,7 @@ full SHA and a merge that deploys — `docs/pr-checks.md`.
   Compose stacks with their volumes, my own worktrees. "Merged" — by the PR or
   `git cherry origin/main <branch>`, not `git branch --merged`. Others'
   branches, worktrees of live sessions, unmerged work — never. The next task —
-  a new session.
+  not in this session.
 - `gh pr merge --delete-branch` from a worktree doesn't delete the local branch
   — this isn't a merge error: I check `gh pr view <N> --json state`, I don't
   repeat the merge.

@@ -476,7 +476,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     const none = fakeGh(p.head, { main, owner: "Organization" });
     const r = premerge(none.gh, p.work);
     expect(none.calls.find((c) => c.startsWith("search/issues?"))).toBe(`search/issues?q=${encodeURIComponent(`repo:${SLUG} is:issue is:open in:title "main красный"`)}&per_page=20`);
-    expect(r.out).toContain(`no bug on red main about check deploy — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun --no-env-file ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; wait for it to close — bash ${WAIT} issue <N> as a background command, then pr premerge ${PR} again`);
+    expect(r.out).toContain(`no bug on red main about check deploy — find an open one on the failed test or file one (label — the failed test's decision) and ask the owner whether to queue it: bun --no-env-file ${GITHUB} task new --type Баг --priority Urgent --title "main красный: чек deploy"; wait for it to close — bash ${WAIT} issue <N> as a background command, then pr premerge ${PR} again`);
     expect(r.code).toBe(3);
   });
 
@@ -534,7 +534,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     expect(r.code).toBe(3);
     expect(r.out).toContain("○ #40 «main красный: чек spec-publish» — about another check: don't wait\n○ #42 «main красный: test:spec» — about another check: don't wait");
     expect(r.out).not.toContain("bug on red main —");
-    expect(r.out).toContain(`no bug on red main about check test — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun --no-env-file ${GITHUB} task new --type Баг --title "main красный: чек test"; wait for it to close — bash ${WAIT} issue <N> as a background command, then pr premerge ${PR} again`);
+    expect(r.out).toContain(`no bug on red main about check test — find an open one on the failed test or file one (label — the failed test's decision) and ask the owner whether to queue it: bun --no-env-file ${GITHUB} task new --type Баг --title "main красный: чек test"; wait for it to close — bash ${WAIT} issue <N> as a background command, then pr premerge ${PR} again`);
     expect(r.last).toBe(MAIN_RED);
   });
 
@@ -544,7 +544,7 @@ describe("pr premerge: main красный — не этот PR: не влива
     const r = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чеки deploy, e2e" }] }).gh, p.work);
     expect(r.code).toBe(3);
     expect(r.out).toContain("bug on red main — #41 «main красный: чеки deploy, e2e»: wait for it to close");
-    expect(r.out).toContain(`no bug on red main about check smoke — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun --no-env-file ${GITHUB} task new --type Баг --title "main красный: чек smoke"`);
+    expect(r.out).toContain(`no bug on red main about check smoke — find an open one on the failed test or file one (label — the failed test's decision) and ask the owner whether to queue it: bun --no-env-file ${GITHUB} task new --type Баг --title "main красный: чек smoke"`);
   });
 
   it("красный test:spec и на голом main — premerge ждёт бага, чей заголовок называет test:spec", () => {
