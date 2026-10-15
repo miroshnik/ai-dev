@@ -192,8 +192,11 @@
       "size": "описание ×{ratio}"
     }
   },
-  "updateCommit": "флоу ai-dev {version}",
-  "updateTask": "Обновить флоу ai-dev",
+  "updateCommit": "флоу Elves {version}",
+  "updateTask": "Обновить флоу Elves",
+  "formerly": {
+    "updateTask": "Обновить флоу ai-dev"
+  },
   "standardIssue": "Стандарт ·",
   "autoAnswer": "✅ авто",
   "lastLine": {

@@ -85,12 +85,12 @@ describe("Код установщика и скриптов скиллов — �
       }
     },
     violator: { name: "комментарий по-русски", item: { file: "skills/x/scripts/x.ts", text: '// подсказка агенту\nconsole.log("Next: task close");\n' } },
-    includes: ["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
+    includes: ["bin/elves.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/spec/scripts/harness.ts"],
   });
 
   it("справка установщика и скриптов скиллов и их команд — на английском", async () => {
     const scripts = clis();
-    expect(scripts.map((c) => c.file)).toEqual(expect.arrayContaining(["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
+    expect(scripts.map((c) => c.file)).toEqual(expect.arrayContaining(["bin/elves.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"]));
     const overviews = await mapLimit(scripts, 8, async (cli) => ({ cli, text: (await isolated(cli, ["--help"])).stdout }));
     const calls = overviews.flatMap(({ cli, text }) => [{ cli, args: [] as string[] }, ...commandsOf(cli.name, text).map((c) => ({ cli, args: c.split(" ") }))]);
     const help = await mapLimit(calls, 8, async ({ cli, args }) => {
@@ -232,7 +232,7 @@ describe("Названия, которые пишут и разбирают ск
  */
 describe("Язык проекта у скриптов скиллов и у установщика — один модуль", () => {
   it("установщик берёт язык и код языка модулем locale скилла github, своего правила у него нет", () => {
-    const bin = codeOnly(read("bin/ai-dev.ts"), "bin/ai-dev.ts");
+    const bin = codeOnly(read("bin/elves.ts"), "bin/elves.ts");
     expect(bin).toContain('import locale from "../skills/github/scripts/locale.ts";');
     expect(bin).not.toMatch(/const (?:DEFAULT|LEGACY)_LANGUAGE\b|\[a-z\]\{2,3\}/);
   });

@@ -170,7 +170,8 @@ no ring and no ratio.
   shows whether the model changed; the flow's effect — by tokens and hours.
 - The effect of a flow change — compare the trend before and after the date
   of an Elves release (tags `vYYYY.MM.DD`) or of the
-  `chore(agents): ai-dev flow …` commit in the project;
+  `chore(agents): Elves flow …` commit in the project (`ai-dev flow …` before the
+  flow's rename);
   fewer than ten tasks after the change so far — too early to draw a
   conclusion. The chart doesn't see flow without tasks (PRs without an issue)
   — the period summary over all sessions shows it, `est period`.

@@ -202,7 +202,7 @@ project's own runner on Node. Each step with its details — `reference.md`,
 "Wiring into a repository"; an old spec's requirements — `migration.md`.
 
 1. **Install** at the project root, the result into a commit:
-   `bunx github:miroshnik/ai-dev install`; exclude `.agents/` and `.claude/`
+   `bunx github:miroshnik/elves install`; exclude `.agents/` and `.claude/`
    from the project's linters and formatters; update — the same command in a
    separate PR.
 2. **Scripts** in `package.json` — via `bun`, reports — those the project has:

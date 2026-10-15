@@ -1,11 +1,11 @@
 {
-  "name": "ai-dev",
+  "name": "elves",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Elves — a development flow with AI agents: shared rules and skills for any agent; install — bunx github:miroshnik/ai-dev install; the installer and skill scripts — TypeScript under Bun, tests — bun test in tests/",
+  "description": "Elves — a development flow with AI agents: shared rules and skills for any agent; install — bunx github:miroshnik/elves install; the installer and skill scripts — TypeScript under Bun, tests — bun test in tests/",
   "bin": {
-    "ai-dev": "bin/ai-dev.ts"
+    "elves": "bin/elves.ts"
   },
   "files": [
     "bin",

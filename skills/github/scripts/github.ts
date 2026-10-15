@@ -1691,6 +1691,13 @@ export interface NewTask {
 export const taskTemplate = (type: string): string =>
   type === N.issueTypes.epic ? `${N.sections.questions}\n` : `${N.sections.scenarios}\n\n${N.sections.questions}\n`;
 
+/**
+ * Titles of the same task as `title`: itself and, for the project's flow update task (`updateTask` of a dictionary
+ * language), its title before the flow's rename (`formerly.updateTask`) — an open update task of an earlier release is
+ * the same task (#544).
+ */
+const sameTitles = (title: string): string[] => [title, ...locale.everyNames().filter((n) => n.updateTask === title).map((n) => n.formerly.updateTask)];
+
 export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const [owner, name] = slug.split("/");
   const ctx = taskContext(io, slug);
@@ -1731,8 +1738,10 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const repoCtx = needCtx ? graphql(io, Q.TaskContext, { owner, name }).repository : null;
   const milestone = o.milestone ? (repoCtx.milestones.nodes as { id: string; title: string }[]).find((m) => m.title === o.milestone) : undefined;
   if (o.milestone && !milestone) throw new GhError(`no open milestone ${q(o.milestone)}`);
-  const dup = (graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${title.replaceAll('"', "")}"` }).search.nodes as Any[]).find((x) => x?.title === title);
-  if (dup) throw new GhError(`an open task with this title already exists: #${dup.number}`);
+  for (const same of sameTitles(title)) {
+    const dup = (graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${same.replaceAll('"', "")}"` }).search.nodes as Any[]).find((x) => x?.title === same);
+    if (dup) throw new GhError(`an open task with this title already exists: #${dup.number}${same === title ? "" : ` (${q(same)} — its title before the flow's rename)`}`);
+  }
   const wanted = [...new Set(o.labels ?? [])];
   // open questions in the description — the questions label: the dashboard and the queue find the task by it
   const open = questionItems(o.body).filter((x) => !x.answered).map((x) => x.k);
@@ -3137,7 +3146,7 @@ export const PREMERGE_SCRIPTS = ["typecheck", "test:spec"];
 /**
  * Spec roots whose checks `test:spec` runs — standards and architecture (the spec skill): there two green PRs break
  * main. A tree with them and without the script — premerge names what isn't checked on the merge, the project's
- * `check` (bin/ai-dev.ts) requires the script (#442).
+ * `check` (bin/elves.ts) requires the script (#442).
  */
 export const SPEC_ROOTS = ["tests/standards", "tests/architecture"];
 /** The spec roots the tree in dir has. */
@@ -3171,7 +3180,7 @@ export interface PackageManager {
 
 /**
  * The project's package manager in dir — the one answer of the flow: `pr premerge` (`projectCommands`), the slot
- * wrapper and the `test:spec` runner of the project's `check` (bin/ai-dev.ts) take it here,
+ * wrapper and the `test:spec` runner of the project's `check` (bin/elves.ts) take it here,
  * `tests/standards/package-manager`. The manager — `packageManager` in package.json, otherwise the lockfile in the
  * order below, otherwise `.yarnrc.yml` — Yarn, otherwise npm. Yarn 2+ — `yarn@2+` in `packageManager`, Yarn by the
  * files — with `.yarnrc.yml`: `packageManager` decides the version too.
@@ -3376,7 +3385,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
   const dirs: string[] = [];
   /** A temporary worktree at origin/<base>: always removed. */
   const worktree = (): string => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "ai-dev-premerge-"));
+    const dir = mkdtempSync(path.join(os.tmpdir(), "elves-premerge-"));
     dirs.push(dir);
     const add = git(io.cwd, "worktree", "add", "-q", "--detach", dir, `origin/${base}`);
     if (add.status !== 0) throw new GhError(`git worktree add: ${add.stderr.trim()}`);
@@ -3420,7 +3429,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     const short = (ref: string) => git(dir, "rev-parse", "--short=7", ref).stdout.trim();
     // like GitHub's merge-ref; a rebase merge without conflicts gives the same tree. A temporary merge doesn't need the
     // project's hooks
-    const merge = git(dir, "-c", "user.name=ai-dev", "-c", "user.email=ai-dev@localhost", "-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "--no-verify", "--no-edit", head);
+    const merge = git(dir, "-c", "user.name=elves", "-c", "user.email=elves@localhost", "-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "--no-verify", "--no-edit", head);
     if (merge.status !== 0) {
       const files = git(dir, "diff", "--name-only", "--diff-filter=U").stdout.split("\n").filter(Boolean);
       if (!files.length) throw new GhError(`git merge: ${merge.stderr.trim()}`);
@@ -3430,7 +3439,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     io.out(`+ merge of ${head.slice(0, 7)} with origin/${base} ${short("HEAD^1")} — no conflicts`);
     // standards without test:spec don't stop the merge: the project's check holds the script, here — that they weren't run
     const roots = specRoots(dir);
-    if (roots.length && !scriptsOf(dir)["test:spec"]) io.out(`○ ${roots.join(", ")} aren't checked on the merge: the merge's package.json has no test:spec script — the project's check names the line to add (bunx github:miroshnik/ai-dev check)`);
+    if (roots.length && !scriptsOf(dir)["test:spec"]) io.out(`○ ${roots.join(", ")} aren't checked on the merge: the merge's package.json has no test:spec script — the project's check names the line to add (bunx github:miroshnik/elves check)`);
     const merged = checks(dir, ON_MERGE, PREMERGE_SCRIPTS);
     if (!merged) {
       io.out(`○ no fast checks: the merge's package.json has no ${PREMERGE_SCRIPTS.join(" or ")} scripts — step skipped`);

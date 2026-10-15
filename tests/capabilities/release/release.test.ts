@@ -15,7 +15,7 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
-// пакет ai-dev собирается один раз на файл
+// пакет Elves собирается один раз на файл
 let packages: { dir: string; cleanup: () => void };
 let base: AiDevPackage;
 beforeAll(() => {
@@ -33,7 +33,7 @@ function owner() {
   const up = copyPackage(base, path.join(sb.tmp, "upstream"));
   const clone = path.join(sb.tmp, "clone");
   git(sb.tmp, "clone", "-q", up.dir, clone);
-  const bin = path.join(clone, "bin/ai-dev.ts");
+  const bin = path.join(clone, "bin/elves.ts");
   const tag = (name: string) => up.repo.git("tag", name);
   const rule = (text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
   return { up, clone, tag, rule, release: (args: string[] = ["--dry-run"]) => aiDev(sb, ["release", ...args], { bin }) };
@@ -56,7 +56,7 @@ describe("Релиз — тег по дате на origin/main и список �
     o.tag(PREV);
     o.up.repo.commit(o.rule("Новое правило."), "docs(agents): новое правило");
     o.up.repo.commit({ "tests/x.test.ts": "// тест\n" }, "test: только тесты");
-    o.up.repo.commit({ "bin/ai-dev.ts": read(path.join(o.up.dir, "bin/ai-dev.ts")) + "// правка\n" }, "fix(install): правка установщика");
+    o.up.repo.commit({ "bin/elves.ts": read(path.join(o.up.dir, "bin/elves.ts")) + "// правка\n" }, "fix(install): правка установщика");
     o.up.repo.commit({ "skills/est/SKILL.md": read(path.join(o.up.dir, "skills/est/SKILL.md")) + "\nшаг\n" }, "feat(est): новый шаг");
     const { r, tag, days } = dated(() => o.release());
     expect(r.code).toBe(0);
@@ -87,7 +87,7 @@ describe("Релиз — тег по дате на origin/main и список �
     const o = owner();
     o.tag(PREV);
     o.up.repo.commit(o.rule("Правило из PR."), "feat(agents): правило из PR\n\nRefs #7");
-    o.up.repo.commit({ "bin/ai-dev.ts": read(path.join(o.up.dir, "bin/ai-dev.ts")) + "// правка\n" }, "fix(install): правка под правило\n\nПричина в одну строку.\nRefs #7");
+    o.up.repo.commit({ "bin/elves.ts": read(path.join(o.up.dir, "bin/elves.ts")) + "// правка\n" }, "fix(install): правка под правило\n\nПричина в одну строку.\nRefs #7");
     const r = o.release();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("- feat(agents): правило из PR (#7)");
@@ -141,10 +141,10 @@ describe("Релиз — тег по дате на origin/main и список �
     expect(r.code).toBe(0);
     expect(days).toContain(tag);
     const args: string[] = JSON.parse(read(out));
-    expect(args.slice(0, 9)).toEqual(["release", "create", tag, "--repo", "miroshnik/ai-dev", "--target", sha, "--title", tag]);
+    expect(args.slice(0, 9)).toEqual(["release", "create", tag, "--repo", "miroshnik/elves", "--target", sha, "--title", tag]);
     expect(args[9]).toBe("--notes");
     expect(args[10]).toContain("- docs(agents): новое правило");
-    expect(r.stdout).toContain(`https://github.com/miroshnik/ai-dev/releases/tag/${tag}`);
+    expect(r.stdout).toContain(`https://github.com/miroshnik/elves/releases/tag/${tag}`);
   });
 
   it("не из клона Elves — отказ, код 2", () => {

@@ -14,7 +14,7 @@ beforeEach(() => {
   sb = sandbox();
   app = realProject(sb);
   expect(aiDev(sb, ["install", "--lang", "ru"]).code).toBe(0);
-  app.commit("chore(agents): флоу ai-dev");
+  app.commit("chore(agents): флоу Elves");
 });
 afterEach(() => sb.cleanup());
 

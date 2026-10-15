@@ -479,7 +479,7 @@ section "Wiring into the project's CI" below.
 1. **Install** at the project root, the result (`.agents/`, `.claude/`, the
    block in `AGENTS.md`) goes into a commit:
    ```bash
-   bunx github:miroshnik/ai-dev install
+   bunx github:miroshnik/elves install
    ```
    - Exclude `.agents/` and `.claude/` from the project's linters and
      formatters (`ignores` in ESLint, `.prettierignore`, `include` in
@@ -655,13 +655,13 @@ section "Wiring into the project's CI" below.
 - **The story is in the main file, named after the folder** (`<name>.test.ts`
   for a capability, an architecture rule and a standard). A standard used to
   have `rule.test.ts` — "the file by rule"; two rules instead of one, and the
-  standard's folder has a name anyway — now there is one (ai-dev#72). The
+  standard's folder has a name anyway — now there is one (elves#72). The
   place is known in advance: a code reader and an agent find the story without
   searching, and the page has a definite beginning — the `describe` order of
   the main file. Rejected: "any single file, `--strict` catches a second one" —
   the story's beginning would depend on where it was written.
 - **The decision's description is `<folder>.md`, not a JSDoc header of the
-  main file (ai-dev#91).** A README next to the tests used to be rejected as a
+  main file (elves#91).** A README next to the tests used to be rejected as a
   second source of meaning. The "what it can do" meaning is still only in the
   test names; the md holds what a test doesn't express — why, the reason for
   the decision, rejected alternatives (formerly `//`, invisible in the spec) —
@@ -675,7 +675,7 @@ section "Wiring into the project's CI" below.
   detail first (`billing-vat` before `billing`). The other files follow by
   path, identical `describe`s merge: unit and e2e tests of one capability are
   one section.
-- **Monorepo — the main file in a package subfolder too (ai-dev#301).** A
+- **Monorepo — the main file in a package subfolder too (elves#301).** A
   decision's tests sit in packages (`export/api/`, `export/web/`): each package
   has its own runner — aliases, environment, plugins — while the decision and
   the page are one. Only a file directly in the folder counted as main, and
@@ -752,7 +752,7 @@ section "Wiring into the project's CI" below.
   before a PR and CI need one version: the `docs/spec` format changes (as it
   did in #32), and documentation built by the skill from a fresh Elves
   wouldn't match CI on another version. Installing the flow
-  (`bunx github:miroshnik/ai-dev install`) puts the skill into
+  (`bunx github:miroshnik/elves install`) puts the skill into
   `.agents/skills/spec`, and it is committed with the project: the project's
   `spec:doc` / `spec:diff` call these files for the agent, in CI and in a
   cloud session; an update is an ordinary PR. The same mechanism installs the
@@ -763,7 +763,7 @@ section "Wiring into the project's CI" below.
     project, where the project's Vitest and ESLint pick them up;
   - an Elves checkout in the workflow (`repository` + `ref: <SHA>`) pins only
     CI: the agent locally calls the skill of another version;
-  - a package (`github:miroshnik/ai-dev#<SHA>` in devDependencies): the
+  - a package (`github:miroshnik/elves#<SHA>` in devDependencies): the
     project's runner imports the harness from it, and Node doesn't strip types
     in `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`) — a build
     would be needed.

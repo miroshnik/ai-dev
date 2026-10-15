@@ -42,8 +42,8 @@ describe("Каждый скрипт, которому нужен каталог 
       },
     ],
     // скрипт, ушедший и от переменной, и от пути, выпал бы из реестра молча
-    includes: ["skills/est/scripts/est.ts", "skills/github/scripts/github.ts", "bin/ai-dev.ts"],
-    outside: [{ item: "bin/ai-dev.ts", reason: INSTALLER }],
+    includes: ["skills/est/scripts/est.ts", "skills/github/scripts/github.ts", "bin/elves.ts"],
+    outside: [{ item: "bin/elves.ts", reason: INSTALLER }],
   });
 
   describe("примеры", () => {

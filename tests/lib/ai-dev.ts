@@ -1,5 +1,5 @@
 /**
- * Хелперы для тестов установщика ai-dev: песочница с HOME и проектом, запуск `bin/ai-dev.ts`, пакет ai-dev с
+ * Хелперы для тестов установщика Elves: песочница с HOME и проектом, запуск `bin/elves.ts`, пакет Elves с
  * правками, снимок дерева. Не спека — в документацию не попадает.
  */
 import { execFileSync, spawnSync } from "node:child_process";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { gitRepo, tmpDir, writeTree } from "./spec.ts";
 
 export const REPO = fileURLToPath(new URL("../../", import.meta.url));
-export const BIN = path.join(REPO, "bin/ai-dev.ts");
+export const BIN = path.join(REPO, "bin/elves.ts");
 
 export interface Sandbox {
   tmp: string;
@@ -64,7 +64,7 @@ export function aiDev(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: s
 }
 
 /**
- * Пакет ai-dev в dir — те же файлы, что публикует package.json (`files`), из этого клона с правками (null — удалить
+ * Пакет Elves в dir — те же файлы, что публикует package.json (`files`), из этого клона с правками (null — удалить
  * файл или каталог); git-репозиторий на main с одним коммитом.
  */
 export function aiDevPackage(dir: string, edits: Record<string, string | null> = {}) {
@@ -77,7 +77,7 @@ export function aiDevPackage(dir: string, edits: Record<string, string | null> =
   }
   const repo = gitRepo(dir);
   const sha = repo.commit({});
-  return { dir, bin: path.join(dir, "bin/ai-dev.ts"), sha, repo };
+  return { dir, bin: path.join(dir, "bin/elves.ts"), sha, repo };
 }
 
 export type AiDevPackage = ReturnType<typeof aiDevPackage>;
@@ -85,24 +85,24 @@ export type AiDevPackage = ReturnType<typeof aiDevPackage>;
 /** Копия пакета вместе с `.git` в dir — без процессов git: пакет собирается один раз на файл теста. */
 export function copyPackage(pkg: AiDevPackage, dir: string): AiDevPackage {
   cpSync(pkg.dir, dir, { recursive: true });
-  return { dir, bin: path.join(dir, "bin/ai-dev.ts"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
+  return { dir, bin: path.join(dir, "bin/elves.ts"), sha: pkg.sha, repo: gitRepo(dir, { init: false }) };
 }
 
 /**
- * Пакет ai-dev, как его кладёт bunx по `github:miroshnik/ai-dev[#<sha>]`: файлы src без `.git` — в
- * `<dir>/node_modules/ai-dev`, спецификатор — в `<dir>/package.json`: с SHA — пакет, поставленный по SHA (релиз),
+ * Пакет Elves, как его кладёт bunx по `github:miroshnik/elves[#<sha>]`: файлы src без `.git` — в
+ * `<dir>/node_modules/elves`, спецификатор — в `<dir>/package.json`: с SHA — пакет, поставленный по SHA (релиз),
  * без SHA (sha null) — пакет из main, пускатель. Установщик в нём — не клон. Возвращает его bin.
  */
 export function bunxPackage(dir: string, src: string, sha: string | null): string {
-  const pkg = path.join(dir, "node_modules/ai-dev");
+  const pkg = path.join(dir, "node_modules/elves");
   cpSync(src, pkg, { recursive: true, filter: (p) => path.basename(p) !== ".git" });
-  const spec = `github:miroshnik/ai-dev${sha ? `#${sha}` : ""}`;
-  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { "ai-dev": spec } }, null, 2) + "\n");
-  return path.join(pkg, "bin/ai-dev.ts");
+  const spec = `github:miroshnik/elves${sha ? `#${sha}` : ""}`;
+  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { elves: spec } }, null, 2) + "\n");
+  return path.join(pkg, "bin/elves.ts");
 }
 
 /**
- * bunx песочницы отдаёт пакеты из dir (bunxPackage): `github:miroshnik/ai-dev#<sha>` — `<dir>/<sha>`, без `#` —
+ * bunx песочницы отдаёт пакеты из dir (bunxPackage): `github:miroshnik/elves#<sha>` — `<dir>/<sha>`, без `#` —
  * `<dir>/main`; флаги bunx до пакета пропускает, аргументы после пакета — установщику, под bun прогона.
  */
 export function bunxServesPackages(sb: Sandbox, dir: string) {
@@ -111,7 +111,7 @@ export function bunxServesPackages(sb: Sandbox, dir: string) {
     "#!/bin/sh",
     'while [ "$#" -gt 0 ]; do case "$1" in github:*) spec="$1"; shift; break ;; *) shift ;; esac; done',
     'case "$spec" in *#*) pkg="${spec#*#}" ;; *) pkg=main ;; esac',
-    `exec "${process.execPath}" "${dir}/$pkg/node_modules/ai-dev/bin/ai-dev.ts" "$@"`,
+    `exec "${process.execPath}" "${dir}/$pkg/node_modules/elves/bin/elves.ts" "$@"`,
   ].join("\n");
   writeFileSync(path.join(sb.bin, "bunx"), script + "\n", { mode: 0o755 });
 }

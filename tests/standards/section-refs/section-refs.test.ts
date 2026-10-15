@@ -147,9 +147,9 @@ describe("Ссылка на раздел документа флоу по наз
       const err = broken(r, repoFile);
       if (err) throw new Error(err);
     },
-    violator: { name: "ссылка на переименованный раздел AGENTS.md", item: { file: "bin/ai-dev.ts", line: 1, target: "AGENTS.md", name: "First step of the session" } },
+    violator: { name: "ссылка на переименованный раздел AGENTS.md", item: { file: "bin/elves.ts", line: 1, target: "AGENTS.md", name: "First step of the session" } },
     includes: [
-      "bin/ai-dev.ts → AGENTS.md, «First step of a session»",
+      "bin/elves.ts → AGENTS.md, «First step of a session»",
       "claude/CLAUDE.md → AGENTS.md, «First step of a session»",
       "skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session»",
       "skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics»",
@@ -169,8 +169,8 @@ describe("Ссылка на раздел документа флоу по наз
     const check = (src: Source) => refsIn(src).map((r) => broken(r, file));
 
     it("ссылка скрипта на раздел AGENTS.md по названию ведёт на существующий заголовок", () => {
-      const src = { file: "bin/ai-dev.ts", text: 'note("Elves flow (AGENTS.md, «First step of a session»):");\n' };
-      expect(refsIn(src)).toEqual([{ file: "bin/ai-dev.ts", line: 1, target: "AGENTS.md", name: "First step of a session" }]);
+      const src = { file: "bin/elves.ts", text: 'note("Elves flow (AGENTS.md, «First step of a session»):");\n' };
+      expect(refsIn(src)).toEqual([{ file: "bin/elves.ts", line: 1, target: "AGENTS.md", name: "First step of a session" }]);
       expect(check(src)).toEqual([null]);
     });
 
@@ -183,7 +183,7 @@ describe("Ссылка на раздел документа флоу по наз
       expect(refsIn({ file: "skills/est/scripts/est.ts", text: "console.log(`… est cloud-import (SKILL.md, «Cloud session»)`);" })).toEqual([
         { file: "skills/est/scripts/est.ts", line: 1, target: "skills/est/SKILL.md", name: "Cloud session" },
       ]);
-      expect(refsIn({ file: "bin/ai-dev.ts", text: "// see SKILL.md est, «Cloud session»" })[0]?.target).toBe("skills/est/SKILL.md");
+      expect(refsIn({ file: "bin/elves.ts", text: "// see SKILL.md est, «Cloud session»" })[0]?.target).toBe("skills/est/SKILL.md");
       expect(check({ file: "skills/github/scripts/github.ts", text: '// (SKILL.md, "Cloud session")' })[0]).toContain("в skills/github/SKILL.md нет раздела «Cloud session»");
     });
 
@@ -214,7 +214,7 @@ describe("Ссылка на раздел документа флоу по наз
     });
 
     it("строки путей в коде и заголовок в блоке кода — не ссылка и не раздел", () => {
-      expect(refsIn({ file: "bin/ai-dev.ts", text: 'const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md"];' })).toEqual([]);
+      expect(refsIn({ file: "bin/elves.ts", text: 'const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md"];' })).toEqual([]);
       expect(check({ file: "docs/x.md", text: '`AGENTS.md`, "Not a heading"' })[0]).toContain("нет раздела «Not a heading»");
     });
 

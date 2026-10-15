@@ -145,7 +145,7 @@ describe("Ядро канона и SKILL.md умещаются в бюджет �
   });
 
   it("бюджет считается в словах всего файла — что между пробелами, блоки кода и frontmatter не исключаются", () => {
-    expect(wordsOf("# Правило\n\n```bash\nbunx github:miroshnik/ai-dev install\n```\n")).toBe(7);
+    expect(wordsOf("# Правило\n\n```bash\nbunx github:miroshnik/elves install\n```\n")).toBe(7);
     expect(wordsOf("  ёлка — палка\t\n")).toBe(3);
   });
 

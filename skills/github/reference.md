@@ -429,7 +429,7 @@ description is rewritten.
   (`updateProjectV2Field`, `singleSelectOptions[].id`): task values and the
   "Item closed" target are kept. Replacing options without ids gives new ids —
   task statuses vanish, "Item closed" sets the deleted `Done`.
-- **The template** — the ai-dev project (`miroshnik/6`): everything the API
+- **The template** — the elves project (`miroshnik/6`): everything the API
   lacks is configured there once. A copy (`copyProjectV2`) carries over views
   with their settings, fields and configured workflows, except auto-add; it
   doesn't carry over tasks, collaborators or the repository link. The template
@@ -839,7 +839,7 @@ merged PR is merged only by `git cherry`; not merged or someone else's — an
 isn't a checkout of the repository — neither stacks nor branches are touched
 (an `○` line: both are named by the checkout's `origin`); a checkout — the
 `owner/repo` of its `origin` equals the task's repository, case aside, not a
-URL substring: `ai-dev-tools` isn't a checkout of `ai-dev` (standard
+URL substring: `elves-tools` isn't a checkout of `elves` (standard
 `origin-repo`, the same for `pr premerge`). The command doesn't delete the
 session's worktree — the `Next` hint; an agent's (`.claude/worktrees/agent-*`,
 a dispatcher's executor) — an `○` line: the dispatcher's next `task queue`
