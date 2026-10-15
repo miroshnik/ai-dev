@@ -53,7 +53,7 @@ function scratch(): string {
   temp.push(cleanup);
   return dir;
 }
-const inSession = (config: string, id = SESSION): Partial<Io> => ({ env: { CLAUDE_CODE_SESSION_ID: id, AI_DEV_CONFIG_DIR: config } });
+const inSession = (config: string, id = SESSION): Partial<Io> => ({ env: { CLAUDE_CODE_SESSION_ID: id, ELVES_CONFIG_DIR: config } });
 const pinFile = (config: string, id = SESSION) => path.join(config, "sessions", id);
 const pinned = (config: string, id = SESSION) => readFileSync(pinFile(config, id), "utf8").trim();
 
@@ -760,7 +760,7 @@ describe("task status берёт в работу одну задачу на се
   it("CLAUDE_CODE_SESSION_ID нет — статус ставится, строка «session not recognized», файла нет", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
-    const io = { env: { AI_DEV_CONFIG_DIR: config } };
+    const io = { env: { ELVES_CONFIG_DIR: config } };
     const r = task(f, ["status", "49", "В работе"], REPO, io);
     expect(r.code).toBe(0);
     expect(r.out).toContain("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — the task isn't pinned");
@@ -782,11 +782,49 @@ describe("task status берёт в работу одну задачу на се
     writeFileSync(path.join(legacy, "repos.json"), "{}\n");
     const io = { env: { CLAUDE_CODE_SESSION_ID: SESSION, HOME: home } };
     expect(task(f, ["status", "49", "В работе"], REPO, io).code).toBe(0);
-    expect(existsSync(path.join(home, ".config", "ai-dev"))).toBe(false);
+    expect(existsSync(path.join(home, ".config"))).toBe(false);
     expect(pinned(legacy)).toBe("miroshnik/ai-dev#49");
     const r = task(f, ["status", "42", "В работе"], REPO, io);
     expect(r.code).toBe(2);
     expect(r.err).toContain(`pin: ${pinFile(legacy)}`);
+  });
+
+  /**
+   * Каталог личной конфигурации до переименования флоу в Elves звался `~/.config/ai-dev`; переносит его `update -g`.
+   * До переноса закрепление ложится в прежний — туда, где его ищет est; на чистой машине — сразу в новый.
+   */
+  it("каталог конфигурации — ~/.config/elves; пока его нет, а прежний ~/.config/ai-dev есть, — прежний: машина до update -g", () => {
+    const pinIn = (home: string) => {
+      const f = new FakeGitHub(REC);
+      expect(task(f, ["status", "49", "В работе"], REPO, { env: { CLAUDE_CODE_SESSION_ID: SESSION, HOME: home } }).code).toBe(0);
+    };
+    const before = scratch();
+    mkdirSync(path.join(before, ".config", "ai-dev"), { recursive: true });
+    pinIn(before);
+    expect(pinned(path.join(before, ".config", "ai-dev"))).toBe("miroshnik/ai-dev#49");
+    expect(existsSync(path.join(before, ".config", "elves"))).toBe(false);
+
+    const after = scratch();
+    for (const d of ["ai-dev", "elves"]) mkdirSync(path.join(after, ".config", d), { recursive: true });
+    pinIn(after);
+    expect(pinned(path.join(after, ".config", "elves"))).toBe("miroshnik/ai-dev#49");
+    expect(existsSync(pinFile(path.join(after, ".config", "ai-dev")))).toBe(false);
+
+    const clean = scratch();
+    pinIn(clean);
+    expect(pinned(path.join(clean, ".config", "elves"))).toBe("miroshnik/ai-dev#49");
+    expect(existsSync(path.join(clean, ".config", "ai-dev"))).toBe(false);
+  });
+
+  it("каталог конфигурации задаёт ELVES_CONFIG_DIR; прежняя AI_DEV_CONFIG_DIR из профиля владельца — запасная", () => {
+    const [elves, former] = [scratch(), scratch()];
+    const f = new FakeGitHub(REC);
+    expect(task(f, ["status", "49", "В работе"], REPO, { env: { CLAUDE_CODE_SESSION_ID: SESSION, AI_DEV_CONFIG_DIR: former } }).code).toBe(0);
+    expect(pinned(former)).toBe("miroshnik/ai-dev#49");
+    const g = new FakeGitHub(REC);
+    expect(task(g, ["status", "49", "В работе"], REPO, { env: { CLAUDE_CODE_SESSION_ID: "other-session", ELVES_CONFIG_DIR: elves, AI_DEV_CONFIG_DIR: former } }).code).toBe(0);
+    expect(pinned(elves, "other-session")).toBe("miroshnik/ai-dev#49");
+    expect(existsSync(pinFile(former, "other-session"))).toBe(false);
   });
 
   // каталог конфигурации бывает симлинком на личный чекаут (AI_DEV_PRIVATE при install -g)

@@ -1345,16 +1345,41 @@ describe("Облачная сессия считается по событиям
   });
 
   it("est cloud-import кладёт выгрузку в личный каталог по репозиторию; не выгрузка — ошибка", () => {
-    const env = { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "" };
+    const env = { ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "" };
     const r = spawnSync("bun", [EST, "cloud-import", exportFile(events())], { encoding: "utf8", env });
     expect(r.status).toBe(0);
-    const stored = path.join(dir, "ai-dev", "cloud", "o", "r", `${SESSION}.json`);
+    const stored = path.join(dir, "elves", "cloud", "o", "r", `${SESSION}.json`);
     expect(JSON.parse(readFileSync(stored, "utf8")).session).toBe(SESSION);
     expect(r.stdout).toContain(`${SESSION} (o/r, «Экспорт»): 12 events, 1 prompt, 10:00–10:10 UTC → ${stored}`);
     writeFileSync(path.join(dir, "bad.json"), JSON.stringify({ data: [] }));
     const bad = spawnSync("bun", [EST, "cloud-import", path.join(dir, "bad.json")], { encoding: "utf8", env });
     expect(bad.status).toBe(1);
     expect(bad.stderr).toContain("not a cloud session export");
+  });
+
+  /**
+   * Каталог личной конфигурации до переименования флоу в Elves звался `~/.config/ai-dev`, переносит его `update -g`:
+   * до переноса реестр, цены и кэш est — в прежнем, на чистой машине — сразу в новом. Выгрузка ложится туда же.
+   */
+  it("est берёт каталог личной конфигурации ~/.config/elves, пока его нет — прежний ~/.config/ai-dev; ELVES_CONFIG_DIR, иначе прежняя AI_DEV_CONFIG_DIR", () => {
+    const file = exportFile(events());
+    // переменные профиля владельца прогона не в счёт: пустая — тоже «не задана»
+    const stored = (env: Record<string, string>) => {
+      const r = spawnSync("bun", [EST, "cloud-import", file], { encoding: "utf8", env: { ...process.env, ELVES_CONFIG_DIR: "", AI_DEV_CONFIG_DIR: "", CLAUDE_CODE_REMOTE: "", ...env } });
+      expect(r.status).toBe(0);
+      return path.relative(env.HOME ?? dir, r.stdout.trim().split(" → ").at(-1)!);
+    };
+    const home = (...dirs: string[]) => {
+      const h = path.join(dir, `home-${dirs.join("-") || "clean"}`);
+      for (const d of ["", ...dirs]) mkdirSync(path.join(h, d), { recursive: true });
+      return h;
+    };
+    const at = (config: string) => path.join(config, "cloud", "o", "r", `${SESSION}.json`);
+    expect(stored({ HOME: home(".config/ai-dev") })).toBe(at(".config/ai-dev"));
+    expect(stored({ HOME: home(".config/ai-dev", ".config/elves") })).toBe(at(".config/elves"));
+    expect(stored({ HOME: home() })).toBe(at(".config/elves"));
+    expect(stored({ HOME: home(), AI_DEV_CONFIG_DIR: path.join(dir, "former") })).toBe(at("../former"));
+    expect(stored({ HOME: home(), AI_DEV_CONFIG_DIR: path.join(dir, "former"), ELVES_CONFIG_DIR: path.join(dir, "elves") })).toBe(at("../elves"));
   });
 });
 
@@ -1365,7 +1390,7 @@ describe("Облачная сессия считается по событиям
  */
 describe("В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением", () => {
   const cloud = (...args: string[]) =>
-    spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+    spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
 
   it("est fact печатает комментарий «Факт недоступен (облако)» со ссылкой на сессию и маркером факта — в GitHub не ходит", () => {
     const r = cloud("fact", "42");
@@ -1389,7 +1414,7 @@ describe("В облачной сессии est считает свою част�
       rec("10:06", { type: "assistant", message: { id: "msg_01", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
       rec("10:12", { type: "assistant", message: { id: "msg_02", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
     ]));
-    return spawnSync("bun", [EST, "fact", "42"], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+    return spawnSync("bun", [EST, "fact", "42"], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
   }
 
   it("est fact в облаке считает часть сессии по её транскрипту в контейнере: «Факт (облако)» с цифрами и маркером части", () => {
@@ -1636,7 +1661,7 @@ type FakeFail = { match: string; times: number; stderr: string };
 /** `cwd` — каталог проекта: язык комментариев — его `.agents/ai-dev.json`; без него — клон Elves (ru). */
 function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeFail[] = [], cwd?: string) {
   const bin = path.join(dir, "bin");
-  const cfg = path.join(dir, "ai-dev");
+  const cfg = path.join(dir, "elves");
   mkdirSync(bin, { recursive: true });
   mkdirSync(cfg, { recursive: true });
   writeFileSync(path.join(bin, "fake-gh.mjs"), FAKE_GH);
@@ -1647,7 +1672,7 @@ function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeF
   const log = path.join(bin, "calls.jsonl");
   writeFileSync(log, "");
   writeFileSync(path.join(bin, "fails.json"), JSON.stringify(fails));
-  const env = { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, AI_DEV_GH_RETRY_MS: "0,0,0" };
+  const env = { ...process.env, HOME: dir, ELVES_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, AI_DEV_GH_RETRY_MS: "0,0,0" };
   const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env, cwd });
   const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));
@@ -1919,7 +1944,7 @@ describe("Вывод читается человеком: часы без хво
 });
 
 describe("Неверный вызов — справка или ошибка до обращения к GitHub", () => {
-  const run = (...args: string[]) => spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "" } });
+  const run = (...args: string[]) => spawnSync("bun", [EST, ...args], { encoding: "utf8", env: { ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "" } });
 
   it("без команды — справка и код 2, неизвестная команда — ошибка", () => {
     expect(exitOf(run())).toBe(2);

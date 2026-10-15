@@ -96,7 +96,7 @@ describe("Команда dashboard сервит страницу сама и о�
     bin = path.join(dir, "bin");
     running = [];
     mkdirSync(bin, { recursive: true });
-    mkdirSync(path.join(dir, "ai-dev"), { recursive: true });
+    mkdirSync(path.join(dir, "elves"), { recursive: true });
     writeFileSync(path.join(bin, "fake-gh.mjs"), FAKE_GH);
     writeFileSync(path.join(bin, "calls.jsonl"), "");
     // «браузер» — и заданный в BROWSER, и системные open / xdg-open: адрес, с которым его позвали, — в opened
@@ -113,7 +113,7 @@ describe("Команда dashboard сервит страницу сама и о�
     cleanup();
   });
 
-  const env = (extra: Record<string, string> = {}) => ({ ...process.env, HOME: dir, AI_DEV_CONFIG_DIR: path.join(dir, "ai-dev"), CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, BROWSER: path.join(bin, "browser"), AI_DEV_PROXY: PROXY_NAME, AI_DEV_PROXY_PORT: String(proxyApi.port), ...extra });
+  const env = (extra: Record<string, string> = {}) => ({ ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, BROWSER: path.join(bin, "browser"), AI_DEV_PROXY: PROXY_NAME, AI_DEV_PROXY_PORT: String(proxyApi.port), ...extra });
   const itemsReads = () => readFileSync(path.join(bin, "calls.jsonl"), "utf8").split("\n").filter((l) => l.includes("node(id:$id)")).length;
   const opened = () => (existsSync(path.join(bin, "opened")) ? readFileSync(path.join(bin, "opened"), "utf8").trim() : null);
   const sync = (args: string[], extra: Record<string, string> = {}) => spawnSync("bun", [DASHBOARD, ...args], { encoding: "utf8", env: env(extra) });
@@ -188,7 +188,7 @@ describe("Команда dashboard сервит страницу сама и о�
 
   it("--all-repos — задачи всех репозиториев реестра, у задачи назван репозиторий", async () => {
     world({ repos: { "o/a": { project: 1, items: [item(1, "Экспорт счетов", 1)] }, "o/b": { project: 2, items: [item(1, "Поиск по каталогу", 2)] } } });
-    writeFileSync(path.join(dir, "ai-dev", "repos.json"), JSON.stringify({ "o/a": {}, "o/b": {} }));
+    writeFileSync(path.join(dir, "elves", "repos.json"), JSON.stringify({ "o/a": {}, "o/b": {} }));
     const d = await start(["--all-repos", "--no-open"]);
     const html = await (await fetch(new URL("/est", d.url))).text();
     expect(html).toContain('data-task="o/a#1"');
@@ -243,9 +243,9 @@ describe("Команда dashboard сервит страницу сама и о�
     // сессия задачи #5 работает из чужого каталога; сессия эпика — из каталога репозитория, без закрепления
     write("-tmp-scratch", "s5", "#5 Импорт банков", rec(120, "CI зелёный.\n\nОсталось: мерж — от владельца."));
     write("-work-a--claude-worktrees-x", "e1", "Биллинг · планирование", rec(600, "Всё сделано, но есть вопросы:\n1. Делить импорт?"));
-    mkdirSync(path.join(dir, "ai-dev", "sessions"), { recursive: true });
-    writeFileSync(path.join(dir, "ai-dev", "sessions", "s5"), "o/a#5\n");
-    writeFileSync(path.join(dir, "ai-dev", "repos.json"), JSON.stringify({ "o/a": { paths: ["/work/a"] } }));
+    mkdirSync(path.join(dir, "elves", "sessions"), { recursive: true });
+    writeFileSync(path.join(dir, "elves", "sessions", "s5"), "o/a#5\n");
+    writeFileSync(path.join(dir, "elves", "repos.json"), JSON.stringify({ "o/a": { paths: ["/work/a"] } }));
     const commit = (state: string) => ({ nodes: [{ commit: { messageBody: "", statusCheckRollup: { state } } }] });
     world({
       repos: {
