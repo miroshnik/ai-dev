@@ -11,6 +11,8 @@ import { tmpDir } from "../../lib/spec.ts";
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 const SLOT = fileURLToPath(new URL("../../../skills/slot/scripts/slot.ts", import.meta.url));
+/** Установщик Elves — бинарь `elves` пакета. */
+const ELVES = fileURLToPath(new URL("../../../bin/elves.ts", import.meta.url));
 /** Начало скрипта package.json после установки флоу: его shell подключает slot.sh, затем идёт команда. */
 const SCRIPT = ". .agents/skills/slot/scripts/slot.sh && ";
 /** Ждать события дольше этого — ошибка с объяснением, а не таймаут теста без него. */
@@ -288,6 +290,23 @@ describe("Скрипт package.json берёт слот своим shell, ком
     expect(w.proc.exitCode).toBe(1);
     expect(w.out()).toBe("");
     for (const n of ["a", "b"]) release(n);
+  });
+
+  /**
+   * Проект без копии флоу берёт slot из пакета `@miroshnik/elves` в devDependencies: шим скрипта зовёт `elves slot --for
+   * $$` — тот же slot.ts пакета, та же очередь и те же переменные (#556).
+   */
+  it("elves slot --for печатает экспорт очереди, как slot.ts", () => {
+    const shells = [spawn("sleep", ["60"], { detached: true }), spawn("sleep", ["60"], { detached: true })] as const;
+    running.push(...shells);
+    const [a, b] = shells.map((s) => s.pid!);
+    const viaElves = spawnSync("bun", ["--no-env-file", ELVES, "slot", "--for", String(a)], { cwd: dir, env: envOf(), encoding: "utf8", timeout: PATIENCE });
+    const viaSlot = run(["--for", String(b)]);
+    expect({ code: exitOf(viaElves), stderr: viaElves.stderr }).toEqual({ code: 0, stderr: "" });
+    expect(exitOf(viaSlot)).toBe(0);
+    expect(viaElves.stdout).toMatch(new RegExp(`^export ELVES_SLOT=\\d+-${a} ELVES_SLOT_CPUS=\\d+ `));
+    const shape = (out: string, pid: number) => out.replaceAll(`-${pid}`, "-<shell>").replace(/=\d{15}-/g, "=<time>-");
+    expect(shape(viaElves.stdout, a!)).toBe(shape(viaSlot.stdout, b!));
   });
 
   it("--for без PID живого процесса — код 2 с объяснением", () => {

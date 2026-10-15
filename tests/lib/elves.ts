@@ -91,13 +91,14 @@ export function copyPackage(pkg: ElvesPackage, dir: string): ElvesPackage {
 /**
  * Пакет Elves, как его кладёт bunx по `github:miroshnik/elves[#<sha>]`: файлы src без `.git` — в
  * `<dir>/node_modules/elves`, спецификатор — в `<dir>/package.json`: с SHA — пакет, поставленный по SHA (релиз),
- * без SHA (sha null) — пакет из main, пускатель. Установщик в нём — не клон. Возвращает его bin.
+ * без SHA (sha null) — пакет из main, пускатель. Установщик в нём — не клон. name — имя зависимости: `elves` — по
+ * имени репозитория, `@miroshnik/elves` — по имени пакета, в `node_modules/@miroshnik/elves`. Возвращает его bin.
  */
-export function bunxPackage(dir: string, src: string, sha: string | null): string {
-  const pkg = path.join(dir, "node_modules/elves");
+export function bunxPackage(dir: string, src: string, sha: string | null, name = "elves"): string {
+  const pkg = path.join(dir, "node_modules", name);
   cpSync(src, pkg, { recursive: true, filter: (p) => path.basename(p) !== ".git" });
   const spec = `github:miroshnik/elves${sha ? `#${sha}` : ""}`;
-  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { elves: spec } }, null, 2) + "\n");
+  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { [name]: spec } }, null, 2) + "\n");
   return path.join(pkg, "bin/elves.ts");
 }
 

@@ -204,6 +204,14 @@ Projects and machines with a copy get the flow **by releases** — tags `vYYYY.M
 - `check` changes nothing: it compares a copy with the latest release (the same install as a dry run, a list of differences), a `--link` clone — with `origin/main` after `git fetch`.
 - `update`: a copy — reinstalled from the latest release; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason). It says what changed, and the agent tells the user: a copy — every release after the installed one, newest first, with the list of its GitHub Release; a clone — the flow commits it pulled.
 - `release` — the owner's step: a date tag (UTC) on `origin/main` and a GitHub Release listing the flow and installer changes since the previous release (the same list `update` prints); nothing to release — refused.
+- The npm package `@miroshnik/elves` — CI publishes every release tag with provenance: `elves pack <tag>` sets the version (`vYYYY.MM.DD.N` → `YYYY.MMDD.N`, versions sort as tags) and builds for Node the modules a project imports, then `npm publish`; the npm token is the repository secret `NPM_TOKEN`.
+
+</details>
+
+<details>
+<summary><b>The package in a project — the harness and the scripts at the project's version</b></summary>
+
+With `@miroshnik/elves` in a project's `devDependencies`, `bun install` brings the flow at the project's version — for CI, colleagues and a cloud session too (npm works there, `github:` gives 403). Tests import `@miroshnik/elves/spec/harness`, `@miroshnik/elves/spec/architecture`, `@miroshnik/elves/spec/eslint-config` and `@miroshnik/elves/github`: Bun and the type checker take the TypeScript source, any runner on Node (Vitest, Jest, Playwright, the project's `eslint.config.js`) — the build. The skills' scripts run from `node_modules/.bin` with the same arguments as the scripts themselves: `elves spec-doc`, `elves spec-diff`, `elves spec-publish`, `elves spec-run`, `elves spec-shard`, `elves spec-claims`, `elves spec-break`, `elves spec-exceptions`, and the machine queue — `elves slot --for <PID>`.
 
 </details>
 

@@ -5,3 +5,4 @@ node_modules/
 docs/spec/
 .spec-meta/
 .spec-journal/
+dist/

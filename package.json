@@ -1,19 +1,50 @@
 {
-  "name": "elves",
+  "name": "@miroshnik/elves",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "description": "Elves — a development flow with AI agents: shared rules and skills for any agent; install — bunx github:miroshnik/elves install; the installer and skill scripts — TypeScript under Bun, tests — bun test in tests/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/miroshnik/elves.git"
+  },
   "bin": {
     "elves": "bin/elves.ts"
   },
+  "exports": {
+    "./spec/harness": {
+      "types": "./skills/spec/scripts/harness.ts",
+      "bun": "./skills/spec/scripts/harness.ts",
+      "default": "./dist/spec/scripts/harness.js"
+    },
+    "./spec/architecture": {
+      "types": "./skills/spec/scripts/architecture.ts",
+      "bun": "./skills/spec/scripts/architecture.ts",
+      "default": "./dist/spec/scripts/architecture.js"
+    },
+    "./spec/eslint-config": {
+      "types": "./skills/spec/scripts/eslint-config.ts",
+      "bun": "./skills/spec/scripts/eslint-config.ts",
+      "default": "./dist/spec/scripts/eslint-config.js"
+    },
+    "./github": {
+      "types": "./skills/github/scripts/github.ts",
+      "bun": "./skills/github/scripts/github.ts",
+      "default": "./dist/github/scripts/github.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "bin",
+    "dist",
     "AGENTS.md",
     "claude",
     "docs/*.md",
     "skills"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "packageManager": "bun@1.4.3",
   "engines": {
     "bun": ">=1.2"
@@ -33,6 +64,7 @@
     "@types/node": "^26.6.2",
     "eslint": "^10.11.0",
     "eslint-plugin-boundaries": "^7.2.0",
-    "knip": "^6.41.0"
+    "knip": "^6.41.0",
+    "vitest": "^5.0.4"
   }
 }

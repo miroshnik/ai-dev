@@ -1,10 +1,11 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { elves, elvesPackage, bunxPackage, copyPackage, sandbox, type ElvesPackage, type Run, type Sandbox } from "../../lib/elves.ts";
-import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { elves, elvesPackage, bunxPackage, copyPackage, REPO, sandbox, type ElvesPackage, type Run, type Sandbox } from "../../lib/elves.ts";
+import { PACK_VERSION, packageProject } from "../../lib/npm.ts";
+import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -152,5 +153,71 @@ describe("Релиз — тег по дате на origin/main и список �
     const r = elves(sb, ["release", "--dry-run"], { bin });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("only from an Elves clone");
+  });
+});
+
+/**
+ * Пакет `@miroshnik/elves` в npm — то, что проект ставит в devDependencies без копии флоу, а облачная сессия получает
+ * из реестра (`github:` в ней — 403, #555). Версия — тег релиза в виде semver, публикует CI по тегу.
+ */
+describe("Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу", () => {
+  it("bun install проекта с @miroshnik/elves в devDependencies приносит пакет с бинарём elves", () => {
+    const proj = packageProject("release-bin");
+    const installed = JSON.parse(read(path.join(proj, "node_modules/@miroshnik/elves/package.json")));
+    expect(installed.version).toBe(PACK_VERSION);
+    const r = spawnSync(path.join(proj, "node_modules/.bin/elves"), ["--help"], { cwd: proj, encoding: "utf8" });
+    expect(exitOf(r)).toBe(0);
+    expect(r.stdout).toStartWith("elves — ");
+    expect(r.stdout).toContain("\n  elves spec-doc ");
+  });
+
+  /**
+   * Тег календарный, а npm требует semver: без ведущих нулей, патч дня — своим числом. Пререлиз (`-1`) в semver младше
+   * самого релиза, build-метаданные (`+1`) npm не различает — поэтому `vГГГГ.ММ.ДД.N` — `ГГГГ.ММДД.N`: порядок версий —
+   * порядок тегов.
+   */
+  it("версия пакета соответствует тегу релиза", () => {
+    const pkg = copyPackage(base, path.join(sb.tmp, "package"));
+    const versionOf = (tag: string) => {
+      const r = elves(sb, ["pack", tag], { bin: pkg.bin, cwd: pkg.dir });
+      expect({ tag, code: r.code, stderr: r.stderr }).toEqual({ tag, code: 0, stderr: "" });
+      return JSON.parse(read(path.join(pkg.dir, "package.json"))).version as string;
+    };
+    const tags = ["v2025.12.31.3", "v2026.01.05", "v2026.01.05.1", "v2026.10.15", "v2026.10.15.2", "v2026.10.15.12"];
+    const versions = tags.map(versionOf);
+    expect(versions).toEqual(["2025.1231.3", "2026.105.0", "2026.105.1", "2026.1015.0", "2026.1015.2", "2026.1015.12"]);
+    expect([...versions].sort(Bun.semver.order)).toEqual(versions);
+  });
+
+  it("pack не с тегом релиза — код 2, package.json и dist/ не меняются", () => {
+    const pkg = copyPackage(base, path.join(sb.tmp, "package"));
+    const before = read(path.join(pkg.dir, "package.json"));
+    for (const tag of [[], ["1.2.3"], ["v2026.10.15-rc"], ["v2026.10.15.0"]]) {
+      const r = elves(sb, ["pack", ...tag], { bin: pkg.bin, cwd: pkg.dir });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("a release tag is needed");
+    }
+    expect(read(path.join(pkg.dir, "package.json"))).toBe(before);
+    expect(existsSync(path.join(pkg.dir, "dist"))).toBe(false);
+  });
+
+  /**
+   * CI по тегу: `elves pack` ставит версию и собирает модули для Node, `npm publish` публикует с provenance — npm
+   * подписывает, из какого прогона пакет. Публикация тега не отменяется: очередь `npm-publish` (стандарт ci-concurrency).
+   */
+  it("релиз публикует пакет в npm из CI по тегу", () => {
+    const wf = Bun.YAML.parse(read(path.join(REPO, ".github/workflows/npm.yml"))) as {
+      on: Record<string, unknown>;
+      jobs: Record<string, { permissions?: Record<string, string>; steps: { run?: string; env?: Record<string, string> }[] }>;
+    };
+    expect(wf.on).toEqual({ push: { tags: ["v*"] } });
+    const [job, ...others] = Object.values(wf.jobs);
+    expect(others).toEqual([]);
+    expect(job!.permissions?.["id-token"]).toBe("write");
+    expect(job!.steps.flatMap((s) => (s.run ? [s.run] : []))).toEqual(['bun --no-env-file bin/elves.ts pack "$GITHUB_REF_NAME"', "npm publish"]);
+    expect(job!.steps.at(-1)!.env).toEqual({ NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" });
+    const pkg = JSON.parse(read(path.join(REPO, "package.json")));
+    expect(pkg).toMatchObject({ name: "@miroshnik/elves", publishConfig: { access: "public", provenance: true }, repository: { url: "git+https://github.com/miroshnik/elves.git" } });
+    expect(pkg.private).toBeUndefined();
   });
 });
