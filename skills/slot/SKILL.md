@@ -69,7 +69,7 @@ what its parent loaded.
 
 | Moment | Action |
 |---|---|
-| Full check before a commit, e2e | via the project's scripts (`npm run test`, `bun run typecheck`): they are already queued. As a background command with a generous timeout (Claude Code — `run_in_background`, up to 2 h): waiting in the queue doesn't eat the tool timeout, completion wakes the session |
+| Check before a commit, a full run, e2e | via the project's scripts (`npm run test -- --changed=origin/main`, `bun run typecheck`): they are already queued; which tests before a commit — `docs/testing.md`. As a background command with a generous timeout (Claude Code — `run_in_background`, up to 2 h): waiting in the queue doesn't eat the tool timeout, completion wakes the session |
 | `slot: waiting for the machine queue — running …` | not a hang: who holds the slots (directory, command) and how long they have been running. Don't kill someone else's run or delete its ticket |
 | `slot: waited …` | the time in the queue; compare run speed without it — by CI or by `user` from `time` |
 | A targeted run (`vitest run <file>`) | bypasses the queue — it's cheap |
