@@ -1,8 +1,9 @@
 /**
- * speclib — shared by spec-doc, spec-diff, spec-publish, spec-exceptions and the harness: the tests/ tree, the test
- * model, the publication's `Source:`, parsing of runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML from
- * `bun test`), parsing of test sources with a parser (describe/it/test for TS/JS: names and prose from JSDoc), the
- * rule for a decision folder's exception files (`exceptionFile`) and the "a name is a statement" rule (`isStatement`).
+ * speclib — shared by spec-doc, spec-diff, spec-publish, spec-exceptions, spec-shard and the harness: the tests/ tree,
+ * the test model, the publication's `Source:`, parsing of runner reports (Vitest/Jest JSON, Playwright JSON, JUnit XML
+ * from `bun test`) and test files' durations from them, parsing of test sources with a parser (describe/it/test for
+ * TS/JS: names and prose from JSDoc), the rule for a decision folder's exception files (`exceptionFile`) and the "a
+ * name is a statement" rule (`isStatement`).
  *
  * The scripts run under Bun (`bun script.ts`); the harness imports this module too, and a project's test loads the
  * harness under the project's runner, Node included — so only `node:` APIs and erasable TypeScript
@@ -227,9 +228,12 @@ export function toRepoPath(p: string, root: string): string {
 
 // ---------- reports ----------
 
-export function loadReport(file: string, root: string): Test[] {
+type Report = { kind: "junit"; text: string } | { kind: "vitest" | "playwright"; data: Json };
+
+/** A report's format — by the content, not the extension: XML — JUnit, JSON — Vitest/Jest or Playwright. */
+function readReport(file: string): Report {
   const text = readFileSync(file, "utf8");
-  if (text.trimStart().startsWith("<")) return parseJunit(text, root);
+  if (text.trimStart().startsWith("<")) return { kind: "junit", text };
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -237,11 +241,66 @@ export function loadReport(file: string, root: string): Test[] {
     throw new Error(`${file}: neither JSON nor XML (${(e as Error).message})`);
   }
   if (data && typeof data === "object") {
-    const d = data as Record<string, unknown>;
-    if ("testResults" in d) return parseVitest(d, root);
-    if ("suites" in d && "config" in d) return parsePlaywright(d, root);
+    const d = data as Json;
+    if ("testResults" in d) return { kind: "vitest", data: d };
+    if ("suites" in d && "config" in d) return { kind: "playwright", data: d };
   }
   throw new Error(`${file}: unknown report format (expected Vitest/Jest JSON, Playwright JSON or JUnit XML from bun test)`);
+}
+
+export function loadReport(file: string, root: string): Test[] {
+  const r = readReport(file);
+  if (r.kind === "junit") return parseJunit(r.text, root);
+  return r.kind === "vitest" ? parseVitest(r.data, root) : parsePlaywright(r.data, root);
+}
+
+/**
+ * Test files' durations in a report, ms, by the file path as the report gives it (an absolute path from another
+ * machine included): spec-shard lays out CI shards by them. Vitest/Jest — from the first test's start to the last one's
+ * end (`endTime - startTime`), without them — the sum of the tests; Playwright — the sum of all results of the file's
+ * tests: each project and retry takes a worker's time; JUnit from `bun test` — the `time` of the file's suite. A file
+ * met twice in one report (two runner projects) — the sum.
+ */
+export function loadDurations(file: string): Map<string, number> {
+  const r = readReport(file);
+  const out = new Map<string, number>();
+  const add = (p: string, ms: number): void => {
+    p = p.replace(/\\/g, "/");
+    if (p && Number.isFinite(ms) && ms >= 0) out.set(p, (out.get(p) ?? 0) + ms);
+  };
+  const num = (v: unknown): number => (typeof v === "number" ? v : 0);
+  if (r.kind === "junit") {
+    // the file's suite is a testsuite at the top level (<testsuites> isn't one), describe — nested ones
+    let depth = 0;
+    for (const m of r.text.matchAll(/<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<(\/?)testsuite\b([^>]*?)(\/?)>/g)) {
+      if (m[0][1] === "!") continue;
+      if (m[1] === "/") {
+        depth--;
+        continue;
+      }
+      if (depth === 0) {
+        const a = xmlAttrs(m[2] ?? "");
+        add(a.file || a.name || "", Number(a.time) * 1000);
+      }
+      if (m[3] !== "/") depth++;
+    }
+  } else if (r.kind === "vitest") {
+    for (const tr of arr(r.data.testResults)) {
+      const [start, end] = [tr.startTime, tr.endTime];
+      const ms = typeof start === "number" && typeof end === "number" && end >= start ? end - start : arr(tr.assertionResults).reduce((s, a) => s + num(a.duration), 0);
+      add(str(tr.name), ms);
+    }
+  } else {
+    const rootDir = str(((r.data.config ?? {}) as Json).rootDir).replace(/\\/g, "/");
+    const total = (suite: Json): number =>
+      arr(suite.specs).reduce((s, spec) => s + arr(spec.tests).reduce((t, test) => t + arr(test.results).reduce((u, res) => u + num(res.duration), 0), 0), 0) +
+      arr(suite.suites).reduce((s, sub) => s + total(sub), 0);
+    for (const fileSuite of arr(r.data.suites)) {
+      const f = (str(fileSuite.file) || str(fileSuite.title)).replace(/\\/g, "/");
+      add(rootDir ? posix.join(rootDir, f) : f, total(fileSuite));
+    }
+  }
+  return out;
 }
 
 const VITEST_STATUS: Record<string, Status> = {

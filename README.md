@@ -242,6 +242,7 @@ A browser page the script serves itself, with two tabs. Sessions (the main one) 
 - `spec-diff` — the spec section for a PR (`## Spec (tests)`): added, changed and removed requirements, the model, exceptions, a check against the task's scenarios section.
 - `spec-publish` — after merge, publishes the documentation to the `spec` branch: it isn't in `main`.
 - `spec-run` — for publishing on PR merge, finds a green run that checked exactly the merge commit's tree; there is none (a PR that fell behind was merged) — publishing is skipped, the `spec` branch isn't rolled back.
+- `spec-shard` — a CI shard's test files by the durations of the last green run, not by the count of tests: the heavy tests of one folder don't all land in one shard.
 - `spec-claims` — every entry point (route, page, job, command) is called by a capability test — by the call log, not by coverage.
 - `spec-break` — proves that a check catches a breakage: break the code → run the test → always revert.
 - `spec-exceptions` — moves a project's exceptions from `exceptions.ts` into the `exceptions/` directory of the decision folder, one file per exception: parallel PRs paying down debt don't conflict.
