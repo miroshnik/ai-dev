@@ -4080,7 +4080,7 @@
   "describes": [
    "Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку"
   ],
-  "name": "повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an ai-dev skill» нет"
+  "name": "повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an Elves skill» нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -7610,6 +7610,13 @@
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
   "name": "check и хук называют язык и режим проекта по-английски"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
+  ],
+  "name": "check называет флоу Elves"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -14473,6 +14480,13 @@
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
   "name": "реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README представляет флоу по имени"
+  ],
+  "name": "README начинается с заголовка Elves и слогана Elves at work"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
