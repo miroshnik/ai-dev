@@ -191,6 +191,32 @@ describe("task-env check называет каждое нарушение пра
     );
   });
 
+  it("сеть прокси под прежним именем ai-dev-proxy — строка ❌ называет прежнее имя с правкой: убрать сеть, `task-env up` добавляет сеть прокси сам; код 1", () => {
+    // как в прежнем примере reference.md: сеть прокси в compose-файле руками
+    composeFile(
+      [
+        "services:",
+        "  web:",
+        "    image: app",
+        "    networks: [default, ai-dev-proxy]",
+        "  admin:",
+        "    image: app",
+        "    networks: [proxy]",
+        "networks:",
+        "  ai-dev-proxy:",
+        "    external: true",
+        "  proxy:",
+        "    external: true",
+        "    name: ai-dev-proxy",
+        "",
+      ].join("\n"),
+    );
+    const r = composeCheck();
+    expect(r.code).toBe(1);
+    const fix = "ai-dev-proxy is the machine's proxy before the rename, now elves-proxy: remove the network from the compose file and its services; task-env up adds the proxy's network to the HTTP services of env.http itself";
+    expect(r.stdout).toBe([`❌ compose.yaml: network ai-dev-proxy (service web) — ${fix}`, `❌ compose.yaml: network proxy (service admin) — ${fix}`, ""].join("\n"));
+  });
+
   it("абсолютный путь к коду в volumes и build — нарушение, ~ тоже; относительный путь, именованный том и ресурс машины (сокет Docker, /etc/localtime) — нет", () => {
     composeFile(
       [
