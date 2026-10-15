@@ -3288,6 +3288,13 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task new ставит метки решений — по имени решения, новое решение — `вид:имя`"
+  ],
+  "name": "эпик у предела меток — ставит эпику, что помещается, остальное печатает, не падает"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task new ставит метку «вопросы», когда в описании есть открытый вопрос"
   ],
   "name": "task new без раздела вопросов или со всеми отвеченными вопросами метку не ставит"
