@@ -3351,6 +3351,20 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task queue не выдаёт задачу второму исполнителю при живом прежнем"
+  ],
+  "name": "task queue не выдаёт задачу повторно, пока жив worktree её прежнего исполнителя или его субагентов"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue не выдаёт задачу второму исполнителю при живом прежнем"
+  ],
+  "name": "прежний исполнитель и его субагенты затихли — задание выдаётся снова, живые агенты других задач его не держат"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task queue раздаёт задачи эпика или фильтра исполнителям"
   ],
   "name": "--assignment N — задание исполнителю: первая строка «Задача #N», отличия субагента, форма ответа"
@@ -3417,6 +3431,13 @@
    "task queue раздаёт задачи эпика или фильтра исполнителям"
   ],
   "name": "задание исполнителя говорит, можно ли ему запускать пишущих субагентов"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue раздаёт задачи эпика или фильтра исполнителям"
+  ],
+  "name": "задание исполнителя запрещает ответ, пока его субагенты работают"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -10834,6 +10855,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название queue.alive скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название queue.answer скрипты читают из словаря"
  },
  {
@@ -10863,6 +10891,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название queue.lead скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название queue.live скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -13460,6 +13495,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «waits for the previous executor» из skills/github/reference.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
