@@ -14,3 +14,17 @@ CommonJS-загрузки своими средствами — не тот за
 Свой загрузчик Node — у `eslint.config.*` проекта и `node --test` — грузит фрагмент ESLint, харнесс и модель как есть,
 без транспиляции раннера. В проекте с `"type": "commonjs"` он счёл бы ESM-модули копии скилла CommonJS, поэтому у
 скиллов `spec` и `github` свой `scripts/package.json` с `"type": "module"`; проверка — `node` во временном проекте.
+
+## Из пакета `@miroshnik/elves`
+
+Проект без копии флоу берёт те же модули из пакета в devDependencies (#556), а из `node_modules` TypeScript не
+грузится: Node не снимает там типы (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), Playwright и Jest файлы
+`node_modules` не транспилируют. Поэтому пакет несёт сборку для Node: при публикации `elves pack` собирает модули из
+`exports` в `dist/` (`bun build`, общие куски — язык и парсер — один раз), и `exports` ведёт раннер по условию: `types`
+и `bun` — на исходник `.ts` (typecheck проекта и bun test), `default` — на `dist/*.js` (Node, Playwright, Jest,
+Vitest). Сборка — библиотека, не точка входа: `import.meta.main` в ней ложно, иначе модуль `github` запускал бы свою
+командную строку при импорте. Модуль `github` грузится и под Node: путь к соседнему скрипту он вычисляет при вызове, а
+не при загрузке (`import.meta.dir` есть только у Bun). Отвергнуто: обойтись без сборки и назвать раннеры — bun test и
+Vitest: фрагмент ESLint проект грузит загрузчиком Node (`eslint.config.js`), без сборки экспорт не работал бы вовсе, а
+e2e на Playwright, импортирующие харнесс (#303), покраснели бы при переезде. Проверка — настоящие Playwright (CommonJS и
+ESM) и `node` в проекте, куда пакет поставлен `bun install` из tarball `npm pack`, как из реестра.

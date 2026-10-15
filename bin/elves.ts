@@ -9,6 +9,8 @@
  *   bunx github:miroshnik/elves check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
  *   bunx github:miroshnik/elves update [-g]            — bring the install up to date
  *   bun <Elves clone>/bin/elves.ts release             — cut a release: a tag and the list of flow changes
+ *   bun <Elves checkout>/bin/elves.ts pack <tag>       — CI on the release tag: the npm package @miroshnik/elves
+ *   elves spec-doc … · elves slot --for <PID>          — a project with the package: the skills' scripts at its version
  *
  * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/elves/` (AGENTS.md,
  * claude/CLAUDE.md, docs/*.md) and `.agents/skills/<name>/`; Claude Code gets symlinks in `.claude/skills` and
@@ -63,6 +65,11 @@ import { COMPOSE_FILES, formerProxyName, proxyName } from "../skills/task-env/sc
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const SOURCE = "miroshnik/elves";
+/**
+ * The npm package: a project gets it in devDependencies — the harness and the skills' scripts at the project's version
+ * (`SCRIPTS`, `exports` of package.json); its version is the release tag (`npmVersion`), CI publishes it on the tag.
+ */
+const PACKAGE = "@miroshnik/elves";
 /**
  * The repository's name before the rename to Elves (#544): GitHub redirects it, installs of earlier releases still call
  * it — a SessionStart hook with it is ours (`claudeHook`), a `--link` clone's origin with it moves to SOURCE
@@ -148,7 +155,7 @@ const TASK_ENV_TIMEOUT = 30_000;
  * Help — `--help` or `-h` anywhere in the arguments (tests/standards/cli-help): a command's synopsis (the first
  * paragraph), what it does and examples; `elves --help` — the synopses of all. Answered before the launcher goes to the
  * release (`toRelease`) — by the launcher's own version: no network, at the cost of lagging behind a newer release. The
- * dispatcher takes only the commands from here (their flags — `FLAGS`).
+ * dispatcher takes only the commands from here (their flags — `FLAGS`) and the skills' scripts (`SCRIPTS`).
  */
 const HELP: Record<string, string> = {
   install: `elves install [--auto | --no-auto] [--lang <code>]
@@ -212,24 +219,70 @@ release; --dry-run — only show them.
 
 Examples:
   elves release --dry-run`,
+  pack: `elves pack <tag>
+
+From an Elves checkout, in CI on a release tag: the npm package ${PACKAGE} of that release — the version
+from the tag into package.json (vYYYY.MM.DD.N → YYYY.MMDD.N: semver without leading zeros, versions sort as tags) and
+the modules a project imports (exports of package.json: the harness, the architecture model, the ESLint fragment,
+github) built for Node into dist/; then npm publish. Not a release tag — code 2, nothing changes.
+
+Examples:
+  elves pack v2026.10.15.1`,
 };
 
-/** `elves --help`: the synopsis of each command and how to run it. */
-const OVERVIEW = [
-  "elves — the rules and skills of the Elves flow: install, check, update, release",
-  "",
-  ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
-  "",
-  "elves <command> --help — the command's details and examples",
-  `Run: ${RUN} <command>`,
-].join("\n");
+/**
+ * The skills' scripts a project runs at its own Elves version — the package in its devDependencies, without a copy of
+ * the flow: `elves spec-doc …` from `node_modules/.bin` runs the script's `main` from this package with the same
+ * arguments, in this process; the project's paths (`.agents/elves.json`, `tests/`, the reports) come from the current
+ * directory and its git root, as with `bun <copy>/scripts/<script>.ts`. No release launcher (`toRelease`): the version
+ * is the project's. Help — the script's own `HELP` under the elves name; `--help` counts where the script reads it: a
+ * spec script — before `--`, slot — only as the first argument (the rest is its command). A script module runs its
+ * `main` itself only as the entry point (`import.meta.main`).
+ */
+const SCRIPTS: Record<string, { file: string; helpFirst?: boolean }> = {
+  ...Object.fromEntries(["spec-doc", "spec-diff", "spec-publish", "spec-run", "spec-shard", "spec-claims", "spec-break", "spec-exceptions"].map((name) => [name, { file: `skills/spec/scripts/${name}.ts` }])),
+  slot: { file: "skills/slot/scripts/slot.ts", helpFirst: true },
+};
+
+/** A script of SCRIPTS: its help and its entry point. */
+interface Script {
+  HELP: string;
+  main: (argv: string[]) => number | Promise<number>;
+}
+
+const loadScript = (cmd: string): Promise<Script> => import(path.join(SRC, SCRIPTS[cmd]!.file));
+
+/** A script's help under the elves name: its synopsis and example lines start with `elves <command>`. */
+const scriptHelp = async (cmd: string) => (await loadScript(cmd)).HELP.replace(new RegExp(`^( *)${cmd}(?= |$)`, "gm"), `$1elves ${cmd}`).trimEnd();
+
+/** `elves <script> …`: the script's help or its `main` with the arguments; the exit code is the script's. */
+async function runScript(cmd: string, args: string[]): Promise<number> {
+  const options = SCRIPTS[cmd]!.helpFirst ? args.slice(0, 1) : args.includes("--") ? args.slice(0, args.indexOf("--")) : args;
+  if (options.some((a) => a === "--help" || a === "-h")) return note(await scriptHelp(cmd)), 0;
+  return (await loadScript(cmd)).main(args);
+}
+
+/** `elves --help`: the synopsis of each command, the scripts' too, and how to run it. */
+async function overview() {
+  const synopsis = (h: string) => h.split("\n\n")[0]!.replace(/^/gm, "  ");
+  const scripts = await Promise.all(Object.keys(SCRIPTS).map(scriptHelp));
+  return [
+    "elves — the rules and skills of the Elves flow: install, check, update, release, pack; skill scripts at a project's version",
+    "",
+    ...Object.values(HELP).map(synopsis),
+    ...scripts.map(synopsis),
+    "",
+    "elves <command> --help — the command's details and examples",
+    `Run: ${RUN} <command>; in a project with ${PACKAGE} in devDependencies — elves <command>`,
+  ].join("\n");
+}
 
 /** The help the arguments ask for (`--help`, `-h`): of the command they start with, otherwise the overview; none — undefined. */
-function helpOf(argv: string[]): string | undefined {
+async function helpOf(argv: string[]): Promise<string | undefined> {
   if (!argv.some((a) => a === "--help" || a === "-h")) return undefined;
   const words = `${argv.join(" ")} `;
   const cmd = Object.keys(HELP).find((c) => words.startsWith(`${c} `));
-  return cmd ? HELP[cmd] : OVERVIEW;
+  return cmd ? HELP[cmd] : overview();
 }
 
 /**
@@ -295,8 +348,9 @@ const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : null)
 /**
  * The Elves SHA the install runs from: for a clone — HEAD; for the bunx package — the SHA of the spec bunx installed it
  * by, `github:miroshnik/elves#<sha>` in the package.json of the bunx directory next to node_modules (bunx unpacks the
- * package from GitHub without `.git`, its `.bun-tag` holds only 7 characters of the SHA). The package from main — no SHA
- * in the spec — null: it is only a launcher (`toRelease`).
+ * package from GitHub without `.git`, its `.bun-tag` holds only 7 characters of the SHA). The package under its scope
+ * (`node_modules/@miroshnik/elves`) — the spec under the full name. The package from main — no SHA in the spec — null:
+ * it is only a launcher (`toRelease`).
  */
 function sourceSha(src: string) {
   if (existsSync(path.join(src, ".git"))) {
@@ -306,10 +360,12 @@ function sourceSha(src: string) {
       return null;
     }
   }
-  const nm = path.dirname(src);
+  const scope = path.basename(path.dirname(src)).startsWith("@") ? path.basename(path.dirname(src)) : null;
+  const nm = scope ? path.dirname(path.dirname(src)) : path.dirname(src);
   if (path.basename(nm) !== "node_modules") return null;
+  const name = scope ? `${scope}/${path.basename(src)}` : path.basename(src);
   try {
-    const spec: unknown = JSON.parse(readFileSync(path.join(nm, "..", "package.json"), "utf8")).dependencies?.[path.basename(src)];
+    const spec: unknown = JSON.parse(readFileSync(path.join(nm, "..", "package.json"), "utf8")).dependencies?.[name];
     return /#([0-9a-f]{40})$/.exec(String(spec ?? ""))?.[1] ?? null;
   } catch {
     return null;
@@ -981,14 +1037,14 @@ function projectRoot() {
 }
 
 /**
- * An Elves clone: its canon is the root AGENTS.md, the flow needn't be installed into it. The package is named after
- * the repository — `elves`, and the repository's name before the rename (LEGACY_SOURCE): a clone or a branch that hasn't
- * pulled the rename yet is a clone too.
+ * An Elves clone: its canon is the root AGENTS.md, the flow needn't be installed into it. The package is PACKAGE; before
+ * it — named after the repository, `elves`, and the repository's name before the rename (LEGACY_SOURCE): a clone or a
+ * branch that hasn't pulled the rename yet is a clone too.
  */
 function isElvesClone(root: string) {
   try {
     const name: unknown = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).name;
-    return [SOURCE, LEGACY_SOURCE].some((repo) => repo.split("/")[1] === name);
+    return name === PACKAGE || [SOURCE, LEGACY_SOURCE].some((repo) => repo.split("/")[1] === name);
   } catch {
     return false;
   }
@@ -1807,6 +1863,51 @@ function releaseCmd(preview: boolean) {
 }
 
 /**
+ * The npm version of a release tag: vYYYY.MM.DD.N → YYYY.MMDD.N, without a patch — .0. Semver has no leading zeros, and
+ * a same-day patch needs a number of its own: a prerelease (`-1`) sorts below the release itself, build metadata (`+1`)
+ * npm doesn't tell apart. MMDD as a number grows with the date — versions sort as tags. Not a release tag — null.
+ */
+function npmVersion(tag: string): string | null {
+  const m = RELEASE_TAG.exec(tag);
+  return m ? `${Number(m[1])}.${Number(m[2]) * 100 + Number(m[3])}.${Number(m[4] ?? 0)}` : null;
+}
+
+/** The modules built for Node: each export of package.json whose `default` is the build of its `bun` source. */
+function builtExports(pkg: { exports?: unknown }): { src: string; out: string }[] {
+  const entries = pkg.exports && typeof pkg.exports === "object" ? Object.values(pkg.exports) : [];
+  return entries.flatMap((e) => (e && typeof e === "object" && "bun" in e && "default" in e ? [{ src: String(e.bun), out: String(e.default) }] : []));
+}
+
+/**
+ * `pack`, CI on a release tag: the npm package of the release — the version from the tag into package.json and the
+ * modules a project imports (`builtExports`) built into dist/. Node doesn't strip types in node_modules
+ * (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING): a project's `eslint.config.js`, `node --test`, Playwright and Jest load
+ * the JS (`default`), Bun and the type checker — the TypeScript source (`bun`, `types`). One build with shared chunks:
+ * the modules share the language module and the TypeScript parser. A built module is a project's import, never the entry
+ * point: `import.meta.main` is false — Bun's build for Node turns it into `require.main == require.module`, true under
+ * Node's ESM, and `github` would run its command line on import. `npm publish` is the workflow's next step. The build
+ * fails — package.json stays as it was.
+ */
+function pack(tag: string | undefined): number {
+  const version = tag === undefined ? null : npmVersion(tag);
+  if (!version) return warn(`pack: a release tag is needed — vYYYY.MM.DD or vYYYY.MM.DD.N, not «${tag ?? ""}»`), 2;
+  if (!existsSync(path.join(SRC, ".git"))) return warn("pack — only from an Elves checkout: bun <checkout>/bin/elves.ts pack <tag>"), 2;
+  const file = path.join(SRC, "package.json");
+  const pkg = JSON.parse(readFileSync(file, "utf8"));
+  const entries = builtExports(pkg);
+  const dist = path.join(SRC, "dist");
+  rmSync(dist, { recursive: true, force: true });
+  const args = ["--target=node", "--format=esm", "--splitting", "--define", "import.meta.main=false", `--root=${path.join(SRC, "skills")}`, `--outdir=${dist}`];
+  const r = spawnSync(process.execPath, ["--no-env-file", "build", ...args, ...entries.map((e) => path.join(SRC, e.src))], { encoding: "utf8" });
+  if (r.error || r.status !== 0) return warn(`pack: bun build — ${r.error?.message ?? (r.stderr || r.stdout).trim().split("\n").slice(-3).join("; ")}`), 2;
+  const missing = entries.filter((e) => !existsSync(path.join(SRC, e.out)));
+  if (missing.length) return warn(`pack: the build has no ${missing.map((e) => e.out).join(", ")} — exports of package.json lead past it`), 2;
+  writeFileSync(file, JSON.stringify({ ...pkg, version }, null, 2) + "\n");
+  note(`${PACKAGE}@${version} — release ${tag}: dist/ ← ${entries.map((e) => e.src).join(", ")}; next: npm publish`);
+  return 0;
+}
+
+/**
  * The `install` question in a project about the `auto` setting: "yes" allows the agent everything listed without a
  * "yes" for each action.
  */
@@ -1903,18 +2004,26 @@ function denied(e: unknown, argv: string[], global: boolean) {
   return true;
 }
 
-const FLAGS: Record<string, string[]> = { install: ["-g", "--global", "--link", "--auto", "--no-auto"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"] };
+const FLAGS: Record<string, string[]> = { install: ["-g", "--global", "--link", "--auto", "--no-auto"], check: ["-g", "--global", "--hook"], update: ["-g", "--global"], release: ["--dry-run"], pack: [] };
 
-function main(argv: string[]) {
+/** `pack <tag>`: the tag — the first argument that isn't a flag; the other arguments. */
+function takeTag(args: string[]): { tag: string | undefined; rest: string[] } {
+  const i = args.findIndex((a) => !a.startsWith("-"));
+  return i < 0 ? { tag: undefined, rest: args } : { tag: args[i], rest: args.filter((_, j) => j !== i) };
+}
+
+async function main(argv: string[]): Promise<number> {
   const [cmd = "", ...args] = argv;
-  const help = helpOf(argv) ?? (cmd === "help" ? OVERVIEW : undefined);
+  // a skill's script — at this package's version, the project's: no launcher, the help is the script's
+  if (Object.hasOwn(SCRIPTS, cmd)) return runScript(cmd, args);
+  const help = (await helpOf(argv)) ?? (cmd === "help" ? await overview() : undefined);
   if (help) return note(help), 0;
   const global = args.includes("-g") || args.includes("--global");
   const hookMode = cmd === "check" && args.includes("--hook");
   // the launcher restarts before it checks the command and flags (`toRelease`): bunx keeps it as old as its first run,
   // and it mustn't reject what the release knows. "Not installed" needs no release: the hook in someone else's project
-  // doesn't go to the network for nothing; release — only from a clone
-  if (cmd !== "release" && (cmd !== "check" || (hookMode ? [true, false].some((g) => target(g).installed) : target(global).installed))) {
+  // doesn't go to the network for nothing; release — only from a clone, pack — from a checkout
+  if (cmd !== "release" && cmd !== "pack" && (cmd !== "check" || (hookMode ? [true, false].some((g) => target(g).installed) : target(global).installed))) {
     try {
       const code = toRelease(argv);
       if (code !== null) return code;
@@ -1924,12 +2033,13 @@ function main(argv: string[]) {
       return warn(`${cmd}: ${reason(e)}`), 2;
     }
   }
-  // --lang with a value — only for install: for the other commands it's an unknown flag
-  const { lang, rest: flags } = cmd === "install" ? takeLang(args) : { lang: undefined, rest: args };
+  // --lang with a value — only for install, the tag — only for pack: for the other commands it's an unknown flag
+  const { lang, rest } = cmd === "install" ? takeLang(args) : { lang: undefined, rest: args };
+  const { tag, rest: flags } = cmd === "pack" ? takeTag(rest) : { tag: undefined, rest };
   const allowed = Object.hasOwn(HELP, cmd) ? FLAGS[cmd] : undefined;
   const unknown = allowed ? flags.filter((f) => !allowed.includes(f)) : [];
   if (!allowed || unknown.length) {
-    process.stderr.write((!allowed && cmd ? `unknown command: ${cmd}\n\n` : unknown.length ? `unknown flag: ${unknown[0]}\n\n` : "") + OVERVIEW + "\n");
+    process.stderr.write((!allowed && cmd ? `unknown command: ${cmd}\n\n` : unknown.length ? `unknown flag: ${unknown[0]}\n\n` : "") + (await overview()) + "\n");
     return 2;
   }
   if (lang !== undefined && (global || !LANGUAGE_CODE.test(lang))) {
@@ -1937,6 +2047,7 @@ function main(argv: string[]) {
     return 2;
   }
   if (cmd === "release") return releaseCmd(flags.includes("--dry-run"));
+  if (cmd === "pack") return pack(tag);
   if (cmd === "check") {
     if (hookMode) return hook();
     let r: Result;
@@ -1985,4 +2096,4 @@ function main(argv: string[]) {
   }
 }
 
-process.exitCode = main(process.argv.slice(2));
+process.exitCode = await main(process.argv.slice(2));

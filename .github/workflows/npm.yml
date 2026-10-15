@@ -1,0 +1,25 @@
+# Релиз в npm: тег релиза (elves release) — пакет @miroshnik/elves этой версии с provenance (tests/capabilities/release).
+# Версия и сборка модулей для Node — elves pack по тегу, публикация — npm publish (publishConfig в package.json).
+# Публикация тега не отменяется и не вытесняется (docs/ci-concurrency.md). Токен npm — секрет NPM_TOKEN, шаг владельца.
+name: npm
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: npm-publish
+  queue: max
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, id-token: write } # id-token — provenance: npm подписывает, из какого прогона пакет
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v7
+        with: { registry-url: "https://registry.npmjs.org" }
+      - run: bun --no-env-file bin/elves.ts pack "$GITHUB_REF_NAME"
+      - run: npm publish
+        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }

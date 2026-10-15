@@ -136,6 +136,18 @@ describe("В проект — копия, которую видят облачн
     expect(JSON.parse(read(path.join(proj, ".agents/elves.json"))).sha).toBe(sha);
   });
 
+  /**
+   * Пакет называется `@miroshnik/elves` (#556): bun кладёт зависимость по имени пакета — в `node_modules/@miroshnik/elves`,
+   * спецификатор — под полным именем. Не узнай установщик SHA, пакет релиза счёл бы себя пускателем из main и
+   * перезапускался бы снова и снова.
+   */
+  it("из пакета под scope @miroshnik — SHA из спецификатора под полным именем пакета", () => {
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const bin = bunxPackage(path.join(tmp, "bunx"), REPO, sha, "@miroshnik/elves");
+    expect(elves(sb, ["install"], { bin }).code).toBe(0);
+    expect(JSON.parse(read(path.join(proj, ".agents/elves.json"))).sha).toBe(sha);
+  });
+
   it("корень установки — корень git-репозитория, даже при запуске из подкаталога", () => {
     mkdirSync(path.join(proj, "src/app"), { recursive: true });
     expect(install([], path.join(proj, "src/app")).code).toBe(0);
@@ -639,7 +651,7 @@ describe("Задача целиком без спроса — настройка
   /** Клон Elves — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
   it("в клоне Elves install флоу не ставит — пишет в .agents/elves.json только auto и language: с флагом — его значение, без флага и терминала — прежнее", () => {
     const clone = path.join(tmp, "clone");
-    writeTree(clone, { "package.json": JSON.stringify({ name: "elves" }) });
+    writeTree(clone, { "package.json": JSON.stringify({ name: "@miroshnik/elves" }) });
     execFileSync("git", ["init", "-q"], { cwd: clone });
     expect(install(["--auto"], clone).code).toBe(0);
     expect(manifest(clone)).toEqual({ auto: true, language: "en" });
@@ -652,19 +664,22 @@ describe("Задача целиком без спроса — настройка
   });
 
   /**
-   * Пакет назван по репозиторию: до переименования в Elves (#544) — `ai-dev`. Клон или ветка, ещё не получившие
-   * переименование, — тот же клон: флоу в него не ставится, check не зовёт его отставшим.
+   * Пакет — `@miroshnik/elves` (#556), до него назывался по репозиторию: `elves`, а до переименования в Elves (#544) —
+   * `ai-dev`. Клон или ветка, ещё не получившие новое имя, — тот же клон: флоу в него не ставится, check не зовёт его
+   * отставшим.
    */
-  it("клон со старым именем пакета узнаётся как клон", () => {
-    const clone = path.join(tmp, "clone");
-    writeTree(clone, { "package.json": JSON.stringify({ name: "ai-dev" }) });
-    execFileSync("git", ["init", "-q"], { cwd: clone });
-    expect(install(["--auto", "--lang", "ru"], clone).code).toBe(0);
-    expect(manifest(clone)).toEqual({ auto: true, language: "ru" });
-    expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
-    const check = elves(sb, ["check"], { cwd: clone });
-    expect(check.code).toBe(0);
-    expect(check.stdout).toStartWith("Elves in the project: not installed — an Elves clone, the canon is at its root\n");
+  it("клон со старым именем пакета — elves или ai-dev — узнаётся как клон", () => {
+    for (const name of ["elves", "ai-dev"]) {
+      const clone = path.join(tmp, `clone-${name}`);
+      writeTree(clone, { "package.json": JSON.stringify({ name }) });
+      execFileSync("git", ["init", "-q"], { cwd: clone });
+      expect(install(["--auto", "--lang", "ru"], clone).code).toBe(0);
+      expect(manifest(clone)).toEqual({ auto: true, language: "ru" });
+      expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
+      const check = elves(sb, ["check"], { cwd: clone });
+      expect(check.code).toBe(0);
+      expect(check.stdout).toStartWith("Elves in the project: not installed — an Elves clone, the canon is at its root\n");
+    }
   });
 });
 

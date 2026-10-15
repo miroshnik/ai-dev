@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { REPO } from "../../lib/elves.ts";
+import { packageProject } from "../../lib/npm.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
@@ -12,6 +13,16 @@ setDefaultTimeout(SPAWN_TIMEOUT);
 
 // Playwright — из devDependencies Elves: во временном проекте своего node_modules нет, он — ссылка на node_modules Elves
 const PLAYWRIGHT = path.join(path.dirname(createRequire(import.meta.url).resolve("@playwright/test/package.json")), "cli.js");
+
+/** e2e-тест проекта: импортирует харнесс и модель из копии скилла и разбирает исходник. */
+const PROJECT_SPEC =
+  'import { expect, test } from "@playwright/test";\n' +
+  'import { architecture } from "../.agents/skills/spec/scripts/architecture.ts";\n' +
+  'import { envNamesIn } from "../.agents/skills/spec/scripts/harness.ts";\n\n' +
+  'test("харнесс разбирает исходник", () => {\n' +
+  '  expect(typeof architecture).toBe("function");\n' +
+  '  expect(envNamesIn("const k = process.env.API_KEY; // process.env.OLD\\n")).toEqual(["API_KEY"]);\n' +
+  "});\n";
 
 let dir: string;
 let cleanup: () => void;
@@ -26,14 +37,7 @@ function project(type?: "module" | "commonjs"): void {
   writeTree(dir, {
     "package.json": JSON.stringify({ name: "app", type }),
     "playwright.config.ts": 'export default { testDir: "e2e" };\n',
-    "e2e/harness.spec.ts":
-      'import { expect, test } from "@playwright/test";\n' +
-      'import { architecture } from "../.agents/skills/spec/scripts/architecture.ts";\n' +
-      'import { envNamesIn } from "../.agents/skills/spec/scripts/harness.ts";\n\n' +
-      'test("харнесс разбирает исходник", () => {\n' +
-      '  expect(typeof architecture).toBe("function");\n' +
-      '  expect(envNamesIn("const k = process.env.API_KEY; // process.env.OLD\\n")).toEqual(["API_KEY"]);\n' +
-      "});\n",
+    "e2e/harness.spec.ts": PROJECT_SPEC,
   });
   cpSync(path.join(SCRIPTS, ".."), path.join(dir, ".agents/skills/spec"), { recursive: true });
   cpSync(path.join(SCRIPTS, "../../github"), path.join(dir, ".agents/skills/github"), { recursive: true });
@@ -41,10 +45,20 @@ function project(type?: "module" | "commonjs"): void {
 }
 
 /** `playwright test` в проекте; кэш трансформаций — свой, чтобы прогон не взял модуль, разобранный прошлым запуском. */
-function playwright(): { code: number | string; output: string } {
-  const env = { ...process.env, PWTEST_CACHE_DIR: path.join(dir, ".playwright-cache"), CI: "1" };
-  const r = spawnSync("node", [PLAYWRIGHT, "test", "--reporter=line"], { cwd: dir, encoding: "utf8", env });
+function playwright(cwd = dir): { code: number | string; output: string } {
+  const env = { ...process.env, PWTEST_CACHE_DIR: path.join(cwd, ".playwright-cache"), CI: "1" };
+  const r = spawnSync("node", [PLAYWRIGHT, "test", "--reporter=line"], { cwd, encoding: "utf8", env });
   return { code: exitOf(r), output: (r.stdout ?? "") + (r.stderr ?? "") };
+}
+
+/**
+ * Проект без копии флоу — с пакетом `@miroshnik/elves` в devDependencies, как его публикует CI: e2e-тест импортирует
+ * харнесс и модель из пакета. Node не снимает типы в node_modules (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), и
+ * Playwright файлы node_modules не транспилирует — грузится сборка для Node (`default` в `exports`).
+ */
+function fromPackage(type?: "module" | "commonjs"): string {
+  const spec = PROJECT_SPEC.replace("../.agents/skills/spec/scripts/architecture.ts", "@miroshnik/elves/spec/architecture").replace("../.agents/skills/spec/scripts/harness.ts", "@miroshnik/elves/spec/harness");
+  return packageProject(`harness-load-${type ?? "typeless"}`, { "playwright.config.ts": 'export default { testDir: "e2e" };\n', "e2e/harness.spec.ts": spec }, type ? { type } : {});
 }
 
 /**
@@ -78,5 +92,27 @@ describe("Тест проекта импортирует харнесс и мо�
     const r = playwright();
     expect(r.output).toContain("1 passed");
     expect(r.code).toBe(0);
+  });
+});
+
+describe("Тест проекта импортирует харнесс и модель из пакета @miroshnik/elves любым раннером", () => {
+  it("Playwright в проекте без \"type\": \"module\" (загрузка CommonJS) импортирует из пакета харнесс и модель и проходит тест", () => {
+    const r = playwright(fromPackage());
+    expect(r.output).toContain("1 passed");
+    expect(r.code).toBe(0);
+  });
+
+  it("Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует из пакета харнесс и модель и проходит тест", () => {
+    const r = playwright(fromPackage("module"));
+    expect(r.output).toContain("1 passed");
+    expect(r.code).toBe(0);
+  });
+
+  it("Node проекта с \"type\": \"commonjs\" своим загрузчиком импортирует из пакета фрагмент ESLint, харнесс, модель и github без ошибок и предупреждений", () => {
+    const proj = fromPackage("commonjs");
+    const code = ["spec/eslint-config", "spec/harness", "spec/architecture", "github"].map((m) => `await import("@miroshnik/elves/${m}");`).join(" ");
+    const r = spawnSync("node", ["--input-type=module", "-e", code], { cwd: proj, encoding: "utf8" });
+    expect((r.stdout ?? "") + (r.stderr ?? "")).toBe("");
+    expect(exitOf(r)).toBe(0);
   });
 });
