@@ -3,7 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync,
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, bunxPackage, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
+import { aiDev, aiDevPackage, bunxPackage, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
 import { writeTree } from "../../lib/spec.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -103,7 +103,7 @@ describe("В проект — копия, которую видят облачн
    * bunx ставит пакет в node_modules своего каталога и запускает его bin по шебангу — так же, как `bun add` пакета из
    * `bun pm pack`: только файлы из `files`, TypeScript в node_modules Bun стирает сам. Кеш bun — свой, в песочнице.
    */
-  it("через bunx из пакета ai-dev: bin из node_modules под Bun ставит правила и скиллы", () => {
+  it("через bunx из пакета Elves: bin из node_modules под Bun ставит правила и скиллы", () => {
     const bunEnv = { ...env, BUN_INSTALL_CACHE_DIR: path.join(tmp, "bun-cache") };
     const pack = spawnSync(process.execPath, ["pm", "pack", "--destination", tmp, "--quiet"], { cwd: REPO, env: bunEnv, encoding: "utf8" });
     expect(pack.status).toBe(0);
@@ -111,7 +111,7 @@ describe("В проект — копия, которую видят облачн
     const bunx = path.join(tmp, "bunx");
     writeTree(bunx, { "package.json": "{}\n" });
     expect(spawnSync(process.execPath, ["add", "--silent", tgz], { cwd: bunx, env: bunEnv, encoding: "utf8" }).status).toBe(0);
-    const r = spawnSync(path.join(bunx, "node_modules/.bin/ai-dev"), ["install"], { cwd: proj, env, encoding: "utf8" });
+    const r = spawnSync(path.join(bunx, "node_modules/.bin/elves"), ["install"], { cwd: proj, env, encoding: "utf8" });
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
     expect(read(path.join(proj, ".agents/ai-dev/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
@@ -160,7 +160,7 @@ describe("Отказ в записи посреди установки — по�
     const r = install(["--lang", "ru"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain(".claude/skills/ci-wait");
-    expect(r.stderr).toContain("bunx github:miroshnik/ai-dev install --lang ru");
+    expect(r.stderr).toContain("bunx github:miroshnik/elves install --lang ru");
     expect(r.stderr).not.toMatch(/\n\s+at /);
   });
 
@@ -182,7 +182,7 @@ describe("Отказ в записи посреди установки — по�
     const r = aiDev(sb, ["update"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain(".claude/skills/spec");
-    expect(r.stderr).toContain("bunx github:miroshnik/ai-dev update");
+    expect(r.stderr).toContain("bunx github:miroshnik/elves update");
   });
 
   it("симлинк, который уже ведёт куда надо, установка не пересоздаёт: .claude/skills без права записи не мешает повтору без нового скилла", () => {
@@ -521,14 +521,16 @@ describe("На машину (-g) — только скиллы и хук, пра
     expect(read(path.join(home, ".claude/CLAUDE.md"))).toBe("мои заметки\n");
   });
 
+  // клон — копия пакета в песочнице: установка --link правит origin клона (переименование #544), настоящий не трогаем
   it("--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json", () => {
     mkdirSync(path.join(home, ".claude"));
-    expect(install(["-g", "--link"]).code).toBe(0);
-    expect(realpathSync(path.join(home, ".agents/skills/spec"))).toBe(realpathSync(path.join(REPO, "skills/spec")));
-    expect(realpathSync(path.join(home, ".claude/skills/spec"))).toBe(realpathSync(path.join(REPO, "skills/spec")));
+    const clone = aiDevPackage(path.join(tmp, "clone"));
+    expect(aiDev(sb, ["install", "-g", "--link"], { bin: clone.bin }).code).toBe(0);
+    expect(realpathSync(path.join(home, ".agents/skills/spec"))).toBe(realpathSync(path.join(clone.dir, "skills/spec")));
+    expect(realpathSync(path.join(home, ".claude/skills/spec"))).toBe(realpathSync(path.join(clone.dir, "skills/spec")));
     expect(gone(path.join(home, ".agents/ai-dev"))).toBe(true);
     expect(gone(path.join(home, ".claude/rules"))).toBe(true);
-    expect(realpathSync(JSON.parse(read(path.join(home, ".agents/ai-dev.json"))).clone)).toBe(realpathSync(REPO));
+    expect(realpathSync(JSON.parse(read(path.join(home, ".agents/ai-dev.json"))).clone)).toBe(realpathSync(clone.dir));
   });
 
   /** Хук проверяет флоу в начале каждой сессии Claude Code; что он делает — capability `update`. */
@@ -541,7 +543,7 @@ describe("На машину (-g) — только скиллы и хук, пра
     expect(s.model).toBe("opus");
     expect(s.hooks.Stop).toEqual([mine]);
     expect(s.hooks.SessionStart[0]).toEqual(mine);
-    const ours = s.hooks.SessionStart.filter((g: { hooks: { command: string }[] }) => g.hooks.some((h) => h.command.includes("ai-dev check --hook")));
+    const ours = s.hooks.SessionStart.filter((g: { hooks: { command: string }[] }) => g.hooks.some((h) => h.command.includes("elves check --hook")));
     expect(ours).toHaveLength(1);
     expect(ours[0].matcher).toContain("startup");
     expect(ours[0].hooks[0].timeout).toBeGreaterThan(0);
@@ -551,11 +553,11 @@ describe("На машину (-g) — только скиллы и хук, пра
    * Вывод хука с кодом 0 Claude Code кладёт в контекст сессии: `--silent` — первая установка пакета bunx печатает свой
    * прогресс в stderr, а хук сводит stderr в вывод.
    */
-  it("команда хука — bunx --silent github:miroshnik/ai-dev check --hook, вывод с ошибками и запасной echo при сбое bunx", () => {
+  it("команда хука — bunx --silent github:miroshnik/elves check --hook, вывод с ошибками и запасной echo при сбое bunx", () => {
     mkdirSync(path.join(home, ".claude"));
     install(["-g"]);
     const hooks = JSON.parse(read(path.join(home, ".claude/settings.json"))).hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
-    expect(hooks[0].command).toMatch(/^bunx --silent github:miroshnik\/ai-dev check --hook 2>&1 \|\| echo "ai-dev check unavailable/);
+    expect(hooks[0].command).toMatch(/^bunx --silent github:miroshnik\/elves check --hook 2>&1 \|\| echo "elves check unavailable/);
   });
 
   /** Хук прошлой версии — с запасным текстом по-русски: установка узнаёт свой хук по команде `check --hook`. */
@@ -566,7 +568,7 @@ describe("На машину (-g) — только скиллы и хук, пра
     expect(install(["-g"]).code).toBe(0);
     const hooks = JSON.parse(read(path.join(home, ".claude/settings.json"))).hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
     expect(hooks).toHaveLength(1);
-    expect(hooks[0].command).toContain("github:miroshnik/ai-dev check --hook");
+    expect(hooks[0].command).toContain("github:miroshnik/elves check --hook");
     expect(hooks[0].command).not.toMatch(/\p{Script=Cyrillic}/u);
   });
 
@@ -620,7 +622,7 @@ describe("Задача целиком без спроса — настройка
   /** Клон Elves — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
   it("в клоне Elves install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее", () => {
     const clone = path.join(tmp, "clone");
-    writeTree(clone, { "package.json": JSON.stringify({ name: "ai-dev" }) });
+    writeTree(clone, { "package.json": JSON.stringify({ name: "elves" }) });
     execFileSync("git", ["init", "-q"], { cwd: clone });
     expect(install(["--auto"], clone).code).toBe(0);
     expect(manifest(clone)).toEqual({ auto: true, language: "en" });
@@ -630,6 +632,22 @@ describe("Задача целиком без спроса — настройка
     expect(manifest(clone)).toEqual({ auto: false, language: "ru" });
     expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
     expect(readdirSync(path.join(clone, ".agents"))).toEqual(["ai-dev.json"]);
+  });
+
+  /**
+   * Пакет назван по репозиторию: до переименования в Elves (#544) — `ai-dev`. Клон или ветка, ещё не получившие
+   * переименование, — тот же клон: флоу в него не ставится, check не зовёт его отставшим.
+   */
+  it("клон со старым именем пакета узнаётся как клон", () => {
+    const clone = path.join(tmp, "clone");
+    writeTree(clone, { "package.json": JSON.stringify({ name: "ai-dev" }) });
+    execFileSync("git", ["init", "-q"], { cwd: clone });
+    expect(install(["--auto", "--lang", "ru"], clone).code).toBe(0);
+    expect(manifest(clone)).toEqual({ auto: true, language: "ru" });
+    expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
+    const check = aiDev(sb, ["check"], { cwd: clone });
+    expect(check.code).toBe(0);
+    expect(check.stdout).toStartWith("Elves in the project: not installed — an Elves clone, the canon is at its root\n");
   });
 });
 

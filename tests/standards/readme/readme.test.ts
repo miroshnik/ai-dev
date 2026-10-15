@@ -25,11 +25,11 @@ const skill = (name: string): Part => ({
   name: `скилл ${name} — со ссылкой на skills/${name}/SKILL.md`,
   mention: new RegExp(`\\]\\(skills/${escape(name)}/SKILL\\.md\\)`),
 });
-// в README команда — строкой запуска: `bunx github:miroshnik/ai-dev check -g` или `bun …/bin/ai-dev.ts release`
+// в README команда — строкой запуска: `bunx github:miroshnik/elves check -g` или `bun …/bin/elves.ts release`
 const command = (name: string): Part => ({
-  key: `ai-dev ${name}`,
+  key: `elves ${name}`,
   name: `команда установщика ${name} названа`,
-  mention: new RegExp(`ai-dev(?:\\.ts)? ${escape(name)}\\b`),
+  mention: new RegExp(`elves(?:\\.ts)? ${escape(name)}\\b`),
 });
 const script = (skillName: string, name: string): Part => ({
   key: `skills/${skillName}/scripts/${name}`,
@@ -56,7 +56,7 @@ const OVERVIEWS = new Map((await mapLimit(clis(), 8, async (c) => [c.name, (awai
 /** Реестр из кода: скиллы, команды из справки установщика, исполняемые скрипты скиллов, справочники docs/. */
 function parts(): Part[] {
   const skills = readdirSync(path.join(ROOT, "skills")).filter((n) => existsSync(path.join(ROOT, "skills", n, "SKILL.md")));
-  const commands = commandsOf("ai-dev", OVERVIEWS.get("ai-dev") ?? "");
+  const commands = commandsOf("elves", OVERVIEWS.get("elves") ?? "");
   const scripts = SKILL_CLIS.map((c) => script(c.file.split("/")[1]!, c.name));
   const references = readdirSync(path.join(ROOT, "docs")).filter((n) => n.endsWith(".md"));
   return [...skills.map(skill), ...commands.map(command), ...scripts, ...references.map(reference)];
@@ -146,7 +146,7 @@ describe("README называет всё, что ставит флоу, и не 
       if (!p.mention.test(README)) throw new Error(`README не называет ${p.key} — допиши его в README (tests/standards/readme)`);
     },
     violator: { name: "скилл, которого README не называет", item: skill("billing") },
-    includes: ["skills/spec", "ai-dev install", "ai-dev release", "skills/spec/scripts/spec-break", "skills/ci-wait/scripts/wait-ci", "docs/pr-checks.md"],
+    includes: ["skills/spec", "elves install", "elves release", "skills/spec/scripts/spec-break", "skills/ci-wait/scripts/wait-ci", "docs/pr-checks.md"],
   });
 
   invariant(it, {

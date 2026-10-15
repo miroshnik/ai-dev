@@ -126,8 +126,8 @@ describe("Менеджер пакетов проекта отвечает одн
       if (wrong.length) throw new Error(`${c.file}: packageManager расходится с правилом:\n${wrong.join("\n")}`);
     },
     violator: [
-      { name: "раннер test:spec до стандарта: bun.lock сильнее packageManager", item: { file: "bin/ai-dev.ts specScript", answer: bunByLockfile } },
-      { name: "обёртка slot до стандарта: .yarnrc.yml — shell Yarn 2+ при любом менеджере", item: { file: "bin/ai-dev.ts yarnShell", answer: yarnrcAnyManager } },
+      { name: "раннер test:spec до стандарта: bun.lock сильнее packageManager", item: { file: "bin/elves.ts specScript", answer: bunByLockfile } },
+      { name: "обёртка slot до стандарта: .yarnrc.yml — shell Yarn 2+ при любом менеджере", item: { file: "bin/elves.ts yarnShell", answer: yarnrcAnyManager } },
     ],
   });
 
@@ -198,11 +198,11 @@ describe("Скрипт флоу не читает packageManager и не ище�
     violator: [
       {
         name: "скрипт флоу читает packageManager мимо этой функции",
-        item: source("bin/ai-dev.ts", 'const yarnShell = (root: string, pkg: { packageManager?: unknown }) => /^yarn@(?!1\\.)\\d/.test(String(pkg.packageManager ?? ""));\n'),
+        item: source("bin/elves.ts", 'const yarnShell = (root: string, pkg: { packageManager?: unknown }) => /^yarn@(?!1\\.)\\d/.test(String(pkg.packageManager ?? ""));\n'),
       },
       {
         name: "скрипт флоу ищет lockfile мимо этой функции",
-        item: source("bin/ai-dev.ts", 'const bun = ["bun.lock", "bun.lockb"].some((f) => existsSync(path.join(root, f)));\n'),
+        item: source("bin/elves.ts", 'const bun = ["bun.lock", "bun.lockb"].some((f) => existsSync(path.join(root, f)));\n'),
       },
       {
         name: "вторая функция packageManager в другом скрипте",

@@ -3,7 +3,7 @@
 ## This file and skills
 
 The Elves canon for any agent (Claude Code, Codex, Gemini CLI, Cursor,
-Copilot, OpenCode, Amp). It lives in **miroshnik/ai-dev** with the skills
+Copilot, OpenCode, Amp). It lives in **miroshnik/elves** with the skills
 (`skills/*`) and references (`docs/`, next to this file); install and update —
 README, "Installation". A rule or skill change from another project's session
 is a task in Elves (project #6) without that project's names, for a separate
@@ -22,11 +22,11 @@ Here — what always applies and where to go; reference — a skill's
 ## First step of a session — an up-to-date flow
 
 Rules load at the session start, so first, before the task: `bunx
-github:miroshnik/ai-dev check -g` (machine) and `check` (project, with its
+github:miroshnik/elves check -g` (machine) and `check` (project, with its
 mode and language) — in Claude Code the `SessionStart` hook runs them into
 the start of the context. A copy follows
 Elves releases (tags `vYYYY.MM.DD`), a `--link` clone — `origin/main`; a
-release is the owner's step (`ai-dev release`), I cut one only when asked.
+release is the owner's step (`elves release`), I cut one only when asked.
 
 - **The machine is behind** — `update -g`. After an `update` I tell the user
   briefly what changed (it lists the skipped releases) and re-read what was

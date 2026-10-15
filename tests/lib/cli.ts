@@ -26,7 +26,7 @@ export function clis(): Cli[] {
     // подкаталог (vendor/ — чужой код файлом) — не скрипт
     return existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => `skills/${s}/scripts/${e.name}`) : [];
   });
-  return ["bin/ai-dev.ts", ...scripts]
+  return ["bin/elves.ts", ...scripts]
     .filter((file) => readFileSync(path.join(ROOT, file), "utf8").startsWith("#!"))
     .map((file) => ({
       file,

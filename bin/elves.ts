@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 /**
- * ai-dev — installs the flow: the shared rules, references and all Elves skills into a project or onto the machine;
+ * elves — installs the flow: the shared rules, references and all Elves skills into a project or onto the machine;
  * checks whether an install has fallen behind the latest Elves release, updates it and cuts a release.
  *
- *   bunx github:miroshnik/ai-dev install                — into the project: the git root (or the current directory)
- *   bunx github:miroshnik/ai-dev install -g             — machine-wide: skills and hook only, rules from the project
- *   bun <Elves clone>/bin/ai-dev.ts install -g --link   — from a clone: symlinks to the clone, edits show at once
- *   bunx github:miroshnik/ai-dev check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
- *   bunx github:miroshnik/ai-dev update [-g]            — bring the install up to date
- *   bun <Elves clone>/bin/ai-dev.ts release             — cut a release: a tag and the list of flow changes
+ *   bunx github:miroshnik/elves install                — into the project: the git root (or the current directory)
+ *   bunx github:miroshnik/elves install -g             — machine-wide: skills and hook only, rules from the project
+ *   bun <Elves clone>/bin/elves.ts install -g --link   — from a clone: symlinks to the clone, edits show at once
+ *   bunx github:miroshnik/elves check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
+ *   bunx github:miroshnik/elves update [-g]            — bring the install up to date
+ *   bun <Elves clone>/bin/elves.ts release             — cut a release: a tag and the list of flow changes
  *
  * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/ai-dev/` (AGENTS.md,
  * claude/CLAUDE.md, docs/*.md) and `.agents/skills/<name>/`; Claude Code gets symlinks in `.claude/skills` and
@@ -62,7 +62,13 @@ import locale from "../skills/github/scripts/locale.ts";
 import { COMPOSE_FILES, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
-const SOURCE = "miroshnik/ai-dev";
+const SOURCE = "miroshnik/elves";
+/**
+ * The repository's name before the rename to Elves (#544): GitHub redirects it, installs of earlier releases still call
+ * it — a SessionStart hook with it is ours (`claudeHook`), a `--link` clone's origin with it moves to SOURCE
+ * (`cloneOrigin`), a clone with this package name is a clone (`isElvesClone`).
+ */
+const LEGACY_SOURCE = "miroshnik/ai-dev";
 /** The command the output names: the installer from GitHub through bunx, then the subcommand. */
 const RUN = `bunx github:${SOURCE}`;
 const BEGIN = "<!-- ai-dev:begin";
@@ -82,7 +88,7 @@ const BLOCK = [
  * context. The timeout keeps the network from holding up the start; an error doesn't block the session — the "First
  * step of a session" rule in AGENTS.md is the safety net.
  */
-const HOOK_COMMAND = `bunx --silent github:${SOURCE} check --hook 2>&1 || echo "ai-dev check unavailable (exit $?): work by the current flow and say so"`;
+const HOOK_COMMAND = `bunx --silent github:${SOURCE} check --hook 2>&1 || echo "elves check unavailable (exit $?): work by the current flow and say so"`;
 const HOOK = { matcher: "startup|resume|clear", hooks: [{ type: "command", command: HOOK_COMMAND, timeout: 60 }] };
 
 /** Flow files in the clone: what `install` installs from it (a git pathspec). */
@@ -102,13 +108,13 @@ const TASK_ENV_TIMEOUT = 30_000;
 
 /**
  * Help — `--help` or `-h` anywhere in the arguments (tests/standards/cli-help): a command's synopsis (the first
- * paragraph), what it does and examples; `ai-dev --help` — the synopses of all. Answered before the launcher goes to the
+ * paragraph), what it does and examples; `elves --help` — the synopses of all. Answered before the launcher goes to the
  * release (`toRelease`) — by the launcher's own version: no network, at the cost of lagging behind a newer release. The
  * dispatcher takes only the commands from here (their flags — `FLAGS`).
  */
 const HELP: Record<string, string> = {
-  install: `ai-dev install [--auto | --no-auto] [--lang <code>]
-ai-dev install -g [--link]
+  install: `elves install [--auto | --no-auto] [--lang <code>]
+elves install -g [--link]
 
 Rules, references and all skills of the latest Elves release — into the project (the git root or the current
 directory); in a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
@@ -123,10 +129,10 @@ from the project, a machine copy of a previous install is removed. --link — fr
 instead of copies, edits show up immediately.
 
 Examples:
-  ai-dev install --auto --lang en
-  ai-dev install -g`,
-  check: `ai-dev check [-g]
-ai-dev check --hook
+  elves install --auto --lang en
+  elves install -g`,
+  check: `elves check [-g]
+elves check --hook
 
 Whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git ignores flow files, its
 compose file breaks task isolation or standards and architecture have no test:spec script, 2 — the check is
@@ -145,9 +151,9 @@ go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE — zs
 and on =word, timeout from bin/shims.
 
 Examples:
-  ai-dev check
-  ai-dev check -g`,
-  update: `ai-dev update [-g]
+  elves check
+  elves check -g`,
+  update: `elves update [-g]
 
 Brings it up to date: a --link clone — git pull --ff-only, a copy — install of the latest release (the project's mode
 and language are kept; an install of a previous version without a language gets ru: before the field the flow worked in
@@ -157,24 +163,24 @@ release after the installed one, newest first, with the list of changes of its G
 flow commits it pulled).
 
 Examples:
-  ai-dev update
-  ai-dev update -g`,
-  release: `ai-dev release [--dry-run]
+  elves update
+  elves update -g`,
+  release: `elves release [--dry-run]
 
 From an Elves clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow changes since the previous
 release; --dry-run — only show them.
 
 Examples:
-  ai-dev release --dry-run`,
+  elves release --dry-run`,
 };
 
-/** `ai-dev --help`: the synopsis of each command and how to run it. */
+/** `elves --help`: the synopsis of each command and how to run it. */
 const OVERVIEW = [
-  "ai-dev — the rules and skills of the Elves flow: install, check, update, release",
+  "elves — the rules and skills of the Elves flow: install, check, update, release",
   "",
   ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
   "",
-  "ai-dev <command> --help — the command's details and examples",
+  "elves <command> --help — the command's details and examples",
   `Run: ${RUN} <command>`,
 ].join("\n");
 
@@ -248,7 +254,7 @@ const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : null)
 
 /**
  * The Elves SHA the install runs from: for a clone — HEAD; for the bunx package — the SHA of the spec bunx installed it
- * by, `github:miroshnik/ai-dev#<sha>` in the package.json of the bunx directory next to node_modules (bunx unpacks the
+ * by, `github:miroshnik/elves#<sha>` in the package.json of the bunx directory next to node_modules (bunx unpacks the
  * package from GitHub without `.git`, its `.bun-tag` holds only 7 characters of the SHA). The package from main — no SHA
  * in the spec — null: it is only a launcher (`toRelease`).
  */
@@ -301,7 +307,7 @@ const repoUrl = () => process.env.AI_DEV_REPO || `https://github.com/${SOURCE}.g
 
 /**
  * A copy follows Elves releases, not main. bunx installs a package by its spec once and then runs it from its cache
- * without the network: the package from main (`bunx github:miroshnik/ai-dev`) stays as old as its first run. So it is
+ * without the network: the package from main (`bunx github:miroshnik/elves`) stays as old as its first run. So it is
  * only a launcher: it finds the latest release and restarts from it by the full SHA — a SHA doesn't change, the cache
  * doesn't harm it; no releases yet — by the SHA of main's head. A package installed by a SHA (`sourceSha`: the restart
  * or the user's own pin) works itself; AI_DEV_RELEASE — the tag the launcher restarted to. A clone installs itself as
@@ -650,9 +656,9 @@ function claudeRules(root: string) {
 
 /**
  * The SessionStart hook in `~/.claude/settings.json` (HOOK): the user's own settings and hooks stay in place, a hook
- * of a previous version (with npx too) is replaced, a repeated install doesn't duplicate it. A dry run names what the
- * hook gives: from a terminal `check -g` can't see the agent's shell, a missing hook is how it names a missing Bash
- * environment (tests/capabilities/agent-shell).
+ * of a previous version (with npx too, with the repository's name before the rename — LEGACY_SOURCE) is replaced, a
+ * repeated install doesn't duplicate it. A dry run names what the hook gives: from a terminal `check -g` can't see the
+ * agent's shell, a missing hook is how it names a missing Bash environment (tests/capabilities/agent-shell).
  */
 function claudeHook(home: string) {
   const file = path.join(home, ".claude/settings.json");
@@ -664,7 +670,7 @@ function claudeHook(home: string) {
       return warn(`.claude/settings.json — not JSON: the SessionStart hook isn't installed, add it yourself: ${HOOK_COMMAND}`);
     }
   }
-  const ours = (h: { command?: unknown }) => typeof h.command === "string" && h.command.includes(`${SOURCE} check --hook`);
+  const ours = ({ command }: { command?: unknown }) => typeof command === "string" && [SOURCE, LEGACY_SOURCE].some((repo) => command.includes(`${repo} check --hook`));
   const groups = settings.hooks?.SessionStart ?? [];
   const count = groups.flatMap((g) => g.hooks ?? []).filter(ours).length;
   if (count === 1 && groups.some((g) => JSON.stringify(g) === JSON.stringify(HOOK))) return;
@@ -673,7 +679,7 @@ function claudeHook(home: string) {
   settings.hooks = { ...settings.hooks, SessionStart: [...rest, HOOK] };
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
-  note(".claude/settings.json — SessionStart hook: ai-dev check --hook");
+  note(".claude/settings.json — SessionStart hook: elves check --hook");
 }
 
 /** The block linking to the rules in the project's AGENTS.md: at the start of the file, a repeated install replaces it. */
@@ -877,10 +883,15 @@ function projectRoot() {
   return gitRoot() ?? process.cwd();
 }
 
-/** An Elves clone: its canon is the root AGENTS.md, the flow needn't be installed into it. */
-function isAiDevClone(root: string) {
+/**
+ * An Elves clone: its canon is the root AGENTS.md, the flow needn't be installed into it. The package is named after
+ * the repository — `elves`, and `ai-dev` before the rename (LEGACY_SOURCE): a clone or a branch that hasn't pulled the
+ * rename yet is a clone too.
+ */
+function isElvesClone(root: string) {
   try {
-    return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).name === "ai-dev";
+    const name: unknown = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).name;
+    return [SOURCE, LEGACY_SOURCE].some((repo) => repo.split("/")[1] === name);
   } catch {
     return false;
   }
@@ -959,12 +970,48 @@ function removeGlobalRules(home: string) {
   if (!dry && (st || removed.length)) note(`rules on the machine removed (${[st ? ".agents/ai-dev/" : "", ...removed].filter(Boolean).join(", ")}): rules load from the project`);
 }
 
+/**
+ * The URL of a GitHub origin on the repository's name before the rename (LEGACY_SOURCE, the name is case-insensitive) —
+ * the same URL on SOURCE: the form, the credentials, the port and `.git` stay; another repository or host — null.
+ */
+function renamedOrigin(url: string): string | null {
+  const m = /^(.*?(?:^|[@/])(?:ssh\.)?github\.com(?::\d+)?[:/])([^/]+\/[^/]+?)((?:\.git)?\/?)$/i.exec(url.trim());
+  return m?.[2]?.toLowerCase() === LEGACY_SOURCE ? `${m[1]}${SOURCE}${m[3]}` : null;
+}
+
+/**
+ * A `--link` clone's origin — on the repository's current name: GitHub redirects git by the old name, but the skills
+ * find the repository and answer "a checkout of repository X?" by the origin URL (tests/standards/origin-repo), and
+ * GraphQL by the old name may not find it. The clone is cloned by the old name — `install -g --link` and `update -g`
+ * (it reinstalls the links) move it, `check -g` names it. `.git/config` is shared with the clone's worktrees, a parallel
+ * git may hold its lock: a failed move is a warning with the command, the install goes on.
+ */
+function cloneOrigin(clone: string) {
+  let url;
+  try {
+    // the URL as configured: `remote get-url` would expand the user's insteadOf rules
+    url = git(clone, "config", "--get", "remote.origin.url");
+  } catch {
+    return;
+  }
+  const to = renamedOrigin(url);
+  if (!to) return;
+  if (dry) return void change("~", clone, { note: `origin ${url} → ${to}: the repository is renamed` });
+  try {
+    git(clone, "remote", "set-url", "origin", to);
+    note(`clone ${clone}: origin → ${to} — the repository is renamed`);
+  } catch (e) {
+    warn(`clone ${clone}: origin isn't moved to ${to} — ${reason(e)}; run: git -C ${clone} remote set-url origin ${to}`);
+  }
+}
+
 function installGlobal(src: string, linkMode: boolean) {
   const home = os.homedir();
   const has = (dir: string, cmd = "") => existsSync(path.join(home, dir)) || (cmd !== "" && onPath(cmd));
   const claude = has(".claude", "claude");
   installSkills(src, home, linkMode, claude);
   removeGlobalRules(home);
+  if (linkMode) cloneOrigin(src);
 
   if (claude) {
     claudeHook(home);
@@ -1013,9 +1060,16 @@ function capped(lines: string[]) {
   return lines.length > MAX_LINES ? [...lines.slice(0, MAX_LINES), `  … and ${lines.length - MAX_LINES} more`] : lines;
 }
 
-/** Dry-run changes as `  ~ path` lines; on the machine the path is from `~/`. */
+/**
+ * Dry-run changes as `  ~ path` lines; on the machine the path is from `~/`, outside the home directory (a `--link`
+ * clone) — absolute.
+ */
 function changeLines(changes: Change[], root: string, global: boolean) {
-  return changes.map((c) => `  ${c.op} ${global ? "~/" : ""}${path.relative(root, c.path)}${c.path.endsWith("/") ? "/" : ""}${c.note ? ` — ${c.note}` : ""}`);
+  const shown = (p: string) => {
+    const rel = path.relative(root, p);
+    return !global ? rel : rel.startsWith("..") ? path.resolve(p) : `~/${rel}`;
+  };
+  return changes.map((c) => `  ${c.op} ${shown(c.path)}${c.path.endsWith("/") ? "/" : ""}${c.note ? ` — ${c.note}` : ""}`);
 }
 
 /**
@@ -1139,7 +1193,7 @@ function target(global: boolean) {
   const canon = path.join(root, ".agents/ai-dev");
   // the home directory is the machine's install, not a project; an Elves clone is the canon itself: its manifest
   // keeps only the mode
-  const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || (!samePath(root, home) && !isAiDevClone(root)));
+  const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || (!samePath(root, home) && !isElvesClone(root)));
   return { home, root, canon, installed };
 }
 
@@ -1151,7 +1205,7 @@ function check(global: boolean): Result {
   const { home, root, installed } = target(global);
   const where = global ? "on the machine" : "in the project";
   // an Elves clone has nothing to compare against, but the session mode is needed in it — as in a project
-  if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`Elves ${where}: not installed — an Elves clone, the canon is at its root`, ...modeLines(root)].join("\n") };
+  if (!installed && !global && isElvesClone(root)) return { code: 0, text: [`Elves ${where}: not installed — an Elves clone, the canon is at its root`, ...modeLines(root)].join("\n") };
   if (!installed) return { code: 0, text: `Elves ${where}: not installed`, absent: true };
   const clone = global ? linkedClone(home) : null;
   if (clone) return checkLink(home, clone);
@@ -1237,8 +1291,8 @@ function checkLink(home: string, clone: string): Result {
  * code. Can't tell — no line.
  */
 function unreleased(clone: string): string[] {
-  if (!isAiDevClone(projectRoot())) return [];
-  const cmd = `release it: bun --no-env-file ${path.join(clone, "bin/ai-dev.ts")} release`;
+  if (!isElvesClone(projectRoot())) return [];
+  const cmd = `release it: bun --no-env-file ${path.join(clone, "bin/elves.ts")} release`;
   try {
     const last = releases("origin", clone).at(-1);
     if (!last) return [`  not in a release: no releases yet — ${cmd}`];
@@ -1430,7 +1484,7 @@ function hook(failed?: unknown) {
 
 /**
  * The flow copy's commit subject — in the project language, the `updateCommit` key of this package's github skill
- * dictionary: "ai-dev flow <tag>" in English, the same phrase translated in other languages.
+ * dictionary: "Elves flow <tag>" in English, the same phrase translated in other languages.
  */
 const commitSubject = (root: string, version: string | null | undefined) => locale.fill(locale.names(languageOf(root)).updateCommit, { version: version ?? "" }).trim();
 
@@ -1449,7 +1503,7 @@ function update(global: boolean) {
     return 0;
   }
   const root = projectRoot();
-  if (isAiDevClone(root)) return note(CLONE_NOTE), 0;
+  if (isElvesClone(root)) return note(CLONE_NOTE), 0;
   const from = readManifest(root);
   const changed = installProject(SRC, root);
   const version = release ?? short(sourceSha(SRC));
@@ -1503,7 +1557,7 @@ function whatChanged(from: { sha?: unknown; tag?: unknown }): string[] {
  */
 function releaseGroups(from: string, to: string): { tag?: string; items: string[] }[] {
   const remote = repoUrl();
-  const tmp = mkdtempSync(path.join(os.tmpdir(), "ai-dev-history-"));
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "elves-history-"));
   try {
     git(tmp, "init", "--quiet", "--bare");
     git(tmp, "fetch", "--quiet", "--no-tags", "--filter=blob:none", remote, to);
@@ -1564,7 +1618,7 @@ function updateLink(clone: string) {
   const items = changeItems(clone, `${before}..${after}`);
   const head = `clone ${clone}: ${short(before)} → ${short(after)}`;
   note((items.length ? [`${head} — tell the user what changed:`, ...items.map((i) => `  ${i}`)] : [`${head}, the flow hasn't changed`]).join("\n"));
-  return spawnSync(process.execPath, ["--no-env-file", path.join(clone, "bin/ai-dev.ts"), "install", "-g", "--link"], { stdio: "inherit" }).status ?? 2;
+  return spawnSync(process.execPath, ["--no-env-file", path.join(clone, "bin/elves.ts"), "install", "-g", "--link"], { stdio: "inherit" }).status ?? 2;
 }
 
 /**
@@ -1574,7 +1628,7 @@ function updateLink(clone: string) {
  * @param preview `--dry-run`: show the tag and the list, create nothing
  */
 function releaseCmd(preview: boolean) {
-  if (!existsSync(path.join(SRC, ".git"))) return warn("release — only from an Elves clone: bun <clone>/bin/ai-dev.ts release"), 2;
+  if (!existsSync(path.join(SRC, ".git"))) return warn("release — only from an Elves clone: bun <clone>/bin/elves.ts release"), 2;
   let head, tags, items;
   try {
     git(SRC, "fetch", "--quiet", "origin", "main");
@@ -1773,7 +1827,7 @@ function main(argv: string[]) {
     const language = lang ?? (tty ? askLanguage(languageOf(root)) : languageOf(root));
     const before = autoOf(root);
     const auto = on ? true : off ? false : tty ? ask(AUTO_QUESTION, before) : before;
-    if (isAiDevClone(root)) installClone(root, auto, language);
+    if (isElvesClone(root)) installClone(root, auto, language);
     else installProject(SRC, root, auto, language);
     if (auto) note(MERGE_HINT(language));
     return 0;

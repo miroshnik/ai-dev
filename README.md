@@ -8,10 +8,10 @@
 
 Claude Code · Codex · Gemini CLI · Cursor · Copilot · OpenCode · Amp
 
-[![CI](https://github.com/miroshnik/ai-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/miroshnik/ai-dev/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/miroshnik/ai-dev?sort=date&label=release)](https://github.com/miroshnik/ai-dev/releases)
+[![CI](https://github.com/miroshnik/elves/actions/workflows/ci.yml/badge.svg)](https://github.com/miroshnik/elves/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/miroshnik/elves?sort=date&label=release)](https://github.com/miroshnik/elves/releases)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-standard-6f42c1)](https://agentskills.io)
-[![Spec](https://img.shields.io/badge/spec-branch-0e8a16)](https://github.com/miroshnik/ai-dev/tree/spec)
+[![Spec](https://img.shields.io/badge/spec-branch-0e8a16)](https://github.com/miroshnik/elves/tree/spec)
 
 [The idea](#the-idea) · [Why](#why) · [Principles](#principles) · [Elves and OpenSpec](#elves-and-openspec) · [Installation](#installation) · [Skills](#skills) · [Layout](#repository-layout)
 
@@ -156,17 +156,17 @@ You need `git` and [Bun](https://bun.sh) ≥ 1.2 — the installer (`bunx`) and 
 
 ```bash
 # into a project — from the root of a git repository; the copy is committed with the project
-bunx github:miroshnik/ai-dev install
+bunx github:miroshnik/elves install
 
 # onto the machine — skills and the hook for every agent it has; the rules come from the project
-bunx github:miroshnik/ai-dev install -g
+bunx github:miroshnik/elves install -g
 ```
 
 Keeping the flow up to date:
 
 ```bash
-bunx github:miroshnik/ai-dev check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation, standards or architecture without a test:spec script), 2 — can't check; changes nothing
-bunx github:miroshnik/ai-dev update -g   # bring it to the latest release
+bunx github:miroshnik/elves check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation, standards or architecture without a test:spec script), 2 — can't check; changes nothing
+bunx github:miroshnik/elves update -g   # bring it to the latest release
 ```
 
 Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session; a session resumed after the app restarted also gets the wait of its task to restart — background waits die with the app's process. The same hook sets up the agent's Bash: in zsh a glob without matches and `====` go to the command as is, as in bash, and `timeout` works on macOS without coreutils (`bin/shims`); `check -g` run from the agent's Bash names it if the session didn't get that. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
@@ -185,7 +185,7 @@ An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun
 - `.agents/ai-dev/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; `.agents/skills/<name>/` — all skills; `.agents/ai-dev.json` — the SHA and release tag it was installed from, the list of skills (a reinstall removes skills that Elves no longer has), `auto` — whether the agent runs a task entirely by itself, without a "yes" for commit, push and merge, and `language` — the project language.
 - Claude Code — symlinks `.claude/rules/ai-dev.md`, `.claude/rules/ai-dev-claude.md` (loaded automatically, whatever the project's `CLAUDE.md`) and `.claude/skills/<name>`.
 - Other agents — a block at the top of the project's `AGENTS.md` linking to `.agents/ai-dev/AGENTS.md` (the whole canon won't fit Codex's budget — 32 KiB for all of a project's `AGENTS.md` files) and `.agents/skills/` — the shared skills location of Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp.
-- Updating — `update` and a commit of the copy, `chore(agents): ai-dev flow <tag>`, in a task of its own: a task session doesn't update the project (the copy is thousands of lines in its branch) — it recommends the update and asks whether to queue that task, one per project, `check` prints its `task new`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
+- Updating — `update` and a commit of the copy, `chore(agents): Elves flow <tag>`, in a task of its own: a task session doesn't update the project (the copy is thousands of lines in its branch) — it recommends the update and asks whether to queue that task, one per project, `check` prints its `task new`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
 - Flow files that the project's git ignores (a `CLAUDE.md` pattern, the `.claude/` directory, `vendor/`) are un-ignored by `install` and `update` with exceptions — an ai-dev block at the end of `.gitignore`, committed with the copy; what an exception can't un-ignore (a directory excluded by a personal rule), and anything ignored until `update` runs — `❌` in the output of the install and of `check`.
 
 **Onto the machine** (`-g`) — only the skills and the hook, no rules on the machine: the project loads them, and a second copy would be read on every turn of every agent (~20k tokens). `~/.agents/skills` — for all agents; Claude Code also gets `~/.claude/skills` and the `SessionStart` hook in `~/.claude/settings.json`. `install -g` removes the rules of a previous install (`~/.agents/ai-dev`, the symlinks in `~/.claude/rules` and the global files of Codex, Gemini CLI, Copilot CLI, OpenCode, Amp); it doesn't touch a file that isn't its own.
@@ -209,9 +209,9 @@ Projects and machines with a copy get the flow **by releases** — tags `vYYYY.M
 <summary><b>Working on the flow itself — from a clone</b></summary>
 
 ```bash
-git clone https://github.com/miroshnik/ai-dev && cd ai-dev
-bun bin/ai-dev.ts install -g --link   # symlinks to the clone instead of copies: edits show up immediately
-bun bin/ai-dev.ts release --dry-run   # what goes into the release; without --dry-run — cut it
+git clone https://github.com/miroshnik/elves && cd elves
+bun bin/elves.ts install -g --link   # symlinks to the clone instead of copies: edits show up immediately
+bun bin/elves.ts release --dry-run   # what goes into the release; without --dry-run — cut it
 ```
 
 </details>
@@ -287,13 +287,13 @@ claude/CLAUDE.md   only what Claude Code has
 docs/              references the canon links to
 skills/<name>/     SKILL.md + scripts/ — TypeScript under Bun, no dependencies
 tests/             Elves' own spec: capabilities/ and standards/
-bin/ai-dev.ts      the installer — TypeScript under Bun too: bunx runs it from node_modules by its shebang
+bin/elves.ts       the installer — TypeScript under Bun too: bunx runs it from node_modules by its shebang
 bin/shims/         commands the SessionStart hook adds to the end of the agent's Bash PATH: timeout
 ```
 
-**A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description` ≤ 1,024 characters; at most 2,500 words — when and what to call) and `scripts/` for the deterministic part; reference material — `reference.md` and the scripts' `--help`. The canon is budgeted too: `AGENTS.md` ≤ 3,000 words, `claude/CLAUDE.md` ≤ 700 (standard `canon-size`). Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in the `tests/` of Elves over the same tree. The installer `bin/ai-dev.ts` is the same TypeScript under Bun and imports skill modules instead of copying their values. A skill imports another skill only by the dependency list of the `skill-imports` standard: `github`, `task-env`, `ci-wait` and `slot` import none, so a rule they share with a neighbor lives as a copy in each script, and a standard keeps the copies identical. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.
+**A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description` ≤ 1,024 characters; at most 2,500 words — when and what to call) and `scripts/` for the deterministic part; reference material — `reference.md` and the scripts' `--help`. The canon is budgeted too: `AGENTS.md` ≤ 3,000 words, `claude/CLAUDE.md` ≤ 700 (standard `canon-size`). Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in the `tests/` of Elves over the same tree. The installer `bin/elves.ts` is the same TypeScript under Bun and imports skill modules instead of copying their values. A skill imports another skill only by the dependency list of the `skill-imports` standard: `github`, `task-env`, `ci-wait` and `slot` import none, so a rule they share with a neighbor lives as a copy in each script, and a standard keeps the copies identical. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.
 
-Elves lives by its own flow: the spec — [`tests/`](tests), its documentation — in the [`spec` branch](https://github.com/miroshnik/ai-dev/tree/spec), tasks — in [Issues](https://github.com/miroshnik/ai-dev/issues) and the [ai-dev project](https://github.com/users/miroshnik/projects/6).
+Elves lives by its own flow: the spec — [`tests/`](tests), its documentation — in the [`spec` branch](https://github.com/miroshnik/elves/tree/spec), tasks — in [Issues](https://github.com/miroshnik/elves/issues) and the [elves project](https://github.com/users/miroshnik/projects/6).
 
 The spec is read from the branch, not from the working tree — the same in any project with the flow:
 

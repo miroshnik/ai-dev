@@ -46,8 +46,8 @@ function codeOf(md: string): string[] {
 
 /**
  * Команды скриптов, названные в документах флоу: `…/scripts/github.ts task new`, `github task close <N>`,
- * `bunx github:miroshnik/ai-dev check -g` — имя скрипта в начале кода или после пути и слова после него до первого
- * аргумента; имя посреди кода — комментарий или текст («# тесты ai-dev standards»), не вызов.
+ * `bunx github:miroshnik/elves check -g` — имя скрипта в начале кода или после пути и слова после него до первого
+ * аргумента; имя посреди кода — комментарий или текст («# тесты elves standards»), не вызов.
  */
 function namedInDocs(all: Cli[]): { cli: Cli; words: string; file: string }[] {
   const names = all.map((c) => escape(c.name)).join("|");
@@ -151,7 +151,7 @@ describe("Скрипты флоу отвечают на --help и -h: синта
       { name: "справка в stderr с кодом 2", item: helpOf("", { ...clean(""), code: 2, stderr: "Usage: x …" }) },
       { name: "обзор без строки о справке команды", item: helpOf("", clean("x — tools\n\n  x run <N>\n  x stop <N>\n")) },
     ],
-    includes: ["bin/ai-dev.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/task-env/scripts/task-env.ts", "skills/ci-wait/scripts/wait-ci.sh", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"],
+    includes: ["bin/elves.ts", "skills/github/scripts/github.ts", "skills/est/scripts/est.ts", "skills/task-env/scripts/task-env.ts", "skills/ci-wait/scripts/wait-ci.sh", "skills/slot/scripts/slot.ts", "skills/spec/scripts/spec-doc.ts"],
   });
 
   invariant(it, {
@@ -170,7 +170,7 @@ describe("Скрипты флоу отвечают на --help и -h: синта
       { name: "запись файла", item: helpOf("run", { ...clean(GOOD), changed: [".agents"] }) },
       { name: "-h не то же, что --help", item: helpOf("run", clean(GOOD), { ...clean(""), code: 2, stderr: "Unknown option '-h'" }) },
     ],
-    includes: ["ai-dev install", "ai-dev check", "github task new", "github pr premerge", "est fact", "task-env proxy up", "task-env check", "wait-ci merged"],
+    includes: ["elves install", "elves check", "github task new", "github pr premerge", "est fact", "task-env proxy up", "task-env check", "wait-ci merged"],
   });
 
   /** Песочница видит то, что проверка запрещает справке: без этого «без сети и изменений» было бы зелёным всегда. */

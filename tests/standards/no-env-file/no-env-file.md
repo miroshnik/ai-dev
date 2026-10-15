@@ -30,7 +30,7 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 ## Вне охвата
 
-Установщик под `bunx` (`bunx github:miroshnik/ai-dev …`, хук `SessionStart`): `bunx` подгружает env-файлы и флаг
+Установщик под `bunx` (`bunx github:miroshnik/elves …`, хук `SessionStart`): `bunx` подгружает env-файлы и флаг
 не принимает — ни `bunx --no-env-file`, ни `bun --no-env-file x` (Bun 1.4.3). Помог бы только shebang
 `#!/usr/bin/env -S bun --no-env-file`, а `env -S` есть не везде (busybox) — установщик там не запустился бы вовсе.
 Сам он проверок проекта не запускает.

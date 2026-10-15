@@ -84,6 +84,6 @@ describe("Скрипты флоу под bun не подгружают env-фа�
       { name: "дочерний bun без флага", item: { file: "skills/x/scripts/x.ts", text: `spawnSync("bun", [script, "down"], { cwd });\n` } },
       { name: "дочерний процесс того же bun без флага", item: { file: "bin/x.ts", text: `spawnSync(process.execPath, [TASK_ENV, "check", root]);\n` } },
     ],
-    includes: ["skills/github/scripts/github.ts", "skills/task-env/scripts/task-env.ts", "skills/spec/scripts/harness.ts", "bin/ai-dev.ts"],
+    includes: ["skills/github/scripts/github.ts", "skills/task-env/scripts/task-env.ts", "skills/spec/scripts/harness.ts", "bin/elves.ts"],
   });
 });

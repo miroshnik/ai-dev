@@ -20,7 +20,7 @@
  * Compose has already brought the forms of writing (short and long syntax, the override file, variables, `extends`) to
  * one. Without path resolution — otherwise Compose makes relative paths absolute itself; with all profiles — otherwise
  * heavy services in `profiles` aren't shown. `config` needs no Docker daemon, it works in the sandbox too. `check` of
- * the ai-dev installer calls it for a project with a compose file.
+ * the Elves installer calls it for a project with a compose file.
  *
  * The proxy is the Compose project of `proxy/compose.yaml` next to this directory: the Docker provider with
  * `exposedByDefault: false` (a container without labels isn't published), its own network, the `web` entry point on

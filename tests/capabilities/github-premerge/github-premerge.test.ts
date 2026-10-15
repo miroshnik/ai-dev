@@ -285,7 +285,7 @@ describe("pr premerge: main ушёл — быстрые проверки на с
    * (#442). Мерж это не останавливает: нехватку скрипта держит check проекта, premerge называет её и отсылает к нему.
    */
   it("premerge в проекте со стандартами без test:spec называет, что стандарты на слиянии не проверены", () => {
-    const unchecked = (roots: string) => `○ ${roots} aren't checked on the merge: the merge's package.json has no test:spec script — the project's check names the line to add (bunx github:miroshnik/ai-dev check)`;
+    const unchecked = (roots: string) => `○ ${roots} aren't checked on the merge: the merge's package.json has no test:spec script — the project's check names the line to add (bunx github:miroshnik/elves check)`;
     const standards = { "tests/standards/registry/registry.test.ts": "" };
     const typed = project({ files: { ...TYPED, ...standards, "package.json": PKG({ typecheck: "sh tc.sh" }) }, pr: { "calls.txt": "other\ncommentsIn\n" }, mainAfter: { "uses.txt": "a\n" } });
     const r = premerge(fakeGh(typed.head, { moved: AFTER }).gh, typed.work);

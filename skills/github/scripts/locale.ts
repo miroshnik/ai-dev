@@ -174,13 +174,18 @@ export interface Names {
       size: string;
     };
   };
-  /** The description of a flow copy commit that `update` suggests: "ai-dev flow <tag>". */
+  /** The description of a flow copy commit that `update` suggests: "Elves flow <tag>"; nothing parses it back. */
   updateCommit: string;
   /**
-   * The title of the project's flow update task that `check` suggests: "Update the ai-dev flow" — constant, so
+   * The title of the project's flow update task that `check` suggests: "Update the Elves flow" — constant, so
    * `task new` refuses a second open one.
    */
   updateTask: string;
+  /**
+   * Names before the flow's rename to Elves (#544) that scripts still recognise: `updateTask` — `task new` of the update
+   * task refuses while an open one has the former title, so a project doesn't get a second one.
+   */
+  formerly: { updateTask: string };
   standardIssue: string;
   autoAnswer: string;
   lastLine: { done: string; questions: string; remaining: string };
