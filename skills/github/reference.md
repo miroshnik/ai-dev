@@ -591,7 +591,15 @@ it yet — the tasks from the PR body's keywords as GitHub understands them; non
 at all — an error), creates a missing label with the kind's color; it doesn't
 remove an earlier label of a decision missing from the diff — an `=` line. The
 task's epic gets the same labels — the union of its subtasks; same with
-`task new --epic --labels`.
+`task new --epic --labels`. GitHub puts at most 100 labels on an issue, and a
+mutation past that fails as a whole (#569): the room is 100 minus the labels
+the task (the epic) already has. Everything fits — everything is set; it
+doesn't — only the decisions whose statements the PR changes: the folder's
+`<name>.md` edited in content or the folder named in the spec section of the PR
+body (spec-diff output — the lists, the summary, the move, harness checks;
+exceptions don't count), alphabetically, as many as fit. A codemod over every
+test changes no statement: test bodies and code only — an `○` line without a
+label, what didn't fit — an `○` line too; code 0.
 
 ### pr premerge
 

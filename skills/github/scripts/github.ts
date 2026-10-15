@@ -89,6 +89,11 @@ export const DECISIONS = {
 export type DecisionKind = keyof typeof DECISIONS;
 const DECISION_KINDS = Object.keys(DECISIONS) as DecisionKind[];
 const MODEL_PATH = "tests/architecture/model.ts";
+/**
+ * GitHub puts at most this many labels on an issue: `addLabelsToLabelable` past it fails as a whole (#569). An issue's
+ * labels are read all at once (`IssueRef`) — otherwise `pr labels` couldn't count the room.
+ */
+const ISSUE_LABEL_LIMIT = 100;
 export const WORKFLOW_ADDED = "Item added to project";
 export const WORKFLOW_CLOSED = "Item closed";
 export const WORKFLOW_AUTO_ADD = "Auto-add to project";
@@ -401,7 +406,7 @@ export const Q = {
     issue(number: $number) {
       id number title state stateReason url
       issueType { name }
-      labels(first: 20) { nodes { name } }
+      labels(first: ${ISSUE_LABEL_LIMIT}) { nodes { name } }
       parent { id number }
       subIssues(first: 100) { nodes { number state title } }
       blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
@@ -3196,6 +3201,64 @@ export function decisionsOfFiles(files: PrFile[], modules: Record<string, string
 }
 
 /**
+ * Decisions whose statements the PR changes — who gets a label when not all of them fit on an issue (#569): a codemod
+ * over every test (a test runner change) rewrites the bodies and changes no statement, and a decision label means "the
+ * task changes the decision". A statement is the decision folder's `<name>.md` edited in content, or the folder named in
+ * the spec section of the PR body (spec-diff output): a list line or a summary row starting with the folder — removed,
+ * changed and added tests, the move into the tree, harness checks, scenarios that became tests. Exceptions aren't
+ * statements (`mechanical`): their blocks are skipped. The section heading and block titles — in any dictionary
+ * language: the body is in the project's language, and the script may run from another project with --repo.
+ */
+function statementDecisions(files: PrFile[], body: string): Set<string> {
+  const dirs = new Set<string>(DECISION_KINDS.map((k) => DECISIONS[k].dir));
+  const out = new Set<string>();
+  for (const f of files) {
+    const [root, dir, name, file, ...rest] = f.path.split("/");
+    if (root === "tests" && dirs.has(dir!) && file === `${name}.md` && !rest.length && !mechanical(f)) out.add(name!);
+  }
+  const heads = locale.every((n) => n.prSpecSection);
+  const exceptions = locale.every((n) => n.spec.diff.exceptionsTitle).map((t) => `**${t}`);
+  let inSection = false;
+  let skip = false;
+  for (const raw of body.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (heads.includes(line)) [inSection, skip] = [true, false];
+    else if (/^##\s/.test(line)) inSection = false;
+    else if (!inSection) continue;
+    else if (/^#{3,}\s/.test(line)) skip = false;
+    else if (line.startsWith("**")) skip = exceptions.some((t) => line.startsWith(t));
+    else if (!skip) {
+      const m = /^(?:[-*]\s+(?:✅\s+)?|\|\s*)`tests\/([^`/]+)\/([^`/]+)[^`]*`/.exec(line);
+      if (m && dirs.has(m[1]!)) out.add(m[2]!);
+    }
+  }
+  return out;
+}
+
+/**
+ * The decision labels an issue doesn't have, as many as fit (`ISSUE_LABEL_LIMIT`): all of them fit — all; otherwise only
+ * the decisions whose statements the PR changes (`statementDecisions`), in alphabetical order, as many as there's room
+ * for. What isn't set — `○` lines: a mutation past the limit would fail and leave the issue without a single label.
+ */
+function putLabels(io: Io, issue: Issue, who: string, want: string[], statements: Set<string>, all: Label[]): void {
+  const missing = want.filter((n) => !issue.labels.includes(n));
+  const room = Math.max(0, ISSUE_LABEL_LIMIT - issue.labels.length);
+  let add = missing;
+  if (missing.length > room) {
+    const named = missing.filter((n) => statements.has(n));
+    const bodies = missing.filter((n) => !statements.has(n));
+    add = named.slice(0, room);
+    const without = bodies.length ? `; test bodies and code only, no label: ${bodies.join(", ")}` : "";
+    io.out(
+      `○ ${who}: ${missing.length} new decision labels, room for ${room} (GitHub puts at most ${ISSUE_LABEL_LIMIT} on an issue, it has ${issue.labels.length}) — only decisions whose <folder>.md or test names the PR changes${without}`,
+    );
+    if (named.length > room) io.out(`○ ${who}: no room — not set: ${named.slice(room).join(", ")}`);
+  }
+  const added = addLabels(io, issue, add, all);
+  if (added) io.out(`+ ${who}: ${added}`);
+}
+
+/**
  * Tasks the PR closes, by its body — as GitHub understands them: a keyword (close, fix, resolve in any form) before
  * each `#N`; "Closes #1, #2" closes only #1.
  */
@@ -3255,19 +3318,16 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
     io.out(`+ created label ${q(l)}`);
   }
   const isDecision = (n: string) => legacyDecision(n) !== null || labelKinds(all.find((x) => x.name === n)?.description) !== null;
+  const statements = statementDecisions(files, head.body ?? "");
   const epics = new Map<number, Issue>();
   for (const n of closes) {
     const issue = loadIssue(io, slug, n);
-    const added = addLabels(io, issue, want, all);
-    if (added) io.out(`+ #${n}: ${added}`);
+    putLabels(io, issue, `#${n}`, want, statements, all);
     // earlier labels aren't removed: the task may have touched the decision in another PR too
     for (const l of issue.labels.filter((x) => isDecision(x) && !want.includes(x))) io.out(`= #${n}: ${l} — the decision is not in the PR diff, the label stays`);
     if (issue.parent && !epics.has(issue.parent.number)) epics.set(issue.parent.number, loadIssue(io, slug, issue.parent.number));
   }
-  for (const epic of epics.values()) {
-    const added = addLabels(io, epic, want, all);
-    if (added) io.out(`+ epic #${epic.number}: ${added}`);
-  }
+  for (const epic of epics.values()) putLabels(io, epic, `epic #${epic.number}`, want, statements, all);
   return 0;
 }
 
@@ -3750,7 +3810,8 @@ Examples:
 
 Decision labels from the PR diff for the tasks from «Closes #N» and their epics; doesn't remove earlier ones. A decision
 touched only mechanically (a deletion, a rename without changes, exceptions) and a decision with a slice label's name —
-an ○ line, no label.
+an ○ line, no label. More than fit on an issue (GitHub allows ${ISSUE_LABEL_LIMIT}) — only decisions whose <folder>.md
+or test names (the PR body's spec section) the PR changes, as many as fit; the rest — ○ lines.
 
 Examples:
   github pr labels 57`,
