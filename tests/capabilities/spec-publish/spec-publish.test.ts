@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { gitRepo, runScript, tmpDir, writeTree } from "../../lib/spec.ts";
+import { fakeGh, type GhArtifact, ghRun, type GhRun, gitRepo, runScript, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -333,46 +333,20 @@ const OTHER_TREE = "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567";
 const REPO = 1001;
 const FORK = 2002;
 
-// `gh` — внешний край, подменяется он. Два вызова `gh api` (REST GitHub Actions): артефакты репозитория с фильтром по
-// имени — из artifacts.json; прогон по id — из runs.json, `{ id: [ответ на каждый опрос…] }`, последний повторяется.
-// Вызовы — в calls.
-const FAKE_GH = `#!/usr/bin/env bash
-printf '%s\\n' "$*" >> "$FAKE_GH/calls"
-[ "$1" = api ] || { echo "fake gh: $*" >&2; exit 1; }
-case "$2" in
-  "repos/{owner}/{repo}/actions/artifacts?name="*)
-    jq -c --arg name "\${2#*name=}" '[.[] | select(.name == $name)] | { total_count: length, artifacts: . }' "$FAKE_GH/artifacts.json" ;;
-  "repos/{owner}/{repo}/actions/runs/"*)
-    id="\${2##*/}"; n=$(cat "$FAKE_GH/n-$id" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_GH/n-$id"
-    jq -ce --arg id "$id" --argjson n "$n" '.[$id] | (.[$n] // .[-1])' "$FAKE_GH/runs.json" ;;
-  *) echo "fake gh: $*" >&2; exit 1 ;;
-esac
-`;
-
-interface Artifact { id: number; name: string; expired: boolean; workflow_run: { id: number; repository_id: number; head_repository_id: number } }
-const artifact = (run: number, over: { tree?: string; expired?: boolean; from?: number } = {}): Artifact => ({
+const artifact = (run: number, over: { tree?: string; expired?: boolean; from?: number } = {}): GhArtifact => ({
   id: 9000 + run,
   name: `docs-spec-${over.tree ?? TREE}`,
   expired: over.expired ?? false,
   workflow_run: { id: run, repository_id: REPO, head_repository_id: over.from ?? REPO },
 });
 
-interface WorkflowRun { id: number; status: string; conclusion: string | null; html_url: string }
-const workflowRun = (id: number, status: string, conclusion: string | null = null): WorkflowRun => ({ id, status, conclusion, html_url: `https://github.test/runs/${id}` });
-const done = (id: number, conclusion = "success") => workflowRun(id, "completed", conclusion);
+const done = (id: number, conclusion = "success") => ghRun(id, "completed", conclusion);
 
 /** Шаг workflow публикации на мерж PR: прогон, проверивший дерево мержа, по ответам `gh api`. */
-function findRun(github: { artifacts: Artifact[]; runs?: Record<number, WorkflowRun[]> }, ...args: string[]) {
-  const bin = path.join(dir, "bin");
-  rmSync(bin, { recursive: true, force: true });
-  mkdirSync(bin);
-  writeFileSync(path.join(bin, "gh"), FAKE_GH);
-  chmodSync(path.join(bin, "gh"), 0o755);
-  writeFileSync(path.join(bin, "artifacts.json"), JSON.stringify(github.artifacts));
-  writeFileSync(path.join(bin, "runs.json"), JSON.stringify(github.runs ?? {}));
-  const r = runScript("spec-run", ["--tree", TREE, "--interval", "0", ...args], work, { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin });
-  const log = path.join(bin, "calls");
-  return { ...r, calls: existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [] };
+function findRun(github: { artifacts: GhArtifact[]; runs?: Record<number, GhRun[]> }, ...args: string[]) {
+  const gh = fakeGh(path.join(dir, "bin"), github);
+  const r = runScript("spec-run", ["--tree", TREE, "--interval", "0", ...args], work, gh.env);
+  return { ...r, calls: gh.calls() };
 }
 
 /**
@@ -425,14 +399,14 @@ describe("Без CI на main публикуется только дерево, 
   });
 
   it("прогон с артефактом ещё идёт — публикация ждёт его завершения", () => {
-    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [workflowRun(41, "queued"), workflowRun(41, "in_progress"), done(41)] } }, "--timeout", "60");
+    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [ghRun(41, "queued"), ghRun(41, "in_progress"), done(41)] } }, "--timeout", "60");
     expect([r.code, r.stdout]).toEqual([0, "41\n"]);
     expect(r.calls.filter((c) => c.endsWith("/runs/41"))).toHaveLength(3);
     expect(r.stderr).toContain(`main tree ${TREE.slice(0, 12)}: run 41 in_progress — waiting`);
   });
 
   it("прогон с артефактом не завершился к потолку ожидания — ошибка, код 1", () => {
-    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [workflowRun(41, "in_progress")] } }, "--timeout", "0");
+    const r = findRun({ artifacts: [artifact(41)], runs: { 41: [ghRun(41, "in_progress")] } }, "--timeout", "0");
     expect([r.code, r.stdout]).toEqual([1, ""]);
     expect(r.stderr).toContain(`main tree ${TREE.slice(0, 12)}: run 41 didn't finish in 0 s`);
   });
