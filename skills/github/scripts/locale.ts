@@ -60,7 +60,8 @@ export interface Names {
    * The epic refresh (`github task actualize`): the subagent's prompt (`lead`, `fetch`), its assignment (`--assignment`)
    * and the line of the script's own fixes in a comment on the epic (`mechanics` of `unblocked`, `unlabeled`,
    * `milestone`). `linkWords` — phrases before `#N` that copy a dependency into text, separated by `|`; the phrases of
-   * all languages are parsed.
+   * all languages are parsed. `report` — the line the subagent's comment on the epic starts with, its result: `task
+   * close` refuses until it finds it, in any language (#571).
    */
   actualize: {
     lead: string;
@@ -82,6 +83,7 @@ export interface Names {
     comment: string;
     answer: string;
     linkWords: string;
+    report: string;
     mechanics: string;
     unblocked: string;
     unlabeled: string;

@@ -241,8 +241,13 @@ line `○ refresh not needed`, no subagent. Five checks:
    they are born faster than they are worked off. Something deferred as "not
    in this PR" — an issue or dropped explicitly, not forgotten.
 
-What was fixed — one line in a comment on the epic: the history of decisions
-in one place.
+What was fixed — one comment on the epic, the history of decisions in one
+place; it is the subagent's last step, always: nothing to fix — «the block is
+current». The comment starts with «Refresh after #N, result:» in the project
+language (`report` of the dictionary) — it is the end of the refresh for
+`task close`: until it, close refuses (#571: an executor closed its task while
+its refresh still ran in its worktree, the dispatcher's queue removed the
+worktree, and the subagent was left without a directory).
 
 **End of session — one line, one of three.** A missing line can't be told
 from a forgotten one, so the answer always has the last line:
@@ -711,7 +716,14 @@ uncommitted changes or unmerged commits — left, an `○` line with the reason;
 session's worktree, an agent's on a task branch and an executor's whose
 handed-out task is open — untouched, no line (#533): Claude Code unlocks the
 worktree when the agent ends its answer, a question too, and doesn't lock it
-again for an executor continued with `SendMessage` after a restart.
+again for an executor continued with `SendMessage` after a restart. An agent's
+worktree a subagent of it works in without a worktree of its own — left, an
+`○` line naming the subagent (#571: the executor closed its task and answered,
+its epic refresh still ran in its directory, and the queue removed it): such a
+subagent — `parentAgentId` without its own `worktreePath` in Claude Code's
+subagent metadata of this session and of the sessions with hand-outs
+(`dispatchers/*.tasks`), at any depth; at work — its transcript
+(`agent-<id>.jsonl`) written in the last 15 minutes.
 `--epic N` — the epic's open sub-issues,
 otherwise the repository's open tasks (the first 100 of the search);
 `--type`, `--priority` — only in an organization. It marks the session as a
@@ -759,7 +771,8 @@ hand-outs of the task in any session's `dispatchers/*.tasks` and a worktree on
 the task branch, the caller's own aside; its subagents' (`agent-<id>`) — by
 `parentAgentId` of Claude Code's subagent metadata
 (`projects/<directory>/<session id>/subagents/agent-<id>.meta.json` in its
-configuration directory), at any depth. Alive — locked by a live process, or HEAD moved (a commit, a switch) in
+configuration directory), at any depth. Alive — locked by a live process, a
+subagent without a worktree of its own at work in it (above), or HEAD moved (a commit, a switch) in
 the last 15 minutes: Claude Code doesn't lock the worktree of an agent continued
 after its answer, and the woken executor of #545 worked unlocked; the wait for CI
 is a Bash call of up to 9 minutes without commits.
@@ -816,8 +829,9 @@ and its open tasks with their texts, the copies of links in text and the
 answers to open questions in comments (`k. ✅ …`) the script found — named, not
 edited, the checks by meaning 1, 3 and 5 from section "Epic refresh on task
 close", what may be changed (only GitHub tasks; the task, the epic and their
-milestone are closed by `task close`), where to write the edits (a comment in
-the epic) and the answer form. No epic, or no open tasks in the epic other than
+milestone are closed by `task close`), the result — always a comment on the
+epic «Refresh after #N, result: …», «the block is current» too (`task close`
+waits for it) — and the answer form. No epic, or no open tasks in the epic other than
 this one — the line `○ refresh not needed`, no subagent. The order after the
 merge — fewer turns (measurement #285: the extra
 turns were `gh pr view` for the SHA and reading the wait result): in one turn,
@@ -827,8 +841,9 @@ script takes the merge SHA from the PR itself), in Claude Code — also
 `ToolSearch` for the `archive_session` schema if it isn't loaded yet; next — in
 the background the subagent with the assignment, if a refresh is needed; a wait
 notification with code 0 — `task close N` right away, don't read the output
-file (not 0 — the `RESULT:` line in it); then the last line of the answer and
-archiving — in one turn.
+file (not 0 — the `RESULT:` line in it); the subagent hasn't reported yet —
+close refuses before any change: close again after its answer; then the last
+line of the answer and archiving — in one turn.
 
 ### task close
 
@@ -840,7 +855,13 @@ then the task's PR is searched among the default branch's recent PRs by the
 branch `<type>/<N>-<slug>` and "Closes #N" in the body: merged — the task is
 closed with the comment «Closed by PR #M: GitHub didn't link the PR to the
 task», none — a refusal
-listing what was checked (no manual `gh issue close` needed). Order:
+listing what was checked (no manual `gh issue close` needed). The epic has
+open tasks besides this one and no report of the refresh on it — a comment
+with «Refresh after #N, result:» in any language of the dictionary, case and
+markup aside; the script's own «Refresh after #N, script: …» comes before the
+subagent and isn't it — a refusal before any changes, with what to do: the
+subagent is at work — wait for its answer, it wasn't launched — `task
+actualize N`, it answered without the comment — post it (#571). Order:
 close the task if the merged PR didn't; a task of the scripts' own repository
 (Elves) — the scripts' clone (the checkout the est script is in) catches up
 with the merged `main`: `git pull --ff-only origin main`, the line
@@ -877,10 +898,8 @@ URL substring: `elves-tools` isn't a checkout of `elves` (standard
 session's worktree — the `Next` hint; an agent's (`.claude/worktrees/agent-*`,
 a dispatcher's executor) — an `○` line: the dispatcher's next `task queue`
 removes it. `--no-git` — without the git step, the
-stacks still go. The last output line — the end-of-session steps: the
-epic has open tasks — a reminder about the epic refresh (its place is before
-close, in parallel with the deploy; if it didn't happen — a subagent with the
-`task actualize N` assignment), then the last line of the answer, one of three
+stacks still go. The last output line — the end-of-session steps: the last
+line of the answer, one of three
 (wording in the project language — `AGENTS.md`, "Language"):
 `All done. The session can be closed.`; the owner has something to decide —
 `All done, but there are questions: …` with the questions themselves;

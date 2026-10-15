@@ -417,7 +417,8 @@ export const Q = {
     }
   }
 }`,
-  // The epic refresh (task actualize): the text, links and milestone of the epic and of each of its open tasks
+  // The epic refresh (task actualize): the text, links and milestone of the epic and of each of its open tasks; task
+  // close — the refresh's report among the epic's comments
   TaskText: `query TaskText($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     issue(number: $number) {
@@ -2137,7 +2138,7 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
  * label; order — Priority, then the number. In work (`=`) — "In progress", an open PR (linked, or by the task branch and
  * "Closes #N" among recent PRs) named with its link, or handed out to an executor of this session (`handedOutFile`).
  * Marks the session as a dispatcher (`dispatcherFile`). Before the queue — finished agents' worktrees
- * (`pruneAgentWorktrees`) but those of executors whose handed-out tasks are open.
+ * (`pruneAgentWorktrees`) but those of executors whose handed-out tasks are open and those a subagent still works in.
  */
 export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   const want = o.type === undefined ? undefined : typeAliases()[o.type.toLowerCase()];
@@ -2287,7 +2288,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * reason. A `worktree-agent-*` branch without a worktree — the same by its commits. A session's worktree, an agent's on
  * a task branch (its task isn't closed), an executor's whose handed-out task is open (`kept`, #533: Claude Code unlocks
  * an agent's worktree when it ends its answer — a question too — and doesn't lock it again when the agent is continued
- * with `SendMessage` after a restart) — not touched, no line. The directory isn't a checkout of the repository — nothing.
+ * with `SendMessage` after a restart) — not touched, no line. A worktree a subagent of its agent works in without one
+ * of its own (`guestWhy`, #571: the executor answered, its epic refresh still ran in its directory) — left, a `○` line
+ * naming the subagent. The directory isn't a checkout of the repository — nothing.
  */
 function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolean): void {
   if (!checkoutOfRepo(io, originUrl(io), slug)) return;
@@ -2311,11 +2314,18 @@ function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolea
     if (d.status !== 0) io.out(`! git branch -D ${branch}: ${why(d)}`);
     return d.status === 0;
   };
-  const agents = all
+  const candidates = all
     .filter((w) => AGENT_WORKTREE.test(w.path) && w.path !== here && !w.prunable && (w.branch === null || AGENT_BRANCH.test(w.branch)))
     .filter((w) => (w.locked === null || !lockHolds(w.locked)) && !kept(w.path))
     .sort((a, b) => a.path.localeCompare(b.path));
-  for (const w of agents) {
+  // the subagents of this session and of the machine's other sessions with hand-outs: their executors' worktrees are here too
+  const agents = candidates.length ? subagentsOf(io, [io.env.CLAUDE_CODE_SESSION_ID ?? "", ...handOutFiles(io).map((h) => h.session)].filter(Boolean)) : new Map<string, Subagent>();
+  for (const w of candidates) {
+    const guest = guestWhy(agents, agentIdOf(w.path)!);
+    if (guest) {
+      io.out(`○ worktree ${w.path} left: ${guest}`);
+      continue;
+    }
     const status = git(w.path, "status", "--porcelain");
     if (status.status !== 0) {
       io.out(`! worktree ${w.path}: git status: ${why(status)}`);
@@ -2358,29 +2368,33 @@ function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolea
  */
 const QUIET_MINUTES = 15;
 
-/** Why a worktree is alive: a lock held by a live process, or HEAD moved less than `QUIET_MINUTES` ago; quiet — null. */
-function aliveWhy(io: Io, w: Worktree): string | null {
-  if (w.locked !== null && lockHolds(w.locked)) return `locked by a live process — ${w.locked || "no reason"}`;
-  // the worktree's own HEAD log: the time of its latest entry (`HEAD@{<unix time>}`)
-  const r = (io.run ?? realRun)("git", ["reflog", "-1", "--date=unix", "--format=%gd"], w.path);
-  const at = Number(/@\{(\d+)\}/.exec(r.stdout)?.[1]);
-  const minutes = Math.floor((Date.now() / 1000 - at) / 60);
-  return r.status === 0 && at > 0 && minutes < QUIET_MINUTES ? `HEAD moved ${Math.max(0, minutes)} min ago (a commit or a switch), quiet after ${QUIET_MINUTES}` : null;
+/** The agent id of an agent's worktree (`agent-<id>`); another directory — null. */
+const agentIdOf = (dir: string) => (AGENT_WORKTREE.test(dir) ? path.basename(dir).slice("agent-".length) : null);
+
+/** A Claude Code subagent by its metadata (`subagentsOf`). */
+interface Subagent {
+  /** The agent that launched it; one the session itself launched — null. */
+  parent: string | null;
+  /** It has a worktree of its own (`isolation: "worktree"`); without one it works in its parent's directory. */
+  own: boolean;
+  /** The last write of its transcript, ms; no transcript — 0. */
+  written: number;
 }
 
 /**
- * The agent that launched each of the sessions' Claude Code subagents, by id (`agent-<id>` — its worktree's name too):
- * `parentAgentId` of the subagent metadata `<Claude Code configuration>/projects/<directory>/<session id>/subagents/
- * agent-<id>.meta.json`; one the session itself launched has none. No metadata — an empty map.
+ * The sessions' Claude Code subagents, by id (`agent-<id>` — its worktree's name too), from the subagent metadata
+ * `<Claude Code configuration>/projects/<directory>/<session id>/subagents/agent-<id>.meta.json`: `parentAgentId` — the
+ * agent that launched it, `worktreePath` named `agent-<id>` — its own worktree; the transcript `agent-<id>.jsonl` next to
+ * it. No metadata — an empty map.
  */
-function agentParents(io: Io, sessions: string[]): Map<string, string | null> {
-  const parents = new Map<string, string | null>();
+function subagentsOf(io: Io, sessions: string[]): Map<string, Subagent> {
+  const agents = new Map<string, Subagent>();
   const projects = path.join(io.env.CLAUDE_CONFIG_DIR || path.join(io.env.HOME || os.homedir(), ".claude"), "projects");
   let dirs: string[];
   try {
     dirs = readdirSync(projects);
   } catch {
-    return parents;
+    return agents;
   }
   for (const dir of dirs) {
     for (const session of new Set(sessions)) {
@@ -2395,15 +2409,71 @@ function agentParents(io: Io, sessions: string[]): Map<string, string | null> {
         const id = /^agent-(.+)\.meta\.json$/.exec(name)?.[1];
         if (!id) continue;
         try {
-          const parent = JSON.parse(readFileSync(path.join(sub, name), "utf8"))?.parentAgentId;
-          parents.set(id, typeof parent === "string" && parent ? parent : null);
+          const meta = JSON.parse(readFileSync(path.join(sub, name), "utf8"));
+          const parent = meta?.parentAgentId;
+          const worktree = meta?.worktreePath;
+          agents.set(id, {
+            parent: typeof parent === "string" && parent ? parent : null,
+            own: typeof worktree === "string" && path.basename(worktree) === `agent-${id}`,
+            written: statSync(path.join(sub, `agent-${id}.jsonl`), { throwIfNoEntry: false })?.mtimeMs ?? 0,
+          });
         } catch {
           // the app is writing it — the agent has only just started, its worktree is locked
         }
       }
     }
   }
-  return parents;
+  return agents;
+}
+
+/**
+ * A subagent at work in an agent's worktree without one of its own (#571): Claude Code runs a subagent launched without
+ * `isolation: "worktree"` in its parent's directory — an executor's epic refresh, in the executor's worktree. The host
+ * agent's descendants through such subagents, at any depth; at work — its transcript written less than `QUIET_MINUTES`
+ * ago (a Bash call of up to 9 minutes writes nothing). The freshest is named; none — null.
+ */
+function guestWhy(agents: Map<string, Subagent>, host: string): string | null {
+  const inside = new Set([host]);
+  let fresh: { id: string; minutes: number } | null = null;
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id, a] of agents) {
+      if (a.own || a.parent === null || !inside.has(a.parent) || inside.has(id)) continue;
+      inside.add(id);
+      grew = true;
+      const minutes = Math.max(0, Math.floor((Date.now() - a.written) / 60_000));
+      if (a.written > 0 && minutes < QUIET_MINUTES && (!fresh || minutes < fresh.minutes)) fresh = { id, minutes };
+    }
+  }
+  return fresh && `subagent agent-${fresh.id} works in it without a worktree of its own — its transcript written ${fresh.minutes} min ago, quiet after ${QUIET_MINUTES}`;
+}
+
+/**
+ * Why a worktree is alive: a lock held by a live process, a subagent of its agent at work in it (`guestWhy`), or HEAD
+ * moved less than `QUIET_MINUTES` ago; quiet — null.
+ */
+function aliveWhy(io: Io, w: Worktree, agents: Map<string, Subagent>): string | null {
+  if (w.locked !== null && lockHolds(w.locked)) return `locked by a live process — ${w.locked || "no reason"}`;
+  const id = agentIdOf(w.path);
+  const guest = id === null ? null : guestWhy(agents, id);
+  if (guest) return guest;
+  // the worktree's own HEAD log: the time of its latest entry (`HEAD@{<unix time>}`)
+  const r = (io.run ?? realRun)("git", ["reflog", "-1", "--date=unix", "--format=%gd"], w.path);
+  const at = Number(/@\{(\d+)\}/.exec(r.stdout)?.[1]);
+  const minutes = Math.floor((Date.now() / 1000 - at) / 60);
+  return r.status === 0 && at > 0 && minutes < QUIET_MINUTES ? `HEAD moved ${Math.max(0, minutes)} min ago (a commit or a switch), quiet after ${QUIET_MINUTES}` : null;
+}
+
+/** The sessions' hand-out files on the machine — `dispatchers/<session id>.tasks` in the configuration directory (`handedOutFile`). */
+function handOutFiles(io: Io): { session: string; file: string }[] {
+  const dir = path.join(configDir(io.env), "dispatchers");
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".tasks"))
+      .map((f) => ({ session: f.slice(0, -".tasks".length), file: path.join(dir, f) }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -2411,8 +2481,9 @@ function agentParents(io: Io, sessions: string[]): Map<string, string | null> {
  * executor of #545 answered «failed» while two of its background subagents were still working; their answers woke it,
  * and it merged the task — while a second executor, launched on the owner's restart, worked on the same branch. The
  * previous executor's worktrees — its hand-outs of the task in any dispatcher session (`dispatchers/*.tasks`) and a
- * worktree on the task branch, the caller's own aside; its subagents' — by Claude Code's metadata (`agentParents`), at any
- * depth. Alive — `aliveWhy`. The directory isn't a checkout of the repository — none: the script doesn't see the worktrees.
+ * worktree on the task branch, the caller's own aside; its subagents' — by Claude Code's metadata (`subagentsOf`), at any
+ * depth. Alive — `aliveWhy`: a subagent without a worktree of its own keeps alive the worktree it works in. The directory
+ * isn't a checkout of the repository — none: the script doesn't see the worktrees.
  */
 function livePredecessors(io: Io, slug: string, number: number, own: string): string[] {
   if (!checkoutOfRepo(io, originUrl(io), slug)) return [];
@@ -2420,27 +2491,19 @@ function livePredecessors(io: Io, slug: string, number: number, own: string): st
   if (listed.status !== 0) return [];
   const mine = realPath(own);
   const all = worktreeList(listed.stdout).filter((w) => !w.prunable && realPath(w.path) !== mine);
-  const dir = path.join(configDir(io.env), "dispatchers");
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith(".tasks"));
-  } catch {
-    files = [];
-  }
-  const handOuts = files.flatMap((f) =>
-    handOutsIn(path.join(dir, f), slug)
+  const handOuts = handOutFiles(io).flatMap(({ session, file }) =>
+    handOutsIn(file, slug)
       .filter((h) => h.number === number && h.worktree !== null)
-      .map((h) => ({ session: f.slice(0, -".tasks".length), worktree: realPath(h.worktree!) })),
+      .map((h) => ({ session, worktree: realPath(h.worktree!) })),
   );
   const executors = all.filter((w) => handOuts.some((h) => h.worktree === realPath(w.path)) || (w.branch !== null && isTaskBranch(w.branch, number)));
   if (!executors.length) return [];
-  const agentId = (dir: string) => (AGENT_WORKTREE.test(dir) ? path.basename(dir).slice("agent-".length) : null);
-  const parents = agentParents(io, [...handOuts.map((h) => h.session), io.env.CLAUDE_CODE_SESSION_ID ?? ""].filter(Boolean));
+  const agents = subagentsOf(io, [...handOuts.map((h) => h.session), io.env.CLAUDE_CODE_SESSION_ID ?? ""].filter(Boolean));
   // the executors' agents and everything they launched
-  const family = new Set(executors.map((w) => agentId(w.path)).filter((id): id is string => id !== null));
+  const family = new Set(executors.map((w) => agentIdOf(w.path)).filter((id): id is string => id !== null));
   for (let grew = true; grew; ) {
     grew = false;
-    for (const [id, parent] of parents) {
+    for (const [id, { parent }] of agents) {
       if (parent !== null && family.has(parent) && !family.has(id)) {
         family.add(id);
         grew = true;
@@ -2449,9 +2512,9 @@ function livePredecessors(io: Io, slug: string, number: number, own: string): st
   }
   const lines: string[] = [];
   for (const w of all) {
-    const parent = parents.get(agentId(w.path) ?? "");
+    const parent = agents.get(agentIdOf(w.path) ?? "")?.parent;
     const role = executors.includes(w) ? "the previous executor" : parent && family.has(parent) ? `a subagent of agent-${parent}` : null;
-    const why = role && aliveWhy(io, w);
+    const why = role && aliveWhy(io, w, agents);
     if (why) lines.push(`! worktree ${w.path} (${role}): ${why}`);
   }
   return lines;
@@ -2732,7 +2795,7 @@ export function cmdTaskActualize(io: Io, slug: string, number: number, o: { assi
     MEANING_CHECKS.map((i) => checks[i]!).join("\n"),
     "",
     locale.fill(N.actualize.scope, { ...vars, questions: N.sections.questions, script: `bun --no-env-file ${import.meta.path}` }),
-    locale.fill(N.actualize.comment, vars),
+    locale.fill(N.actualize.comment, { ...vars, report: locale.fill(N.actualize.report, { number, text: "…" }) }),
     N.actualize.answer,
   );
   for (const line of lines) io.out(line);
@@ -2740,12 +2803,24 @@ export function cmdTaskActualize(io: Io, slug: string, number: number, o: { assi
 }
 
 /**
+ * The epic refresh's report (#571): the refresh subagent ends with a comment on the epic that starts with `report` —
+ * «Refresh after #N, result: …» in any language of the dictionary, case and markup aside; the script's own comment
+ * (`mechanics`) comes before the subagent and isn't it.
+ */
+function refreshReported(epic: TaskText, number: number): boolean {
+  const heads = locale.every((n) => n.actualize.report).map((t) => locale.fill(t, { number, text: "" }).trim().toLowerCase());
+  return epic.comments.some((c) => heads.some((h) => c.body.toLowerCase().includes(h)));
+}
+
+/**
  * The closing ritual after a PR merge — the actual, Status "Done", the epic, the milestone, taking down the task's
  * stacks, cleaning up the merged branch — in one call: the session did it one step per turn at its largest context.
  * The epic refresh (the canon's five checks) isn't here: it runs before close, in parallel with the deploy, by a
- * subagent with the `task actualize` assignment; close only reminds of it where the epic has open tasks — and names the
- * three lines, one of which ends the session's answer, and archiving the session in auto mode — except a session with
- * questions for the owner.
+ * subagent with the `task actualize` assignment. Where the epic has open tasks besides this one, close refuses before
+ * any change until the subagent's report is on the epic (`refreshReported`, #571): an executor closed its task and
+ * answered while its refresh subagent still worked in its worktree — the dispatcher's next queue removed the worktree,
+ * and the subagent was left without a directory. Close names the three lines, one of which ends the session's answer,
+ * and archiving the session in auto mode — except a session with questions for the owner.
  */
 export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boolean }): number {
   const ctx = taskContext(io, slug);
@@ -2764,6 +2839,18 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     const checked = found ? `; checked: the PR–task link, the branch <type>/${number}-<slug> and «Closes #${number}» in the body of the last ${RECENT_PRS} PRs into ${found.base}` : "";
     throw new GhError(`#${number} is too early to close: ${what}${checked} — close after the PR is merged or the task is closed`);
   }
+  if (issue.parent) {
+    const epic = loadTaskText(io, slug, issue.parent.number);
+    const others = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
+    if (others && !refreshReported(epic, number)) {
+      const head = locale.fill(N.actualize.report, { number, text: "…" });
+      throw new GhError(
+        `#${number} is too early to close: the epic refresh hasn't reported — epic #${epic.number} has open tasks besides #${number} (${others}), and no comment «${head}» on it. ` +
+          `The refresh subagent is at work — wait for its answer, then task close ${number} again; it wasn't launched — task actualize ${number} and the subagent with its prompt; ` +
+          `it answered without the comment — post its result: gh issue comment ${epic.number} --repo ${slug} --body "${head}"`,
+      );
+    }
+  }
   const wasOpen = issue.state === "OPEN";
   if (wasOpen) {
     // without the link the task doesn't see its PR — a comment names it
@@ -2781,10 +2868,9 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   setStatus(io, ctx, item.id, N.status.done);
   io.out(`+ #${number}: ${STATUS} ${q(N.status.done)}${item.added ? " (added to the project)" : ""}`);
   closeMilestone(io, slug, issue, wasOpen);
-  let open = 0; // the epic's open tasks other than this one: if there are any, a subagent refreshes the epic
   if (issue.parent) {
     const epic = loadIssue(io, slug, issue.parent.number);
-    open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
+    const open = epic.subIssues.filter((x) => x.state === "OPEN" && x.number !== number).length;
     if (epic.state === "OPEN" && epic.subIssues.length && !open) {
       mutate(io, { op: "CloseIssue", input: { issueId: epic.id, stateReason: "COMPLETED" } });
       setStatus(io, ctx, ensureItem(io, ctx, epic).id, N.status.done);
@@ -2805,8 +2891,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
   }
   // three lines — in the project language: dashboard parses them
   io.out(
-    `Next: ${open ? `the epic refresh, if it didn't happen before close — a subagent with the task actualize ${number} assignment; then ` : ""}` +
-      `the last line of the answer is one of three: ${q(N.lastLine.done)}; ` +
+    `Next: the last line of the answer is one of three: ${q(N.lastLine.done)}; ` +
       `the owner has something to decide — ${q(`${N.lastLine.questions} …`)} with the questions themselves, without ${q(N.lastLine.done)}; ` +
       `something remains — ${q(`${N.lastLine.remaining} …`)}. ` +
       // the command doesn't read the mode (auto) or the session's background tasks: the session knows them, the step is spelled out in words
@@ -3785,11 +3870,13 @@ label's — from the latest «External blocker: …» comment). Marks the sessio
 with the session's id; a session with a pinned task keeps it. Before the queue, in the repository's checkout —
 finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-agent-*, not locked by a live process,
 not an executor's whose handed-out task is open): clean and merged (git cherry) — removed with the branch (+),
-otherwise left (○ with the reason); loose worktree-agent-* branches — the same. --type and --priority — in an
+otherwise left (○ with the reason), and so is one a subagent works in without a worktree of its own (its transcript
+written in the last ${QUIET_MINUTES} min); loose worktree-agent-* branches — the same. --type and --priority — in an
 organization. --assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a session
 (not one pinned to N) it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks). A
-restart while the task's previous executor or its subagent is alive — a worktree of it locked by a live process or with
-HEAD moved in the last ${QUIET_MINUTES} min — code 1: ! lines and the answer that makes the dispatcher wait, no hand-out.
+restart while the task's previous executor or its subagent is alive — a worktree of it locked by a live process, with
+such a subagent at work or HEAD moved in the last ${QUIET_MINUTES} min — code 1: ! lines and the answer that makes the
+dispatcher wait, no hand-out.
 
 Examples:
   github task queue --epic 40
@@ -3799,9 +3886,10 @@ Examples:
 
 After the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write), Status Done, the
 epic and the milestone, the task's stacks taken down with their volumes (task-env down), the merged branches removed
-(--no-git — without git). A task of the scripts' own repository: before the actual the scripts' clone catches up with
-origin (pull --ff-only; only on the default branch, without uncommitted changes). Docker and gh don't work in an agent's
-sandbox — run it outside.
+(--no-git — without git). The epic has other open tasks and no report of the refresh subagent on it («Refresh after
+#N, result: …») — a refusal before any changes. A task of the scripts' own repository: before the actual the scripts'
+clone catches up with origin (pull --ff-only; only on the default branch, without uncommitted changes). Docker and gh
+don't work in an agent's sandbox — run it outside.
 
 Examples:
   github task close 42
