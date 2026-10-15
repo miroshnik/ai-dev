@@ -16,7 +16,7 @@ const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.
 const REPO = "miroshnik/ai-dev";
 const PROJECT_URL = "https://github.com/users/miroshnik/projects/6";
 
-/** `cwd` — чекаут проекта: язык названий канона — его `.agents/ai-dev.json`; без него — текущий каталог (клон Elves, ru). */
+/** `cwd` — чекаут проекта: язык названий канона — его `.agents/elves.json`; без него — текущий каталог (клон Elves, ru). */
 function run(fake: FakeGitHub, args: string[], env: Record<string, string> = {}, cwd?: string) {
   const out: string[] = [];
   const err: string[] = [];
@@ -31,15 +31,17 @@ const temp: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of temp.splice(0)) cleanup();
 });
-/** Чекаут проекта во временном каталоге: манифест `.agents/ai-dev.json` с этим содержимым (null — без манифеста). */
-function checkout(manifest: string | null): string {
+/**
+ * Чекаут проекта во временном каталоге: манифест `.agents/elves.json` с этим содержимым (null — без манифеста);
+ * `former` — ещё и прежний `.agents/ai-dev.json`, как у установки до переименования флоу, пока её не перенёс update.
+ */
+function checkout(manifest: string | null, former: string | null = null): string {
   const { dir, cleanup } = tmpDir();
   temp.push(cleanup);
   mkdirSync(path.join(dir, ".git"));
-  if (manifest !== null) {
-    mkdirSync(path.join(dir, ".agents"));
-    writeFileSync(path.join(dir, ".agents/ai-dev.json"), manifest);
-  }
+  mkdirSync(path.join(dir, ".agents"));
+  if (manifest !== null) writeFileSync(path.join(dir, ".agents/elves.json"), manifest);
+  if (former !== null) writeFileSync(path.join(dir, ".agents/ai-dev.json"), former);
   return dir;
 }
 const EN = '{ "language": "en" }\n';
@@ -780,11 +782,11 @@ function openIssueId(n: number): string {
 
 /**
  * Канон проекта — на языке проекта: варианты Status, поля, представления и типы issue называет словарь
- * `skills/github/locales/<язык>.json` по `language` в `.agents/ai-dev.json` чекаута, из которого зовут скрипт (канон,
- * «Language»). Язык сменили — check показывает расхождение, fix переименовывает с теми же id: значения задач и цель
+ * `skills/github/locales/<язык>.json` по `language` в `.agents/elves.json` чекаута, из которого зовут скрипт (канон,
+ * «Language»); пока update не перенёс манифест установки до переименования флоу — в прежнем `.agents/ai-dev.json`. Язык сменили — check показывает расхождение, fix переименовывает с теми же id: значения задач и цель
  * «Item closed» сохраняются (#366, вопрос 1).
  */
-describe("Канон проекта — на языке проекта из .agents/ai-dev.json чекаута", () => {
+describe("Канон проекта — на языке проекта из .agents/elves.json чекаута", () => {
   it("project fix в проекте на en создаёт статусы Backlog, In progress, Done", () => {
     const f = fake();
     f.unlinkAll();
@@ -824,7 +826,14 @@ describe("Канон проекта — на языке проекта из .age
     expect(r.out).toContain("✅ Status: Бэклог → В работе → Готово");
   });
 
-  it("без манифеста — язык en: проект ai-dev с русской доской не по канону", () => {
+  it("без манифеста — язык en: проект Elves с русской доской не по канону", () => {
     expect(marks(check(fake(), REPO, checkout(null)).out)).toMatchObject({ Status: "❌", Fields: "❌" });
+  });
+
+  it("до update язык читается из прежнего манифеста .agents/ai-dev.json, а когда есть и .agents/elves.json — из нового", () => {
+    const former = check(fake(), REPO, checkout(null, '{ "language": "ru" }\n'));
+    expect(former.code).toBe(0);
+    expect(former.out).toContain("✅ Status: Бэклог → В работе → Готово");
+    expect(marks(check(fake(), REPO, checkout(EN, '{ "language": "ru" }\n')).out)).toMatchObject({ Status: "❌", Fields: "❌" });
   });
 });

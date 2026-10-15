@@ -3,9 +3,9 @@
  * `spec` and `dashboard` import it from `github` — there's one dictionary, in this skill's `locales/`, and `github`
  * doesn't depend on them; the installer in `bin/` imports it from its own package.
  *
- * The language is `language` in `.agents/ai-dev.json` of the project root (the nearest directory up with `.git`,
- * otherwise the directory itself): a manifest without the field (an install of a previous version) — `ru`, no
- * manifest — `en`. Names are `locales/<language>.json`, the same keys for each language; no dictionary for the
+ * The language is `language` in `.agents/elves.json` of the project root (the nearest directory up with `.git`,
+ * otherwise the directory itself), until `update` moves it — in the former `.agents/ai-dev.json`: a manifest without
+ * the field (an install of a previous version) — `ru`, no manifest — `en`. Names are `locales/<language>.json`, the same keys for each language; no dictionary for the
  * language — `en`. Scripts write in the project language and parse the names of any dictionary language (`everyNames`):
  * a project that changed its language and tasks of other repositories are read without knowing their language.
  *
@@ -399,6 +399,13 @@ const DEFAULT_LANGUAGE = "en";
  * worked only in Russian.
  */
 const LEGACY_LANGUAGE = "ru";
+/** The install manifest of the project root. */
+const MANIFEST = path.join(".agents", "elves.json");
+/**
+ * The manifest of an install made before the flow was renamed to Elves: `update` moves it to `MANIFEST`, until then the
+ * project language is read from it.
+ */
+const FORMER_MANIFEST = path.join(".agents", "ai-dev.json");
 /** The dictionary: language → names, one entry per `locales/<language>.json`. */
 const LOCALES: Record<string, Names> = { en, ru };
 
@@ -415,12 +422,13 @@ function projectRoot(dir: string): string {
 }
 
 /**
- * The project language of the `dir` directory (by default — the current one): the manifest's `language`, no field — ru,
- * no manifest — en.
+ * The project language of the `dir` directory (by default — the current one): the manifest's `language` (`MANIFEST`,
+ * otherwise `FORMER_MANIFEST`), no field — ru, no manifest — en.
  */
 function projectLanguage(dir: string = process.cwd()): string {
-  const file = path.join(projectRoot(dir), ".agents", "ai-dev.json");
-  if (!existsSync(file)) return DEFAULT_LANGUAGE;
+  const root = projectRoot(dir);
+  const file = [MANIFEST, FORMER_MANIFEST].map((m) => path.join(root, m)).find((f) => existsSync(f));
+  if (!file) return DEFAULT_LANGUAGE;
   let manifest: { language?: unknown } = {};
   try {
     manifest = JSON.parse(readFileSync(file, "utf8")) ?? {};
