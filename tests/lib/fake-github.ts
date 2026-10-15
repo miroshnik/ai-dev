@@ -120,7 +120,7 @@ export class FakeGitHub {
         throw e;
       }
     }
-    if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number));
+    if (op === "IssueRef") return JSON.stringify(this.issueRef(variables.number, query));
     if (op === "TaskText") return JSON.stringify(this.taskText(variables.number));
     if (op === "IssueShow") return JSON.stringify(this.issueShow(variables.number));
     if (op === "PrShow") return JSON.stringify({ data: { repository: { pullRequest: this.prs[variables.number] ? this.prShow(Number(variables.number)) : null } } });
@@ -165,10 +165,13 @@ export class FakeGitHub {
       .filter(([k, v]) => k.startsWith("IssueRef ") && v.data.repository.issue)
       .map(([, v]) => v.data.repository.issue);
   }
-  private issueRef(number: number): Any {
+  private issueRef(number: number, query = ""): Any {
     const i = this.issue(number);
     if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
     const out = structuredClone(i);
+    // меток — не больше, чем просит запрос, как у GitHub: `labels(first: 20)` у задачи с 30 метками отдаёт 20
+    const first = /\blabels\(first:\s*(\d+)\)/.exec(query);
+    if (first) out.labels = { nodes: out.labels.nodes.slice(0, Number(first[1])) };
     // подзадачи с заголовком, как у GitHub: заголовок — из записи подзадачи, без неё — как записан в подзадачах эпика
     out.subIssues = { nodes: i.subIssues.nodes.map((s: Any) => ({ ...s, title: this.issue(s.number)?.title ?? s.title ?? "" })) };
     out.blockedBy = { nodes: (this.blockedBy[number] ?? []).map((b) => this.blocker(b)).map(({ number, state, repository }) => ({ number, state, repository })) };
@@ -595,12 +598,12 @@ export class FakeGitHub {
       for (const i of this.allIssues()) for (const n of i.labels.nodes) if (n.name === old) n.name = l.name;
       return { updateLabel: { label: { id } } };
     },
+    // Больше 100 меток на issue GitHub не ставит: мутация, которая перешла бы предел, падает целиком — ни одной метки
     AddLabels: ({ labelableId, labelIds }: Any) => {
       const i = this.allIssues().find((x) => x.id === labelableId);
-      for (const lid of labelIds) {
-        const name = this.labels.find((l) => l.id === lid)!.name;
-        if (!i.labels.nodes.some((n: Any) => n.name === name)) i.labels.nodes.push({ name });
-      }
+      const names = labelIds.map((lid: string) => this.labels.find((l) => l.id === lid)!.name).filter((name: string) => !i.labels.nodes.some((n: Any) => n.name === name));
+      if (new Set([...i.labels.nodes.map((n: Any) => n.name), ...names]).size > ISSUE_LABELS) throw new GitHubError("addLabelsToLabelable", `Labelable can't have more than ${ISSUE_LABELS} labels`);
+      for (const name of new Set<string>(names)) i.labels.nodes.push({ name });
       return { addLabelsToLabelable: { clientMutationId: null } };
     },
     RemoveLabels: ({ labelableId, labelIds }: Any) => {
@@ -778,6 +781,9 @@ function rulesetOf(input: Any) {
 }
 
 /** Ошибка GitHub на мутацию: поле мутации в data — null, текст — в errors. */
+/** Предел меток на issue у GitHub. */
+const ISSUE_LABELS = 100;
+
 class GitHubError extends Error {
   field: string;
   constructor(field: string, message: string) {

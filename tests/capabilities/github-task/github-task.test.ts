@@ -572,6 +572,77 @@ describe("pr labels ставит задаче метки решений по д�
     expect(r.out).toContain("○ web — label «web» is slice «приложения», not a decision label: not set");
   });
 
+  /**
+   * GitHub ставит на issue не больше 100 меток, и мутация сверх предела падает целиком (#569): PR, задевший почти все
+   * решения (смена раннера переписывает тела всех тестов), оставлял задачу без единой новой метки. Не помещается — метку
+   * получают решения, чьи утверждения PR меняет: `<папка>.md` или имена тестов (раздел спеки тела PR), — по алфавиту,
+   * сколько помещается.
+   */
+  it("решений в диффе больше, чем помещается меток, — ставит, что помещается, остальное печатает, не падает", () => {
+    const f = new FakeGitHub(REC);
+    // меток у задачи больше, чем отдаёт первая страница в 20
+    for (let i = 0; i < 30; i++) f.labelIssue(49, `тема-${i}`);
+    const names = Array.from({ length: 80 }, (_, i) => `d${String(i).padStart(2, "0")}`);
+    // тела тестов 80 решений, у d79 — ещё и описание решения
+    const files = [...names.map((n) => `tests/capabilities/${n}/${n}.test.ts`), "tests/capabilities/d79/d79.md"];
+    // имена тестов меняют 72 решения — сводкой по папкам, как её пишет spec-diff
+    const body = [
+      "Closes #49",
+      "",
+      "## Спека (тесты)",
+      "",
+      "| Папка | Удалены | Изменены | Добавлены |",
+      "|---|--:|--:|--:|",
+      ...names.slice(0, 72).map((n) => `| \`tests/capabilities/${n}\` | 0 | 1 | 0 |`),
+      "| **Всего** | 0 | 72 | 0 |",
+    ].join("\n");
+    f.prs[120] = { files, closes: [49], body, head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 49)).toHaveLength(100);
+    expect(issueLabels(f, 49).slice(30)).toEqual(names.slice(0, 70));
+    expect(r.out).toContain(
+      "○ #49: 80 new decision labels, room for 70 (GitHub puts at most 100 on an issue, it has 30) — only decisions whose <folder>.md or test names the PR changes; test bodies and code only, no label: d72, d73, d74, d75, d76, d77, d78",
+    );
+    expect(r.out).toContain("○ #49: no room — not set: d70, d71, d79");
+  });
+
+  it("эпик у предела меток — новые решения подзадачи печатаются, а не роняют команду", () => {
+    const f = new FakeGitHub(REC);
+    // у эпика 99 меток: epic и 98 решений прежних подзадач
+    for (let i = 0; i < 98; i++) f.labelIssue(45, `прежнее-${i}`);
+    const files = ["tests/capabilities/billing/billing.test.ts", "tests/capabilities/est/est.test.ts", "tests/standards/audit/audit.test.ts"];
+    const body = [
+      "Closes #47",
+      "",
+      "## Спека (тесты)",
+      "",
+      "**Добавлены (2):**",
+      "",
+      "- `tests/standards/audit` · правило держит импорт",
+      "- `tests/capabilities/billing` · счёт выставляется в конце месяца",
+      "",
+      // исключение — не утверждение решения
+      "**Исключения — добавлено (1):**",
+      "",
+      "- `tests/capabilities/est` · importLegacy (#12) — старый импорт",
+      "",
+      "## Прочее",
+      "",
+      "- `tests/capabilities/est` · вне раздела спеки — не имя теста",
+    ].join("\n");
+    f.prs[120] = { files, closes: [47], body, head: HEAD, model: null };
+    const r = prLabels(f, 120);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 47)).toEqual(["audit", "billing", "est"]);
+    expect(issueLabels(f, 45)).toHaveLength(100);
+    expect(issueLabels(f, 45).at(-1)).toBe("audit");
+    expect(r.out).toContain(
+      "○ epic #45: 3 new decision labels, room for 1 (GitHub puts at most 100 on an issue, it has 99) — only decisions whose <folder>.md or test names the PR changes; test bodies and code only, no label: est",
+    );
+    expect(r.out).toContain("○ epic #45: no room — not set: billing");
+  });
+
   // GitHub связывает PR с задачей не сразу после создания: pr labels зовут как раз тогда (#164)
   it("связь PR с задачей ещё не появилась — задачи берутся из «Closes #N» в теле PR", () => {
     const f = new FakeGitHub(REC);
