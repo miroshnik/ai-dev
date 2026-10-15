@@ -95,11 +95,11 @@ export function writeTree(root: string, files: Record<string, string>): void {
 }
 
 /**
- * Язык временного проекта — `.agents/ai-dev.json` с полем `language`, как его ставит установка: скрипты spec пишут
+ * Язык временного проекта — `.agents/elves.json` с полем `language`, как его ставит установка: скрипты spec пишут
  * на нём. Без манифеста проект — `en`.
  */
 export function setLanguage(dir: string, language: string): void {
-  writeTree(dir, { ".agents/ai-dev.json": JSON.stringify({ language }) + "\n" });
+  writeTree(dir, { ".agents/elves.json": JSON.stringify({ language }) + "\n" });
 }
 
 /** Git-репозиторий во временном каталоге (init: false — уже готовый); commit пишет файлы (null — удалить) и возвращает SHA. */

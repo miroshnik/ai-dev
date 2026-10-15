@@ -798,7 +798,7 @@ describe("Названия — текст, а не разметка", () => {
 });
 
 /**
- * Документацию читают люди проекта — она на его языке (`language` в `.agents/ai-dev.json`): заголовки, разделы,
+ * Документацию читают люди проекта — она на его языке (`language` в `.agents/elves.json`): заголовки, разделы,
  * счётчики и пометки тестов. Манифест без поля — установка прошлой версии: флоу до поля работал по-русски.
  */
 describe("Документация — на языке проекта", () => {
@@ -847,7 +847,7 @@ describe("Документация — на языке проекта", () => {
   });
 
   it("манифест без поля language — установка прошлой версии: документация по-русски, как раньше", () => {
-    writeTree(dir, { ".agents/ai-dev.json": JSON.stringify({ auto: true }) + "\n" });
+    writeTree(dir, { ".agents/elves.json": JSON.stringify({ auto: true }) + "\n" });
     const r = doc("r.json", billing(), "--stdout");
     expect(r.stdout).toStartWith("<!-- spec-doc: сгенерировано из названий тестов, руками не править -->\n# Спецификация\n");
     expect(r.stdout).toContain("## Что делает система\n\n### billing\n\n#### Счета\n\n<details><summary>✅ 2 теста</summary>");

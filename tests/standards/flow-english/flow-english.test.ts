@@ -227,7 +227,7 @@ describe("Названия, которые пишут и разбирают ск
 });
 
 /**
- * Язык проекта — `language` в `.agents/ai-dev.json`, без поля — `ru`, без манифеста — `en`: скрипты скиллов и
+ * Язык проекта — `language` в `.agents/elves.json`, без поля — `ru`, без манифеста — `en`: скрипты скиллов и
  * установщик берут его одним модулем `skills/github/scripts/locale.ts` — правило в одном месте.
  */
 describe("Язык проекта у скриптов скиллов и у установщика — один модуль", () => {
@@ -245,7 +245,7 @@ describe("Язык проекта у скриптов скиллов и у ус�
         mkdirSync(path.join(root, ".git"), { recursive: true });
         if (manifest !== null) {
           mkdirSync(path.join(root, ".agents"));
-          writeFileSync(path.join(root, ".agents/ai-dev.json"), manifest);
+          writeFileSync(path.join(root, ".agents/elves.json"), manifest);
         }
         mkdirSync(path.join(root, "src"));
         return path.join(root, "src");

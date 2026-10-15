@@ -43,7 +43,7 @@ release is the owner's step (`elves release`), I cut one only when asked.
 ## Language
 
 The flow is written in English; the agent works in the **project language**
-(`language` in `.agents/ai-dev.json`, printed by `check`): talking with the
+(`language` in `.agents/elves.json`, printed by `check`): talking with the
 user, issues, prompts to subagents, documents, commit and PR
 descriptions, `describe`/`it` names, decision docs — briefly. Always English:
 code, identifiers, terms, conventional-commit type and scope. Names that
@@ -72,7 +72,7 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
   confirmations for the named task, except on a discrepancy that changes
   scope or approach. An autonomous routine does exactly what
   its assignment names; merge, deploy, external settings — only if named.
-- **`"auto": true` in `.agents/ai-dev.json` — the whole task without asking**:
+- **`"auto": true` in `.agents/elves.json` — the whole task without asking**:
   commit, push, fixing CI, merging my own PR on green checks; work outside the
   task — a Backlog task and the question «queue it?». The task's open
   questions — I answer by a recommendation with ✅ auto (`task answer

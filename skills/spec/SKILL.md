@@ -108,7 +108,7 @@ it**); plus the `README.md` index and `architecture.md` from the model
   code 2.
 
 Names of `describe` and `it` are statements in the project language
-(`language` in `.agents/ai-dev.json`): an identifier, a function or file name,
+(`language` in `.agents/elves.json`): an identifier, a function or file name,
 a path — a warning line, no exit code.
 
 **Prose:** `<folder>.md` — why, the reason and the rejected alternatives (its

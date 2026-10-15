@@ -1,7 +1,7 @@
 # Claude Code
 
 Shared rules — `AGENTS.md`; here — only what Claude Code has. Install puts
-both into `.claude/rules/` (`ai-dev.md`, `ai-dev-claude.md`): Claude Code
+both into `.claude/rules/` (`elves.md`, `elves-claude.md`): Claude Code
 loads them whatever the project's `CLAUDE.md`.
 
 - Session transcripts (`~/.claude/projects/<path-with-dashes>*/`) are the
@@ -66,4 +66,4 @@ loads them whatever the project's `CLAUDE.md`.
   "worktree"`, `run_in_background: true` and the prompt `github` printed.
   The executor isn't `TaskStop`ped: the last line — after its answer.
 - In an Elves clone the canon loads from the root (`AGENTS.md`), this file —
-  via the committed symlink `.claude/rules/ai-dev-claude.md`.
+  via the committed symlink `.claude/rules/elves-claude.md`.

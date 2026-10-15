@@ -25,7 +25,7 @@ import knipHints from "./knip-hints.cjs";
 import { commentsOf, decisionFolder, EXCEPTIONS_DIR, exceptionFile, stringsOf } from "./speclib.ts";
 
 /**
- * Harness test names are in the project language (`language` in `.agents/ai-dev.json` of the directory the runner runs
+ * Harness test names are in the project language (`language` in `.agents/elves.json` of the directory the runner runs
  * from): they stand in the project's spec next to its own. The language is read when tests are registered, not when the
  * module loads.
  */

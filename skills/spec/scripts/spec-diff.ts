@@ -13,7 +13,7 @@
  * dictionary language) is matched against added and changed tests and against the describes of new harness checks — a
  * scenario that became a test or a check, an undone scenario and tests beyond the scenarios.
  *
- * The section is in the root's project language (`language` in `.agents/ai-dev.json`, the github skill's dictionary).
+ * The section is in the root's project language (`language` in `.agents/elves.json`, the github skill's dictionary).
  * The default base is the merge-base of the base branch and HEAD (like a PR diff on GitHub). Runs on Bun; needs git.
  */
 

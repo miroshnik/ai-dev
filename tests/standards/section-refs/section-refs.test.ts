@@ -80,7 +80,7 @@ const examplesOut = (md: string) => md.replace(/(`+)(?!`)([^\n]*?[^`])\1(?!`)/g,
 export function resolve(from: string, file: string, skill: string | undefined): string {
   if (file === "README") return "README.md";
   if (file === "CLAUDE.md") return "claude/CLAUDE.md";
-  if (file.includes("/")) return file.replace(/^\.agents\/(?:ai-dev\/)?/, "");
+  if (file.includes("/")) return file.replace(/^\.agents\/(?:elves\/)?/, "");
   if (skill) return `skills/${skill}/${file}`;
   const own = /^(skills\/[^/]+)\//.exec(from)?.[1] ?? (from.startsWith("docs/") ? "docs" : null);
   if (own && existsSync(path.join(ROOT, own, file))) return `${own}/${file}`;

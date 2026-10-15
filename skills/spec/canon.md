@@ -167,7 +167,7 @@ no decision claims is dead and is deleted.
   accessibility and budgets — like any quality (above); the rest (look, texts,
   impression) — a product document or acceptance in the issue.
 - **Names are statements in the project language** (`language` in
-  `.agents/ai-dev.json`). `describe` — a capability in the user's terms ("only
+  `.agents/elves.json`). `describe` — a capability in the user's terms ("only
   someone with access to the entity itself sees its history"), `it` — a
   concrete example; not a function, component or file name (`spec-doc` warns
   about such ones and `spec-diff` counts the PR's new ones in its body: in
