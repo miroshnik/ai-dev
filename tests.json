@@ -3081,6 +3081,14 @@
    "task new заводит задачу со всем сразу",
    "ошибка до создания — задача не заводится наполовину"
   ],
+  "name": "task new узнаёт открытую задачу обновления флоу со старым названием и второй не заводит"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new заводит задачу со всем сразу",
+   "ошибка до создания — задача не заводится наполовину"
+  ],
   "name": "блокера нет в репозитории"
  },
  {
@@ -3947,7 +3955,7 @@
   "describes": [
    "В проект — копия, которую видят облачная сессия и CI"
   ],
-  "name": "через bunx из пакета ai-dev: bin из node_modules под Bun ставит правила и скиллы"
+  "name": "через bunx из пакета Elves: bin из node_modules под Bun ставит правила и скиллы"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3983,6 +3991,13 @@
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
   "name": "в клоне Elves install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
+  ],
+  "name": "клон со старым именем пакета узнаётся как клон"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4045,7 +4060,7 @@
   "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
-  "name": "команда хука — bunx --silent github:miroshnik/ai-dev check --hook, вывод с ошибками и запасной echo при сбое bunx"
+  "name": "команда хука — bunx --silent github:miroshnik/elves check --hook, вывод с ошибками и запасной echo при сбое bunx"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -7728,6 +7743,13 @@
   "describes": [
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
+  "name": "origin клона --link на прежнем имени репозитория — check -g называет перенос, update -g переносит origin на miroshnik/elves"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
   "name": "update -g называет коммиты флоу между старой и новой головой клона, тем же форматом, что заметки релиза"
  },
  {
@@ -7813,6 +7835,13 @@
    "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
   ],
   "name": "старая установка без SHA — check по git; update -g пишет SHA клона"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Клон --link сверяется с origin/main, update подтягивает его, не трогая работу пользователя"
+  ],
+  "name": "установщик клона по прежнему пути bin/ai-dev.ts — тот же установщик: update -g релиза до переименования ставит машине новый хук"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7918,6 +7947,13 @@
    "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
   ],
   "name": "Elves ушёл вперёд (новый скилл) — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального, правил на машине по-прежнему нет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
+  ],
+  "name": "update -g на машине со старым хуком оставляет один хук — с командой miroshnik/elves"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -8769,42 +8805,42 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
-  "name": "ai-dev --help и -h — обзор команд, код 0, без сети и изменений"
- },
- {
-  "path": "tests/standards/cli-help/cli-help.test.ts",
-  "describes": [
-   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
-  ],
-  "name": "ai-dev check --help и -h — синтаксис с примером, код 0, без сети и изменений"
- },
- {
-  "path": "tests/standards/cli-help/cli-help.test.ts",
-  "describes": [
-   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
-  ],
-  "name": "ai-dev install --help и -h — синтаксис с примером, код 0, без сети и изменений"
- },
- {
-  "path": "tests/standards/cli-help/cli-help.test.ts",
-  "describes": [
-   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
-  ],
-  "name": "ai-dev release --help и -h — синтаксис с примером, код 0, без сети и изменений"
- },
- {
-  "path": "tests/standards/cli-help/cli-help.test.ts",
-  "describes": [
-   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
-  ],
-  "name": "ai-dev update --help и -h — синтаксис с примером, код 0, без сети и изменений"
- },
- {
-  "path": "tests/standards/cli-help/cli-help.test.ts",
-  "describes": [
-   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
-  ],
   "name": "dashboard --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves --help и -h — обзор команд, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves check --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves install --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves release --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves update --help и -h — синтаксис с примером, код 0, без сети и изменений"
  },
  {
   "path": "tests/standards/cli-help/cli-help.test.ts",
@@ -9189,7 +9225,7 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
-  "name": "реестр «команды скриптов — из обзора каждого скрипта и из вызовов в документах флоу» находит ai-dev install, ai-dev check, github task new, github pr premerge, est fact, task-env proxy up, task-env check, wait-ci merged (команды)"
+  "name": "реестр «команды скриптов — из обзора каждого скрипта и из вызовов в документах флоу» находит elves install, elves check, github task new, github pr premerge, est fact, task-env proxy up, task-env check, wait-ci merged (команды)"
  },
  {
   "path": "tests/standards/cli-help/cli-help.test.ts",
@@ -9203,7 +9239,7 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
-  "name": "реестр «скрипты флоу — установщик и исполняемые скрипты скиллов» находит bin/ai-dev.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/task-env/scripts/task-env.ts, skills/ci-wait/scripts/wait-ci.sh, skills/slot/scripts/slot.ts, skills/spec/scripts/spec-doc.ts (скрипты)"
+  "name": "реестр «скрипты флоу — установщик и исполняемые скрипты скиллов» находит bin/elves.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/task-env/scripts/task-env.ts, skills/ci-wait/scripts/wait-ci.sh, skills/slot/scripts/slot.ts, skills/spec/scripts/spec-doc.ts (скрипты)"
  },
  {
   "path": "tests/standards/cli-help/cli-help.test.ts",
@@ -9309,7 +9345,7 @@
   "describes": [
    "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
   ],
-  "name": "вне охвата: bin/ai-dev.ts"
+  "name": "вне охвата: bin/elves.ts"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
@@ -9330,7 +9366,7 @@
   "describes": [
    "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
   ],
-  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/ai-dev.ts"
+  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/elves.ts"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
@@ -9551,6 +9587,13 @@
   "describes": [
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
+  "name": "в bin/elves.ts нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
+  ],
   "name": "в skills/dashboard/scripts/dashboard.ts нет кириллицы"
  },
  {
@@ -9726,7 +9769,7 @@
   "describes": [
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
-  "name": "реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts"
+  "name": "реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/elves.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -10441,6 +10484,13 @@
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
   "name": "название fields.tokens скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название formerly.updateTask скрипты читают из словаря"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -13457,6 +13507,13 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "bin/elves.ts печатает и запускает скрипты флоу с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "skills/dashboard/scripts/dashboard.ts печатает и запускает скрипты флоу с --no-env-file"
  },
  {
@@ -13835,7 +13892,7 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
-  "name": "реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/ai-dev.ts (код)"
+  "name": "реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/elves.ts (код)"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14549,7 +14606,7 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
-  "name": "реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, ai-dev install, ai-dev release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md"
+  "name": "реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, elves install, elves release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -14663,21 +14720,21 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "bin/ai-dev.ts: AGENTS.md, «First step of a session» — есть такой раздел"
+  "name": "bin/elves.ts: AGENTS.md, «First step of a session» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "bin/ai-dev.ts: AGENTS.md, «Language» — есть такой раздел"
+  "name": "bin/elves.ts: AGENTS.md, «Language» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "bin/ai-dev.ts: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел"
+  "name": "bin/elves.ts: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
@@ -15601,7 +15658,7 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»"
+  "name": "реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/elves.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",

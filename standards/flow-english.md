@@ -77,12 +77,13 @@
 (`skills/github/locales`), а комментарии — по-английски, как документы флоу, поэтому кириллицы в коде скриптов нет
 вовсе: файл сверяется целиком, с комментариями.
 
-<details><summary>✅ 29 тестов</summary>
+<details><summary>✅ 30 тестов</summary>
 
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» не пуст
-- ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts
+- ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/elves.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts
 - ✅ нарушитель не проходит: комментарий по-русски
 - ✅ в bin/ai-dev.ts нет кириллицы
+- ✅ в bin/elves.ts нет кириллицы
 - ✅ в skills/dashboard/scripts/dashboard.ts нет кириллицы
 - ✅ в skills/dashboard/scripts/sessions.ts нет кириллицы
 - ✅ в skills/est/scripts/est.ts нет кириллицы
@@ -307,7 +308,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 
 ## Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи
 
-<details><summary>✅ 317 тестов</summary>
+<details><summary>✅ 318 тестов</summary>
 
 - ✅ у каждого языка те же ключи, что у en, и ни одного пустого названия
 - ✅ в en.json нет кириллицы
@@ -414,6 +415,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ название fields.cost скрипты читают из словаря
 - ✅ название fields.estimate скрипты читают из словаря
 - ✅ название fields.tokens скрипты читают из словаря
+- ✅ название formerly.updateTask скрипты читают из словаря
 - ✅ название issueTypes.bug скрипты читают из словаря
 - ✅ название issueTypes.epic скрипты читают из словаря
 - ✅ название issueTypes.task скрипты читают из словаря

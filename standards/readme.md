@@ -27,7 +27,7 @@ README читают первым, а правят последним: новый
 <details><summary>✅ 69 тестов</summary>
 
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст
-- ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, ai-dev install, ai-dev release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
+- ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, elves install, elves release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
 - ✅ нарушитель не проходит: скилл, которого README не называет
 - ✅ README: команда установщика check названа
 - ✅ README: команда установщика install названа

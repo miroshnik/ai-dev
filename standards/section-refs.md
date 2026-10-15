@@ -39,14 +39,14 @@
 <details><summary>✅ 139 тестов</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
-- ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
+- ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/elves.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
 - ✅ нарушитель не проходит: ссылка на переименованный раздел AGENTS.md
 - ✅ AGENTS.md: README.md, «Installation» — есть такой раздел
 - ✅ AGENTS.md: README.md, «Repository layout» — есть такой раздел
 - ✅ AGENTS.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел
-- ✅ bin/ai-dev.ts: AGENTS.md, «First step of a session» — есть такой раздел
-- ✅ bin/ai-dev.ts: AGENTS.md, «Language» — есть такой раздел
-- ✅ bin/ai-dev.ts: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел
+- ✅ bin/elves.ts: AGENTS.md, «First step of a session» — есть такой раздел
+- ✅ bin/elves.ts: AGENTS.md, «Language» — есть такой раздел
+- ✅ bin/elves.ts: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел
 - ✅ claude/CLAUDE.md: AGENTS.md, «First step of a session» — есть такой раздел
 - ✅ claude/CLAUDE.md: docs/pr-checks.md, «Auto-fix» — есть такой раздел
 - ✅ claude/CLAUDE.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел

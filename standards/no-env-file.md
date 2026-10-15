@@ -33,14 +33,14 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 ## Вне охвата
 
-Установщик под `bunx` (`bunx github:miroshnik/ai-dev …`, хук `SessionStart`): `bunx` подгружает env-файлы и флаг
+Установщик под `bunx` (`bunx github:miroshnik/elves …`, хук `SessionStart`): `bunx` подгружает env-файлы и флаг
 не принимает — ни `bunx --no-env-file`, ни `bun --no-env-file x` (Bun 1.4.3). Помог бы только shebang
 `#!/usr/bin/env -S bun --no-env-file`, а `env -S` есть не везде (busybox) — установщик там не запустился бы вовсе.
 Сам он проверок проекта не запускает.
 
 ## Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file
 
-<details><summary>✅ 57 тестов</summary>
+<details><summary>✅ 58 тестов</summary>
 
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (документы)
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит skills/slot/SKILL.md, skills/github/SKILL.md, skills/task-env/SKILL.md, skills/spec/SKILL.md, docs/parallel-checkouts.md, package.json (документы)
@@ -72,11 +72,12 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 - ✅ в skills/task-env/SKILL.md скрипты скиллов вызываются с --no-env-file
 - ✅ в skills/task-env/reference.md скрипты скиллов вызываются с --no-env-file
 - ✅ реестр «код скриптов скиллов и установщика без комментариев» не пуст (код)
-- ✅ реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/ai-dev.ts (код)
+- ✅ реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/elves.ts (код)
 - ✅ нарушитель не проходит (код): подсказка с командой без флага
 - ✅ нарушитель не проходит (код): дочерний bun без флага
 - ✅ нарушитель не проходит (код): дочерний процесс того же bun без флага
 - ✅ bin/ai-dev.ts печатает и запускает скрипты флоу с --no-env-file
+- ✅ bin/elves.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/dashboard/scripts/dashboard.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/dashboard/scripts/sessions.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/est/scripts/est.ts печатает и запускает скрипты флоу с --no-env-file
