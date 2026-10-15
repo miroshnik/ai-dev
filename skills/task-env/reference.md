@@ -131,6 +131,10 @@ takes its place:
   a task stack's service names the network by the label (section "Labels of
   a task stack's service"), and the provider's default is `ai-dev-proxy`
   while the proxy is in it — the stacks before the rename carry no label;
+- **`check`** names a network `ai-dev-proxy` written in a project's compose
+  file (`networks: [default, ai-dev-proxy]`, `external: true`) with its fix:
+  remove it, `up` adds the proxy's network itself. The project moves by a
+  task of its own; until then the network is there and its stack comes up;
 - **the port** — `ELVES_PROXY_PORT`, unset — `AI_DEV_PROXY_PORT` of the
   profile; **the settings** — `.agents/elves.json`, before `update` moves it
   — `.agents/ai-dev.json`.

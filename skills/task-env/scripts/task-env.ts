@@ -35,9 +35,10 @@
  *
  * The rename of the flow (ai-dev → Elves) renamed the proxy: `ai-dev-proxy` → `elves-proxy`. For one release `proxy
  * up` takes the former proxy's place (`FORMER_PROXY`): removes its container — it holds the port — and joins its
- * network, where stacks brought up before the rename stay, so their addresses keep working. Which network the proxy
- * reaches a container through is deterministic: a task stack's service names it by a label, the provider's default is
- * the former network while the proxy is in it (`proxyLabels`, `up`).
+ * network, where stacks brought up before the rename stay, so their addresses keep working; `check` names the former
+ * network in a project's compose file. Which network the proxy reaches a container through is deterministic: a task
+ * stack's service names it by a label, the provider's default is the former network while the proxy is in it
+ * (`proxyLabels`, `up`).
  *
  * The proxy's API (Traefik `/api/http/routers`) answers on its port by the host `<name>.localhost`: `proxyHosts` reads
  * the hosts of its routes, `taskAddress` tells a task's address among them — the dashboard shows a task's services by
@@ -97,8 +98,9 @@ Examples:
 
 Holds the compose file in <dir> (default — the current directory) to the task isolation rules: no container_name, no
 fixed host port, volumes and networks without name and external, code by paths relative to the compose file; one ❌ line
-per violation. Code 0 — the rules hold or there is no compose file, 1 — violations, 2 — not checked (no docker compose,
-the config doesn't parse).
+per violation; the network of the proxy's former name ai-dev-proxy — remove it, task-env up adds the proxy's network
+itself. Code 0 — the rules hold or there is no compose file, 1 — violations, 2 — not checked (no docker compose, the
+config doesn't parse).
 
 Examples:
   task-env check
@@ -157,7 +159,8 @@ export const PROXY = "elves-proxy";
 
 /**
  * The proxy's default name before the rename of the flow (ai-dev → Elves), read for the transition — one release
- * (#545): `proxy up` takes its place, `check -g` of the installer names a proxy left under this name.
+ * (#545): `proxy up` takes its place, `check` names its network in a project's compose file, `check -g` of the
+ * installer names a proxy left under this name.
  */
 export const FORMER_PROXY = "ai-dev-proxy";
 
@@ -512,6 +515,12 @@ function violations(config: Config, file: string): string[] {
   }
   for (const [key, r] of Object.entries(config.networks ?? {})) {
     const users = services.filter(([, s]) => Object.hasOwn(s.networks ?? {}, key)).map(([n]) => n);
+    // the proxy's network under its name before the rename (#545): a compose file wrote it by hand, as the example of
+    // reference.md did; the proxy stays in that network one release (`up`), and a machine without it fails the stack
+    if (r.name === FORMER_PROXY) {
+      line(`network ${key} (${list(users)})`, `${FORMER_PROXY} is the machine's proxy before the rename, now ${PROXY}: remove the network from the compose file and its services; task-env up adds the proxy's network to the HTTP services of env.http itself`);
+      continue;
+    }
     shared("network", key, r, users, "task stacks share it and reach each other's services");
   }
   return out;

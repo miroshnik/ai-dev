@@ -146,7 +146,9 @@ each with `task-env check`, a violation is code 1 of `check`.
 
 A bind mount of a machine resource — the Docker socket, `/etc/localtime`, a
 device (a source in `/var/run`, `/run`, `/etc`, `/dev`, `/proc`, `/sys`) — is
-not code and is fine; `~/…` is an absolute path.
+not code and is fine; `~/…` is an absolute path. A network named `ai-dev-proxy`
+(the proxy before the rename, written by hand) — its own `❌` line: remove it,
+`up` adds the proxy's network to the `env.http` services itself.
 
 `task-env check` reads `docker compose config`, not the YAML, so every form of writing is covered, and needs no Docker
 daemon — reference.md, "What the compose file check reads".
