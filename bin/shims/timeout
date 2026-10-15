@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bun --no-env-file
 /**
  * timeout — GNU coreutils `timeout` for a machine without it (macOS without coreutils). The SessionStart hook puts this
- * directory at the end of the agent's Bash PATH (bin/ai-dev.ts, `agentShellScript`), so a real `timeout` wins;
+ * directory at the end of the agent's Bash PATH (bin/elves.ts, `agentShellScript`), so a real `timeout` wins;
  * tests/capabilities/agent-shell.
  *
  *   timeout [-s SIGNAL] [-k DURATION] [--preserve-status] [--foreground] [-v] DURATION COMMAND [ARG]...
