@@ -1,12 +1,17 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { invariant, source } from "../../../skills/spec/scripts/harness.ts";
 import type { SourceFile } from "../../../skills/spec/scripts/harness.ts";
 import { parseJs } from "../../../skills/spec/scripts/speclib.ts";
 import * as babel from "../../../skills/spec/scripts/vendor/babel-parser.cjs";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { gitRepo, tmpDir, writeTree } from "../../lib/spec.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -106,17 +111,15 @@ const PLACES: readonly Place[] = [
   { file: "skills/task-env/reference.md", at: "`providers.docker.network`", reads: "справочник называет сеть ai-dev-proxy сетью провайдера по умолчанию", test: PROXY },
 ];
 
-/** Файлы флоу от корня, по порядку; скрытые и node_modules — не флоу. */
-function flowFiles(): string[] {
-  const out: string[] = [];
-  const walk = (rel: string): void => {
-    const abs = path.join(ROOT, rel);
-    if (!existsSync(abs)) return;
-    if (!statSync(abs).isDirectory()) return void out.push(rel);
-    for (const e of readdirSync(abs)) if (e !== "node_modules" && !e.startsWith(".")) walk(`${rel}/${e}`);
-  };
-  for (const f of FLOW) walk(f);
-  return out.sort();
+/**
+ * Файлы флоу от корня, по порядку, — те, что попадают в коммит: отслеживаемые git и новые, кроме игнорируемых git.
+ * Обход каталога читал бы и сгенерированное: страницы `docs/spec` после локального `spec:doc` называют старое имя в
+ * названиях тестов, а в CI их ещё нет (#579). Отслеживаемый файл, удалённый из рабочей копии, — уже не файл флоу.
+ */
+function flowFiles(root = ROOT): string[] {
+  const r = spawnSync("git", ["-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...FLOW], { encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`git ls-files в ${root} — ${String(r.stderr).trim() || r.error}`);
+  return [...new Set(r.stdout.split("\0").filter(Boolean))].filter((f) => existsSync(path.join(root, f))).sort();
 }
 
 /** Вхождение старого имени: строка (0 — путь файла), её текст, блок — для сообщения — и входит ли оно в место `at`. */
@@ -373,5 +376,22 @@ describe("примеры", () => {
     expect(outside("x.md", doc, places)).toEqual(["x.md:16 (## Labels) — No `ai-dev-proxy` here."]);
     expect(outside("x.json", '{\n  "formerly": { "title": "Update the ai-dev flow" }\n}\n', places)).toEqual([]);
     expect(outside("bin/ai-dev.ts", '/** The installer under its name before the rename: <clone>/bin/ai-dev.ts. */\nimport "./elves.ts";\n', places)).toEqual([]);
+  });
+
+  it("old-name не читает файлы, которые git игнорирует: сгенерированный docs/spec не делает стандарт красным", () => {
+    const { dir, cleanup } = tmpDir();
+    try {
+      gitRepo(dir).commit({ ".gitignore": "docs/spec/\n", "AGENTS.md": "# Elves\n", "docs/gone.md": "ai-dev\n" });
+      rmSync(path.join(dir, "docs/gone.md"));
+      writeTree(dir, {
+        "docs/guide.md": "The settings — `.agents/ai-dev.json`.\n",
+        "docs/spec/README.md": "# ai-dev\n",
+        "docs/spec/capabilities/install.md": "update переносит .agents/ai-dev.json\n",
+        "tests/x.test.ts": 'const MANIFEST = ".agents/ai-dev.json";\n',
+      });
+      expect(flowFiles(dir)).toEqual(["AGENTS.md", "docs/guide.md"]);
+    } finally {
+      cleanup();
+    }
   });
 });
