@@ -4060,6 +4060,13 @@
   "describes": [
    "В проект — копия, которую видят облачная сессия и CI"
   ],
+  "name": "из пакета под scope @miroshnik — SHA из спецификатора под полным именем пакета"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — копия, которую видят облачная сессия и CI"
+  ],
   "name": "корень установки — корень git-репозитория, даже при запуске из подкаталога"
  },
  {
@@ -4123,7 +4130,7 @@
   "describes": [
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
-  "name": "клон со старым именем пакета узнаётся как клон"
+  "name": "клон со старым именем пакета — elves или ai-dev — узнаётся как клон"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4457,6 +4464,34 @@
  {
   "path": "tests/capabilities/release/release.test.ts",
   "describes": [
+   "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
+  ],
+  "name": "bun install проекта с @miroshnik/elves в devDependencies приносит пакет с бинарём elves"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
+  ],
+  "name": "pack не с тегом релиза — код 2, package.json и dist/ не меняются"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
+  ],
+  "name": "версия пакета соответствует тегу релиза"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
+  ],
+  "name": "релиз публикует пакет в npm из CI по тегу"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
    "Релиз — тег по дате на origin/main и список изменений флоу с прошлого релиза"
   ],
   "name": "PR, влитый merge-коммитом, — строкой с заголовком PR и номером, без коммитов его ветки"
@@ -4586,6 +4621,13 @@
    "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
   ],
   "name": "--for без PID живого процесса — код 2 с объяснением"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "elves slot --for печатает экспорт очереди, как slot.ts"
  },
  {
   "path": "tests/capabilities/slot/slot.test.ts",
@@ -6872,6 +6914,20 @@
   "name": "examples и исключения пишут метаданные прогона для spec-doc"
  },
  {
+  "path": "tests/capabilities/spec-harness/package.test.ts",
+  "describes": [
+   "Харнесс и spec-скрипты — из пакета @miroshnik/elves, без копии флоу в проекте"
+  ],
+  "name": "elves spec-doc и elves spec-diff из node_modules/.bin работают в проекте без копии флоу"
+ },
+ {
+  "path": "tests/capabilities/spec-harness/package.test.ts",
+  "describes": [
+   "Харнесс и spec-скрипты — из пакета @miroshnik/elves, без копии флоу в проекте"
+  ],
+  "name": "тест проекта импортирует harness из пакета и проходит под bun test и под Vitest"
+ },
+ {
   "path": "tests/capabilities/spec-harness/sequence.test.ts",
   "describes": [
    "Сценарий capability — сиквенс-схема из трассы вызовов на границах модели"
@@ -9036,6 +9092,13 @@
   "describes": [
    "Каждый блок concurrency с общей группой — queue: max"
   ],
+  "name": ".github/workflows/npm.yml concurrency «npm-publish» не вытесняет ожидающий прогон"
+ },
+ {
+  "path": "tests/standards/ci-concurrency/ci-concurrency.test.ts",
+  "describes": [
+   "Каждый блок concurrency с общей группой — queue: max"
+  ],
   "name": "docs/ci-concurrency.md concurrency «cd-${{ github.ref }}» не вытесняет ожидающий прогон"
  },
  {
@@ -9141,7 +9204,77 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
+  "name": "elves pack --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
   "name": "elves release --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves slot --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-break --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-claims --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-diff --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-doc --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-exceptions --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-publish --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-run --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
+  "name": "elves spec-shard --help и -h — синтаксис с примером, код 0, без сети и изменений"
  },
  {
   "path": "tests/standards/cli-help/cli-help.test.ts",
@@ -9533,7 +9666,7 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
-  "name": "реестр «команды скриптов — из обзора каждого скрипта и из вызовов в документах флоу» находит elves install, elves check, github task new, github pr premerge, est fact, task-env proxy up, task-env check, wait-ci merged (команды)"
+  "name": "реестр «команды скриптов — из обзора каждого скрипта и из вызовов в документах флоу» находит elves install, elves check, elves pack, elves spec-doc, elves slot, github task new, github pr premerge, est fact, task-env proxy up, task-env check, wait-ci merged (команды)"
  },
  {
   "path": "tests/standards/cli-help/cli-help.test.ts",
@@ -13856,6 +13989,27 @@
  {
   "path": "tests/standards/harness-load/harness-load.test.ts",
   "describes": [
+   "Тест проекта импортирует харнесс и модель из пакета @miroshnik/elves любым раннером"
+  ],
+  "name": "Node проекта с \"type\": \"commonjs\" своим загрузчиком импортирует из пакета фрагмент ESLint, харнесс, модель и github без ошибок и предупреждений"
+ },
+ {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
+   "Тест проекта импортирует харнесс и модель из пакета @miroshnik/elves любым раннером"
+  ],
+  "name": "Playwright в проекте без \"type\": \"module\" (загрузка CommonJS) импортирует из пакета харнесс и модель и проходит тест"
+ },
+ {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
+   "Тест проекта импортирует харнесс и модель из пакета @miroshnik/elves любым раннером"
+  ],
+  "name": "Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует из пакета харнесс и модель и проходит тест"
+ },
+ {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
    "Тест проекта импортирует харнесс и модель любым раннером"
   ],
   "name": "Node проекта с \"type\": \"commonjs\" своим загрузчиком импортирует фрагмент ESLint, харнесс и модель без ошибок и предупреждений"
@@ -14915,7 +15069,77 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: команда установщика pack названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: команда установщика release названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика slot названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-break названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-claims названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-diff названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-doc названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-exceptions названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-publish названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-run названа"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
+  "name": "README: команда установщика spec-shard названа"
  },
  {
   "path": "tests/standards/readme/readme.test.ts",
@@ -16864,6 +17088,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/spec-harness/meta.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-harness/package.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",

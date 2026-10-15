@@ -35,7 +35,7 @@
 
 ## Каждый блок concurrency с общей группой — queue: max
 
-<details><summary>✅ 13 тестов</summary>
+<details><summary>✅ 14 тестов</summary>
 
 - ✅ реестр «блоки concurrency в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» не пуст
 - ✅ реестр «блоки concurrency в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md» находит .github/workflows/ci.yml jobs.spec-publish.concurrency «spec-publish», docs/ci-concurrency.md concurrency «cd-${{ github.ref }}», docs/ci-concurrency.md jobs.deploy-dev.concurrency «deploy-dev», skills/spec/ci.md jobs.spec-publish.concurrency «spec-publish»
@@ -43,6 +43,7 @@
 - ✅ нарушитель не проходит: job с общей группой без queue: max
 - ✅ .github/workflows/ci.yml concurrency «ci-${{ github.event.pull_request.number || github.run_id }}» не вытесняет ожидающий прогон
 - ✅ .github/workflows/ci.yml jobs.spec-publish.concurrency «spec-publish» не вытесняет ожидающий прогон
+- ✅ .github/workflows/npm.yml concurrency «npm-publish» не вытесняет ожидающий прогон
 - ✅ docs/ci-concurrency.md concurrency «cd-${{ github.ref }}» не вытесняет ожидающий прогон
 - ✅ docs/ci-concurrency.md concurrency «ci-${{ github.event.pull_request.number || github.ref }}» не вытесняет ожидающий прогон
 - ✅ docs/ci-concurrency.md jobs.deploy-dev.concurrency «deploy-dev» не вытесняет ожидающий прогон

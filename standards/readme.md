@@ -24,14 +24,24 @@ README читают первым, а правят последним: новый
 
 ## README называет всё, что ставит флоу, и не ссылается на то, чего нет
 
-<details><summary>✅ 69 тестов</summary>
+<details><summary>✅ 79 тестов</summary>
 
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» не пуст
 - ✅ реестр «скиллы, команды установщика и скиллов, справочники docs/» находит skills/spec, elves install, elves release, skills/spec/scripts/spec-break, skills/ci-wait/scripts/wait-ci, docs/pr-checks.md
 - ✅ нарушитель не проходит: скилл, которого README не называет
 - ✅ README: команда установщика check названа
 - ✅ README: команда установщика install названа
+- ✅ README: команда установщика pack названа
 - ✅ README: команда установщика release названа
+- ✅ README: команда установщика slot названа
+- ✅ README: команда установщика spec-break названа
+- ✅ README: команда установщика spec-claims названа
+- ✅ README: команда установщика spec-diff названа
+- ✅ README: команда установщика spec-doc названа
+- ✅ README: команда установщика spec-exceptions названа
+- ✅ README: команда установщика spec-publish названа
+- ✅ README: команда установщика spec-run названа
+- ✅ README: команда установщика spec-shard названа
 - ✅ README: команда установщика update названа
 - ✅ README: скилл ci-wait — со ссылкой на skills/ci-wait/SKILL.md
 - ✅ README: скилл dashboard — со ссылкой на skills/dashboard/SKILL.md
