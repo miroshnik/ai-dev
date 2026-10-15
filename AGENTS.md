@@ -2,12 +2,12 @@
 
 ## This file and skills
 
-The canon for any agent (Claude Code, Codex, Gemini CLI, Cursor, Copilot,
-OpenCode, Amp). It lives in **miroshnik/ai-dev** with the skills (`skills/*`)
-and references (`docs/`, next to this file); install and update — README,
-"Installation". A rule or skill change from another project's session is a
-task in ai-dev (project #6) without that project's names, for a separate
-session; I don't edit an ai-dev clone from someone else's session. A Claude
+The Elves canon for any agent (Claude Code, Codex, Gemini CLI, Cursor,
+Copilot, OpenCode, Amp). It lives in **miroshnik/ai-dev** with the skills
+(`skills/*`) and references (`docs/`, next to this file); install and update —
+README, "Installation". A rule or skill change from another project's session
+is a task in Elves (project #6) without that project's names, for a separate
+session; I don't edit an Elves clone from someone else's session. A Claude
 Code **cloud session** sees only the repository — `docs/cloud-sessions.md`.
 
 **The repository is public:** no names, owners, paths or numbers of other
@@ -25,7 +25,7 @@ Rules load at the session start, so first, before the task: `bunx
 github:miroshnik/ai-dev check -g` (machine) and `check` (project, with its
 mode and language) — in Claude Code the `SessionStart` hook runs them into
 the start of the context. A copy follows
-ai-dev releases (tags `vYYYY.MM.DD`), a `--link` clone — `origin/main`; a
+Elves releases (tags `vYYYY.MM.DD`), a `--link` clone — `origin/main`; a
 release is the owner's step (`ai-dev release`), I cut one only when asked.
 
 - **The machine is behind** — `update -g`. After an `update` I tell the user
@@ -289,7 +289,7 @@ The full canon and wiring — the `spec` skill (`canon.md`, `checks.md`).
 
 ## Project knowledge and handoff
 
-- **Shared — in ai-dev, project-specific — in the project's spec**
+- **Shared — in Elves, project-specific — in the project's spec**
   ("Specification — decisions"), the reason in the decision's `<folder>.md`;
   neither shared nor checkable (operations, product documents) — the
   project's `docs/`. The project's `AGENTS.md` — the install block and how

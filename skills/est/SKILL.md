@@ -36,7 +36,7 @@ never touch them by hand.
 
 Run: `bun --no-env-file <skill folder>/scripts/est.ts <subcommand> …` (Bun, no
 dependencies) — the skill folder is the one holding this file (`~/.claude/skills/est`,
-`~/.agents/skills/est`, the project's `.agents/skills/est` or an ai-dev clone; in
+`~/.agents/skills/est`, the project's `.agents/skills/est` or an Elves clone; in
 Claude Code — `${CLAUDE_SKILL_DIR}`); below abbreviated to `est`. `--repo
 owner/repo` can be omitted when you work in the repository's folder (the
 registry — reference.md, "Repository registry"). Without `--write` everything is
@@ -138,7 +138,7 @@ and commits aren't visible from there) and prints the comment «Actual (cloud): 
 with hours, tokens and a link to the session, with a part
 marker (`cloud`) (or «Actual unavailable (cloud)», if the transcript isn't linked
 to the task) — the agent writes it into the issue with a GitHub tool. Other
-commands fail with an explanation (`docs/cloud-sessions.md` in ai-dev). Project
+commands fail with an explanation (`docs/cloud-sessions.md` in Elves). Project
 fields can't be set from the cloud: they are set by the nearest local `est fact
 <N> --write` or `--sweep` (closed tasks without the «Actual, h» field), which adds
 the cloud part to the local work without double counting; the part is kept in the

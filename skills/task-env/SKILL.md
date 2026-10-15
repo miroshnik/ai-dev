@@ -13,7 +13,7 @@ agent's browser and the owner's log each other out. A host per app solves it:
 and a different host has its own cookies. One proxy per machine — Traefik in
 Docker — routes these hosts to the containers of task stacks by their labels:
 no host port per app, no port search. The scheme and the reasons — epic
-"Environment" in ai-dev (`tests/capabilities/task-env/task-env.md`).
+"Environment" in Elves (`tests/capabilities/task-env/task-env.md`).
 
 ```bash
 bun --no-env-file <skill dir>/scripts/task-env.ts up [--profile <p>]...                  # the task's stack by the branch, its addresses

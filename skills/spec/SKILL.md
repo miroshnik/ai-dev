@@ -46,7 +46,7 @@ without a build and without dependencies. Syntax, flags and exit codes — each
 script's `--help`; what a script does in detail and why — `reference.md` next
 to this file. The skill directory is the one holding this file
 (`${CLAUDE_SKILL_DIR}` in Claude Code, `~/.claude/skills/spec`,
-`~/.agents/skills/spec`, the project's `.agents/skills/spec` or an ai-dev
+`~/.agents/skills/spec`, the project's `.agents/skills/spec` or an Elves
 clone). The repository root is `git toplevel` (or `--root DIR`); the tree is
 `tests/` at the root. In a repository wired up per the "Wiring into a
 repository" section — its `spec:doc` and `spec:diff`, not the scripts from the

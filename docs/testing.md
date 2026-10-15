@@ -300,5 +300,5 @@ into the project's `docs/`, not into memory.
 - Knowledge about a helper (what a factory creates, what it cleans up, what
   permissions a user has) — in its JSDoc in `tests/lib`: the editor's hint
   shows it, a document doesn't.
-- A lesson repeated in two projects is a task in ai-dev for this reference
+- A lesson repeated in two projects is a task in Elves for this reference
   (`AGENTS.md`, "This file and skills"), not the agent's memory.

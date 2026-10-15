@@ -12,7 +12,7 @@ a dozen neighbors and gets cut off by the tool timeout, and a retry adds load.
 The `scripts/slot.ts` script next to this file lets two heavy runs go at a
 time, the rest wait in arrival order; together the slots take half of the
 cores, the other half is for the human, the app and the agents themselves. Why
-it is so and what was rejected — `tests/capabilities/slot/slot.md` in ai-dev.
+it is so and what was rejected — `tests/capabilities/slot/slot.md` in Elves.
 
 ```bash
 bun --no-env-file <skill dir>/scripts/slot.ts '<command>' [arguments…]
@@ -62,7 +62,7 @@ at all — it gets the script's environment and the two queue variables;
 project's `bunfig.toml`:
 it would turn env files off for every `bun` of a Bun project, its own
 `bun test` and `bun run dev` included. The same flag is on every call of a
-skill script (`tests/standards/no-env-file` in ai-dev): a child `bun` inherits
+skill script (`tests/standards/no-env-file` in Elves): a child `bun` inherits
 what its parent loaded.
 
 ## What the agent does
