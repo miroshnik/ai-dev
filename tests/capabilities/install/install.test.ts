@@ -3,7 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync,
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, bunxPackage, REPO, sandbox, snapshot, type Sandbox } from "../../lib/ai-dev.ts";
+import { elves, elvesPackage, bunxPackage, REPO, sandbox, snapshot, type Sandbox } from "../../lib/elves.ts";
 import { writeTree } from "../../lib/spec.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -24,7 +24,7 @@ beforeEach(() => {
 afterEach(() => sb.cleanup());
 
 function install(args: string[] = [], cwd = proj, extra: Record<string, string> = {}) {
-  return aiDev(sb, ["install", ...args], { cwd, env: extra });
+  return elves(sb, ["install", ...args], { cwd, env: extra });
 }
 
 const read = (p: string) => readFileSync(p, "utf8");
@@ -132,7 +132,7 @@ describe("В проект — копия, которую видят облачн
   it("из пакета bunx — SHA из спецификатора в package.json каталога bunx", () => {
     const sha = "0123456789abcdef0123456789abcdef01234567";
     const bin = bunxPackage(path.join(tmp, "bunx"), REPO, sha);
-    expect(aiDev(sb, ["install"], { bin }).code).toBe(0);
+    expect(elves(sb, ["install"], { bin }).code).toBe(0);
     expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).sha).toBe(sha);
   });
 
@@ -179,7 +179,7 @@ describe("Отказ в записи посреди установки — по�
     install();
     rmSync(path.join(skillsDir(), "spec"));
     chmodSync(skillsDir(), 0o555);
-    const r = aiDev(sb, ["update"]);
+    const r = elves(sb, ["update"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain(".claude/skills/spec");
     expect(r.stderr).toContain("bunx github:miroshnik/elves update");
@@ -189,7 +189,7 @@ describe("Отказ в записи посреди установки — по�
     install();
     chmodSync(skillsDir(), 0o555);
     expect(install().code).toBe(0);
-    expect(aiDev(sb, ["update"]).code).toBe(0);
+    expect(elves(sb, ["update"]).code).toBe(0);
   });
 });
 
@@ -372,7 +372,7 @@ describe("Проверки проекта идут очередью машины
       writeTree(proj, { ...files, "package.json": JSON.stringify({ packageManager, scripts: { test: "vitest run", lint: slot("eslint .") } }) });
       install();
       expect(scripts()).toEqual({ test: slotString("vitest run"), lint: slotString("eslint .") });
-      expect(aiDev(sb, ["check"]).code).toBe(0);
+      expect(elves(sb, ["check"]).code).toBe(0);
     }
     writeTree(proj, { "package.json": JSON.stringify({ packageManager: "yarn@1.22.22", scripts: { test: "vitest run" } }) });
     install();
@@ -383,14 +383,14 @@ describe("Проверки проекта идут очередью машины
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "vitest run" } }) });
     install();
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: slotString("vitest run") } }) });
-    const c = aiDev(sb, ["check"]);
+    const c = elves(sb, ["check"]);
     expect(c.code).toBe(1);
     expect(c.stdout).toMatch(/~ package\.json — [^\n]*previous install[^\n]*\btest\b/);
     expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
-    const u = aiDev(sb, ["update"]);
+    const u = elves(sb, ["update"]);
     expect(u.code).toBe(0);
     expect(scripts()).toEqual({ lint: slot("eslint ."), test: slot("vitest run") });
-    expect(aiDev(sb, ["check"]).code).toBe(0);
+    expect(elves(sb, ["check"]).code).toBe(0);
   });
 
   /**
@@ -420,17 +420,17 @@ describe("Проверки проекта идут очередью машины
   it("check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json", () => {
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "vitest run" } }) });
     install();
-    expect(aiDev(sb, ["check"]).code).toBe(0);
+    expect(elves(sb, ["check"]).code).toBe(0);
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: "vitest run" } }) });
-    const c = aiDev(sb, ["check"]);
+    const c = elves(sb, ["check"]);
     expect(c.code).toBe(1);
     expect(c.stdout).toMatch(/~ package\.json — [^\n]*\btest\b/);
     expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
-    const u = aiDev(sb, ["update"]);
+    const u = elves(sb, ["update"]);
     expect(u.code).toBe(0);
     expect(scripts().test).toBe(slot("vitest run"));
     expect(u.stdout).toMatch(/git add [^\n]* package\.json/);
-    expect(aiDev(sb, ["check"]).code).toBe(0);
+    expect(elves(sb, ["check"]).code).toBe(0);
   });
 
   /**
@@ -450,11 +450,11 @@ describe("Проверки проекта идут очередью машины
     expect(i.code).toBe(0);
     expect(i.stderr).toContain(`!! turbo.json — AI_DEV_SLOT doesn't reach the runner`);
     expect(i.stderr).toContain(ready);
-    const c = aiDev(sb, ["check"]);
+    const c = elves(sb, ["check"]);
     expect(c.code).toBe(0);
     expect(c.stdout).toMatch(/up to date[^\n]*\n {2}! turbo\.json — AI_DEV_SLOT doesn't reach the runner: turbo in strict env mode/);
     expect(c.stdout).toContain(ready);
-    expect(aiDev(sb, ["check", "--hook"]).stdout).toContain(ready);
+    expect(elves(sb, ["check", "--hook"]).stdout).toContain(ready);
   });
 
   it("предупреждения нет, если переменные очереди доходят до задач turbo — globalPassThroughEnv или globalEnv с масками, envMode loose, --env-mode=loose — или turbo зовёт скрипт вне очереди", () => {
@@ -524,8 +524,8 @@ describe("На машину (-g) — только скиллы и хук, пра
   // клон — копия пакета в песочнице: установка --link правит origin клона (переименование #544), настоящий не трогаем
   it("--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json", () => {
     mkdirSync(path.join(home, ".claude"));
-    const clone = aiDevPackage(path.join(tmp, "clone"));
-    expect(aiDev(sb, ["install", "-g", "--link"], { bin: clone.bin }).code).toBe(0);
+    const clone = elvesPackage(path.join(tmp, "clone"));
+    expect(elves(sb, ["install", "-g", "--link"], { bin: clone.bin }).code).toBe(0);
     expect(realpathSync(path.join(home, ".agents/skills/spec"))).toBe(realpathSync(path.join(clone.dir, "skills/spec")));
     expect(realpathSync(path.join(home, ".claude/skills/spec"))).toBe(realpathSync(path.join(clone.dir, "skills/spec")));
     expect(gone(path.join(home, ".agents/ai-dev"))).toBe(true);
@@ -645,7 +645,7 @@ describe("Задача целиком без спроса — настройка
     expect(install(["--auto", "--lang", "ru"], clone).code).toBe(0);
     expect(manifest(clone)).toEqual({ auto: true, language: "ru" });
     expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
-    const check = aiDev(sb, ["check"], { cwd: clone });
+    const check = elves(sb, ["check"], { cwd: clone });
     expect(check.code).toBe(0);
     expect(check.stdout).toStartWith("Elves in the project: not installed — an Elves clone, the canon is at its root\n");
   });
@@ -696,8 +696,8 @@ describe("Язык работы агента — настройка проект
 
   it("--lang — флаг только install: у update и check он неизвестен", () => {
     install();
-    expect(aiDev(sb, ["update", "--lang", "ru"]).code).toBe(2);
-    expect(aiDev(sb, ["check", "--lang=ru"]).stderr).toContain("unknown flag: --lang=ru");
+    expect(elves(sb, ["update", "--lang", "ru"]).code).toBe(2);
+    expect(elves(sb, ["check", "--lang=ru"]).stderr).toContain("unknown flag: --lang=ru");
   });
 
   it("install -g язык не спрашивает и не хранит — в ~/.agents/ai-dev.json поля language нет", () => {
@@ -744,7 +744,7 @@ describe("Мерж своего PR в Claude Code — правило разре�
     }
     install(["--auto"]);
     // update и check идут с режимом манифеста — подсказка только у install
-    for (const cmd of ["update", "check"]) expect(aiDev(sb, [cmd]).stdout).not.toContain("gh pr merge");
+    for (const cmd of ["update", "check"]) expect(elves(sb, [cmd]).stdout).not.toContain("gh pr merge");
   });
 
   it("подсказка не меняет настройки машины", () => {
@@ -776,7 +776,7 @@ describe("Неверный вызов — код 2 с объяснением", (
   });
 
   it("неизвестная команда — код 2 и справка", () => {
-    const r = aiDev(sb, ["instal"]);
+    const r = elves(sb, ["instal"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("install");
   });

@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { aiDev, aiDevPackage, bunxPackage, copyPackage, sandbox, type AiDevPackage, type Run, type Sandbox } from "../../lib/ai-dev.ts";
+import { elves, elvesPackage, bunxPackage, copyPackage, sandbox, type ElvesPackage, type Run, type Sandbox } from "../../lib/elves.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
@@ -17,10 +17,10 @@ afterEach(() => sb.cleanup());
 
 // пакет Elves собирается один раз на файл
 let packages: { dir: string; cleanup: () => void };
-let base: AiDevPackage;
+let base: ElvesPackage;
 beforeAll(() => {
   packages = tmpDir();
-  base = aiDevPackage(path.join(packages.dir, "base"));
+  base = elvesPackage(path.join(packages.dir, "base"));
 });
 afterAll(() => packages.cleanup());
 
@@ -36,7 +36,7 @@ function owner() {
   const bin = path.join(clone, "bin/elves.ts");
   const tag = (name: string) => up.repo.git("tag", name);
   const rule = (text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
-  return { up, clone, tag, rule, release: (args: string[] = ["--dry-run"]) => aiDev(sb, ["release", ...args], { bin }) };
+  return { up, clone, tag, rule, release: (args: string[] = ["--dry-run"]) => elves(sb, ["release", ...args], { bin }) };
 }
 
 // прошлый релиз — дата в прошлом: в день, совпавший с ней, релиз был бы патчем того же дня (.1), а не тегом дня
@@ -149,7 +149,7 @@ describe("Релиз — тег по дате на origin/main и список �
 
   it("не из клона Elves — отказ, код 2", () => {
     const bin = bunxPackage(path.join(sb.tmp, "bunx"), base.dir, base.sha);
-    const r = aiDev(sb, ["release", "--dry-run"], { bin });
+    const r = elves(sb, ["release", "--dry-run"], { bin });
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("only from an Elves clone");
   });

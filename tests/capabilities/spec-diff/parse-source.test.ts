@@ -5,7 +5,7 @@ import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { codeOnly } from "../../../skills/spec/scripts/harness.ts";
 import { parseJs, parseJunit, scanJs, type Test } from "../../../skills/spec/scripts/speclib.ts";
-import { REPO } from "../../lib/ai-dev.ts";
+import { REPO } from "../../lib/elves.ts";
 import { tmpDir } from "../../lib/spec.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 

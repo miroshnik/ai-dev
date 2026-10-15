@@ -7,7 +7,7 @@ import { packageManager, projectCommands } from "../../../skills/github/scripts/
 import type { PackageManager } from "../../../skills/github/scripts/github.ts";
 import { codeOnly, invariant, source, sources } from "../../../skills/spec/scripts/harness.ts";
 import type { SourceFile } from "../../../skills/spec/scripts/harness.ts";
-import { aiDev, sandbox } from "../../lib/ai-dev.ts";
+import { elves, sandbox } from "../../lib/elves.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
 
@@ -152,11 +152,11 @@ describe("Менеджер пакетов у premerge, обёртки slot и р
         ".yarnrc.yml": "nodeLinker: node-modules\n",
         "tests/standards/naming/naming.test.ts": "",
       });
-      const install = aiDev(sb, ["install"]);
+      const install = elves(sb, ["install"]);
       expect(install.code, install.stderr).toBe(0);
       const scripts = JSON.parse(readFileSync(path.join(sb.proj, "package.json"), "utf8")).scripts;
       expect(scripts.lint).toBe(". .agents/skills/slot/scripts/slot.sh && eslint .");
-      const check = aiDev(sb, ["check"]);
+      const check = elves(sb, ["check"]);
       expect(check.stdout).toContain(`"test:spec": ${JSON.stringify(". .agents/skills/slot/scripts/slot.sh && vitest run tests/standards")}`);
       expect(check.stdout).not.toContain("bun test");
       expect(projectCommands(sb.proj).run("test:spec").join(" ")).toBe("pnpm run test:spec");
