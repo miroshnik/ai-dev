@@ -103,8 +103,9 @@ est fact <N> --repo <r> --write
 
 The number is the **issue** number, not a PR's. The script finds the task's
 sessions — first by pinning (the session in which `github task status` set the
-task to In progress, with its subagents), the rest by features (the PR's
-commits, the branch, `#N` in the session's name, first prompt or a subagent's
+task to In progress, with its subagents but another task's executors), the rest
+by features (the PR's commits, the branch, `#N` in the session's name, first
+prompt or a subagent's
 assignment; reference.md, "Actual — how sessions are found"). It computes active
 hours — including subagents and workflows — and writes a comment of four lines:
 the actual (sessions, prompts, subagents, wall clock, coverage), the model spend,
@@ -181,8 +182,10 @@ Without this the coverage will be `partial`/`none`, and no history accumulates
   in the session that does it: pinning links the whole session directly; the
   features below are a fallback for sessions without it and for history before it;
 - the session is named `#<number> <task title>` — the name links to the task
-  explicitly (stronger than the first prompt). A new task is a new session:
-  `github task status` won't take a second one into work;
+  explicitly (stronger than the first prompt). A new task isn't this
+  session's: `github task status` won't take a second one into work, a queued
+  one goes to an executor — a subagent with «Task #N» in its assignment, its
+  records go to task N, not to the session's pin;
 - one session — one task; a branch by the convention `<type>/<issue>-<slug>`
   (`feat/42-invoice-export`) — the script takes from it both the task
   number and the type for history;
