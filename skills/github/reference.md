@@ -480,7 +480,8 @@ mutation: a decision from the default branch — by name (`billing`), a new
 decision — `kind:name` (`capability:export`, the label is `export`, the line
 «new decision»: it will appear in the task's PR); no decision
 label — created with the kind's color; a regular label must exist, otherwise an
-error before creating. A slice label by name (`api`) is a regular task label,
+error before creating. With `--epic` the decision labels are added to the epic
+too (the union of its subtasks; GitHub's limit of 100 — "pr labels"). A slice label by name (`api`) is a regular task label,
 not passed to the epic; `kind:name` with a slice label's name is an error
 before creating: a decision with that name isn't marked by a label. A question
 without ✅ in the description's questions section — the `questions` label in
@@ -604,7 +605,10 @@ doesn't — only the decisions whose statements the PR changes: the folder's
 body (spec-diff output — the lists, the summary, the move, harness checks;
 exceptions don't count), alphabetically, as many as fit. A codemod over every
 test changes no statement: test bodies and code only — an `○` line without a
-label, what didn't fit — an `○` line too; code 0.
+label, what didn't fit — an `○` line too; code 0. `task new --epic --labels`
+has no PR yet to choose by (#574): the epic gets the task's decisions
+alphabetically, as many as fit, the rest — `○` lines, code 0 — the task is
+already created by then.
 
 ### pr premerge
 

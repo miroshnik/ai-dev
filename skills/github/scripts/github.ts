@@ -1853,13 +1853,10 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
     done.push(`blocked by #${b.number}`);
   }
   if (milestone) done.push(`milestone ${q(milestone.title)}`);
-  // the epic accumulates its subtasks' decision labels
+  // the epic accumulates its subtasks' decision labels — up to GitHub's limit: the task is already created, a failure
+  // here would leave the epic without its labels and without a line about them (#574)
   const decided = plan.filter((x) => x.decision).map((x) => x.name);
-  if (epic && decided.length) {
-    const all = loadLabels(io, slug);
-    const line = addLabels(io, epic, decided, all);
-    if (line) done.push(`epic #${epic.number}: ${line}`);
-  }
+  const epicLabels = epic && decided.length ? putLabels(io, epic, `epic #${epic.number}`, decided, null, loadLabels(io, slug)) : [];
   // the epic — no lower than its most urgent open subtask
   if (epic && priority) {
     const rank = (p: string | null) => (p === null ? PRIORITIES.length : (PRIORITIES as readonly string[]).indexOf(p));
@@ -1871,6 +1868,7 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
 
   io.out(`Created #${created.number} ${created.title} — ${created.url}`);
   for (const d of done) io.out(`+ ${d}`);
+  for (const l of epicLabels) io.out(l);
   if (o.type === N.issueTypes.epic) {
     io.out(`Next: an epic isn't estimated — its ${q(N.fields.estimate)} is the sum of its subtasks' estimates.`);
     // an epic's work goes to the dispatcher on the owner's "yes" (#546), not to a session card per subtask
@@ -3323,24 +3321,26 @@ function statementDecisions(files: PrFile[], body: string): Set<string> {
 /**
  * The decision labels an issue doesn't have, as many as fit (`ISSUE_LABEL_LIMIT`): all of them fit — all; otherwise only
  * the decisions whose statements the PR changes (`statementDecisions`), in alphabetical order, as many as there's room
- * for. What isn't set — `○` lines: a mutation past the limit would fail and leave the issue without a single label.
+ * for; no PR yet (`task new --epic`, `statements` null) — any of them, alphabetically (#574). What isn't set — `○` lines:
+ * a mutation past the limit would fail and leave the issue without a single label. Returns the lines to print.
  */
-function putLabels(io: Io, issue: Issue, who: string, want: string[], statements: Set<string>, all: Label[]): void {
+function putLabels(io: Io, issue: Issue, who: string, want: string[], statements: Set<string> | null, all: Label[]): string[] {
+  const lines: string[] = [];
   const missing = want.filter((n) => !issue.labels.includes(n));
   const room = Math.max(0, ISSUE_LABEL_LIMIT - issue.labels.length);
   let add = missing;
   if (missing.length > room) {
-    const named = missing.filter((n) => statements.has(n));
-    const bodies = missing.filter((n) => !statements.has(n));
+    const named = statements ? missing.filter((n) => statements.has(n)) : [...missing].sort();
+    const bodies = statements ? missing.filter((n) => !statements.has(n)) : [];
     add = named.slice(0, room);
+    const which = statements ? "only decisions whose <folder>.md or test names the PR changes" : "alphabetically, as many as fit";
     const without = bodies.length ? `; test bodies and code only, no label: ${bodies.join(", ")}` : "";
-    io.out(
-      `○ ${who}: ${missing.length} new decision labels, room for ${room} (GitHub puts at most ${ISSUE_LABEL_LIMIT} on an issue, it has ${issue.labels.length}) — only decisions whose <folder>.md or test names the PR changes${without}`,
-    );
-    if (named.length > room) io.out(`○ ${who}: no room — not set: ${named.slice(room).join(", ")}`);
+    lines.push(`○ ${who}: ${missing.length} new decision labels, room for ${room} (GitHub puts at most ${ISSUE_LABEL_LIMIT} on an issue, it has ${issue.labels.length}) — ${which}${without}`);
+    if (named.length > room) lines.push(`○ ${who}: no room — not set: ${named.slice(room).join(", ")}`);
   }
   const added = addLabels(io, issue, add, all);
-  if (added) io.out(`+ ${who}: ${added}`);
+  if (added) lines.push(`+ ${who}: ${added}`);
+  return lines;
 }
 
 /**
@@ -3407,12 +3407,12 @@ export function cmdPrLabels(io: Io, slug: string, number: number): number {
   const epics = new Map<number, Issue>();
   for (const n of closes) {
     const issue = loadIssue(io, slug, n);
-    putLabels(io, issue, `#${n}`, want, statements, all);
+    for (const l of putLabels(io, issue, `#${n}`, want, statements, all)) io.out(l);
     // earlier labels aren't removed: the task may have touched the decision in another PR too
     for (const l of issue.labels.filter((x) => isDecision(x) && !want.includes(x))) io.out(`= #${n}: ${l} — the decision is not in the PR diff, the label stays`);
     if (issue.parent && !epics.has(issue.parent.number)) epics.set(issue.parent.number, loadIssue(io, slug, issue.parent.number));
   }
-  for (const epic of epics.values()) putLabels(io, epic, `epic #${epic.number}`, want, statements, all);
+  for (const epic of epics.values()) for (const l of putLabels(io, epic, `epic #${epic.number}`, want, statements, all)) io.out(l);
   return 0;
 }
 

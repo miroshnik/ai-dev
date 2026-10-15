@@ -349,6 +349,26 @@ describe("task new ставит метки решений — по имени р
     expect(r.out).toContain("+ epic #45: billing");
   });
 
+  /**
+   * GitHub ставит на issue не больше 100 меток, мутация сверх предела падает целиком (#569), а объединение меток подзадач
+   * у эпика копится до предела. Задача к этому времени уже заведена: падение оставляло эпик без её меток и без строки о
+   * них (#574). PR ещё нет — выбора по утверждениям нет: по алфавиту, сколько помещается.
+   */
+  it("эпик у предела меток — ставит эпику, что помещается, остальное печатает, не падает", () => {
+    const f = new FakeGitHub(REC);
+    Object.assign(f.tree, { capabilities: ["billing", "est"], standards: ["audit"] });
+    // у эпика 99 меток: epic и 98 решений прежних подзадач
+    for (let i = 0; i < 98; i++) f.labelIssue(45, `прежнее-${i}`);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--epic", "45", "--labels", "est,billing,audit"]);
+    expect(r.code).toBe(0);
+    expect(issueLabels(f, 561)).toEqual(["est", "billing", "audit"]);
+    expect(issueLabels(f, 45)).toHaveLength(100);
+    expect(issueLabels(f, 45).at(-1)).toBe("audit");
+    expect(r.out).toContain("+ epic #45: audit");
+    expect(r.out).toContain("○ epic #45: 3 new decision labels, room for 1 (GitHub puts at most 100 on an issue, it has 99) — alphabetically, as many as fit");
+    expect(r.out).toContain("○ epic #45: no room — not set: billing, est");
+  });
+
   // метка-разрез (описание «Разрез: …») — разрез задач проекта, а не метка решения, хотя имя у них одно (#343)
   it("метка-разрез с именем решения: `вид:имя` — ошибка до создания, по имени — обычная метка задачи, эпику не передаётся", () => {
     const f = new FakeGitHub(REC);
