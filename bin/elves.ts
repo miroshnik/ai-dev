@@ -59,7 +59,7 @@ import { fileURLToPath } from "node:url";
 
 import { packageManager, specRoots } from "../skills/github/scripts/github.ts";
 import locale from "../skills/github/scripts/locale.ts";
-import { COMPOSE_FILES, FORMER_PROXY, proxyName } from "../skills/task-env/scripts/task-env.ts";
+import { COMPOSE_FILES, formerProxyName, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const SOURCE = "miroshnik/elves";
@@ -1437,7 +1437,7 @@ function unreleased(clone: string): string[] {
  * start command, Docker unavailable — with the reason. No task-env skill or no docker on the machine — no line: without
  * Docker there are no task stacks, and a line in every session would be noise. Asks docker itself — the skill's
  * `proxyRunning` folds "docker not found" into its reason. Doesn't change the check's code — the proxy isn't the flow
- * falling behind. Not running, while the proxy of an earlier release under the flow's former name (`FORMER_PROXY` of
+ * falling behind. Not running, while the proxy of an earlier release under the flow's former name (`formerProxyName` of
  * the skill) is — it holds the port: the line names it, and `proxy up` of the skill replaces it.
  */
 function proxyLines(home: string): string[] {
@@ -1452,7 +1452,8 @@ function proxyLines(home: string): string[] {
   const running = (x: ReturnType<typeof ps>) => !x.error && x.status === 0 && x.stdout.split("\n").includes("running");
   if (running(r)) return [`  proxy *.localhost: running (${name})`];
   const up = "bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up";
-  if (name !== FORMER_PROXY && running(ps(FORMER_PROXY))) return [`  proxy *.localhost: running under the flow's former name (${FORMER_PROXY}) — replace it: ${up}`];
+  const former = formerProxyName();
+  if (running(ps(former))) return [`  proxy *.localhost: running under the flow's former name (${former}) — replace it: ${up}`];
   return [`  proxy *.localhost: not running — start: ${up}`];
 }
 
