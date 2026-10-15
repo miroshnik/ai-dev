@@ -81,7 +81,7 @@
   "describes": [
    "Окружение Bash агента не настроено — об этом говорят check -g и хук"
   ],
-  "name": "`check -g` называет, если окружение Bash агента не настроено"
+  "name": "`check -g` называет, если окружение Bash агента не настроено; метка хука прошлого релиза — тоже окружение"
  },
  {
   "path": "tests/capabilities/agent-shell/agent-shell.test.ts",
@@ -1241,6 +1241,13 @@
   "describes": [
    "Облачная сессия считается по событиям, выгруженным из claude.ai"
   ],
+  "name": "est берёт каталог личной конфигурации ~/.config/elves, пока его нет — прежний ~/.config/ai-dev; ELVES_CONFIG_DIR, иначе прежняя AI_DEV_CONFIG_DIR"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "Облачная сессия считается по событиям, выгруженным из claude.ai"
+  ],
   "name": "задание субагенту с номером задачи и номером эпика привязывает его записи к задаче"
  },
  {
@@ -2200,7 +2207,7 @@
   "describes": [
    "check показывает каждое расхождение с каноном отдельным пунктом"
   ],
-  "name": "проект ai-dev как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются"
+  "name": "проект Elves как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -2310,30 +2317,44 @@
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+   "Канон проекта — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "project fix в проекте на en создаёт статусы Backlog, In progress, Done"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+   "Канон проекта — на языке проекта из .agents/elves.json чекаута"
   ],
-  "name": "без манифеста — язык en: проект ai-dev с русской доской не по канону"
+  "name": "без манифеста — язык en: проект Elves с русской доской не по канону"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+   "Канон проекта — на языке проекта из .agents/elves.json чекаута"
+  ],
+  "name": "до update язык читается из прежнего манифеста .agents/ai-dev.json, а когда есть и .agents/elves.json — из нового"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Канон проекта — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "доска на русском, а язык проекта en — check ❌ по представлениям, Status и полям; fix --confirm переименовывает с теми же id, задачи сохраняют статусы"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
   "describes": [
-   "Канон проекта — на языке проекта из .agents/ai-dev.json чекаута"
+   "Канон проекта — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "проект без поля language в манифесте работает с русскими названиями, как раньше"
+ },
+ {
+  "path": "tests/capabilities/github-project/github-project.test.ts",
+  "describes": [
+   "Мерж в основную ветку — только с зелёными обязательными чеками"
+  ],
+  "name": "project check узнаёт ruleset ai-dev своим, project fix переименовывает его в elves"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -2347,7 +2368,7 @@
   "describes": [
    "Мерж в основную ветку — только с зелёными обязательными чеками"
   ],
-  "name": "правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, без strict, обязательные — зелёные на всех последних влитых PR, обход — admin"
+  "name": "правила нет — ❌; fix ставит ruleset «elves»: основная ветка, без strict, обязательные — зелёные на всех последних влитых PR, обход — admin"
  },
  {
   "path": "tests/capabilities/github-project/github-project.test.ts",
@@ -2981,7 +3002,7 @@
   "describes": [
    "task close убирает влитое"
   ],
-  "name": "task close из чекаута репозитория с тем же префиксом имени (ai-dev-tools при ai-dev) — не чекаут задачи: ни стеки, ни ветки не трогаются"
+  "name": "task close из чекаута репозитория с тем же префиксом имени (elves-tools при elves) — не чекаут задачи: ни стеки, ни ветки не трогаются"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3002,7 +3023,7 @@
   "describes": [
    "task close убирает влитое"
   ],
-  "name": "регистр owner/repo в origin не важен: из чекаута Miroshnik/AI-Dev task close убирает ветку и снимает стеки задачи"
+  "name": "регистр owner/repo в origin не важен: из чекаута Miroshnik/Elves task close убирает ветку и снимает стеки задачи"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3703,6 +3724,20 @@
   "describes": [
    "task status берёт в работу одну задачу на сессию"
   ],
+  "name": "каталог конфигурации задаёт ELVES_CONFIG_DIR; прежняя AI_DEV_CONFIG_DIR из профиля владельца — запасная"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
+  "name": "каталог конфигурации — ~/.config/elves; пока его нет, а прежний ~/.config/ai-dev есть, — прежний: машина до update -g"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status берёт в работу одну задачу на сессию"
+  ],
   "name": "каталог конфигурации — чекаут git: закрепления в него не коммитятся — sessions/ закрыт своим .gitignore"
  },
  {
@@ -3806,70 +3841,70 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "доска на русском, а скрипт позван из каталога без манифеста (en) — задача ведётся на языке доски"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "задание субагенту в проекте на en начинается с «Task #N (epic #M)» — по нему est привязывает работу к задаче"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "манифест без поля language — каркас на русском, как раньше"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "проект на en: task answer пишет ответ «**Answer:**», est не считает его в размер описания"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "проект на en: task new пишет раздел ## Questions, est его читает"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "проект на en: комментарий о PR, с которым GitHub не связал задачу, — по-английски"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "проект на en: правки скрипта в комментарии к эпику — по-английски"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "тело дано — пишется как есть, без каркаса"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "тип и статус — название любого языка словаря: --type Epic и task status Done в проекте на русском"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
-   "Задачи — на языке проекта из .agents/ai-dev.json чекаута"
+   "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "эпик без --body — каркас только с разделом вопросов: эпик без кода, сценариев у него нет"
  },
@@ -3913,7 +3948,7 @@
   "describes": [
    "В проект — копия, которую видят облачная сессия и CI"
   ],
-  "name": "в .agents/ai-dev.json — SHA Elves, из которого поставлено: у клона — его HEAD"
+  "name": "в .agents/elves.json — SHA Elves, из которого поставлено: у клона — его HEAD"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -3976,21 +4011,21 @@
   "describes": [
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
-  "name": "install -g настройку не спрашивает и не хранит — в ~/.agents/ai-dev.json поля auto нет"
+  "name": "install -g настройку не спрашивает и не хранит — в ~/.agents/elves.json поля auto нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
-  "name": "без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json auto: false"
+  "name": "без терминала и без флага вопроса нет — у новой установки в .agents/elves.json auto: false"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
-  "name": "в клоне Elves install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее"
+  "name": "в клоне Elves install флоу не ставит — пишет в .agents/elves.json только auto и language: с флагом — его значение, без флага и терминала — прежнее"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4032,14 +4067,14 @@
   "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
-  "name": "--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/ai-dev.json"
+  "name": "--link из клона — симлинки только на skills/ клона, правка в клоне видна сразу; путь клона — в ~/.agents/elves.json"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "На машину (-g) — только скиллы и хук, правила грузятся из проекта"
   ],
-  "name": "AI_DEV_PRIVATE — ~/.config/ai-dev становится симлинком на личную конфигурацию"
+  "name": "ELVES_PRIVATE — ~/.config/elves становится симлинком на личную конфигурацию"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4165,6 +4200,13 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
   ],
+  "name": "turbo.json пропускает переменные очереди только под прежними именами флоу — install и check называют их и строку с новыми"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+  ],
   "name": "в проекте на Yarn 2+ команда остаётся строкой у slot.ts: shell Yarn не подключает slot.sh"
  },
  {
@@ -4256,7 +4298,7 @@
   "describes": [
    "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
   ],
-  "name": "шаблон CLAUDE.md в .gitignore проекта — install дописывает в конец .gitignore блок ai-dev с исключением: копия claude/CLAUDE.md не игнорируется, свои строки .gitignore на месте, повторная установка блок не дублирует"
+  "name": "шаблон CLAUDE.md в .gitignore проекта — install дописывает в конец .gitignore блок Elves с исключением: копия claude/CLAUDE.md не игнорируется, свои строки .gitignore на месте, повторная установка блок не дублирует"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4284,14 +4326,14 @@
   "describes": [
    "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
   ],
-  "name": "install -g язык не спрашивает и не хранит — в ~/.agents/ai-dev.json поля language нет"
+  "name": "install -g язык не спрашивает и не хранит — в ~/.agents/elves.json поля language нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "Язык работы агента — настройка проекта: по умолчанию en, у установки прошлой версии — ru"
   ],
-  "name": "без терминала и без флага вопроса нет — у новой установки в .agents/ai-dev.json language: en"
+  "name": "без терминала и без флага вопроса нет — у новой установки в .agents/elves.json language: en"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4410,7 +4452,7 @@
   "describes": [
    "Команда в слоте — как без него, с долей ядер для раннера"
   ],
-  "name": "команда получает четверть ядер в AI_DEV_SLOT_CPUS"
+  "name": "команда получает четверть ядер в ELVES_SLOT_CPUS"
  },
  {
   "path": "tests/capabilities/slot/slot.test.ts",
@@ -4425,6 +4467,13 @@
    "Песочница агента не роняет очередь"
   ],
   "name": "очереди нет — одна строка предупреждения, команда идёт без неё"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Песочница агента не роняет очередь"
+  ],
+  "name": "очередь видит билеты slot прошлого релиза в ai-dev/slots временного каталога"
  },
  {
   "path": "tests/capabilities/slot/slot.test.ts",
@@ -4460,6 +4509,13 @@
    "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
   ],
   "name": "slot не запустился — скрипт падает с его кодом, команда не идёт"
+ },
+ {
+  "path": "tests/capabilities/slot/slot.test.ts",
+  "describes": [
+   "Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта"
+  ],
+  "name": "slot экспортирует ELVES_SLOT, ELVES_SLOT_CPUS и AI_DEV_SLOT, AI_DEV_SLOT_CPUS; вложенный вызов только с AI_DEV_SLOT своего слота не ждёт"
  },
  {
   "path": "tests/capabilities/slot/slot.test.ts",
@@ -7147,6 +7203,20 @@
  {
   "path": "tests/capabilities/task-env/task-env.slow.test.ts",
   "describes": [
+   "Переход с прокси до переименования: `proxy up` занимает его место, стеки до переименования и новые открываются через новый прокси"
+  ],
+  "name": "`proxy up` убирает прежний прокси, который держит порт, а его сеть оставляет: новый прокси на том же порту, в своей сети и в сети прежнего"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Переход с прокси до переименования: `proxy up` занимает его место, стеки до переименования и новые открываются через новый прокси"
+  ],
+  "name": "стек до переименования (без метки сети) и новый (с меткой) открываются через новый прокси — каждый раз, при каждой пересборке маршрутов"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
    "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
   ],
   "name": "API прокси называет хосты маршрутов по адресу `<имя прокси>.localhost` на его порту: контейнер стартовал — его хост есть, остановился — нет"
@@ -7178,6 +7248,13 @@
    "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
   ],
   "name": "остановленный контейнер пропадает из маршрутов"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.slow.test.ts",
+  "describes": [
+   "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
+  ],
+  "name": "сети прежнего прокси на машине нет — прокси только в своей сети, сеть прежнего не создаётся"
  },
  {
   "path": "tests/capabilities/task-env/task-env.slow.test.ts",
@@ -7303,7 +7380,7 @@
   "describes": [
    "check -g называет прокси на машине: работает или не запущен — с командой запуска; код check прокси не меняет"
   ],
-  "name": "ищет тот же проект Compose, что поднимает скилл: имя — из его compose-файла, AI_DEV_PROXY его меняет"
+  "name": "ищет тот же проект Compose, что поднимает скилл: имя — из его скрипта, ELVES_PROXY его меняет"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -7346,6 +7423,13 @@
    "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
   ],
   "name": "сервис в profiles и правка из compose.override.yaml проверяются наравне с остальными"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "task-env check называет каждое нарушение правил изоляции compose-файла строкой ❌ с правилом и сервисом"
+  ],
+  "name": "сеть прокси под прежним именем ai-dev-proxy — строка ❌ называет прежнее имя с правкой: убрать сеть, `task-env up` добавляет сеть прокси сам; код 1"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -7403,7 +7487,7 @@
   "describes": [
    "Адреса задачи и маршруты прокси — для дашборда, без сокета Docker"
   ],
-  "name": "значения по умолчанию имени и порта прокси — только в скрипте: compose-файл без них не собирается, `proxy up` передаёт их сам"
+  "name": "значения по умолчанию имени, порта и сети провайдера прокси — только в скрипте: compose-файл без них не собирается, `proxy up` передаёт их сам"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -7418,6 +7502,13 @@
    "Имя проекта стеков и адресов — из репозитория, а не из каталога"
   ],
   "name": "имя проекта — из репозитория, а не из каталога worktree"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Настройки проекта — `.agents/elves.json`; установка до `update` — `.agents/ai-dev.json`"
+  ],
+  "name": "`env.http` — из `.agents/elves.json`; пока его нет — из `.agents/ai-dev.json`; сообщение об ошибке называет прочитанный файл"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -7446,6 +7537,27 @@
    "Проверить нечего или нечем — проверка молчит или говорит «не проверено», а не ошибку"
   ],
   "name": "проект без compose-файла — код 0, ни строки ❌ и ○, docker не нужен"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Прокси после переименования — `elves-proxy`; прежние имя, порт и настройки читаются один релиз"
+  ],
+  "name": "имя прокси — `elves-proxy`, ELVES_PROXY его меняет; порт — ELVES_PROXY_PORT, без неё — прежняя AI_DEV_PROXY_PORT из профиля, без обеих — 80"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Прокси после переименования — `elves-proxy`; прежние имя, порт и настройки читаются один релиз"
+  ],
+  "name": "новый прокси не создался — прежний остаётся на месте: его контейнер не удалён, код 2"
+ },
+ {
+  "path": "tests/capabilities/task-env/task-env.test.ts",
+  "describes": [
+   "Прокси после переименования — `elves-proxy`; прежние имя, порт и настройки читаются один релиз"
+  ],
+  "name": "прежний прокси — `ai-dev-proxy` только у прокси по умолчанию; у прокси с другим именем — `<имя>-former`: тестовый прокси не трогает прокси машины"
  },
  {
   "path": "tests/capabilities/task-env/task-env.test.ts",
@@ -7855,7 +7967,7 @@
   "describes": [
    "Копия в проекте сверяется со свежим Elves и обновляется им"
   ],
-  "name": "`install` и `update` сохраняют `env` в `.agents/ai-dev.json`"
+  "name": "`install` и `update` сохраняют `env` в `.agents/elves.json`"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7890,7 +8002,7 @@
   "describes": [
    "Копия в проекте сверяется со свежим Elves и обновляется им"
   ],
-  "name": "update — копия как у свежего пакета, его SHA в .agents/ai-dev.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально"
+  "name": "update — копия как у свежего пакета, его SHA в .agents/elves.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7988,7 +8100,7 @@
   "describes": [
    "Копия следует за релизами Elves, а не за main"
   ],
-  "name": "install ставит последний релиз, а не голову main: его файлы, тег и SHA в .agents/ai-dev.json"
+  "name": "install ставит последний релиз, а не голову main: его файлы, тег и SHA в .agents/elves.json"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -8037,6 +8149,13 @@
   "describes": [
    "Копия следует за релизами Elves, а не за main"
   ],
+  "name": "пускатель и релиз по разные стороны переименования флоу: тег релиза доходит и под прежним именем AI_DEV_RELEASE"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Копия следует за релизами Elves, а не за main"
+  ],
   "name": "релизов ещё нет — пускатель перезапускается по SHA головы main: её файлы и SHA, без тега"
  },
  {
@@ -8052,6 +8171,62 @@
    "Копия следует за релизами Elves, а не за main"
   ],
   "name": "хук: последний релиз не узнать — код 0, в выводе — проверка недоступна"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "check -g называет переменные пользователя под прежним именем флоу — с новым именем; код не меняется"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "update -g переносит ~/.config/ai-dev в ~/.config/elves"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "update заменяет блоки ai-dev в AGENTS.md и .gitignore блоками elves — второго блока нет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "update переносит .agents/ai-dev.json и правила ai-dev в новые имена, содержимое не теряется"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "~/.config/ai-dev и ~/.config/elves оба есть — update -g их не сливает: предупреждение, что сделать; check -g — строка !, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "~/.config/ai-dev — симлинк на личный чекаут: update -g ставит тот же симлинк ~/.config/elves, переменная — прежняя или новая"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "прокси прошлого релиза работает под прежним именем — check -g называет его и команду, которая его заменит"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
+  ],
+  "name": "скрипты читают старый конфиг, пока его не перенёс update"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -9290,15 +9465,23 @@
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev",
    "примеры"
   ],
-  "name": "комментарий и текст справки (~/.config/ai-dev, $AI_DEV_CONFIG_DIR) — не обращение к каталогу"
+  "name": "без прежнего каталога машина до update -g потеряла бы конфигурацию — нарушение"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev",
+   "примеры"
+  ],
+  "name": "комментарий и текст справки (~/.config/elves, $ELVES_CONFIG_DIR) — не обращение к каталогу"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev",
    "примеры"
   ],
   "name": "правило есть, а рядом второй путь к каталогу — нарушение со строкой"
@@ -9306,7 +9489,7 @@
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev",
    "примеры"
   ],
   "name": "правило с окружением и домашним каталогом под любым именем — чисто"
@@ -9314,7 +9497,7 @@
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev",
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev",
    "примеры"
   ],
   "name": "пустая переменная — тоже каталог по умолчанию: `??` вместо `||` — нарушение"
@@ -9322,56 +9505,63 @@
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
-  "name": "skills/est/scripts/est.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  "name": "skills/est/scripts/est.ts берёт каталог из ELVES_CONFIG_DIR, иначе ~/.config/elves, до переноса — ~/.config/ai-dev"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
-  "name": "skills/github/scripts/github.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  "name": "skills/github/scripts/github.ts берёт каталог из ELVES_CONFIG_DIR, иначе ~/.config/elves, до переноса — ~/.config/ai-dev"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
-  "name": "skills/slot/scripts/slot.ts берёт каталог из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+  "name": "skills/slot/scripts/slot.ts берёт каталог из ELVES_CONFIG_DIR, иначе ~/.config/elves, до переноса — ~/.config/ai-dev"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
   "name": "вне охвата: bin/elves.ts"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
+  ],
+  "name": "нарушитель не проходит: скрипт с прежним выражением — не видит ни новую переменную, ни новый каталог"
+ },
+ {
+  "path": "tests/standards/config-dir/config-dir.test.ts",
+  "describes": [
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
   "name": "нарушитель не проходит: скрипт со своим путём каталога личной конфигурации"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
-  "name": "нарушитель не проходит: скрипт читает AI_DEV_CONFIG_DIR, а каталог по умолчанию у него свой"
+  "name": "нарушитель не проходит: скрипт читает ELVES_CONFIG_DIR, а каталог по умолчанию у него свой"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
-  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, bin/elves.ts"
+  "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» находит skills/est/scripts/est.ts, skills/github/scripts/github.ts, skills/slot/scripts/slot.ts, bin/elves.ts"
  },
  {
   "path": "tests/standards/config-dir/config-dir.test.ts",
   "describes": [
-   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из AI_DEV_CONFIG_DIR, иначе ~/.config/ai-dev"
+   "Каждый скрипт, которому нужен каталог личной конфигурации, берёт его из ELVES_CONFIG_DIR, иначе ~/.config/elves, а до переноса — из прежнего ~/.config/ai-dev"
   ],
   "name": "реестр «скрипты скиллов и установщик, которым нужен каталог личной конфигурации» не пуст"
  },
@@ -9573,7 +9763,7 @@
   "describes": [
    "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт AI_DEV_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют"
+  "name": "скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт ELVES_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -15581,6 +15771,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/task-env/SKILL.md: skills/task-env/reference.md, «The proxy before the rename» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/task-env/SKILL.md: skills/task-env/reference.md, «The proxy» — есть такой раздел"
  },
  {
@@ -15610,6 +15807,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/task-env/reference.md: skills/task-env/reference.md, «Labels of a task stack's service» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/task-env/reference.md: skills/task-env/reference.md, «The proxy before the rename» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",

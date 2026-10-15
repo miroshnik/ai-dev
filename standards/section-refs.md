@@ -36,7 +36,7 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 139 тестов</summary>
+<details><summary>✅ 141 тест</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/elves.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
@@ -167,11 +167,13 @@
 - ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Override and compose files» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Stacks of closed tasks» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «Taking a task's stacks down» — есть такой раздел
+- ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «The proxy before the rename» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «The proxy» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/reference.md, «What the compose file check reads» — есть такой раздел
 - ✅ skills/task-env/reference.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ skills/task-env/reference.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
 - ✅ skills/task-env/reference.md: skills/task-env/reference.md, «Labels of a task stack's service» — есть такой раздел
+- ✅ skills/task-env/reference.md: skills/task-env/reference.md, «The proxy before the rename» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
 - ✅ tests/capabilities/task-env/task-env.md: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
