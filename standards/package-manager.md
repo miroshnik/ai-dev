@@ -48,7 +48,7 @@
 
 <details><summary>✅ 1 тест</summary>
 
-- ✅ premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через slot.sh, check не предлагает bun test
+- ✅ premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через шим slot.sh, check не предлагает bun test
 
 </details>
 

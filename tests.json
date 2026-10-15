@@ -4030,79 +4030,72 @@
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
+  ],
+  "name": "install в проект без флоу ставит devDependency пакета, .agents/elves.json, шим slot и блок AGENTS.md — без копии флоу"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
   "name": "без AGENTS.md в проекте — файл создаётся с одним блоком"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
+  ],
+  "name": "без lockfile — только версия в package.json и команда установки зависимостей; lockfile не появляется"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
   "name": "блок прошлой версии по-русски в AGENTS.md проекта установка заменяет английским, а не ставит второй"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "в .agents/elves.json — SHA Elves, из которого поставлено: у клона — его HEAD"
+  "name": "в AGENTS.md проекта — блок со ссылкой на канон машины: свой текст проекта на месте, повторная установка блок не дублирует"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
-  ],
-  "name": "в AGENTS.md проекта — блок со ссылкой на правила: свой текст проекта на месте, повторная установка блок не дублирует"
- },
- {
-  "path": "tests/capabilities/install/install.test.ts",
-  "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
-  ],
-  "name": "из пакета bunx — SHA из спецификатора в package.json каталога bunx"
- },
- {
-  "path": "tests/capabilities/install/install.test.ts",
-  "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
-  ],
-  "name": "из пакета под scope @miroshnik — SHA из спецификатора под полным именем пакета"
- },
- {
-  "path": "tests/capabilities/install/install.test.ts",
-  "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
   "name": "корень установки — корень git-репозитория, даже при запуске из подкаталога"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "правила, справочники и все скиллы — копией в .agents, Claude Code получает их симлинками из .claude"
+  "name": "менеджер пакетов не поставил пакет (нет сети) — версия в package.json, предупреждение с командой, код 0"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "скилл, которого больше нет в Elves, при переустановке удаляется; свой скилл проекта не трогается"
+  "name": "проект без package.json — без devDependency: манифест, шим и блок AGENTS.md"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "через bunx из пакета Elves: bin из node_modules под Bun ставит правила и скиллы"
+  "name": "установщик не релиз (клон) — devDependency не трогает: предупреждение с причиной"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "В проект — копия, которую видят облачная сессия и CI"
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "чужой каталог с именем скилла Elves не перезаписывается — предупреждение"
+  "name": "через bunx из пакета Elves: bin из node_modules под Bun ставит тонкий флоу"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4214,7 +4207,28 @@
   "describes": [
    "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
   ],
+  "name": "в ~/.agents/elves.json — SHA Elves, из которого поставлено: у клона — его HEAD"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
+  ],
   "name": "в клоне elves с --link канон не грузится дважды"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
+  ],
+  "name": "из пакета bunx — SHA из спецификатора в package.json каталога bunx"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
+  ],
+  "name": "из пакета под scope @miroshnik — SHA из спецификатора под полным именем пакета"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4249,6 +4263,13 @@
   "describes": [
    "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
   ],
+  "name": "скилл, которого больше нет в Elves, при переустановке удаляется; свой скилл на машине не трогается"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
+  ],
   "name": "старый симлинк install.sh ~/.claude/CLAUDE.md → claude/CLAUDE.md убирается — правила не грузятся дважды"
  },
  {
@@ -4257,6 +4278,13 @@
    "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
   ],
   "name": "хук прошлой версии с запасным текстом по-русски install -g заменяет, а не ставит второй"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
+  ],
+  "name": "чужой каталог с именем скилла Elves не перезаписывается — предупреждение"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4270,7 +4298,7 @@
   "describes": [
    "Неверный вызов — код 2 с объяснением"
   ],
-  "name": "--link без -g — код 2: в проект коммитится копия, не ссылка на локальный клон"
+  "name": "--link без -g — код 2: проект держит версию пакета, а не ссылку на локальный клон"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4284,154 +4312,161 @@
   "describes": [
    "Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку"
   ],
-  "name": "update: нет права писать в .claude/skills — код 2, та же строка с командой update"
+  "name": "update -g: нет права писать в ~/.claude/skills — код 2, та же строка с командой update -g"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку"
   ],
-  "name": "нет права писать в .claude/skills — install: код 2, строка с путём и командой для своего терминала, без стека"
+  "name": "нет права писать в ~/.claude/skills — install -g: код 2, строка с путём и командой для своего терминала, без стека"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку"
   ],
-  "name": "повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an Elves skill» нет"
+  "name": "повтор после отказа на ~/.claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an Elves skill» нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку"
   ],
-  "name": "симлинк, который уже ведёт куда надо, установка не пересоздаёт: .claude/skills без права записи не мешает повтору без нового скилла"
+  "name": "симлинк, который уже ведёт куда надо, установка не пересоздаёт: ~/.claude/skills без права записи не мешает повтору без нового скилла"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "check называет обёртку прошлой установки несоответствием, update переписывает её"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "check называет скрипт без slot несоответствием, update оборачивает и зовёт закоммитить package.json"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "turbo.json пропускает переменные очереди только под прежними именами флоу — install и check называют их и строку с новыми"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
-  "name": "в проекте на Yarn 2+ команда остаётся строкой у slot.ts: shell Yarn не подключает slot.sh"
+  "name": "в проекте на Yarn 2+ команда остаётся строкой у elves slot: shell Yarn не подключает шим"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "команда под slot не видит ключей env-файлов рабочего каталога"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "обёрнутый скрипт идёт как прежде: кавычки команды на месте, аргументы — в её конце"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
-  "name": "обёртка прошлой установки — команда строкой у slot.ts через node или bun — переписывается, команда та же"
+  "name": "обёртка прошлой установки — slot.sh копии или команда строкой у slot.ts через node или bun — переписывается, команда та же"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "повторная установка не оборачивает дважды, отступ и конец package.json — как были"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "после установки флоу knip видит команды обёрнутых скриптов: тесты bun test и preload — входы, бинарник команды — использованная зависимость"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "предупреждения нет, если переменные очереди доходят до задач turbo — globalPassThroughEnv или globalEnv с масками, envMode loose, --env-mode=loose — или turbo зовёт скрипт вне очереди"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "скрипт в slot зовёт turbo без проброса переменных очереди — install и check предупреждают готовой строкой для turbo.json, отставанием это не считается"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot"
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
+  ],
+  "name": "скрипты package.json тонкого проекта идут через шим slot: с elves на PATH — в слоте машины, без elves — как есть, сбой elves роняет скрипт с его кодом"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
+  ],
+  "name": "скрипты копии флоу — bun .agents/skills/spec/scripts/<скрипт>.ts — переписываются на elves <скрипт>, репортёр knip — на файл пакета"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
   "name": "установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
-  "name": "блок исключений прошлой версии с шапкой по-русски установка заменяет английским, а не ставит второй"
+  "name": ".agents/ в .gitignore проекта — install дописывает в конец .gitignore блок Elves: манифест и шим не игнорируются, своё в .agents — как прежде, свои строки на месте, повтор блок не дублирует"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
-  "name": "игнорируются .agents/ и vendor/ — после install ни один файл флоу не игнорируется, свои vendor/ проекта и прочее в .agents игнорируются"
+  "name": "блок исключений копии прошлой версии с шапкой по-русски установка убирает — файлам тонкого проекта исключения не нужны"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
-  ],
-  "name": "каталог .claude/ в .gitignore проекта — исключения снимают его только с файлов флоу: правила и скиллы не игнорируются, свои файлы в .claude по-прежнему игнорируются"
- },
- {
-  "path": "tests/capabilities/install/install.test.ts",
-  "describes": [
-   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
   "name": "ничего не игнорируется — .gitignore не создаётся и не меняется; ставший ненужным блок убирается"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
-  "name": "шаблон CLAUDE.md в .gitignore проекта — install дописывает в конец .gitignore блок Elves с исключением: копия claude/CLAUDE.md не игнорируется, свои строки .gitignore на месте, повторная установка блок не дублирует"
+  "name": "шаблон файла вне проекта (core.excludesFile) снимается исключением в .gitignore проекта; каталог, исключённый вне проекта, — ❌ с правилом, исключений на него в .gitignore проекта нет"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
-   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии"
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
-  "name": "шаблон файла вне проекта (core.excludesFile) снимается исключением в .gitignore проекта; каталог, исключённый вне проекта, — ❌ с правилом, исключений на него в .gitignore проекта нет"
+  "name": "шаблоны CLAUDE.md и .claude/ тонкому проекту не мешают — исключений нет, .gitignore не меняется"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -7921,7 +7956,7 @@
   "describes": [
    "update называет изменения каждого пропущенного релиза"
   ],
-  "name": "update копии перечисляет каждый пропущенный релиз от нового к старому: тег, ссылка и пункты — те же, что в заметках релиза"
+  "name": "update проекта перечисляет каждый релиз после его версии пакета от нового к старому: тег, ссылка и пункты — те же, что в заметках релиза"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -7935,14 +7970,14 @@
   "describes": [
    "update называет изменения каждого пропущенного релиза"
   ],
-  "name": "релизов ещё нет — список коммитов флоу от стоявшего SHA до новой головы"
+  "name": "релизов ещё нет — update -g называет коммиты флоу от стоявшего SHA до новой головы"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
    "update называет изменения каждого пропущенного релиза"
   ],
-  "name": "список не узнать (в манифесте нет SHA, стоявшего SHA нет в истории) — update всё равно завершается кодом 0, строка с причиной и ссылкой на релизы"
+  "name": "список не узнать (версии пакета нет среди релизов, версия — не релиза, на машине нет SHA) — update всё равно завершается кодом 0, строка с причиной и ссылкой на релизы"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -8079,7 +8114,84 @@
   "describes": [
    "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает"
   ],
-  "name": "хук: флоу проекта отстал — рекомендовать обновление и спросить, ставить ли его задачу в очередь, в сессии задачи не обновлять; отстала только машина — update -g в сессии"
+  "name": "хук: в проекте копия флоу — рекомендовать переезд и спросить, ставить ли его задачу в очередь; тонкий проект отстал — update в задаче сессии; отстала только машина — update -g в сессии"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "install ставит проекту версию пакета последнего релиза, а не головы main"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "main ушёл вперёд, нового релиза нет — актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "update ставит версию последнего релиза, а не головы main; подсказка коммита — с тегом; после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "вышел релиз новее установленного — отстаёт, код 1: стоящий и свежий тег, версия пакета; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "машина копией (-g) — тоже по релизам: main ушёл вперёд — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "последний релиз не узнать (нет сети) — check: проверка недоступна, код 2; install и update — отказ, код 2; флоу не стоит — релиз не ищет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "последний релиз — по дате, затем по номеру патча; аннотированный тег — его коммит; чужие теги не в счёт"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "пускатель и релиз по разные стороны переименования флоу: тег релиза доходит и под прежним именем AI_DEV_RELEASE"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "релизов ещё нет — пускатель перезапускается по SHA головы main: её файлы и SHA, без тега; версию пакета проекту не ставит"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "устаревший пускатель не отвергает флаг, который знает релиз: перезапуск — до проверки флагов"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Версия пакета проекта и копия на машине следуют за релизами Elves, а не за main"
+  ],
+  "name": "хук: последний релиз не узнать — код 0, в выводе — проверка недоступна"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -8196,104 +8308,6 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "Elves ушёл вперёд — отстаёт, код 1: стоит и свежий SHA, что изменится, команда обновления; check ничего не меняет"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "`install` и `update` сохраняют `env` в `.agents/elves.json`"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "check называет режим проекта: auto true — «tasks: entirely by itself», иначе — «tasks: with permission»; поле, правленное руками, и установка без поля отставанием не считаются"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "check называет язык проекта; установка прошлой версии без поля — ru, отставанием не считается"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "update настройку сохраняет: auto true остаётся true, у установки прошлой версии без поля — false"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "update язык сохраняет: language ru остаётся ru, у установки прошлой версии без поля — ru"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "update — копия как у свежего пакета, его SHA в .agents/elves.json, подсказка коммита chore(agents) на языке проекта; после него check — актуально"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "блоки AGENTS.md и .gitignore со старой командой npx — отстаёт; update переписывает оба на bunx; после него check — актуально"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "в клоне Elves check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "копия проекта до `--branch-type`: команда задачи обновления из `check` — скриптом github, который знает её флаги, а не отставшей копией"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "поставлено из того же Elves — актуально, код 0"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "проверка проекта с отставшим флоу рекомендует обновление и не велит обновлять в сессии задачи"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "старая установка без SHA — check сравнивает содержимое: совпадает — актуально, нет — отстаёт «without SHA»; update записывает SHA"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия в проекте сверяется со свежим Elves и обновляется им"
-  ],
-  "name": "флоу в проекте не стоит — «not installed», код 0, ничего не создаётся"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
    "Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart"
   ],
   "name": "Elves ушёл вперёд (новое правило, новый скилл) — check -g называет отставание канона и скиллов, код 1, ничего не меняет; update -g доводит канон, скиллы и хук машины до актуального"
@@ -8343,83 +8357,6 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "install ставит последний релиз, а не голову main: его файлы, тег и SHA в .agents/elves.json"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "main ушёл вперёд, нового релиза нет — актуально, код 0"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "update ставит последний релиз, а не голову main; подсказка коммита — с тегом; после него check — актуально"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "вышел релиз новее установленного — отстаёт, код 1: стоящий и свежий тег; check ничего не меняет"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "машина копией (-g) — тоже по релизам: main ушёл вперёд — актуально"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "последний релиз не узнать (нет сети) — check: проверка недоступна, код 2; install и update — отказ, код 2; флоу не стоит — релиз не ищет"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "последний релиз — по дате, затем по номеру патча; аннотированный тег — его коммит; чужие теги не в счёт"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "пускатель и релиз по разные стороны переименования флоу: тег релиза доходит и под прежним именем AI_DEV_RELEASE"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "релизов ещё нет — пускатель перезапускается по SHA головы main: её файлы и SHA, без тега"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "устаревший пускатель не отвергает флаг, который знает релиз: перезапуск — до проверки флагов"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
-   "Копия следует за релизами Elves, а не за main"
-  ],
-  "name": "хук: последний релиз не узнать — код 0, в выводе — проверка недоступна"
- },
- {
-  "path": "tests/capabilities/update/update.test.ts",
-  "describes": [
    "Пакет из npm — сам релиз: install -g ставит его версию, check -g и update -g — по последнему релизу пакета"
   ],
   "name": "check -g называет отставание машины от последнего релиза пакета"
@@ -8464,7 +8401,7 @@
   "describes": [
    "Прежние имена флоу (ai-dev): update переносит их в новые, скрипты до него читают прежние, check называет оставшиеся"
   ],
-  "name": "update переносит .agents/ai-dev.json и правила ai-dev в новые имена, содержимое не теряется"
+  "name": "update переводит установку под прежним именем на тонкий проект: режим, язык и env из .agents/ai-dev.json — в .agents/elves.json, канон и правила ai-dev уходят"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -8497,16 +8434,121 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением"
+   "Проект с копией флоу переезжает на тонкий проект"
   ],
-  "name": "check: код 1, ❌ с путём и правилом, команда update — в задаче обновления, как и при отставании; check ничего не меняет"
+  "name": "check проекта с копией флоу печатает задачу переезда на тонкий проект — своей задачей, одной на проект; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Проект с копией флоу переезжает на тонкий проект"
+  ],
+  "name": "update в проекте с копией переводит его на тонкий: копия, симлинки и исключения .gitignore удалены, импорты harness и пути CI переписаны"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Проект с копией флоу переезжает на тонкий проект"
+  ],
+  "name": "копия без списка скиллов в манифесте — уходят скиллы, которые есть у Elves; свой скилл проекта остаётся"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Проект с копией флоу переезжает на тонкий проект"
+  ],
+  "name": "копия проекта до `--branch-type`: команда задачи переезда из `check` — скриптом github, который знает её флаги, а не копией"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "`install` и `update` сохраняют `env` в `.agents/elves.json`"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "check называет режим проекта: auto true — «tasks: entirely by itself», иначе — «tasks: with permission»; поле, правленное руками, и установка без поля отставанием не считаются"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "check называет язык проекта; установка прошлой версии без поля — ru, отставанием не считается"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "check тонкого проекта называет отставание версии пакета и строку для текущей задачи; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "update в тонком проекте поднимает версию пакета в package.json и bun.lock — три строки; коммит — в задаче сессии; после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "update настройку сохраняет: auto true остаётся true, у установки прошлой версии без поля — false"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "update язык сохраняет: language ru остаётся ru, у установки прошлой версии без поля — ru"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "блоки AGENTS.md и .gitignore со старой командой npx — отстаёт; update переписывает оба на bunx; после него check — актуально"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "в клоне Elves check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "версия пакета проекта — как у релиза установщика: актуально, код 0"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "флоу в проекте не стоит — «not installed», код 0, ничего не создаётся"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
    "Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением"
   ],
-  "name": "update дописывает исключения, подсказка коммита включает .gitignore — её git add берёт копию и симлинки; после него check — актуально"
+  "name": "check: код 1, ❌ с путём и правилом, команда update — в задаче сессии; check ничего не меняет"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Файл флоу, который игнорирует git проекта, — несоответствие: check его называет, update снимает исключением"
+  ],
+  "name": "update дописывает исключения, подсказка коммита включает .gitignore и файлы флоу; после него check — актуально"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -15041,7 +15083,7 @@
   "describes": [
    "Менеджер пакетов у premerge, обёртки slot и раннера test:spec у check — ответ packageManager"
   ],
-  "name": "premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через slot.sh, check не предлагает bun test"
+  "name": "premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через шим slot.sh, check не предлагает bun test"
  },
  {
   "path": "tests/standards/package-manager/package-manager.test.ts",
