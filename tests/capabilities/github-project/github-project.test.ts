@@ -589,7 +589,7 @@ describe("Мерж в основную ветку — только с зелён
     return f;
   }
 
-  it("правила нет — ❌; fix ставит ruleset «ai-dev»: основная ветка, без strict, обязательные — зелёные на всех последних влитых PR, обход — admin", () => {
+  it("правила нет — ❌; fix ставит ruleset «elves»: основная ветка, без strict, обязательные — зелёные на всех последних влитых PR, обход — admin", () => {
     const f = bare();
     const r = check(f);
     expect(r.code).toBe(1);
@@ -601,7 +601,7 @@ describe("Мерж в основную ветку — только с зелён
     expect(byOp(f, "CreateRuleset")).toEqual([
       {
         sourceId: f.repo.id,
-        name: "ai-dev",
+        name: "elves",
         target: "BRANCH",
         enforcement: "ACTIVE",
         conditions: { refName: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
@@ -609,7 +609,7 @@ describe("Мерж в основную ветку — только с зелён
         bypassActors: [{ repositoryRoleDatabaseId: 5, bypassMode: "ALWAYS" }],
       },
     ]);
-    expect(x.out).toContain("+ create ruleset «ai-dev» on main: required «tests», bypass — admin");
+    expect(x.out).toContain("+ create ruleset «elves» on main: required «tests», bypass — admin");
     expect(marks(x.out).Merge).toBe("✅");
   });
 
@@ -647,12 +647,12 @@ describe("Мерж в основную ветку — только с зелён
     Object.assign(f.merge.rulesets[0]!, { enforcement: "DISABLED", strict: true, admin: false });
     const r = check(f);
     expect(marks(r.out).Merge).toBe("❌");
-    expect(r.out).toContain("· ruleset «ai-dev» — DISABLED, not in effect");
-    expect(r.out).toContain("· ruleset «ai-dev»: strict is on — GitHub won't merge a branch that fell behind");
-    expect(r.out).toContain("· ruleset «ai-dev»: admin can't bypass — no direct push to main");
+    expect(r.out).toContain("· ruleset «elves» — DISABLED, not in effect");
+    expect(r.out).toContain("· ruleset «elves»: strict is on — GitHub won't merge a branch that fell behind");
+    expect(r.out).toContain("· ruleset «elves»: admin can't bypass — no direct push to main");
     const x = fix(f);
     expect(ops(f)).toEqual(["UpdateRuleset"]);
-    expect(x.out).toContain("+ ruleset «ai-dev»: default branch, required «tests», bypass — admin");
+    expect(x.out).toContain("+ ruleset «elves»: default branch, required «tests», bypass — admin");
     expect(f.merge.rulesets[0]).toMatchObject({ enforcement: "ACTIVE", strict: false, admin: true, contexts: ["tests"] });
     expect(marks(check(f).out).Merge).toBe("✅");
     // ruleset, поставленный прежним fix: действует, с обходом, но со strict — единственная причина
@@ -660,10 +660,28 @@ describe("Мерж в основную ветку — только с зелён
     g.merge.rulesets[0]!.strict = true;
     const only = check(g);
     expect(only.code).toBe(1);
-    expect(only.out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · ruleset «ai-dev»: strict is on — GitHub won't merge a branch that fell behind"]);
+    expect(only.out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · ruleset «elves»: strict is on — GitHub won't merge a branch that fell behind"]);
     fix(g);
     expect(byOp(g, "UpdateRuleset").map((u) => u.rules[0].parameters.requiredStatusChecks.strictRequiredStatusChecksPolicy)).toEqual([false]);
     expect(check(g).code).toBe(0);
+  });
+
+  it("project check узнаёт ruleset ai-dev своим, project fix переименовывает его в elves", () => {
+    // репозиторий, настроенный fix до переименования флоу: свой ruleset — под прежним именем, в остальном по канону
+    const f = fake();
+    Object.assign(f.merge.rulesets[0]!, { id: "RRS_ai-dev", name: "ai-dev" });
+    const r = check(f);
+    expect(r.code).toBe(1);
+    expect(marks(r.out).Merge).toBe("❌");
+    expect(r.out.split("\n").filter((l) => l.startsWith("   · "))).toEqual(["   · ruleset «ai-dev» — the flow's former name: fix renames it to «elves»"]);
+    const x = fix(f);
+    expect(x.code).toBe(0);
+    // та же правка UpdateRuleset того же ruleset, а не второй рядом
+    expect(ops(f)).toEqual(["UpdateRuleset"]);
+    expect(byOp(f, "UpdateRuleset").map((u) => [u.repositoryRulesetId, u.name])).toEqual([["RRS_ai-dev", "elves"]]);
+    expect(x.out).toContain("+ ruleset «ai-dev» → «elves»: default branch, required «tests», bypass — admin");
+    expect(f.merge.rulesets.map((s) => [s.id, s.name])).toEqual([["RRS_ai-dev", "elves"]]);
+    expect(check(f).code).toBe(0);
   });
 
   it("у влитых PR нет общего зелёного чека — ➖: обязательным делать нечего", () => {

@@ -347,12 +347,14 @@ description is rewritten.
 10. Merging into the default branch — only with green required checks: an
     active branch rule (`Ref.rules` — a repository or organization ruleset —
     or classic protection) with a non-empty list of required checks. None —
-    `fix` sets the `ai-dev` ruleset: `~DEFAULT_BRANCH`, without strict (the
+    `fix` sets the `elves` ruleset: `~DEFAULT_BRANCH`, without strict (the
     rule doesn't require an up-to-date branch), required — the checks green on
     each of the last 10 merged PRs (by the latest run; skipped or neutral
     isn't green here), bypass — the admin role (the owner's direct
     push). Its own ruleset keeps being checked: disabled, with strict or
-    without bypass — fixed; a required check that the fresh head lacks (the
+    without bypass — fixed; under the flow's former name `ai-dev` (set by a
+    `fix` before the rename to Elves) — its own too, `fix` renames it to
+    `elves` with the same edit; a required check that the fresh head lacks (the
     last merged PR, an open PR with finished checks) leaves the list —
     otherwise a PR would wait for it forever; a new stable one is added.
     Someone else's rule with required checks — ✅, with strict or without: no

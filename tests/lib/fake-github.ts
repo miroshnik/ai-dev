@@ -58,18 +58,19 @@ export class FakeGitHub {
   /** Задача → её комментарии (TaskText), старые первыми. */
   comments: Record<number, { body: string; url: string }[]> = {};
   /**
-   * Основная ветка `main` (MergeRules) — как у ai-dev после fix: ruleset «ai-dev» без strict, с обязательным `tests`;
-   * у влитых PR `tests` зелёный, `spec-publish` пропущен. Чеки головы PR: имя → вывод чека или IN_PROGRESS.
+   * Основная ветка `main` (MergeRules) — как у Elves после fix: ruleset «elves» без strict, с обязательным `tests`;
+   * у влитых PR `tests` зелёный, `spec-publish` пропущен. Правила держит фейк, а не запись: она их не задаёт. Чеки
+   * головы PR: имя → вывод чека или IN_PROGRESS.
    * `org` — ruleset организации: действует на ветку, но в rulesets репозитория его нет. `upgrade` — приватный
    * репозиторий на Free: GraphQL отдаёт пустые правила, REST — 403. `methods` — разрешённые способы мержа PR, как у
-   * ai-dev после fix: только rebase; меняет их REST-запрос `PATCH repos/<репозиторий>`.
+   * Elves после fix: только rebase; меняет их REST-запрос `PATCH repos/<репозиторий>`.
    */
   merge = {
     private: false,
     upgrade: false,
     methods: { merge: false, squash: false, rebase: true },
     protection: null as { strict: boolean; contexts: string[] } | null,
-    rulesets: [{ id: "RRS_ai-dev", name: "ai-dev", org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: false, contexts: ["tests"], admin: true }],
+    rulesets: [{ id: "RRS_elves", name: "elves", org: false, enforcement: "ACTIVE", include: ["~DEFAULT_BRANCH"], strict: false, contexts: ["tests"], admin: true }],
     merged: Array.from({ length: 12 }, (_, i) => ({ number: 120 + i, checks: { tests: "SUCCESS", "spec-publish": "SKIPPED" } as Record<string, string> })),
     open: [] as { number: number; checks: Record<string, string> }[],
   };
