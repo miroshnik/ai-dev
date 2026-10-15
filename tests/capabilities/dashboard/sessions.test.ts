@@ -187,7 +187,7 @@ describe("Адреса сервисов задачи — ссылки из ма�
       "web.7.cart.localhost",
       // стек основного чекаута и API прокси — не адреса задачи
       "web.shop.localhost",
-      "ai-dev-proxy.localhost",
+      "elves-proxy.localhost",
     ];
     expect(one(7, hosts).addresses.map((a) => a.url)).toEqual(["http://web.7.shop.localhost"]);
     // проект в адресе — имя репозитория строчными буквами, цифрами и «-»

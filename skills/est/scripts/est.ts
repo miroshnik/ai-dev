@@ -349,9 +349,9 @@ const NETWORK_FAILURE = /dial tcp|i\/o timeout|timed out|TLS handshake|connectio
 /** The request didn't reach GitHub: the connection wasn't established. */
 const NOT_SENT = /dial tcp|TLS handshake|no such host|network is unreachable/i;
 
-/** Pauses before gh call retries on a network failure, ms: `AI_DEV_GH_RETRY_MS`, comma-separated, else 2, 5, 15 s. */
+/** Pauses before gh call retries on a network failure, ms: `ELVES_GH_RETRY_MS`, comma-separated, else 2, 5, 15 s. */
 function retryPauses(): number[] {
-  const env = process.env.AI_DEV_GH_RETRY_MS;
+  const env = process.env.ELVES_GH_RETRY_MS;
   return env === undefined ? [2000, 5000, 15000] : env.split(",").filter(Boolean).map(Number);
 }
 

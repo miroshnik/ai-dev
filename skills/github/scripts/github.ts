@@ -1604,7 +1604,7 @@ function pinTask(io: Io, slug: string, number: number, epic: number | null): voi
     }
   };
   mkdirSync(path.dirname(file), { recursive: true });
-  // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — pins aren't committed into it
+  // the configuration directory may be a personal git checkout (ELVES_PRIVATE) — pins aren't committed into it
   created(path.join(path.dirname(file), ".gitignore"), "*\n");
   if (created(file, pinLine(slug, number))) return;
   const now = pinnedTask(io)!;
@@ -2191,7 +2191,7 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
   const file = dispatcherFile(io);
   if (file) {
     mkdirSync(path.dirname(file), { recursive: true });
-    // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — markers aren't committed into it
+    // the configuration directory may be a personal git checkout (ELVES_PRIVATE) — markers aren't committed into it
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
     writeFileSync(file, `bun --no-env-file ${import.meta.path} task queue ${args ? `${args} ` : ""}--repo ${slug}\n`);
   } else io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — not marked as a dispatcher: task status in the executors would pin their tasks");
@@ -2368,7 +2368,7 @@ export function cmdTaskAssignment(io: Io, slug: string, number: number): number 
     const top = (io.run ?? realRun)("git", ["rev-parse", "--show-toplevel"], io.cwd);
     const worktree = top.status === 0 ? top.stdout.trim() : "";
     mkdirSync(path.dirname(file), { recursive: true });
-    // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — hand-outs aren't committed into it
+    // the configuration directory may be a personal git checkout (ELVES_PRIVATE) — hand-outs aren't committed into it
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
     appendFileSync(file, `${slug}#${number}${worktree ? ` ${worktree}` : ""}\n`);
   }
@@ -2830,7 +2830,7 @@ function unlinkedPrs(io: Io, slug: string, number: number): { base: string; prs:
  * The est script next to the skill (`../est/scripts/est.ts`: the project copy, `~/.agents/skills` and the clone are
  * laid out this way).
  */
-const estScript = (io: Io) => io.env.AI_DEV_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
+const estScript = (io: Io) => io.env.ELVES_EST ?? path.resolve(import.meta.dir, "../../est/scripts/est.ts");
 
 /** The origin URL of the current directory's checkout; not a checkout or no origin — "". */
 function originUrl(io: Io): string {
@@ -2839,7 +2839,7 @@ function originUrl(io: Io): string {
 }
 
 /** The task-env script next to the skill — laid out like est (`../task-env/scripts/task-env.ts`). */
-const taskEnvScript = (io: Io) => io.env.AI_DEV_TASK_ENV ?? path.resolve(import.meta.dir, "../../task-env/scripts/task-env.ts");
+const taskEnvScript = (io: Io) => io.env.ELVES_TASK_ENV ?? path.resolve(import.meta.dir, "../../task-env/scripts/task-env.ts");
 
 /**
  * The task's stacks (task-env, epic #392) live until someone takes them down — `task close` does: `task-env down <N>`
