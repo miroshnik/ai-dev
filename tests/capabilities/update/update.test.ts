@@ -1085,6 +1085,23 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(git(clone, "config", "remote.origin.url")).toBe("https://github.com/miroshnik/elves.git");
     expect(aiDev(sb, ["check", "-g"]).code).toBe(0);
   });
+
+  /**
+   * update -g релиза до переименования (#544) подтягивает клон и запускает его установщик по прежнему пути
+   * `bin/ai-dev.ts`: это тот же установщик — машина получает ссылки и хук версии клона, а не ошибку «нет файла».
+   */
+  it("установщик клона по прежнему пути bin/ai-dev.ts — тот же установщик: update -g релиза до переименования ставит машине новый хук", () => {
+    const { clone } = linkedClone();
+    const file = path.join(sb.home, ".claude/settings.json");
+    const settings = JSON.parse(read(file));
+    settings.hooks.SessionStart[0].hooks[0].command = 'bunx --silent github:miroshnik/ai-dev check --hook 2>&1 || echo "ai-dev check unavailable (exit $?): work by the current flow and say so"';
+    writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
+    expect(aiDev(sb, ["install", "-g", "--link"], { bin: path.join(clone, "bin/ai-dev.ts") }).code).toBe(0);
+    const hooks: { command: string }[] = JSON.parse(read(file)).hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks);
+    expect(hooks).toHaveLength(1);
+    expect(hooks[0]!.command).toStartWith("bunx --silent github:miroshnik/elves check --hook 2>&1 || ");
+    expect(aiDev(sb, ["check", "-g"]).code).toBe(0);
+  });
 });
 
 /**
