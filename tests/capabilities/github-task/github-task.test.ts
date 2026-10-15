@@ -236,7 +236,7 @@ describe("task new ставит оценку сам — по аналогам, �
       args.includes("miroshnik/old-name") ? (calls.push([cmd, ...args]), { status: 1, stdout: "", stderr: "error: command gh api -X… exited with code 1: gh: HTTP 307\n" }) : est(calls)(cmd, args);
     const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], "miroshnik/old-name", { run });
     expect(r.code).toBe(0);
-    expect(calls.map((c) => c.slice(3))).toEqual([["estimate", "50", "--repo", REPO, "--type", "feat", "--write"]]);
+    expect(calls.map((c) => c.slice(3))).toEqual([["estimate", "561", "--repo", REPO, "--type", "feat", "--write"]]);
     expect(r.out).toContain("«Estimate» comment created, field «Оценка, ч» = 0.5");
     expect(r.out).not.toContain("! est estimate");
   });
