@@ -30,7 +30,8 @@ export interface Sandbox {
  * временные каталоги установщика (история для списка изменений `update`) — в нём, а не в системном /tmp, куда песочница
  * агента не пускает. BUN_JSC_useJIT — из окружения прогона: дочерний bun на macOS — без JIT
  * (tests/standards/spawn-no-jit). Кеш транспиляции bun выключен: bun кладёт его в HOME (`~/Library/Caches/bun`), а
- * тесты сверяют HOME песочницы снимком — это машина, где установщик пишет только своё.
+ * тесты сверяют HOME песочницы снимком — это машина, где установщик пишет только своё; кеш пакетов `bun install`
+ * проекта — в каталоге песочницы по той же причине.
  */
 export function sandbox(): Sandbox {
   const { dir: tmp, cleanup } = tmpDir();
@@ -45,7 +46,7 @@ export function sandbox(): Sandbox {
   const found = execFileSync("sh", ["-c", `for c in ${cmds.join(" ")}; do command -v "$c"; done`], { encoding: "utf8" }).trim().split("\n");
   cmds.forEach((cmd, i) => symlinkSync(found[i]!, path.join(bin, cmd)));
   symlinkSync(process.execPath, path.join(bin, "bun"));
-  const env: Record<string, string> = { HOME: home, PATH: bin, TMPDIR: tmp, ELVES_REPO: noReleases, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" };
+  const env: Record<string, string> = { HOME: home, PATH: bin, TMPDIR: tmp, ELVES_REPO: noReleases, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0", BUN_INSTALL_CACHE_DIR: path.join(tmp, "bun-cache") };
   if (process.env.BUN_JSC_useJIT) env.BUN_JSC_useJIT = process.env.BUN_JSC_useJIT;
   return { tmp, home, proj, bin, env, cleanup };
 }
@@ -81,6 +82,43 @@ export function elvesPackage(dir: string, edits: Record<string, string | null> =
 }
 
 export type ElvesPackage = ReturnType<typeof elvesPackage>;
+
+/** Скиллы Elves: их копии клала в проект установка прошлых релизов. */
+export const FLOW_SKILLS = ["ci-wait", "dashboard", "est", "github", "slot", "spec", "task-env"];
+
+/** Блок AGENTS.md проекта с копией флоу — ссылка на канон копии. */
+export const COPY_BLOCK = [
+  "<!-- elves:begin — set by `bunx github:miroshnik/elves install`, don't edit by hand -->",
+  "Shared rules — `.agents/elves/AGENTS.md`: read them before starting work (references — `.agents/elves/docs/`).",
+  "Skills — `.agents/skills/`.",
+  "<!-- elves:end -->",
+].join("\n");
+
+/**
+ * Проект с копией флоу, как её ставила установка прошлых релизов (до #558): канон `.agents/elves/`, скиллы в
+ * `.agents/skills/`, симлинки Claude Code в `.claude/rules` и `.claude/skills`, манифест с источником, SHA, тегом и
+ * списком скиллов, блок в начале AGENTS.md. Канон — текст этого клона: Claude Code грузит его из копии, как и с машины
+ * (двойная загрузка, #557); справочники и скиллы — заглушки: переезду их содержимое не важно. manifest — поля
+ * манифеста поверх обычных.
+ */
+export function copyInstall(root: string, manifest: Record<string, unknown> = {}) {
+  writeTree(root, {
+    ".agents/elves/AGENTS.md": readFileSync(path.join(REPO, "AGENTS.md"), "utf8"),
+    ".agents/elves/claude/CLAUDE.md": readFileSync(path.join(REPO, "claude/CLAUDE.md"), "utf8"),
+    ".agents/elves/docs/testing.md": "справочник копии\n",
+    ".agents/skills/slot/scripts/slot.sh": "# slot.sh копии\n",
+    ...Object.fromEntries(FLOW_SKILLS.map((s) => [`.agents/skills/${s}/SKILL.md`, `скилл ${s} копии\n`])),
+    ".agents/elves.json": JSON.stringify({ source: "miroshnik/elves", sha: "1".repeat(40), tag: "v2026.10.05", skills: FLOW_SKILLS, auto: false, language: "en", ...manifest }, null, 2) + "\n",
+  });
+  mkdirSync(path.join(root, ".claude/rules"), { recursive: true });
+  mkdirSync(path.join(root, ".claude/skills"), { recursive: true });
+  symlinkSync("../../.agents/elves/AGENTS.md", path.join(root, ".claude/rules/elves.md"));
+  symlinkSync("../../.agents/elves/claude/CLAUDE.md", path.join(root, ".claude/rules/elves-claude.md"));
+  for (const s of FLOW_SKILLS) symlinkSync(`../../.agents/skills/${s}`, path.join(root, ".claude/skills", s));
+  const agents = path.join(root, "AGENTS.md");
+  const own = lstatSync(agents, { throwIfNoEntry: false }) ? readFileSync(agents, "utf8") : "";
+  writeFileSync(agents, own ? `${COPY_BLOCK}\n\n${own}` : `${COPY_BLOCK}\n`);
+}
 
 /** Копия пакета вместе с `.git` в dir — без процессов git: пакет собирается один раз на файл теста. */
 export function copyPackage(pkg: ElvesPackage, dir: string): ElvesPackage {

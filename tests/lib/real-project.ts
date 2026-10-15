@@ -1,20 +1,20 @@
 /**
  * Фикстура «реальный проект» для e2e флоу: то, на чём флоу ломался в проектах, а не в тестах Elves, — `.gitignore`,
- * прячущий файлы флоу (#299), ключи разработчика в `.env.local` (#424), `package.json` без `"type"` — Playwright грузит
- * тесты как CommonJS (#303), workspace-пакет, журнал spec-claims от двух раннеров и настоящий knip. Не спека.
+ * прячущий каталоги агентов (#299), ключи разработчика в `.env.local` (#424), `package.json` без `"type"` — Playwright
+ * грузит тесты как CommonJS (#303), workspace-пакет, журнал spec-claims от двух раннеров и настоящий knip. Флоу в ней —
+ * тонкий (#552): пакет `@miroshnik/elves` в devDependencies, тесты импортируют его харнесс, скрипты зовут его `elves`.
+ * Не спека.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, symlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
 import { REPO, type Sandbox } from "./elves.ts";
+import { npmTarball, PACK_VERSION } from "./npm.ts";
 import { gitRepo, writeTree } from "./spec.ts";
 
 const json = (v: unknown) => JSON.stringify(v, null, 2) + "\n";
-
-/** Как в проекте до флоу: скрипты spec ведут в копию `.agents`, которую поставит установка. */
-const SPEC = "bun --no-env-file .agents/skills/spec/scripts";
 
 const FILES: Record<string, string> = {
   "package.json": json({
@@ -26,14 +26,14 @@ const FILES: Record<string, string> = {
       test: "bun test --reporter=junit --reporter-outfile=.spec-report.xml --path-ignore-patterns='tests/standards/**'",
       "test:spec": "bun test tests/standards --reporter=junit --reporter-outfile=.spec-standards.xml",
       "test:e2e": "playwright test",
-      "spec:claims": `${SPEC}/spec-claims.ts --entries tests/standards/entry-points/entries.ts`,
-      "spec:doc": `${SPEC}/spec-doc.ts .spec-report.xml .spec-standards.xml .spec-playwright.json .spec-claims.xml --strict`,
-      "spec:diff": `${SPEC}/spec-diff.ts`,
+      "spec:claims": "elves spec-claims --entries tests/standards/entry-points/entries.ts",
+      "spec:doc": "elves spec-doc .spec-report.xml .spec-standards.xml .spec-playwright.json .spec-claims.xml --strict",
+      "spec:diff": "elves spec-diff",
     },
     dependencies: { "@shop/prices": "workspace:*" },
-    devDependencies: { "@playwright/test": "^1.63.0", knip: "^6.41.0" },
+    devDependencies: { "@miroshnik/elves": PACK_VERSION, "@playwright/test": "^1.63.0", knip: "^6.41.0" },
   }),
-  // личные заметки агента и каталоги инструментов прячут часто — вместе с ними git спрятал бы файлы флоу
+  // личные заметки агента и каталоги инструментов прячут часто — флоу в них ничего не кладёт
   ".gitignore": ["node_modules/", ".env*.local", "CLAUDE.md", ".claude/", "vendor/", "docs/spec/", ".spec-*", "test-results/", ""].join("\n"),
   // ключ из `vercel env pull`: проверки его не видят — CI, где файла нет, их не видит тоже
   ".env.local": "PAYMENTS_KEY=live-key\n",
@@ -83,7 +83,7 @@ const FILES: Record<string, string> = {
     "",
   ].join("\n"),
   "tests/lib/app.ts": [
-    'import { journal } from "../../.agents/skills/spec/scripts/harness.ts";',
+    'import { journal } from "@miroshnik/elves/spec/harness";',
     'import { routes } from "../../src/server.ts";',
     "",
     "// сборка тестов оборачивает точки входа журналом; e2e передаёт файл теста сам",
@@ -94,14 +94,14 @@ const FILES: Record<string, string> = {
     "",
   ].join("\n"),
   "tests/lib/journal.ts": [
-    'import { resetJournal } from "../../.agents/skills/spec/scripts/harness.ts";',
+    'import { resetJournal } from "@miroshnik/elves/spec/harness";',
     "",
     'process.env.SPEC_JOURNAL ??= ".spec-journal/unit";',
     "resetJournal();",
     "",
   ].join("\n"),
   "tests/lib/journal-e2e.ts": [
-    'import { resetJournal } from "../../.agents/skills/spec/scripts/harness.ts";',
+    'import { resetJournal } from "@miroshnik/elves/spec/harness";',
     "",
     "export default function journalReset(): void {",
     "  resetJournal();",
@@ -141,7 +141,7 @@ const FILES: Record<string, string> = {
   "tests/standards/dead-code/dead-code.md": "Файл, экспорт или зависимость, до которых не доходит ни одна точка входа, — мёртвый код.\n",
   "tests/standards/dead-code/dead-code.test.ts": [
     'import { describe, it } from "bun:test";',
-    'import { deadCode, exceptionsIn } from "../../../.agents/skills/spec/scripts/harness.ts";',
+    'import { deadCode, exceptionsIn } from "@miroshnik/elves/spec/harness";',
     "",
     'describe("Нет кода без потребителя", () => deadCode(it, { root: process.cwd(), exceptions: exceptionsIn() }));',
     "",
@@ -161,8 +161,9 @@ export interface RealProject {
 /**
  * Проект магазина в `sb.proj` — закоммичен, флоу ещё не стоит: workspace-пакет цен, маршруты, юниты под `bun test`,
  * стандарты своим `test:spec`, e2e под Playwright, реестр точек входа, deadCode. Зависимости — ссылки на `node_modules` Elves (knip и Playwright —
- * его devDependencies), пакет workspace — ссылкой, как его кладёт менеджер пакетов; в PATH песочницы — node: на нём
- * идут knip и Playwright.
+ * его devDependencies), пакет workspace — ссылкой, как его кладёт менеджер пакетов, пакет Elves — из tarball'а релиза,
+ * как из npm (сборка для Node — Playwright грузит харнесс из неё); в PATH песочницы — node: на нём идут knip и
+ * Playwright.
  */
 export function realProject(sb: Sandbox): RealProject {
   const { proj } = sb;
@@ -171,6 +172,10 @@ export function realProject(sb: Sandbox): RealProject {
   mkdirSync(path.join(modules, ".bin"), { recursive: true });
   mkdirSync(path.join(modules, "@playwright"));
   mkdirSync(path.join(modules, "@shop"));
+  mkdirSync(path.join(modules, "@miroshnik"));
+  execFileSync("tar", ["-xzf", npmTarball(), "-C", sb.tmp]);
+  renameSync(path.join(sb.tmp, "package"), path.join(modules, "@miroshnik/elves"));
+  symlinkSync("../@miroshnik/elves/bin/elves.ts", path.join(modules, ".bin/elves"));
   const dep = (name: string) => path.dirname(createRequire(path.join(REPO, "package.json")).resolve(`${name}/package.json`));
   symlinkSync(dep("knip"), path.join(modules, "knip"));
   symlinkSync(dep("@playwright/test"), path.join(modules, "@playwright/test"));

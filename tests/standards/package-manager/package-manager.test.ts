@@ -143,7 +143,7 @@ describe("Менеджер пакетов проекта отвечает одн
 });
 
 describe("Менеджер пакетов у premerge, обёртки slot и раннера test:spec у check — ответ packageManager", () => {
-  it("premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через slot.sh, check не предлагает bun test", () => {
+  it("premerge, обёртка slot и раннер test:spec у check берут менеджер пакетов у неё: packageManager pnpm и забытые bun.lock и .yarnrc.yml — premerge зовёт pnpm, обёртка slot — через шим slot.sh, check не предлагает bun test", () => {
     const sb = sandbox();
     try {
       writeTree(sb.proj, {
@@ -155,9 +155,9 @@ describe("Менеджер пакетов у premerge, обёртки slot и р
       const install = elves(sb, ["install"]);
       expect(install.code, install.stderr).toBe(0);
       const scripts = JSON.parse(readFileSync(path.join(sb.proj, "package.json"), "utf8")).scripts;
-      expect(scripts.lint).toBe(". .agents/skills/slot/scripts/slot.sh && eslint .");
+      expect(scripts.lint).toBe(". .agents/slot.sh && eslint .");
       const check = elves(sb, ["check"]);
-      expect(check.stdout).toContain(`"test:spec": ${JSON.stringify(". .agents/skills/slot/scripts/slot.sh && vitest run tests/standards")}`);
+      expect(check.stdout).toContain(`"test:spec": ${JSON.stringify(". .agents/slot.sh && vitest run tests/standards")}`);
       expect(check.stdout).not.toContain("bun test");
       expect(projectCommands(sb.proj).run("test:spec").join(" ")).toBe("pnpm run test:spec");
     } finally {

@@ -45,7 +45,7 @@ interface Place {
 }
 
 const CONFIG_DIR = "каталог личной конфигурации до переименования — AI_DEV_CONFIG_DIR и ~/.config/ai-dev, пока update -g его не перенёс";
-const MOVE = "update › update переносит .agents/ai-dev.json и правила ai-dev в новые имена, содержимое не теряется";
+const MOVE = "update › update переводит установку под прежним именем на тонкий проект: режим, язык и env из .agents/ai-dev.json — в .agents/elves.json, канон и правила ai-dev уходят";
 const RULESET = "github-project › project check узнаёт ruleset ai-dev своим, project fix переименовывает его в elves";
 const LANGUAGE = "github-project › до update язык читается из прежнего манифеста .agents/ai-dev.json, а когда есть и .agents/elves.json — из нового";
 const UPDATE_TASK = "github-task › task new узнаёт открытую задачу обновления флоу со старым названием и второй не заводит";
