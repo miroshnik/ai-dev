@@ -1414,6 +1414,13 @@
  {
   "path": "tests/capabilities/est/est.test.ts",
   "describes": [
+   "Переименованный репозиторий — est работает под его нынешним именем"
+  ],
+  "name": "est estimate --write по старому имени переименованного репозитория записывает оценку — под нынешним именем"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
    "Пересчёт записанных фактов по модели"
   ],
   "name": "берёт закрытые задачи, в расходе которых есть модель этой версии, и их закрытые эпики — эпики после задач"
@@ -3297,6 +3304,13 @@
   "describes": [
    "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
   ],
+  "name": "task new с --repo старого имени переименованного репозитория записывает оценку"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task new ставит оценку сам — по аналогам, которые подбирает скрипт"
+  ],
   "name": "баг без --branch-type — оценка с типом fix: ветка бага — fix/<N>-…"
  },
  {
@@ -3445,6 +3459,13 @@
    "task queue раздаёт задачи эпика или фильтра исполнителям"
   ],
   "name": "очередь пуста и в работе ничего — строка с последним шагом диспетчера"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue раздаёт задачи эпика или фильтра исполнителям"
+  ],
+  "name": "подсказки скриптов называют каноническое имя переименованного репозитория"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3627,6 +3648,13 @@
    "task status --branch переименовывает ветку worktree в ветку задачи"
   ],
   "name": "--branch не с «В работе» и у эпика — ошибка до изменений: ветку заводят, беря задачу в работу, у эпика ветки нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task status --branch переименовывает ветку worktree в ветку задачи"
+  ],
+  "name": "origin чекаута называет прежнее имя переименованного репозитория — это его чекаут: ветка переименована"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
