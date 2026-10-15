@@ -25,7 +25,7 @@ bun --no-env-file <skill dir>/scripts/task-env.ts e2e -- npx playwright test   #
 - **The stack** — Compose project `<project>-<N>` by the number from the
   branch, e2e — `<project>-<N>-e2e` on clean volumes, the main checkout —
   `<project>`; the e2e variables `TASK_ENV_*`, heavy services in `profiles`,
-  `env.http` in `.agents/ai-dev.json`, taking it down (`task-env down`;
+  `env.http` in `.agents/elves.json`, taking it down (`task-env down`;
   stacks of closed tasks left on the machine — `task-env prune`) and the
   limit of Docker's subnets — the `task-env` skill,
   section "The task's stack".
@@ -48,7 +48,7 @@ bun --no-env-file <skill dir>/scripts/task-env.ts e2e -- npx playwright test   #
   first its owner: `lsof -nP -iTCP:<port> -sTCP:LISTEN` and the process's cwd
   (`lsof -a -p <PID> -d cwd -Fn`). Someone else's — I don't kill it: `kill`
   by port breaks someone else's run; the proxy takes another port
-  (`AI_DEV_PROXY_PORT`, the `task-env` skill, section "Settings").
+  (`ELVES_PROXY_PORT`, the `task-env` skill, section "Settings").
 
 ## Everything in the compose file
 
@@ -61,7 +61,7 @@ the machine's Redis — is shared by all tasks again, with its port and data.
   file. Apps reach them by the service name, as in the project
   (`postgres://db:5432/app`): no host variables, no names per task.
 - **HTTP services** and their ports in the container — `env.http` in
-  `.agents/ai-dev.json` (`{"env": {"http": {"web": 3000}}}`): only they get an
+  `.agents/elves.json` (`{"env": {"http": {"web": 3000}}}`): only they get an
   address; in a compose file a database's port doesn't differ from an app's.
 - **The code** — the worktree's: a build (`build: .`) or a bind mount by a
   relative path (`./src:/app/src`); the dev server's HMR in a container works

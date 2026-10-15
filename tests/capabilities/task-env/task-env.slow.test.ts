@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { proxyHosts, proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
+import { composeEnv, formerProxyName, proxyHosts, proxyLabels } from "../../../skills/task-env/scripts/task-env.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
 import { calls, COMPOSE, FAKE_GH, run, SCRIPT } from "../../lib/task-env.ts";
@@ -20,10 +20,11 @@ const dockerUp = spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"],
 
 /**
  * Свой прокси теста рядом с рабочим: своё имя (проект Compose и сеть) и порт, который выдаёт Docker, — рабочий прокси
- * машины на 80 тест не трогает.
+ * машины на 80 тест не трогает; прежний прокси у прокси теста — свой, `<имя>-former` (`formerProxyName`), а не прокси
+ * машины до переименования. Окружение — с переменными compose-файла прокси: тест зовёт `docker compose -f` и сам.
  */
-const NAME = `ai-dev-proxy-test-${process.pid}`;
-const proxyEnv = { ...process.env, AI_DEV_PROXY: NAME, AI_DEV_PROXY_PORT: "0" };
+const NAME = `elves-proxy-test-${process.pid}`;
+const proxyEnv = composeEnv({ ...process.env, ELVES_PROXY: NAME, ELVES_PROXY_PORT: "0" });
 
 /** `docker …`, ошибка — с её stderr. */
 function docker(...args: string[]) {
@@ -84,7 +85,7 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     throw new Error(`${host}: за ${PATIENCE / 1000} с не дождались ${status}, последний ответ ${last.status} ${last.body.slice(0, 200)}`);
   }
 
-  const labels = (stack: string, service: string, host: string) => proxyLabels({ stack, service, host, port: 80 });
+  const labels = (stack: string, service: string, host: string) => proxyLabels({ stack, service, host, port: 80, network: NAME });
 
   it("контейнер с метками сервиса открывается по `<сервис>.<N>.<проект>.localhost`", async () => {
     const id = app("web", labels("demo-42", "web", "web.42.demo.localhost"));
@@ -103,7 +104,7 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
   });
 
   it("API прокси называет хосты маршрутов по адресу `<имя прокси>.localhost` на его порту: контейнер стартовал — его хост есть, остановился — нет", async () => {
-    const env = { ...proxyEnv, AI_DEV_PROXY_PORT: port };
+    const env = { ...proxyEnv, ELVES_PROXY_PORT: port };
     const id = app("listed", labels("demo-45", "web", "web.45.demo.localhost"));
     await until("web.45.demo.localhost", 200);
     expect(await proxyHosts(env)).toEqual(expect.arrayContaining(["web.45.demo.localhost", `${NAME}.localhost`]));
@@ -119,6 +120,12 @@ describe.skipIf(!dockerUp && !process.env.CI)("Прокси на машине р
     await until("web.44.demo.localhost", 200);
     docker("stop", "--time", "0", id);
     await until("web.44.demo.localhost", 404);
+  });
+
+  it("сети прежнего прокси на машине нет — прокси только в своей сети, сеть прежнего не создаётся", () => {
+    const id = docker("compose", "-f", COMPOSE, "ps", "--quiet", "traefik");
+    expect(Object.keys(JSON.parse(docker("inspect", "--format", "{{json .NetworkSettings.Networks}}", id)))).toEqual([NAME]);
+    expect(docker("network", "ls", "--quiet", "--filter", `name=^${formerProxyName(proxyEnv)}$`)).toBe("");
   });
 
   it("proxy status: работает — код 0; после proxy down — не запущен, код 1, с командой запуска; сети прокси нет", () => {
@@ -197,13 +204,13 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
 
   beforeAll(() => {
     // прокси на порту, который выдаёт Docker; стек получает этот порт — он в адресах
-    const proxyEnv = { ...process.env, AI_DEV_PROXY: PROXY, AI_DEV_PROXY_PORT: "0" };
+    const proxyEnv = composeEnv({ ...process.env, ELVES_PROXY: PROXY, ELVES_PROXY_PORT: "0" });
     const up = run("bun", [SCRIPT, "proxy", "up"], proxyEnv);
     expect(exitOf(up), up.stdout + up.stderr).toBe(0);
     port = run("docker", ["compose", "-f", COMPOSE, "port", "traefik", "80"], proxyEnv).stdout.trim().split(":").at(-1)!;
     // без TASK_ENV_* прогона (тесты под `task-env e2e`): адрес в compose-файл должен дать скрипт, а не окружение теста
     const own = Object.entries(process.env).filter(([k]) => !k.startsWith("TASK_ENV_"));
-    env = { ...Object.fromEntries(own), AI_DEV_PROXY: PROXY, AI_DEV_PROXY_PORT: port };
+    env = { ...Object.fromEntries(own), ELVES_PROXY: PROXY, ELVES_PROXY_PORT: port };
     for (const image of [WHOAMI, BUSYBOX]) dockerOut("pull", "--quiet", image);
     repo = tmpDir();
     root = path.join(repo.dir, "session-379-499083");
@@ -231,13 +238,13 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
         db + "    healthcheck: { test: [CMD, sh, -c, 'echo sick-check; exit 1'], interval: 1s, retries: 1 }",
         "    profiles: [sick]",
         "  missing:",
-        "    image: ai-dev-task-env-test/no-such-image:0",
+        "    image: elves-task-env-test/no-such-image:0",
         "    profiles: [missing]",
         "volumes:",
         "  data: {}",
         "",
       ].join("\n"),
-      ".agents/ai-dev.json": JSON.stringify({ env: { http: { web: 80, search: 80, ghost: 3000 } } }) + "\n",
+      ".agents/elves.json": JSON.stringify({ env: { http: { web: 80, search: 80, ghost: 3000 } } }) + "\n",
     });
     git("init", "-q", "-b", "main");
     git("remote", "add", "origin", `git@github.com:acme/Shop-T${process.pid}.git`);
@@ -295,7 +302,7 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
     const field = (service: string, format: string) => JSON.parse(dockerOut("inspect", "--format", format, containerId(`${PROJECT}-42`, service))) as Record<string, unknown>;
     const inspect = (service: string) => [field(service, "{{json .Config.Labels}}"), field(service, "{{json .NetworkSettings.Networks}}")] as const;
     const [webLabels, webNets] = inspect("web");
-    expect(webLabels).toMatchObject(proxyLabels({ stack: `${PROJECT}-42`, service: "web", host: `web.42.${PROJECT}.localhost`, port: 80 }));
+    expect(webLabels).toMatchObject(proxyLabels({ stack: `${PROJECT}-42`, service: "web", host: `web.42.${PROJECT}.localhost`, port: 80, network: PROXY }));
     expect(Object.keys(webNets).sort()).toEqual([PROXY, `${PROJECT}-42_default`].sort());
     const [dbLabels, dbNets] = inspect("db");
     expect(Object.keys(dbLabels).filter((k) => k.startsWith("traefik."))).toEqual([]);
@@ -474,5 +481,115 @@ describe.skipIf(!dockerUp && !process.env.CI)("Стек задачи — про�
     expect(r.code, r.out).toBe(0);
     expect(r.stdout).toMatch(new RegExp(`^○ stack ${PROJECT}-9: its containers are from \\S*/other — another project, left\n$`));
     expect(services(`${PROJECT}-9`)).toEqual(["db"]);
+  });
+});
+
+describe.skipIf(!dockerUp && !process.env.CI)("Переход с прокси до переименования: `proxy up` занимает его место, стеки до переименования и новые открываются через новый прокси", () => {
+  /** Свой прокси теста; его прежний — `<имя>-former` (`formerProxyName`): прокси машины до переименования тест не трогает. */
+  const NEW = `${NAME}-move`;
+  const env = { ...process.env, ELVES_PROXY: NEW };
+  const FORMER = formerProxyName(env);
+  /**
+   * Стеки: до переименования — сервисы без метки сети, в своей сети и сети прежнего прокси (как поднимал прежний
+   * скрипт); новый — с меткой сети, в своей сети и сети прокси. Имена стеков — раньше по алфавиту, чем сети прокси: из
+   * сетей контейнера без нужной Traefik берёт «первую» в порядке обхода map Go — случайном, но неравномерном, чаще
+   * первую по алфавиту, — так без выбора сети по метке или по умолчанию стек по чужой сети почти всегда не открывается.
+   */
+  const OLD_STACK = `${NAME}-a-old`;
+  const NEW_STACK = `${NAME}-a-new`;
+  const SERVICES = ["a", "b", "c"];
+  /** Пересборок маршрутов: при каждой Traefik выбирает сеть каждого контейнера заново. */
+  const ROUNDS = 4;
+  const oldHost = (s: string) => `${s}.1.${NEW}.localhost`;
+  const newHost = (s: string) => `${s}.2.${NEW}.localhost`;
+  let port = "";
+  let up: { code: number | string; out: string } = { code: 0, out: "" };
+  const ticks: string[] = [];
+
+  const dockerOut = (...args: string[]) => {
+    const r = run("docker", args, env);
+    if (r.status !== 0) throw new Error(`docker ${args.join(" ")}: ${r.stderr.trim()}`);
+    return r.stdout.trim();
+  };
+  /** Проект Compose из файла на stdin: так тест поднимает прежний прокси и стеки, не трогая compose-файл скилла. */
+  function composeUp(project: string, file: object) {
+    const r = spawnSync("docker", ["compose", "-p", project, "-f", "-", "up", "--detach", "--wait", "--quiet-pull"], { input: JSON.stringify(file), encoding: "utf8", env });
+    if (exitOf(r) !== 0) throw new Error(`docker compose -p ${project} up: ${r.stderr.trim()}`);
+  }
+  /** Контейнер сервиса проекта Compose — его короткий id: whoami отвечает им в `Hostname`. */
+  const container = (project: string, service: string) =>
+    dockerOut("ps", "--all", "--quiet", "--filter", `label=com.docker.compose.project=${project}`, "--filter", `label=com.docker.compose.service=${service}`);
+  const networksOf = (id: string) => Object.keys(JSON.parse(dockerOut("inspect", "--format", "{{json .NetworkSettings.Networks}}", id)) as object).sort();
+  /**
+   * Кто ответил через прокси по Host — `Hostname` из ответа whoami; не ответил за 3 с — пусто: к контейнеру по чужой
+   * сети Traefik стучится до своего таймаута.
+   */
+  async function answered(host: string) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/`, { headers: { Host: host }, signal: AbortSignal.timeout(3_000) });
+      return /^Hostname: (\S+)$/m.exec(await r.text())?.[1] ?? `HTTP ${r.status}`;
+    } catch (e) {
+      if ((e as Error).name !== "TimeoutError") throw e;
+      return "";
+    }
+  }
+  async function until(host: string, id: string) {
+    const deadline = Date.now() + PATIENCE;
+    while (Date.now() < deadline) {
+      if ((await answered(host)) === id.slice(0, 12)) return;
+      await Bun.sleep(100);
+    }
+    throw new Error(`${host}: за ${PATIENCE / 1000} с не ответил контейнер ${id.slice(0, 12)}`);
+  }
+
+  beforeAll(() => {
+    dockerOut("pull", "--quiet", WHOAMI);
+    // порт, свободный на машине, — прежний прокси занимает его явно, как ai-dev-proxy порт 80: порт, который Docker выдал
+    // сам, Docker 29 второму контейнеру отдаёт молча — тот запускается без публикации
+    const free = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
+    port = String(free.port);
+    free.stop(true);
+    // прежний прокси: проект Compose с сервисом traefik и сетью с его именем
+    composeUp(FORMER, { services: { traefik: { image: WHOAMI, ports: [`127.0.0.1:${port}:80`], networks: ["proxy"] } }, networks: { proxy: { name: FORMER } } });
+    // стек до переименования — метки без сети, как ставил прежний скрипт
+    const old = (s: string) =>
+      Object.fromEntries(Object.entries(proxyLabels({ stack: OLD_STACK, service: s, host: oldHost(s), port: 80, network: NEW })).filter(([k]) => k !== "traefik.docker.network"));
+    composeUp(OLD_STACK, { services: Object.fromEntries(SERVICES.map((s) => [s, { image: WHOAMI, labels: old(s), networks: ["default", "former"] }])), networks: { former: { name: FORMER, external: true } } });
+    const r = run("bun", [SCRIPT, "proxy", "up"], { ...env, ELVES_PROXY_PORT: port });
+    up = { code: exitOf(r), out: r.stdout + r.stderr };
+    if (up.code !== 0) return;
+    const labelled = (s: string) => proxyLabels({ stack: NEW_STACK, service: s, host: newHost(s), port: 80, network: NEW });
+    composeUp(NEW_STACK, { services: Object.fromEntries(SERVICES.map((s) => [s, { image: WHOAMI, labels: labelled(s), networks: ["default", "proxy"] }])), networks: { proxy: { name: NEW, external: true } } });
+  }, 300_000);
+  afterAll(() => {
+    if (ticks.length) run("docker", ["rm", "-f", ...ticks], env);
+    for (const project of [OLD_STACK, NEW_STACK]) run("docker", ["compose", "-p", project, "down", "--remove-orphans"], env);
+    run("bun", [SCRIPT, "proxy", "down"], env);
+    run("docker", ["compose", "-p", FORMER, "down", "--remove-orphans"], env);
+    run("docker", ["network", "rm", FORMER], env);
+  });
+
+  it("`proxy up` убирает прежний прокси, который держит порт, а его сеть оставляет: новый прокси на том же порту, в своей сети и в сети прежнего", () => {
+    expect(up.code, up.out).toBe(0);
+    expect(up.out).toContain(`proxy ${FORMER}: removed — the proxy before the rename; ${NEW} takes its port, its network ${FORMER} stays\n`);
+    expect(container(FORMER, "traefik")).toBe("");
+    const id = container(NEW, "traefik");
+    expect(dockerOut("port", id, "80/tcp")).toBe(`127.0.0.1:${port}`);
+    expect(networksOf(id)).toEqual([FORMER, NEW].sort());
+    expect(up.out).toContain(`(network ${NEW}; and ${FORMER} — of the proxy before the rename, with the stacks brought up before it)`);
+  });
+
+  it("стек до переименования (без метки сети) и новый (с меткой) открываются через новый прокси — каждый раз, при каждой пересборке маршрутов", async () => {
+    expect(up.code, up.out).toBe(0);
+    const expected = [...SERVICES.map((s) => [oldHost(s), container(OLD_STACK, s)]), ...SERVICES.map((s) => [newHost(s), container(NEW_STACK, s)])];
+    for (let round = 1; round <= ROUNDS; round++) {
+      // такт: маршрут нового контейнера появился — прокси пересобрал маршруты всех контейнеров и выбрал сеть каждого заново
+      const tick = `tick${round}.${NEW}.localhost`;
+      const flags = Object.entries(proxyLabels({ stack: `${NEW}-tick${round}`, service: "web", host: tick, port: 80, network: NEW })).flatMap(([k, v]) => ["--label", `${k}=${v}`]);
+      const id = dockerOut("run", "-d", "--network", NEW, ...flags, WHOAMI);
+      ticks.push(id);
+      await until(tick, id);
+      for (const [host, id] of expected) expect(await answered(host!), `${host}, пересборка ${round}`).toBe(id!.slice(0, 12));
+    }
   });
 });
