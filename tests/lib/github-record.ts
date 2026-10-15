@@ -1,8 +1,8 @@
 /**
  * Запись ответов GitHub для фикстур теста скилла github — только чтения, мутации запрещены:
- *   bun tests/lib/github-record.ts miroshnik/ai-dev tests/lib/github-ai-dev.json --issues 42,45,46,47,49
+ *   bun --no-env-file tests/lib/github-record.ts miroshnik/elves tests/lib/github-elves.json --issues 42,45,46,47,49
  * Пишет всё, что читает `project check`, поиск проекта по названию, эталон, контекст задач (метка epic,
- * milestones) и задачи из --issues. Не спека.
+ * milestones) и задачи из --issues — кроме того, что фейк отдаёт из своего состояния (`SERVED_BY_FAKE`). Не спека.
  */
 import { writeFileSync } from "node:fs";
 
@@ -17,6 +17,26 @@ const issues = at < 0 ? [] : argv.splice(at, 2)[1]!.split(",").map(Number);
 const [slug, out, template = "miroshnik/6"] = argv;
 if (!slug || !out) throw new Error("usage: bun tests/lib/github-record.ts owner/repo <out.json> [owner/N] [--issues 42,45]");
 
+/**
+ * Ответы, которые фейк строит сам (fake-github.ts): правила мержа основной ветки, метки репозитория, дерево спеки —
+ * тесты задают их явно, запись их не задаёт. В запись не идут: настоящий ruleset или чужие PR лежали бы в ней мёртвым
+ * грузом.
+ */
+const SERVED_BY_FAKE = new Set(["MergeRules", "RepoLabels", "SpecDecisions"]);
+
+/**
+ * Следующая страница того же запроса — в ту же запись: ключ записи без курсора `after` (keyOf), и фейк отдаёт на любую
+ * страницу одну запись. Узлы страниц складываются, `pageInfo` — последней страницы (дальше страниц нет); иначе в записи
+ * осталась бы одна последняя страница — у проекта больше 100 элементов.
+ */
+function addPage(prev: unknown, next: unknown): unknown {
+  if (!prev || !next || typeof prev !== "object" || typeof next !== "object" || Array.isArray(next)) return next;
+  const p = prev as Record<string, unknown>;
+  const n = next as Record<string, unknown>;
+  if ("pageInfo" in n && Array.isArray(n.nodes) && Array.isArray(p.nodes)) return { ...n, nodes: [...p.nodes, ...n.nodes] };
+  return Object.fromEntries(Object.entries(n).map(([k, v]) => [k, addPage(p[k], v)]));
+}
+
 const rec: Recording = {};
 const io: Io = {
   gh: (args, stdin) => {
@@ -24,7 +44,8 @@ const io: Io = {
     const { kind, op } = opOf(query);
     if (kind !== "query") throw new Error(`запись — только чтения, а не ${op}`);
     const res = realGh(args, stdin);
-    rec[keyOf(op, variables)] = JSON.parse(res);
+    const key = keyOf(op, variables);
+    if (!SERVED_BY_FAKE.has(op)) rec[key] = variables.after ? addPage(rec[key], JSON.parse(res)) : JSON.parse(res);
     return res;
   },
   out: (l) => console.log(l),

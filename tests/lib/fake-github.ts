@@ -156,8 +156,8 @@ export class FakeGitHub {
     const i = this.issue(number);
     if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
     const out = structuredClone(i);
-    // подзадачи с заголовком, как у GitHub: заголовок — из записи подзадачи
-    out.subIssues = { nodes: i.subIssues.nodes.map((s: Any) => ({ ...s, title: this.issue(s.number)?.title ?? "" })) };
+    // подзадачи с заголовком, как у GitHub: заголовок — из записи подзадачи, без неё — как записан в подзадачах эпика
+    out.subIssues = { nodes: i.subIssues.nodes.map((s: Any) => ({ ...s, title: this.issue(s.number)?.title ?? s.title ?? "" })) };
     out.blockedBy = { nodes: (this.blockedBy[number] ?? []).map((b) => this.blocker(b)).map(({ number, state, repository }) => ({ number, state, repository })) };
     const lag = this.issueRefLag[number] ?? 0;
     if (lag > 0) {
@@ -214,7 +214,7 @@ export class FakeGitHub {
             milestone: milestone(number),
             blockedBy: { nodes: (this.blockedBy[number] ?? []).map((b) => this.blocker(b)).map(({ id, number, state, repository }) => ({ id, number, state, repository })) },
             comments: { nodes: this.comments[number] ?? [] },
-            subIssues: { nodes: i.subIssues.nodes.map((s: Any) => ({ number: s.number, title: this.issue(s.number)?.title ?? "", state: s.state, milestone: milestone(s.number) })) },
+            subIssues: { nodes: i.subIssues.nodes.map((s: Any) => ({ number: s.number, title: this.issue(s.number)?.title ?? s.title ?? "", state: s.state, milestone: milestone(s.number) })) },
           },
         },
       },
@@ -227,8 +227,9 @@ export class FakeGitHub {
   private issueShow(number: number): Any {
     const i = this.issue(number);
     if (!i) return { data: { repository: { issue: null } }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to an Issue with the number of ${number}.` }] };
-    const brief = (n: number) => ({ number: n, state: this.issue(n)?.state ?? "OPEN", title: this.issue(n)?.title ?? "" });
-    const subs = (x: Any) => ({ nodes: x.subIssues.nodes.map((s: Any) => brief(s.number)) });
+    // подзадача без своей записи — как её записал GitHub в подзадачах эпика
+    const brief = (s: Any) => ({ number: s.number, state: this.issue(s.number)?.state ?? s.state ?? "OPEN", title: this.issue(s.number)?.title ?? s.title ?? "" });
+    const subs = (x: Any) => ({ nodes: x.subIssues.nodes.map(brief) });
     const parent = i.parent ? this.issue(i.parent.number) : null;
     const m = this.milestoneOf(number);
     const items = this.allProjects().flatMap((p) => this.items(p.id).filter((it: Any) => it.content?.id === i.id).map((it: Any) => ({ p, it })));
@@ -789,6 +790,35 @@ export function asOrg(rec: Recording, org = "acme"): Recording {
   for (const [k, v] of Object.entries(out)) {
     const i = k.startsWith("IssueRef ") ? v.data.repository.issue : null;
     if (i) i.issueType = { name: i.labels.nodes.some((l: Any) => l.name === "epic") ? "Эпик" : "Задача" };
+  }
+  return out;
+}
+
+/**
+ * Сценарий тестов скилла github поверх записи: эпик #45 «В работе» — его подзадача #46 закрыта, #47 «В работе»; #42
+ * с открытым вопросом (метка «вопросы») и #49 — в «Бэклоге». Тесты написаны на нём, а в записи настоящего репозитория
+ * эти задачи давно закрыты: сценарий открывает их, как будто их ещё не закрыли, — как `closed` закрывает. Остальное —
+ * как записано: проект, его элементы и открытые задачи репозитория.
+ */
+export function epicInProgress(rec: Recording): Recording {
+  const out: Recording = structuredClone(rec);
+  const open: Record<number, { status: string; labels?: string[] }> = { 42: { status: "Бэклог", labels: ["вопросы"] }, 45: { status: "В работе" }, 47: { status: "В работе" }, 49: { status: "Бэклог" } };
+  const entries = Object.entries(out);
+  const issues = entries.filter(([k]) => k.startsWith("IssueRef ")).map(([, v]) => v.data.repository.issue);
+  const items = entries.find(([k]) => k.startsWith("ProjectItems "))![1].data.node.items.nodes;
+  const repoIssues = entries.find(([k]) => k.startsWith("RepoIssues "))![1].data.repository.issues.nodes;
+  for (const [n, want] of Object.entries(open)) {
+    const i = issues.find((x: Any) => x.number === Number(n));
+    if (!i) throw new Error(`epicInProgress: в записи нет задачи #${n}`);
+    Object.assign(i, { state: "OPEN", stateReason: null });
+    for (const name of want.labels ?? []) if (!i.labels.nodes.some((l: Any) => l.name === name)) i.labels.nodes.push({ name });
+    for (const x of issues) for (const sub of x.subIssues.nodes) if (sub.number === i.number) sub.state = "OPEN";
+    for (const p of i.projectItems.nodes) p.status = { name: want.status };
+    const it = items.find((x: Any) => x.content?.number === i.number);
+    if (!it) throw new Error(`epicInProgress: задачи #${n} нет среди элементов проекта`);
+    Object.assign(it.content, { state: "OPEN", stateReason: null });
+    it.status = { name: want.status };
+    if (!repoIssues.some((x: Any) => x.number === i.number)) repoIssues.push({ id: i.id, number: i.number });
   }
   return out;
 }

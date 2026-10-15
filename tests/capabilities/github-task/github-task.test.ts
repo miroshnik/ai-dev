@@ -6,7 +6,7 @@ import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bu
 import { descSize } from "../../../skills/est/scripts/est.ts";
 import { main, realRun } from "../../../skills/github/scripts/github.ts";
 import type { Io } from "../../../skills/github/scripts/github.ts";
-import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
+import { asOrg, epicInProgress, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { githubOrigin, gitRepo, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -14,10 +14,11 @@ import { githubOrigin, gitRepo, tmpDir, writeTree } from "../../lib/spec.ts";
 // модель архитектуры скилл читает отдельным процессом bun
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-// Ответы GitHub — записанные с проекта ai-dev, `gh` подменён: мутации меняют запись так, как это сделал бы GitHub
-const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.json", import.meta.url), "utf8"));
-const REPO = "miroshnik/ai-dev";
-const ORG = "acme/ai-dev";
+// Ответы GitHub — записанные с проекта Elves, `gh` подменён: мутации меняют запись так, как это сделал бы GitHub;
+// поверх записи — сценарий тестов: эпик #45 «В работе», #42 и #49 в «Бэклоге» (epicInProgress)
+const REC: Recording = epicInProgress(JSON.parse(readFileSync(new URL("../../lib/github-elves.json", import.meta.url), "utf8")));
+const REPO = "miroshnik/elves";
+const ORG = "acme/elves";
 
 let pauses = 0;
 /** Вызов скрипта task-env (снятие стеков задачи в `task close`) — подпроцесс bun, как est. */
@@ -63,11 +64,11 @@ describe("task new заводит задачу со всем сразу", () => 
     const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт задач", "--body", "Что сделать", "--epic", "45", "--blocked-by", "#49"]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateIssue")).toEqual([{ repositoryId: f.repo.id, title: "GitHub · Экспорт задач", body: "Что сделать", projectV2Ids: [f.project().id], parentIssueId: f.issue(45).id }]);
-    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
-    expect(byOp(f, "AddBlockedBy")).toEqual([{ issueId: f.issue(50).id, blockingIssueId: f.issue(49).id }]);
+    expect(statusSet(f)).toEqual([[561, "Бэклог"]]);
+    expect(byOp(f, "AddBlockedBy")).toEqual([{ issueId: f.issue(561).id, blockingIssueId: f.issue(49).id }]);
     expect(r.out.split("\n")).toEqual([
-      "Created #50 GitHub · Экспорт задач — https://github.com/miroshnik/ai-dev/issues/50",
-      "+ project «ai-dev»: Status «Бэклог»",
+      "Created #561 GitHub · Экспорт задач — https://github.com/miroshnik/elves/issues/561",
+      "+ project «elves»: Status «Бэклог»",
       "+ subtask of epic #45",
       "+ blocked by #49",
       "Next: «Оценка, ч» of epic #45 — recompute as the sum of its subtasks' estimates.",
@@ -89,7 +90,7 @@ describe("task new заводит задачу со всем сразу", () => 
 
   it("тело задачи — из файла --body-file", () => {
     const f = new FakeGitHub(REC);
-    const file = new URL("../../lib/github-ai-dev.json", import.meta.url).pathname;
+    const file = new URL("../../lib/github-elves.json", import.meta.url).pathname;
     task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body-file", file]);
     expect(byOp(f, "CreateIssue")[0].body).toBe(readFileSync(file, "utf8"));
   });
@@ -140,10 +141,10 @@ describe("task new заводит задачу со всем сразу", () => 
     expect(r.code).toBe(0);
     const last = r.out.split("\n").at(-1)!;
     expect(last).toStartWith(
-      "Next: the session runs miroshnik/ai-dev#49; #51 isn't taken here — the question to the owner «queue #51?» — yes: a background subagent in its own worktree, " +
-        "its prompt: Задача #51 в miroshnik/ai-dev (эпик #45): ты исполнитель сессии-диспетчера. Задание целиком печатает `bun --no-env-file ",
+      "Next: the session runs miroshnik/elves#49; #562 isn't taken here — the question to the owner «queue #562?» — yes: a background subagent in its own worktree, " +
+        "its prompt: Задача #562 в miroshnik/elves (эпик #45): ты исполнитель сессии-диспетчера. Задание целиком печатает `bun --no-env-file ",
     );
-    expect(last).toContain("task queue --assignment 51 --repo miroshnik/ai-dev`");
+    expect(last).toContain("task queue --assignment 562 --repo miroshnik/elves`");
   });
 
   // эпик заводят — владельца спрашивают, запускать ли диспетчера на его задачи, а не раздают карточки сессий (#546)
@@ -152,7 +153,7 @@ describe("task new заводит задачу со всем сразу", () => 
     const r = task(f, ["new", "--title", "Импорт · Импорт задач из CSV", "--type", "Эпик"]);
     expect(r.code).toBe(0);
     expect(r.out.split("\n").at(-1)).toMatch(
-      /^Next: once its subtasks are created — the question to the owner «run the dispatcher on epic #50\?»; yes — bun --no-env-file \S+github\.ts task queue --epic 50 --repo miroshnik\/ai-dev in this session, its executors — background subagents\.$/,
+      /^Next: once its subtasks are created — the question to the owner «run the dispatcher on epic #561\?»; yes — bun --no-env-file \S+github\.ts task queue --epic 561 --repo miroshnik\/elves in this session, its executors — background subagents\.$/,
     );
   });
 
@@ -185,11 +186,11 @@ describe("task new заводит задачу со всем сразу", () => 
       refused(f, ["--title", "Обновить флоу Elves"], "an open task with this title already exists: #49 («Обновить флоу ai-dev» — its title before the flow's rename)");
     });
     it("в личном аккаунте --priority — приоритет там не ведём", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--priority", "High"], "a personal account has no issue fields"));
-    it("блокера нет в репозитории", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--blocked-by", "999"], "no issue #999 in miroshnik/ai-dev"));
+    it("блокера нет в репозитории", () => refused(new FakeGitHub(REC), ["--title", "Экспорт", "--blocked-by", "999"], "no issue #999 in miroshnik/elves"));
     it("проекта нет — сначала project fix", () => {
       const f = new FakeGitHub(REC);
       f.unlinkAll();
-      refused(f, ["--title", "Экспорт"], "no project is linked to miroshnik/ai-dev — github project fix first");
+      refused(f, ["--title", "Экспорт"], "no project is linked to miroshnik/elves — github project fix first");
     });
   });
 });
@@ -201,7 +202,7 @@ describe("task new заводит задачу со всем сразу", () => 
  */
 describe("task new ставит оценку сам — по аналогам, которые подбирает скрипт", () => {
   const ESTIMATE = "Оценка: 0.5 ч, ≈ 20 млн токенов, ≈ $8 (тип feat, доверие A; прогноз по фактам аналогов). Аналоги (подбор скриптом): #12 (факт 0.4 ч); #14 (факт 0.5 ч); #20 (факт 1 ч). Поправка: ×1.";
-  const STDOUT = `== miroshnik/ai-dev#50: Экспорт\ncurrent «Оценка, ч»: —; status: Бэклог\ncomment:\n${ESTIMATE}\n<!-- est {"v": 2, "h": 0.5} -->\n«Estimate» comment created, field «Оценка, ч» = 0.5\n`;
+  const STDOUT = `== miroshnik/elves#561: Экспорт\ncurrent «Оценка, ч»: —; status: Бэклог\ncomment:\n${ESTIMATE}\n<!-- est {"v": 2, "h": 0.5} -->\n«Estimate» comment created, field «Оценка, ч» = 0.5\n`;
   const est =
     (calls: string[][], r: { status: number; stdout?: string; stderr?: string } = { status: 0, stdout: STDOUT }) =>
     (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
@@ -212,7 +213,7 @@ describe("task new ставит оценку сам — по аналогам, �
     const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est(calls) });
     expect(r.code).toBe(0);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.slice(3)).toEqual(["estimate", "50", "--repo", REPO, "--type", "feat", "--write"]);
+    expect(calls[0]!.slice(3)).toEqual(["estimate", "561", "--repo", REPO, "--type", "feat", "--write"]);
     expect(calls[0]!.slice(0, 2)).toEqual(["bun", "--no-env-file"]);
     expect(calls[0]![2]).toMatch(/skills\/est\/scripts\/est\.ts$/);
     expect(r.out).toContain(ESTIMATE);
@@ -225,7 +226,7 @@ describe("task new ставит оценку сам — по аналогам, �
     const f = new FakeGitHub(REC);
     const calls: string[][] = [];
     expect(task(f, ["new", "--title", "Экспорт падает", "--type", "Баг"], REPO, { run: est(calls) }).code).toBe(0);
-    expect(calls[0]!.slice(3)).toEqual(["estimate", "50", "--repo", REPO, "--type", "fix", "--write"]);
+    expect(calls[0]!.slice(3)).toEqual(["estimate", "561", "--repo", REPO, "--type", "fix", "--write"]);
   });
 
   it("эпик не оценивается: est не зовётся, «Next:» — оценка эпика есть сумма оценок подзадач", () => {
@@ -268,7 +269,7 @@ describe("task new ставит оценку сам — по аналогам, �
     expect(r.code).toBe(0);
     expect(calls).toEqual([]);
     expect(r.out).toContain("○ no estimate: est is not installed (/nowhere/est.ts)");
-    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
+    expect(statusSet(f)).toEqual([[561, "Бэклог"]]);
   });
 
   it("est упал — задача заведена, его ошибка строкой «! est estimate», код 0", () => {
@@ -276,7 +277,7 @@ describe("task new ставит оценку сам — по аналогам, �
     const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est([], { status: 1, stderr: "warning: x\nerror: GitHub is unavailable\n" }) });
     expect(r.code).toBe(0);
     expect(r.out).toContain("! est estimate: error: GitHub is unavailable");
-    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
+    expect(statusSet(f)).toEqual([[561, "Бэклог"]]);
   });
 });
 
@@ -295,7 +296,7 @@ describe("task new ставит метки решений — по имени р
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" }]);
     const billing = f.labels.find((l) => l.name === "billing")!;
     expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([billing.id, audit.id]);
-    expect(issueLabels(f, 50)).toEqual(["billing", "audit"]);
+    expect(issueLabels(f, 561)).toEqual(["billing", "audit"]);
     expect(r.out).toContain("+ created label «billing»");
     expect(r.out).toContain("+ labels: billing, audit");
   });
@@ -305,7 +306,7 @@ describe("task new ставит метки решений — по имени р
     const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--labels", "capability:export"]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "export", color: CAP, description: "Решение: tests/capabilities/export" }]);
-    expect(issueLabels(f, 50)).toEqual(["export"]);
+    expect(issueLabels(f, 561)).toEqual(["export"]);
     expect(r.out).toContain("+ export — new decision: tests/capabilities/export is not in the default branch yet");
   });
 
@@ -363,7 +364,7 @@ describe("task new ставит метку «вопросы», когда в о�
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateLabel")).toEqual([]);
     expect(byOp(f, "CreateIssue")[0].labelIds).toEqual([billing.id, questions.id]);
-    expect(issueLabels(f, 50)).toEqual(["billing", "вопросы"]);
+    expect(issueLabels(f, 561)).toEqual(["billing", "вопросы"]);
     expect(r.out).toContain("+ label «вопросы» — open questions in the description: 2, 3");
   });
 
@@ -375,7 +376,7 @@ describe("task new ставит метку «вопросы», когда в о�
       const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", ...body]);
       expect(r.code).toBe(0);
       expect(byOp(f, "CreateIssue")[0]).not.toHaveProperty("labelIds");
-      expect(issueLabels(f, 50)).toEqual([]);
+      expect(issueLabels(f, 561)).toEqual([]);
       expect(r.out).not.toContain("вопросы");
     }
   });
@@ -385,7 +386,7 @@ describe("task new ставит метку «вопросы», когда в о�
     const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body", OPEN]);
     expect(r.code).toBe(0);
     expect(byOp(f, "CreateLabel")).toEqual([{ repositoryId: f.repo.id, name: "вопросы", ...QUESTIONS }]);
-    expect(issueLabels(f, 50)).toEqual(["вопросы"]);
+    expect(issueLabels(f, 561)).toEqual(["вопросы"]);
     expect(r.out).toContain("+ created label «вопросы»");
   });
 });
@@ -658,7 +659,7 @@ describe("task status берёт в работу одну задачу на се
     const r = task(f, ["status", "49", "В работе"], REPO, inSession(config));
     expect(r.code).toBe(0);
     expect(statusSet(f)).toEqual([[49, "В работе"]]);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
   });
 
   it("другая задача «В работе» в той же сессии — отказ (код 2) до изменений: закреплённая задача, вопрос владельцу о постановке в очередь с промптом исполнителя и файл закрепления — одной строкой", () => {
@@ -669,15 +670,15 @@ describe("task status берёт в работу одну задачу на се
     expect(r.code).toBe(2);
     expect(r.err.split("\n")).toHaveLength(1);
     expect(r.err).toStartWith(
-      "error: the session runs miroshnik/ai-dev#49; #42 isn't taken here — the question to the owner «queue #42?» — yes: a background subagent in its own worktree, " +
-        "its prompt: Задача #42 в miroshnik/ai-dev: ты исполнитель сессии-диспетчера. Задание целиком печатает `bun --no-env-file ",
+      "error: the session runs miroshnik/elves#49; #42 isn't taken here — the question to the owner «queue #42?» — yes: a background subagent in its own worktree, " +
+        "its prompt: Задача #42 в miroshnik/elves: ты исполнитель сессии-диспетчера. Задание целиком печатает `bun --no-env-file ",
     );
-    expect(r.err).toContain("task queue --assignment 42 --repo miroshnik/ai-dev`");
+    expect(r.err).toContain("task queue --assignment 42 --repo miroshnik/elves`");
     expect(r.err).toEndWith(` (pin: ${pinFile(config)} — a mistaken one is removed by a human)`);
     expect(r.out).toBe("");
     expect(statusSet(f)).toEqual([[49, "В работе"]]);
     expect(f.mutations).toHaveLength(1);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
   });
 
   it("та же задача «В работе» повторно — без отказа", () => {
@@ -697,9 +698,9 @@ describe("task status берёт в работу одну задачу на се
     writeFileSync(pinFile(config), "49\n");
     const r = task(f, ["status", "42", "В работе"], REPO, inSession(config));
     expect(r.code).toBe(0);
-    expect(r.out).toContain(`○ the session pin ${pinFile(config)} held «49», not owner/repo#N — replaced with miroshnik/ai-dev#42`);
+    expect(r.out).toContain(`○ the session pin ${pinFile(config)} held «49», not owner/repo#N — replaced with miroshnik/elves#42`);
     expect(statusSet(f)).toEqual([[42, "В работе"]]);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#42");
+    expect(pinned(config)).toBe("miroshnik/elves#42");
   });
 
   it("задача с тем же номером в другом репозитории — другая задача: отказ", () => {
@@ -708,7 +709,7 @@ describe("task status берёт в работу одну задачу на се
     const other = new FakeGitHub(asOrg(REC));
     const r = task(other, ["status", "49", "В работе"], ORG, inSession(config));
     expect(r.code).toBe(2);
-    expect(r.err).toContain("the session runs miroshnik/ai-dev#49; #49 isn't taken here — the question to the owner «queue #49?»");
+    expect(r.err).toContain("the session runs miroshnik/elves#49; #49 isn't taken here — the question to the owner «queue #49?»");
     expect(other.mutations).toEqual([]);
   });
 
@@ -719,7 +720,7 @@ describe("task status берёт в работу одну задачу на се
     expect(task(f, ["status", "45", "В работе"], REPO, inSession(config)).code).toBe(0);
     expect(existsSync(pinFile(config))).toBe(false);
     expect(task(f, ["status", "47", "В работе"], REPO, inSession(config)).code).toBe(0);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#47");
+    expect(pinned(config)).toBe("miroshnik/elves#47");
   });
 
   it("«Бэклог» и «Готово» другой задаче — без отказа: закрепляет только «В работе»", () => {
@@ -729,7 +730,7 @@ describe("task status берёт в работу одну задачу на се
     expect(task(f, ["status", "42", "Бэклог"], REPO, inSession(config)).code).toBe(0);
     expect(task(f, ["status", "42", "Готово"], REPO, inSession(config)).code).toBe(0);
     expect(statusSet(f)).toEqual([[49, "В работе"], [42, "Бэклог"], [42, "Готово"]]);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
   });
 
   it("закрепление не снимают ни «Готово», ни task close — другая задача после них всё равно отказ", () => {
@@ -742,7 +743,7 @@ describe("task status берёт в работу одну задачу на се
     f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
     expect(task(f, ["close", "49", "--no-git"], REPO, { ...io, run: () => ({ status: 0, stdout: "Факт: …\n", stderr: "" }) }).code).toBe(0);
     expect(task(f, ["status", "42", "В работе"], REPO, io).code).toBe(2);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
   });
 
   // ключ — id сессии, а не чекаут и не машина: параллельные сессии делят каталог конфигурации
@@ -752,8 +753,8 @@ describe("task status берёт в работу одну задачу на се
     const neighbour = "7d9e2a44-1c3b-4e6f-8a70-5b2c9d1e3f08";
     task(f, ["status", "49", "В работе"], REPO, inSession(config));
     expect(task(f, ["status", "42", "В работе"], REPO, inSession(config, neighbour)).code).toBe(0);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
-    expect(pinned(config, neighbour)).toBe("miroshnik/ai-dev#42");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
+    expect(pinned(config, neighbour)).toBe("miroshnik/elves#42");
   });
 
   // id сессии даёт Bash-инструмент Claude Code; у другого агента его нет — статус важнее гарда
@@ -783,7 +784,7 @@ describe("task status берёт в работу одну задачу на се
     const io = { env: { CLAUDE_CODE_SESSION_ID: SESSION, HOME: home } };
     expect(task(f, ["status", "49", "В работе"], REPO, io).code).toBe(0);
     expect(existsSync(path.join(home, ".config"))).toBe(false);
-    expect(pinned(legacy)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(legacy)).toBe("miroshnik/elves#49");
     const r = task(f, ["status", "42", "В работе"], REPO, io);
     expect(r.code).toBe(2);
     expect(r.err).toContain(`pin: ${pinFile(legacy)}`);
@@ -801,18 +802,18 @@ describe("task status берёт в работу одну задачу на се
     const before = scratch();
     mkdirSync(path.join(before, ".config", "ai-dev"), { recursive: true });
     pinIn(before);
-    expect(pinned(path.join(before, ".config", "ai-dev"))).toBe("miroshnik/ai-dev#49");
+    expect(pinned(path.join(before, ".config", "ai-dev"))).toBe("miroshnik/elves#49");
     expect(existsSync(path.join(before, ".config", "elves"))).toBe(false);
 
     const after = scratch();
     for (const d of ["ai-dev", "elves"]) mkdirSync(path.join(after, ".config", d), { recursive: true });
     pinIn(after);
-    expect(pinned(path.join(after, ".config", "elves"))).toBe("miroshnik/ai-dev#49");
+    expect(pinned(path.join(after, ".config", "elves"))).toBe("miroshnik/elves#49");
     expect(existsSync(pinFile(path.join(after, ".config", "ai-dev")))).toBe(false);
 
     const clean = scratch();
     pinIn(clean);
-    expect(pinned(path.join(clean, ".config", "elves"))).toBe("miroshnik/ai-dev#49");
+    expect(pinned(path.join(clean, ".config", "elves"))).toBe("miroshnik/elves#49");
     expect(existsSync(path.join(clean, ".config", "ai-dev"))).toBe(false);
   });
 
@@ -820,10 +821,10 @@ describe("task status берёт в работу одну задачу на се
     const [elves, former] = [scratch(), scratch()];
     const f = new FakeGitHub(REC);
     expect(task(f, ["status", "49", "В работе"], REPO, { env: { CLAUDE_CODE_SESSION_ID: SESSION, AI_DEV_CONFIG_DIR: former } }).code).toBe(0);
-    expect(pinned(former)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(former)).toBe("miroshnik/elves#49");
     const g = new FakeGitHub(REC);
     expect(task(g, ["status", "49", "В работе"], REPO, { env: { CLAUDE_CODE_SESSION_ID: "other-session", ELVES_CONFIG_DIR: elves, AI_DEV_CONFIG_DIR: former } }).code).toBe(0);
-    expect(pinned(elves, "other-session")).toBe("miroshnik/ai-dev#49");
+    expect(pinned(elves, "other-session")).toBe("miroshnik/elves#49");
     expect(existsSync(pinFile(former, "other-session"))).toBe(false);
   });
 
@@ -979,7 +980,7 @@ describe("task status --branch переименовывает ветку worktre
     const r = task(f, ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: scratch() });
     expect(r.code).toBe(0);
     expect(statusSet(f)).toEqual([[49, "В работе"]]);
-    expect(r.out).toContain("○ branch left alone: the current directory is not a checkout of miroshnik/ai-dev");
+    expect(r.out).toContain("○ branch left alone: the current directory is not a checkout of miroshnik/elves");
   });
 });
 
@@ -1035,8 +1036,8 @@ describe("Статус ставится, даже если проект ещё �
     f.createIssueHidesItems = true;
     const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт"]);
     expect(r.code).toBe(0);
-    expect(statusSet(f)).toEqual([[50, "Бэклог"]]);
-    expect(r.out).toContain("+ project «ai-dev»: Status «Бэклог»");
+    expect(statusSet(f)).toEqual([[561, "Бэклог"]]);
+    expect(r.out).toContain("+ project «elves»: Status «Бэклог»");
   });
 
   it("задачу проект уже добавил, а чтение её ещё не показывает: task status перечитывает с паузой и ставит статус", () => {
@@ -1080,11 +1081,11 @@ describe("task show печатает задачу одним выводом", ()
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
     expect(r.out.split("\n")).toEqual([
-      "#47 GitHub · Задача одной командой — github task — https://github.com/miroshnik/ai-dev/issues/47",
+      "#47 GitHub · Задача одной командой — github task — https://github.com/miroshnik/elves/issues/47",
       "Status «В работе» · «Оценка, ч» 0.5",
       "Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой» — open questions: 1, other open tasks: 1",
       "- question 1. Сроки?",
-      "- task #50 «GitHub · Экспорт счетов»",
+      "- task #561 «GitHub · Экспорт счетов»",
       // закрытый блокер уже не блокирует
       "Blocked by: #49 «Стандарт · облачная сессия — скрипты скиллов с Projects v2 выходят с объяснением»",
       "PR #80 open — checks: 2 ✅, 1 ⏳ (e2e), 1 ❌ (lint)",
@@ -1112,7 +1113,8 @@ describe("task show печатает задачу одним выводом", ()
     const f = new FakeGitHub(REC);
     f.issue(45).body = "## Вопросы\n\n1. Сроки?\n";
     const lines = task(f, ["show", "45"]).out.split("\n");
-    expect(lines.slice(1, 5)).toEqual(["Эпик · Status «В работе» · no «Оценка, ч»", "Subtasks: open 1 of 2", "- task #47 «GitHub · Задача одной командой — github task»", 'Questions: open 1 — task answer 45 <k> "<answer>" [--auto]']);
+    // у эпика в записи три подзадачи: #46 и #50 закрыты, открыта #47
+    expect(lines.slice(1, 5)).toEqual(["Эпик · Status «В работе» · no «Оценка, ч»", "Subtasks: open 1 of 3", "- task #47 «GitHub · Задача одной командой — github task»", 'Questions: open 1 — task answer 45 <k> "<answer>" [--auto]']);
     expect(lines.some((l) => l.startsWith("PR"))).toBe(false);
   });
 
@@ -1129,7 +1131,7 @@ describe("task show печатает задачу одним выводом", ()
     expect(task(f, ["show", "49"]).out.split("\n")).toContain("PR: none");
     const r = task(f, ["show", "999"]);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("no issue #999 in miroshnik/ai-dev");
+    expect(r.err).toContain("no issue #999 in miroshnik/elves");
   });
 });
 
@@ -1209,7 +1211,7 @@ describe("task actualize делает механику актуализации 
   const CHECKS = (/Five checks:\n\n([\s\S]*?)\n\nWhat was fixed/.exec(REFERENCE)?.[1] ?? "").split(/\n(?=\d\. )/);
   const LEAD = "Задача #46 (эпик #45): актуализация блока после мержа — открытые задачи эпика привести в соответствие с выкаченным.";
   const merged46 = (f: FakeGitHub, files: FakeGitHub["prs"][number]["files"] = []) => (f.prs[77] = { files, closes: [46], head: "feat/46-project-check", base: "main", model: null, merged: true });
-  /** Подзадача эпика #45 — новая открытая задача (#50, #51, …). */
+  /** Подзадача эпика #45 — новая открытая задача (#561, #562, …: следующие за последней задачей записи). */
   const subtask = (f: FakeGitHub, title: string, ...more: string[]) => task(f, ["new", "--branch-type", "feat", "--title", title, "--epic", "45", ...more]).out.match(/^Created #(\d+)/)![1]!;
 
   it("сессия получает от скрипта короткий промпт субагенту: строка «Задача #N (эпик #M)» и команда, которая печатает задание", () => {
@@ -1222,7 +1224,7 @@ describe("task actualize делает механику актуализации 
     expect(lines.at(-3)).toBe("Next: a subagent in the background — the two lines below are its whole prompt, pass them as is.");
     // номер задачи — после слова «Задача»: est привязывает работу субагента к задаче, эпик после «эпик» — нет
     expect(lines.at(-2)).toBe(LEAD);
-    expect(lines.at(-1)).toMatch(/^Задание целиком — тексты открытых задач эпика, файлы PR, .* печатает `bun --no-env-file \S+\/skills\/github\/scripts\/github\.ts task actualize 46 --assignment --repo miroshnik\/ai-dev`: позови первым, вне песочницы/);
+    expect(lines.at(-1)).toMatch(/^Задание целиком — тексты открытых задач эпика, файлы PR, .* печатает `bun --no-env-file \S+\/skills\/github\/scripts\/github\.ts task actualize 46 --assignment --repo miroshnik\/elves`: позови первым, вне песочницы/);
     // механике нечего править — ни мутаций, ни комментария к эпику
     expect(f.mutations).toEqual([]);
   });
@@ -1240,7 +1242,7 @@ describe("task actualize делает механику актуализации 
     expect(r.code).toBe(0);
     const lines = r.out.split("\n");
     expect(lines[0]).toBe(LEAD);
-    expect(lines).toContain("Репозиторий miroshnik/ai-dev. Выкачено: #46 «GitHub · Проект по канону — github project check и fix», PR #77 (`gh pr view 77`, `gh pr diff 77`).");
+    expect(lines).toContain("Репозиторий miroshnik/elves. Выкачено: #46 «GitHub · Проект по канону — github project check и fix», PR #77 (`gh pr view 77`, `gh pr diff 77`).");
     expect(r.out).toContain("Файлы PR #77:\n- skills/github/scripts/github.ts (+1 −1)\n- docs/old.md (deleted, +0 −12)");
     expect(r.out).toContain("## Эпик #45 «GitHub · Скилл github: проект и задачи по канону одной командой»\n~~~~markdown\nЦель эпика: проект по канону.\n~~~~");
     expect(r.out).toContain("## Открытые задачи эпика — его подзадачи (sub-issues), а не список в описании эпика");
@@ -1343,8 +1345,8 @@ describe("task actualize делает механику актуализации 
     f.issue(45).body = "Цель.\n\n## План\n\n- #46 «Проект»\n- [ ] #47 «Задача»\n- #12 чужая задача — не подзадача";
     f.issue(47).body = "Задача.\n\nПосле #46 — сначала проект.\n⛔ ждёт решения\n\n## Вопросы\n\n1. Формат?\n2. ✅ Срок? Ответ: неделя.\n3. Цвет?\n";
     f.comments[47] = [
-      { body: "Ответы владельца:\n1. ✅ PDF\n2. ✅ месяц", url: "https://github.com/miroshnik/ai-dev/issues/47#issuecomment-1" },
-      { body: "1. ✅ PDF и CSV", url: "https://github.com/miroshnik/ai-dev/issues/47#issuecomment-2" },
+      { body: "Ответы владельца:\n1. ✅ PDF\n2. ✅ месяц", url: "https://github.com/miroshnik/elves/issues/47#issuecomment-1" },
+      { body: "1. ✅ PDF и CSV", url: "https://github.com/miroshnik/elves/issues/47#issuecomment-2" },
     ];
     expect(task(f, ["actualize", "46"]).out).not.toContain("+ ");
     expect(f.mutations).toEqual([]);
@@ -1353,7 +1355,7 @@ describe("task actualize делает механику актуализации 
     // #12 — не подзадача эпика: пункт списка с ней — не копия связи
     expect(r.out).not.toContain("- #45: «- #12");
     // ответ — из последнего комментария; на уже отмеченный вопрос 2 и на вопрос без ответа 3 — ничего
-    expect(r.out).toContain("- #47, вопрос 1: «PDF и CSV» — https://github.com/miroshnik/ai-dev/issues/47#issuecomment-2");
+    expect(r.out).toContain("- #47, вопрос 1: «PDF и CSV» — https://github.com/miroshnik/elves/issues/47#issuecomment-2");
     expect(r.out).not.toContain("вопрос 2");
     expect(r.out).not.toContain("вопрос 3");
     expect(f.mutations).toEqual([]);
@@ -1391,7 +1393,7 @@ describe("task actualize делает механику актуализации 
     const f = new FakeGitHub(REC);
     subtask(f, "Экспорт счетов");
     const r = task(f, ["actualize", "47", "--assignment"]);
-    expect(r.out).toContain("### #50 «GitHub · Экспорт счетов»");
+    expect(r.out).toContain("### #561 «GitHub · Экспорт счетов»");
     expect(r.out).not.toContain("### #47 ");
   });
 });
@@ -1789,7 +1791,7 @@ describe("task close убирает влитое", () => {
       const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(args), noEst(cmd, args, cwd));
       const r = task(f, ["close", "49"], REPO, { run, cwd: dir });
       expect(r.code).toBe(0);
-      expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/ai-dev");
+      expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/elves");
       expect(calls).toEqual([]);
     } finally {
       cleanup();
@@ -1797,8 +1799,8 @@ describe("task close убирает влитое", () => {
   });
 
   /** Чекаут узнаётся равенством owner/repo из origin (стандарт origin-repo), не подстрокой URL. */
-  it("task close из чекаута репозитория с тем же префиксом имени (ai-dev-tools при ai-dev) — не чекаут задачи: ни стеки, ни ветки не трогаются", () => {
-    const { work, origin, cleanup } = checkout("fix/49-x", { slug: "miroshnik/ai-dev-tools" });
+  it("task close из чекаута репозитория с тем же префиксом имени (elves-tools при elves) — не чекаут задачи: ни стеки, ни ветки не трогаются", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x", { slug: "miroshnik/elves-tools" });
     try {
       const f = new FakeGitHub(REC);
       f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
@@ -1806,7 +1808,7 @@ describe("task close убирает влитое", () => {
       const run = (cmd: string, args: string[], cwd?: string) => (isTaskEnv(args) && calls.push(args), noEst(cmd, args, cwd));
       const r = task(f, ["close", "49"], REPO, { run, cwd: work });
       expect(r.code).toBe(0);
-      expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/ai-dev");
+      expect(r.out).toContain("○ branches and task stacks left alone: the current directory is not a checkout of miroshnik/elves");
       expect(calls).toEqual([]);
       expect(git(work, "branch", "--show-current")).toBe("fix/49-x");
       expect(git(origin, "branch", "--list", "fix/49-x")).toContain("fix/49-x");
@@ -1815,8 +1817,8 @@ describe("task close убирает влитое", () => {
     }
   });
 
-  it("регистр owner/repo в origin не важен: из чекаута Miroshnik/AI-Dev task close убирает ветку и снимает стеки задачи", () => {
-    const { work, origin, cleanup } = checkout("fix/49-x", { slug: "Miroshnik/AI-Dev" });
+  it("регистр owner/repo в origin не важен: из чекаута Miroshnik/Elves task close убирает ветку и снимает стеки задачи", () => {
+    const { work, origin, cleanup } = checkout("fix/49-x", { slug: "Miroshnik/Elves" });
     try {
       const f = new FakeGitHub(REC);
       f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
@@ -1866,7 +1868,7 @@ describe("task close снимает стеки задачи", () => {
   /** task-env — подпроцесс bun (внешний край): ответ подменён, вызовы записаны; git — настоящий, est — молчит. */
   const taskEnv = (calls: { args: string[]; cwd?: string }[], r: Answer) => (cmd: string, args: string[], cwd?: string) =>
     cmd === "bun" && isTaskEnv(args) ? (calls.push({ args: taskEnvArgs(args), cwd }), { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }) : noEst(cmd, args, cwd);
-  const DOWN = "+ stack ai-dev-49: down, with its volumes\n+ stack ai-dev-49-e2e: down, with its volumes\n";
+  const DOWN = "+ stack elves-49: down, with its volumes\n+ stack elves-49-e2e: down, with its volumes\n";
   const merged = (f: FakeGitHub) => (f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true });
 
   function close(args: string[], answer: Answer, env: Record<string, string> = {}) {
@@ -1888,7 +1890,7 @@ describe("task close снимает стеки задачи", () => {
   });
 
   it("ошибка снятия выводится строкой и не мешает закрытию задачи", () => {
-    const failed = "! stack ai-dev-49: not removed — permission denied while trying to connect to the docker API";
+    const failed = "! stack elves-49: not removed — permission denied while trying to connect to the docker API";
     const reported = close([], { status: 2, stdout: failed + "\n" });
     expect(reported.code).toBe(0);
     expect(reported.out).toContain(failed);
@@ -2021,7 +2023,7 @@ describe("task close подтягивает клон скриптов до вл�
   });
 
   it("клон — чекаут другого репозитория: влитый PR задачи скриптов не меняет — не трогается, без строки", () => {
-    const m = machineClone("miroshnik/ai-dev-tools");
+    const m = machineClone("miroshnik/elves-tools");
     const before = m.head();
     const r = close(m.clone);
     expect(r.codes).toEqual(["est до PR"]);
@@ -2053,7 +2055,7 @@ describe("task resume называет, какое ожидание переза
     pr(f, { state: "OPEN" });
     const r = task(f, ["resume"], REPO, io);
     expect(r.code).toBe(0);
-    expect(r.out).toBe(`Session task miroshnik/ai-dev#49: PR #77 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 77`);
+    expect(r.out).toBe(`Session task miroshnik/elves#49: PR #77 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 77`);
     expect(f.mutations).toEqual([]);
   });
 
@@ -2064,7 +2066,7 @@ describe("task resume называет, какое ожидание переза
     const r = task(f, ["resume"], REPO, io);
     expect(r.code).toBe(0);
     expect(r.out).toBe(
-      `Session task miroshnik/ai-dev#49: PR #77 is merged, the task is open — where the merge deploys, the deploy wait as a background command: bash ${WAIT} merged 77; then close the task: bun --no-env-file ${GITHUB} task close 49`,
+      `Session task miroshnik/elves#49: PR #77 is merged, the task is open — where the merge deploys, the deploy wait as a background command: bash ${WAIT} merged 77; then close the task: bun --no-env-file ${GITHUB} task close 49`,
     );
     expect(f.mutations).toEqual([]);
   });
@@ -2090,17 +2092,17 @@ describe("task resume называет, какое ожидание переза
     const io = pinnedSession(f);
     pr(f, { merged: true });
     f.prs[78] = { files: [], closes: [49], head: "fix/49-y", base: "main", model: null, state: "OPEN" };
-    expect(task(f, ["resume"], REPO, io).out).toBe(`Session task miroshnik/ai-dev#49: PR #78 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 78`);
+    expect(task(f, ["resume"], REPO, io).out).toBe(`Session task miroshnik/elves#49: PR #78 is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT} pr 78`);
   });
 
   it("у задачи нет PR или она закрыта — ждать нечего, строка ○", () => {
     const f = new FakeGitHub(REC);
     const io = pinnedSession(f);
-    expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/ai-dev#49: no PR — no wait to restart" });
+    expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/elves#49: no PR — no wait to restart" });
     pr(f, { state: "CLOSED" });
-    expect(task(f, ["resume"], REPO, io).out).toBe("○ session task miroshnik/ai-dev#49: no PR — no wait to restart");
+    expect(task(f, ["resume"], REPO, io).out).toBe("○ session task miroshnik/elves#49: no PR — no wait to restart");
     f.closed(49);
-    expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/ai-dev#49 is closed — no wait to restart" });
+    expect(task(f, ["resume"], REPO, io)).toMatchObject({ code: 0, out: "○ session task miroshnik/elves#49 is closed — no wait to restart" });
   });
 
   // как в est и дашборде: строка не по форме — не закрепление (tests/standards/session-pin); путь файла — человеку
@@ -2149,8 +2151,8 @@ describe("Задачи — на языке проекта из .agents/ai-dev.js
     expect(r.code).toBe(0);
     const body: string = byOp(f, "CreateIssue")[0].body;
     expect(body).toBe("## Scenarios\n\n## Questions\n");
-    expect(statusSet(f)).toEqual([[50, "Backlog"]]);
-    expect(r.out).toContain("+ project «ai-dev»: Status «Backlog»");
+    expect(statusSet(f)).toEqual([[561, "Backlog"]]);
+    expect(r.out).toContain("+ project «elves»: Status «Backlog»");
     // est находит раздел: ответ, дописанный в нём после оценки, в размер описания не идёт
     expect(descSize(`${body}1. ✅ Format? **Answer:** PDF.\n`)).toBe(descSize(`${body}1. Format?\n`));
   });
@@ -2254,11 +2256,11 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = queue(f, ["--epic", "45"], ORG);
     expect(r.code).toBe(0);
     const lines = r.out.split("\n");
-    expect(lines[0]).toBe("Queue acme/ai-dev (epic #45): ready 4, «В работе» 0, not ready 0");
+    expect(lines[0]).toBe("Queue acme/elves (epic #45): ready 4, «В работе» 0, not ready 0");
     expect(lines.filter((l) => l.startsWith("+ ")).map((l) => Number(/^\+ #(\d+)/.exec(l)![1]))).toEqual([urgent, 47, medium, low]);
     expect(lines[1]).toBe(`+ #${urgent} «GitHub · Срочная» (Urgent)`);
-    expect(lines[2]).toStartWith(`  Задача #${urgent} в acme/ai-dev (эпик #45): ты исполнитель сессии-диспетчера. Задание целиком печатает \`bun --no-env-file `);
-    expect(lines[2]).toContain(`task queue --assignment ${urgent} --repo acme/ai-dev\``);
+    expect(lines[2]).toStartWith(`  Задача #${urgent} в acme/elves (эпик #45): ты исполнитель сессии-диспетчера. Задание целиком печатает \`bun --no-env-file `);
+    expect(lines[2]).toContain(`task queue --assignment ${urgent} --repo acme/elves\``);
     expect(lines.at(-1)).toStartWith("Next: each ready task above — a background subagent in its own worktree while fewer than 3 run");
   });
 
@@ -2272,7 +2274,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = queue(f, []);
     expect(r.code).toBe(0);
     expect(heads(r.out)).toEqual([
-      "Queue miroshnik/ai-dev (open tasks): ready 2, «В работе» 1, not ready 3",
+      "Queue miroshnik/elves (open tasks): ready 2, «В работе» 1, not ready 3",
       `+ #42 «${f.issue(42).title}»`,
       `+ #${ready} «GitHub · Готова»`,
       `= #47 «${f.issue(47).title}» — «В работе»`,
@@ -2298,10 +2300,10 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = queue(f, ["--epic", "45"]);
     expect(r.code).toBe(0);
     expect(heads(r.out)).toEqual([
-      "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 3, not ready 0",
-      `= #47 «${f.issue(47).title}» — «В работе», open PR #202 https://github.com/miroshnik/ai-dev/pull/202`,
-      `= #${linked} «GitHub · С PR» — open PR #200 https://github.com/miroshnik/ai-dev/pull/200`,
-      `= #${branch} «GitHub · С веткой» — open PR #201 https://github.com/miroshnik/ai-dev/pull/201`,
+      "Queue miroshnik/elves (epic #45): ready 0, «В работе» 3, not ready 0",
+      `= #47 «${f.issue(47).title}» — «В работе», open PR #202 https://github.com/miroshnik/elves/pull/202`,
+      `= #${linked} «GitHub · С PR» — open PR #200 https://github.com/miroshnik/elves/pull/200`,
+      `= #${branch} «GitHub · С веткой» — open PR #201 https://github.com/miroshnik/elves/pull/201`,
       "Next: no ready tasks — wait for the executors' answers; after each — task queue again.",
     ]);
   });
@@ -2320,7 +2322,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     // задание исполнитель печатает из своего worktree; каталог не чекаут — веток задачи скрипт не ищет
     expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
     expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)).toEqual([
-      "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 1, not ready 0",
+      "Queue miroshnik/elves (epic #45): ready 0, «В работе» 1, not ready 0",
       `= #47 «${f.issue(47).title}» — handed out to an executor of this session`,
       "Next: no ready tasks — wait for the executors' answers; after each — task queue again.",
     ]);
@@ -2344,7 +2346,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(r.code).toBe(0);
     expect(r.out).toContain("○ #47 is handed out to an executor of this session — not pinned: the executor is a subagent with the session's id, est links the work by «Задача #47» in the assignment");
     expect(statusSet(f)).toEqual([[49, "В работе"], [47, "В работе"]]);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
     // не выданная задача — по-прежнему отказ
     expect(task(f, ["status", "42", "В работе"], REPO, inSession(config)).code).toBe(2);
   });
@@ -2357,7 +2359,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(task(f, ["status", "47", "В работе"], REPO, inSession(config)).code).toBe(0);
     expect(existsSync(pinFile(config))).toBe(false);
     expect(task(f, ["status", "49", "В работе"], REPO, inSession(config)).code).toBe(0);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    expect(pinned(config)).toBe("miroshnik/elves#49");
   });
 
   // без перегиба: сессия, закреплённая за этой же задачей, — её задача, а не выдача исполнителю
@@ -2392,7 +2394,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = queue(f, ["--epic", "45"]);
     expect(r.code).toBe(0);
     expect(heads(r.out)).toEqual([
-      "Queue miroshnik/ai-dev (epic #45): ready 1, «В работе» 0, not ready 3",
+      "Queue miroshnik/elves (epic #45): ready 1, «В работе» 0, not ready 3",
       `+ #47 «${f.issue(47).title}»`,
       `○ #${linked} «GitHub · Ждёт релиза» — blocked by acme/runtime#47`,
       `○ #${labeled} «GitHub · Ждёт поставщика» — label «внешний блокер»: ответ поставщика по лицензии`,
@@ -2411,7 +2413,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     // метку сняли, комментарий с причиной остался — он сам задачу не держит
     f.comments[labeled] = [{ body: "Внешний блокер: ответ поставщика по лицензии", url: "c1" }];
     const r = queue(f, ["--epic", "45"]);
-    expect(heads(r.out).slice(0, 3)).toEqual(["Queue miroshnik/ai-dev (epic #45): ready 2, «В работе» 0, not ready 0", `+ #${linked} «GitHub · Ждала релиза»`, `+ #${labeled} «GitHub · Ждала поставщика»`]);
+    expect(heads(r.out).slice(0, 3)).toEqual(["Queue miroshnik/elves (epic #45): ready 2, «В работе» 0, not ready 0", `+ #${linked} «GitHub · Ждала релиза»`, `+ #${labeled} «GitHub · Ждала поставщика»`]);
   });
 
   it("--type и --priority отбирают задачи в организации; в личном аккаунте — ошибка до чтения задач", () => {
@@ -2422,7 +2424,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     created(task(f, ["new", "--branch-type", "feat", "--title", "Срочная фича", "--priority", "Urgent"], ORG));
     const r = queue(f, ["--type", "bug", "--priority", "Urgent,High"], ORG);
     expect(r.code).toBe(0);
-    expect(heads(r.out).slice(0, 2)).toEqual(["Queue acme/ai-dev (open tasks, type «Баг», Priority Urgent|High): ready 1, «В работе» 0, not ready 1", `+ #${bug} «Падает» (High)`]);
+    expect(heads(r.out).slice(0, 2)).toEqual(["Queue acme/elves (open tasks, type «Баг», Priority Urgent|High): ready 1, «В работе» 0, not ready 1", `+ #${bug} «Падает» (High)`]);
     const personal = task(new FakeGitHub(REC), ["queue", "--type", "Bug"], REPO, dispatcherIo());
     expect(personal.code).toBe(2);
     expect(personal.err).toBe("error: --type and --priority — only in an organization: a personal account has no issue types and no Priority");
@@ -2442,7 +2444,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = task(f, ["queue", "--assignment", "47"], REPO, { cwd: projectDir() });
     expect(r.code).toBe(0);
     const lines = r.out.split("\n");
-    expect(lines[0]).toStartWith("Задача #47 «GitHub · Задача одной командой — github task» в miroshnik/ai-dev (эпик #45): ты исполнитель сессии-диспетчера — сделай задачу целиком по канону");
+    expect(lines[0]).toStartWith("Задача #47 «GitHub · Задача одной командой — github task» в miroshnik/elves (эпик #45): ты исполнитель сессии-диспетчера — сделай задачу целиком по канону");
     expect(lines).toContain("Ты субагент, а не сессия:");
     expect(r.out).toContain("последнюю строку («Всё сделано. Сессию можно закрывать.») не пиши");
     expect(r.out).toContain("pr <PR> --timeout 540");
@@ -2505,7 +2507,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const f = new FakeGitHub(REC);
     const config = scratch();
     expect(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).code).toBe(0);
-    expect(readFileSync(path.join(config, "dispatchers", SESSION), "utf8")).toMatch(/ task queue --epic 45 --repo miroshnik\/ai-dev\n$/);
+    expect(readFileSync(path.join(config, "dispatchers", SESSION), "utf8")).toMatch(/ task queue --epic 45 --repo miroshnik\/elves\n$/);
     const r = task(f, ["status", "47", "В работе"], REPO, inSession(config));
     expect(r.code).toBe(0);
     expect(r.out).toContain("○ dispatcher session: #47 isn't pinned — its executor is a subagent with the session's id, est links the work by «Задача #47» in the assignment");
@@ -2525,7 +2527,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(heads(r.out)).toContain(`= #47 «${f.issue(47).title}» — «В работе»`);
     expect(existsSync(path.join(config, "dispatchers", SESSION))).toBe(true);
     expect(task(f, ["status", "47", "В работе"], REPO, inSession(config)).code).toBe(0);
-    expect(pinned(config)).toBe("miroshnik/ai-dev#47");
+    expect(pinned(config)).toBe("miroshnik/elves#47");
     expect(task(f, ["status", "42", "В работе"], REPO, inSession(config)).code).toBe(2);
   });
 
@@ -2542,7 +2544,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
         "continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree",
     );
     expect(lines[1]).toStartWith("Dispatcher session: a new executor — only for one that can't be continued");
-    expect(lines.slice(2).join("\n")).toMatch(/session task miroshnik\/ai-dev#49/i);
+    expect(lines.slice(2).join("\n")).toMatch(/session task miroshnik\/elves#49/i);
   });
 
   /**
@@ -2558,7 +2560,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = task(f, ["resume"], REPO, inSession(config));
     expect(r.code).toBe(0);
     expect(r.out.split("\n")[0]).toMatch(
-      /^Dispatcher session: its executors \(background subagents\) stopped with the app's process, their transcripts are intact — continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree; then re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/ai-dev — their tasks stay = in it$/,
+      /^Dispatcher session: its executors \(background subagents\) stopped with the app's process, their transcripts are intact — continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree; then re-read the queue: bun --no-env-file \S+github\.ts task queue --epic 45 --repo miroshnik\/elves — their tasks stay = in it$/,
     );
   });
 
@@ -2593,7 +2595,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     const r = queue(f, ["--epic", "45"]);
     expect(r.code).toBe(0);
     expect(r.out.split("\n")).toEqual([
-      "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 0, not ready 0",
+      "Queue miroshnik/elves (epic #45): ready 0, «В работе» 0, not ready 0",
       "Queue is empty: nothing ready, nothing «В работе» — the dispatcher's summary (merged, questions, the not ready ones above) and the last line; a session with its own task — after it.",
     ]);
   });
@@ -2656,7 +2658,7 @@ describe("task queue убирает worktree исполнителей закры
       `+ worktree ${closed} removed: clean, nothing outside origin/main`,
       `+ worktree ${sub} removed with branch worktree-agent-af17f6db7baf535f7: clean, nothing outside origin/main`,
     ]);
-    expect(out[2]).toStartWith("Queue miroshnik/ai-dev (epic #45): ");
+    expect(out[2]).toStartWith("Queue miroshnik/elves (epic #45): ");
     expect(d.worktrees()).toEqual([d.work]);
     expect(d.branches()).toEqual([]);
   });

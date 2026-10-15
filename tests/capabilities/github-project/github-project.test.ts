@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { main } from "../../../skills/github/scripts/github.ts";
-import { asOrg, FakeGitHub } from "../../lib/fake-github.ts";
+import { asOrg, epicInProgress, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
@@ -11,9 +11,10 @@ import { tmpDir } from "../../lib/spec.ts";
 // модель архитектуры скилл читает отдельным процессом bun
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-// Ответы GitHub — записанные с проекта ai-dev, `gh` подменён: мутации меняют запись так, как это сделал бы GitHub
-const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.json", import.meta.url), "utf8"));
-const REPO = "miroshnik/ai-dev";
+// Ответы GitHub — записанные с проекта Elves, `gh` подменён: мутации меняют запись так, как это сделал бы GitHub;
+// поверх записи — сценарий тестов: эпик #45 «В работе», #42 и #49 в «Бэклоге» (epicInProgress)
+const REC: Recording = epicInProgress(JSON.parse(readFileSync(new URL("../../lib/github-elves.json", import.meta.url), "utf8")));
+const REPO = "miroshnik/elves";
 const PROJECT_URL = "https://github.com/users/miroshnik/projects/6";
 
 /** `cwd` — чекаут проекта: язык названий канона — его `.agents/elves.json`; без него — текущий каталог (клон Elves, ru). */
@@ -57,7 +58,7 @@ const byOp = (fake: FakeGitHub, op: string) => fake.mutations.filter((m) => m.op
 function fake(rec: Recording = REC): FakeGitHub {
   return new FakeGitHub(rec);
 }
-/** Проект, у которого в UI не настраивали «Item added to project» и «Auto-add to project» — как ai-dev до fix. */
+/** Проект, у которого в UI не настраивали «Item added to project» и «Auto-add to project» — как Elves до fix. */
 function unconfigured(f: FakeGitHub = fake()): FakeGitHub {
   for (const name of ["Item added to project", "Auto-add to project"]) f.unconfigure(name);
   return f;
@@ -65,7 +66,7 @@ function unconfigured(f: FakeGitHub = fake()): FakeGitHub {
 const wfUrl = (f: FakeGitHub, name: string) => `${f.project().url}/workflows/${f.workflow(name).fullDatabaseId}`;
 
 describe("check показывает каждое расхождение с каноном отдельным пунктом", () => {
-  it("проект ai-dev как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются", () => {
+  it("проект Elves как записан — все пункты ✅, код 0; в личном аккаунте Priority и типы issue не проверяются", () => {
     const r = check(fake());
     expect(r.code).toBe(0);
     expect(r.out).toStartWith(`Project ${REPO}: ${PROJECT_URL}`);
@@ -190,7 +191,7 @@ describe("fix доводит проект до канона: через API — 
     expect(f.mutations).toEqual([]);
     expect(r.out).toContain("UI steps — in the session's browser, without a browser — for the user; then check again:");
     expect(r.out).toMatch(new RegExp(`^1\\. «Item added to project»: Edit → Set value → Status: Бэклог → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
-    expect(r.out).toMatch(new RegExp(`^2\\. «Auto-add to project»: Edit → repository ai-dev, filter is:issue is:open \\(Enter\\) → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
+    expect(r.out).toMatch(new RegExp(`^2\\. «Auto-add to project»: Edit → repository elves, filter is:issue is:open \\(Enter\\) → Save and turn on workflow — ${PROJECT_URL}/workflows$`, "m"));
   });
 
   it("доска не по Status — шаг UI со ссылкой на представление", () => {
@@ -213,7 +214,7 @@ describe("fix доводит проект до канона: через API — 
     expect(before.code).toBe(1);
     expect(f.mutations).toEqual([]);
     expect(before.out).toContain("Confirmation needed from the user — then fix --confirm:");
-    for (const s of ["rename project «AI dev» → «ai-dev»", "delete view «Мои задачи»", "delete field «Iteration»", "Status: Бэклог, В работе, Готово (rename the existing ones keeping the id)"]) {
+    for (const s of ["rename project «AI dev» → «elves»", "delete view «Мои задачи»", "delete field «Iteration»", "Status: Бэклог, В работе, Готово (rename the existing ones keeping the id)"]) {
       expect(before.out).toContain(s);
     }
 
@@ -227,12 +228,12 @@ describe("fix доводит проект до канона: через API — 
   it("проекта нет — привязывает одноимённый проект владельца, а не заводит новый", () => {
     const f = fake();
     f.unlinkAll();
-    const own = f.ownerProject("ai-dev");
+    const own = f.ownerProject("elves");
     const r = fix(f);
     expect(byOp(f, "LinkProject")).toEqual([{ projectId: own.id, repositoryId: f.repo.id }]);
     expect(ops(f)).not.toContain("CopyProject");
     expect(ops(f)).not.toContain("CreateProject");
-    expect(r.out).toContain(`+ linked project «ai-dev» (${own.url})`);
+    expect(r.out).toContain(`+ linked project «elves» (${own.url})`);
   });
 
   it("проекта нет — копирует эталон под владельца репозитория и привязывает; из шагов остаётся только auto-add", () => {
@@ -240,12 +241,12 @@ describe("fix доводит проект до канона: через API — 
     const template = f.project();
     f.unlinkAll();
     const r = fix(f);
-    expect(byOp(f, "CopyProject")).toEqual([{ projectId: template.id, ownerId: f.repo.owner.id, title: "ai-dev", includeDraftIssues: false }]);
+    expect(byOp(f, "CopyProject")).toEqual([{ projectId: template.id, ownerId: f.repo.owner.id, title: "elves", includeDraftIssues: false }]);
     const copy = f.project();
     expect(copy.id).not.toBe(template.id);
     expect(byOp(f, "AddItem").map((i) => i.contentId)).toEqual(f.openIssues.map((i: { id: string }) => i.id));
     expect(marks(r.out)).toMatchObject({ Project: "✅", Views: "✅", Status: "✅", Fields: "✅", Workflows: "❌", Open: "✅" });
-    expect(r.out).toContain(`1. «Auto-add to project»: Edit → repository ai-dev, filter is:issue is:open (Enter) → Save and turn on workflow — ${copy.url}/workflows`);
+    expect(r.out).toContain(`1. «Auto-add to project»: Edit → repository elves, filter is:issue is:open (Enter) → Save and turn on workflow — ${copy.url}/workflows`);
     expect(r.out).not.toContain("2. ");
   });
 
@@ -268,7 +269,7 @@ describe("fix доводит проект до канона: через API — 
 });
 
 describe("В организации сверяются ещё поле Priority и типы issue", () => {
-  const ORG = "acme/ai-dev";
+  const ORG = "acme/elves";
   const ORG_URL = "https://github.com/orgs/acme/projects/6";
   const org = () => fake(asOrg(REC));
 
