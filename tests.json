@@ -14120,6 +14120,391 @@
   "name": "реестр «код скриптов скиллов и установщика без комментариев» не пуст (код)"
  },
  {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "README.md · **Before the rename to Elves** — README называет прежние имена установки и их перенос"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "bin/ai-dev.ts — установщик под прежним путём: update -g релиза до переименования запускает его в клоне --link"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "bin/elves.ts · FORMER — имена установки до переименования — манифест, канон, правила, блоки AGENTS.md и .gitignore, каталог конфигурации, переменные AI_DEV_*"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "bin/elves.ts · HELP — справка check и update называет прежние имена, которые update переносит, а check -g называет"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "bin/elves.ts · LEGACY_SOURCE — прежнее имя репозитория miroshnik/ai-dev — в хуке SessionStart, имени пакета клона и origin клона --link"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/est/reference.md · the former `~/.config/ai-dev` — справочник называет прежний каталог реестра репозиториев"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/est/scripts/est.ts · EST_DIR — каталог личной конфигурации до переименования — AI_DEV_CONFIG_DIR и ~/.config/ai-dev, пока update -g его не перенёс"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/locales/en.json · formerly.updateTask — название задачи обновления флоу до переименования"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/locales/ru.json · formerly.updateTask — название задачи обновления флоу до переименования"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/reference.md · the former `.agents/ai-dev.json` — справочник называет прежний манифест, из которого читается язык"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/reference.md · under the flow's former name `ai-dev` — справочник называет ruleset под прежним именем"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/scripts/github.ts · FORMER_RULESET — ruleset ai-dev, поставленный project fix до переименования"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/scripts/github.ts · configDir — каталог личной конфигурации до переименования — AI_DEV_CONFIG_DIR и ~/.config/ai-dev, пока update -g его не перенёс"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/github/scripts/locale.ts · FORMER_MANIFEST — язык проекта из манифеста .agents/ai-dev.json, пока update его не перенёс"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/slot/SKILL.md · **The flow's former name.** — описание скилла называет прежние переменные очереди"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/slot/SKILL.md · the tickets of an earlier release's slot — описание скилла называет прежнее место билетов"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/slot/scripts/slot.ts · FORMER_ENV — переменные очереди AI_DEV_SLOT и AI_DEV_SLOT_CPUS проектов и slot прошлого релиза"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/slot/scripts/slot.ts · FORMER_TEMP — билеты slot прошлого релиза в ai-dev/slots временного каталога"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/slot/scripts/slot.ts · places — каталог личной конфигурации до переименования — AI_DEV_CONFIG_DIR и ~/.config/ai-dev, пока update -g его не перенёс"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/SKILL.md · (the proxy before the rename, written by hand) — описание скилла называет сеть ai-dev-proxy в compose-файле"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/SKILL.md · **Before the rename** — описание скилла называет прокси до переименования"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/SKILL.md · an install from before the rename — описание скилла называет прежний файл настроек"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/SKILL.md · its name before the rename — описание скилла называет AI_DEV_PROXY_PORT"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/reference.md · ## The proxy before the rename — справочник описывает переход с прокси ai-dev-proxy"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/reference.md · `providers.docker.network` — справочник называет сеть ai-dev-proxy сетью провайдера по умолчанию"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/scripts/task-env.ts · FORMER_PROXY — прокси ai-dev-proxy и его сеть — один релиз"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/scripts/task-env.ts · HELP — справка check и proxy up называет прокси ai-dev-proxy и его сеть"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/scripts/task-env.ts · MANIFESTS — настройки стека из .agents/ai-dev.json, пока update его не перенёс"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "skills/task-env/scripts/task-env.ts · proxyPort — порт прокси из AI_DEV_PROXY_PORT профиля владельца"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "нарушитель не проходит: место с тестом, которого нет"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "нарушитель не проходит: место, где старого имени уже нет"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Место реестра имён для перехода живо: старое имя в нём есть, тест перехода — тоже"
+  ],
+  "name": "реестр «места реестра имён для перехода» не пуст"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в README.md старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в bin/ai-dev.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в bin/elves.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/est/reference.md старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/est/scripts/est.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/github/locales/en.json старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/github/locales/ru.json старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/github/reference.md старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/github/scripts/github.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/github/scripts/locale.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/slot/SKILL.md старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/slot/scripts/slot.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/task-env/SKILL.md старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/task-env/reference.md старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "в skills/task-env/scripts/task-env.ts старое имя — только в местах реестра"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "нарушитель не проходит: скрипт читает прежний манифест в новой функции, мимо своей константы"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "нарушитель не проходит: справочник называет прежний каталог вне абзаца о переходе"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "нарушитель не проходит: файл скилла под прежним именем"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "реестр «файлы флоу со старым именем — bin, skills, канон, docs, README.md, package.json» находит bin/ai-dev.ts, bin/elves.ts, README.md, skills/github/locales/en.json, skills/task-env/SKILL.md"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "Старое имя ai-dev в файлах флоу — только в местах реестра имён для перехода"
+  ],
+  "name": "реестр «файлы флоу со старым именем — bin, skills, канон, docs, README.md, package.json» не пуст"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "примеры"
+  ],
+  "name": "место документа — абзац с фразой или раздел под заголовком; в JSON — путь ключа; файл под старым именем — место целиком"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "примеры"
+  ],
+  "name": "место кода — объявление верхнего уровня с его комментарием; комментарий перед импортами — место header"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "примеры"
+  ],
+  "name": "старое имя вне реестра роняет проверку"
+ },
+ {
   "path": "tests/standards/origin-repo/origin-repo.test.ts",
   "describes": [
    "Репозиторий чекаута по origin определяется одинаково во всех скиллах"
