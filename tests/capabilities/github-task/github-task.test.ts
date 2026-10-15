@@ -221,6 +221,25 @@ describe("task new ставит оценку сам — по аналогам, �
     expect(r.out).not.toContain("est estimate");
   });
 
+  /**
+   * Репозиторий переименовали (#560): GitHub отвечает на прежнее имя нынешним, чтения по прежнему имени проходят, а
+   * запись est (`gh api -X POST`) получает редирект 307, который gh для не-GET не повторяет, — задача заводилась без
+   * оценки. task new работает под нынешним именем и передаёт est его.
+   */
+  it("task new с --repo старого имени переименованного репозитория записывает оценку", () => {
+    const f = new FakeGitHub(REC);
+    f.formerNames = ["miroshnik/old-name"];
+    const calls: string[][] = [];
+    // est как настоящий: его запись по прежнему имени получает 307
+    const run = (cmd: string, args: string[]) =>
+      args.includes("miroshnik/old-name") ? (calls.push([cmd, ...args]), { status: 1, stdout: "", stderr: "error: command gh api -X… exited with code 1: gh: HTTP 307\n" }) : est(calls)(cmd, args);
+    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], "miroshnik/old-name", { run });
+    expect(r.code).toBe(0);
+    expect(calls.map((c) => c.slice(3))).toEqual([["estimate", "50", "--repo", REPO, "--type", "feat", "--write"]]);
+    expect(r.out).toContain("«Estimate» comment created, field «Оценка, ч» = 0.5");
+    expect(r.out).not.toContain("! est estimate");
+  });
+
   it("баг без --branch-type — оценка с типом fix: ветка бага — fix/<N>-…", () => {
     const f = new FakeGitHub(REC);
     const calls: string[][] = [];
@@ -810,10 +829,10 @@ describe("task status берёт в работу одну задачу на се
  */
 describe("task status --branch переименовывает ветку worktree в ветку задачи", () => {
   // чекаут сессии — worktree от origin/main с upstream, как его заводит инструмент: .git/config — общий с основным чекаутом
-  function worktree() {
+  function worktree(name = REPO) {
     const { dir, cleanup } = tmpDir();
     temp.push(cleanup);
-    const origin = path.join(dir, `${REPO}.git`);
+    const origin = path.join(dir, `${name}.git`);
     mkdirSync(path.dirname(origin), { recursive: true });
     execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
     const main = path.join(dir, "main");
@@ -844,6 +863,17 @@ describe("task status --branch переименовывает ветку worktre
     expect(git(work, "branch", "--show-current")).toBe("fix/49-config-lock");
     expect(config(work, "branch.fix/49-config-lock.merge")).toBe("refs/heads/main");
     expect(config(work, "branch.claude/x-1.merge")).toBe(null);
+    expect(r.out).toContain("+ branch claude/x-1 → fix/49-config-lock");
+  });
+
+  // клон, сделанный до переименования репозитория, — его чекаут, хотя origin называет прежнее имя (#560)
+  it("origin чекаута называет прежнее имя переименованного репозитория — это его чекаут: ветка переименована", () => {
+    const { work } = worktree("miroshnik/old-name");
+    const f = new FakeGitHub(REC);
+    f.formerNames = ["miroshnik/old-name"];
+    const r = task(f, ["status", "49", "В работе", "--branch", "fix/49-config-lock"], REPO, { run: noEst, cwd: work });
+    expect(r.code).toBe(0);
+    expect(git(work, "branch", "--show-current")).toBe("fix/49-config-lock");
     expect(r.out).toContain("+ branch claude/x-1 → fix/49-config-lock");
   });
 
@@ -2410,6 +2440,27 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(r.out).toContain("pr <PR> --timeout 540");
     expect(lines.at(-1)).toBe("Ответ диспетчеру — одной строкой: `влито #<PR>` · `вопрос: <вопрос, варианты, рекомендация>` · `сломалось: <что и где остановилось>`.");
     expect(f.mutations).toEqual([]);
+  });
+
+  /**
+   * Репозиторий переименовали (#560): подсказки печатали имя из --repo или origin как есть — прежнее, и команда по
+   * подсказке шла по прежнему имени, где запись получает редирект 307. Скрипт берёт нынешнее имя у GitHub.
+   */
+  it("подсказки скриптов называют каноническое имя переименованного репозитория", () => {
+    const f = new FakeGitHub(REC);
+    f.formerNames = ["miroshnik/old-name"];
+    f.status(47, "Бэклог");
+    const epic = task(f, ["new", "--title", "Импорт · Импорт задач из CSV", "--type", "Эпик"], "miroshnik/old-name");
+    const queued = queue(f, ["--epic", "45"], "miroshnik/old-name");
+    const assignment = task(f, ["queue", "--assignment", "47"], "miroshnik/old-name", { cwd: projectDir() });
+    for (const r of [epic, queued, assignment]) {
+      expect(r.code).toBe(0);
+      expect(r.out).not.toContain("old-name");
+    }
+    expect(epic.out).toContain(`task queue --epic ${created(epic)} --repo ${REPO} in this session`);
+    expect(queued.out.split("\n")[0]).toStartWith(`Queue ${REPO} (epic #45)`);
+    expect(queued.out).toContain(`task queue --assignment 47 --repo ${REPO}\``);
+    expect(assignment.out.split("\n")[0]).toContain(`в ${REPO} (эпик #45)`);
   });
 
   // лимит «не больше трёх» — на исполнителей диспетчера; о своих субагентах задание молчало, и исполнитель #439 гадал (#516)

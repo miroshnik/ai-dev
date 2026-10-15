@@ -338,6 +338,10 @@ export const HEAD_CHECKS = `commits(last: 1) { nodes { commit { statusCheckRollu
 const PR_SHOW = `number state merged isDraft headRefName
         ${HEAD_CHECKS}`;
 export const Q = {
+  /** The repository's current name: GitHub answers a renamed repository's former name with it (`canonicalRepo`). */
+  RepoName: `query RepoName($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) { nameWithOwner }
+}`,
   RepoState: `query RepoState($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     id name nameWithOwner
@@ -2262,7 +2266,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * with `SendMessage` after a restart) — not touched, no line. The directory isn't a checkout of the repository — nothing.
  */
 function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolean): void {
-  if (!checkoutOf(originUrl(io), slug)) return;
+  if (!checkoutOfRepo(io, originUrl(io), slug)) return;
   const git = (cwd: string | undefined, ...args: string[]) => (io.run ?? realRun)("git", args, cwd);
   const listed = git(io.cwd, "worktree", "list", "--porcelain");
   if (listed.status !== 0) return;
@@ -2329,7 +2333,7 @@ function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolea
  * checkout of the repository — none: the script doesn't see the branches and claims nothing.
  */
 function taskBranchesHere(io: Io, slug: string, number: number): string[] {
-  if (!checkoutOf(originUrl(io), slug)) return [];
+  if (!checkoutOfRepo(io, originUrl(io), slug)) return [];
   const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd).stdout.split("\n");
   const refs = [...git("for-each-ref", "--format=%(refname)", "refs/heads/"), ...git("ls-remote", "--heads", "origin").map((l) => l.split("\t")[1] ?? "")];
   return [...new Set(refs.map((r) => r.trim().replace(/^refs\/heads\//, "")).filter((b) => isTaskBranch(b, number)))].sort();
@@ -2651,7 +2655,7 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
     } else if (epic.state === "OPEN") io.out(`○ epic #${epic.number}: open subtasks ${open}`);
   }
   // stacks of task-env and branches are named by the checkout's origin: from someone else's checkout — another project's
-  if (!checkoutOf(originUrl(io), slug)) io.out(`○ ${o.git ? "branches and task stacks" : "task stacks"} left alone: the current directory is not a checkout of ${slug}`);
+  if (!checkoutOfRepo(io, originUrl(io), slug)) io.out(`○ ${o.git ? "branches and task stacks" : "task stacks"} left alone: the current directory is not a checkout of ${slug}`);
   else {
     takeDownStacks(io, number);
     if (o.git) {
@@ -2758,7 +2762,7 @@ const CONFIG_LOCKED = /could not lock config file (.+)$/m;
 function renameBranch(io: Io, slug: string, target: string): boolean {
   const git = (...args: string[]) => (io.run ?? realRun)("git", args, io.cwd);
   const has = (ref: string) => git("rev-parse", "--verify", "--quiet", ref).status === 0;
-  if (!checkoutOf(originUrl(io), slug)) return (io.out(`○ branch left alone: the current directory is not a checkout of ${slug}`), true);
+  if (!checkoutOfRepo(io, originUrl(io), slug)) return (io.out(`○ branch left alone: the current directory is not a checkout of ${slug}`), true);
   const current = git("branch", "--show-current").stdout.trim();
   if (!current) {
     const base = git("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD").stdout.trim() || "origin/main";
@@ -2868,7 +2872,7 @@ function freshClone(io: Io, slug: string): void {
   const dir = top.stdout.trim();
   const git = (...args: string[]) => run("git", args, dir);
   const origin = git("remote", "get-url", "origin");
-  if (origin.status !== 0 || !checkoutOf(origin.stdout, slug)) return;
+  if (origin.status !== 0 || !checkoutOfRepo(io, origin.stdout, slug)) return;
   const base = git("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD").stdout.trim().replace(/^origin\//, "") || "main";
   const branch = git("branch", "--show-current").stdout.trim();
   const left = (why: string) => io.out(`○ clone ${dir} left alone: ${why} — the actual is by its code`);
@@ -3374,7 +3378,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
 
   const run = io.run ?? realRun;
   const git = (cwd: string | undefined, ...args: string[]) => run("git", args, cwd);
-  if (!checkoutOf(originUrl(io), slug)) throw new GhError(`the merge check runs from a checkout of ${slug}: the current directory is not one`);
+  if (!checkoutOfRepo(io, originUrl(io), slug)) throw new GhError(`the merge check runs from a checkout of ${slug}: the current directory is not one`);
   const fetched = git(io.cwd, "fetch", "-q", "origin", base);
   if (fetched.status !== 0) throw new GhError(`git fetch origin ${base}: ${fetched.stderr.trim()}`);
   // the head — by its SHA, not refs/pull/<N>/head: GitHub creates that ref up to minutes after the PR, when CI has
@@ -3672,6 +3676,43 @@ function detectRepo(): string {
   return repo;
 }
 
+/** Names already resolved by `canonicalRepo`, per Io: lowercase name → the current one. */
+const canonicalNames = new WeakMap<Io, Map<string, string>>();
+
+/**
+ * The repository's current name `owner/repo` (#560): GitHub answers a renamed repository's former name with it. Reads by
+ * the former name work — GraphQL and a REST GET follow the rename — but a REST write gets HTTP 307, which `gh` doesn't
+ * repeat for a non-GET, and a hint with the former name sends the next command there: the commands work under the
+ * current name. No such repository or no access — the name as given: the command's own reads say so.
+ */
+function canonicalRepo(io: Io, slug: string): string {
+  let known = canonicalNames.get(io);
+  if (!known) canonicalNames.set(io, (known = new Map()));
+  const key = slug.toLowerCase();
+  if (!known.has(key)) {
+    const [owner, name] = slug.split("/");
+    const out = io.gh(["api", "graphql", "--input", "-"], JSON.stringify({ query: Q.RepoName, variables: { owner, name } }));
+    let current: unknown = null;
+    try {
+      current = JSON.parse(out)?.data?.repository?.nameWithOwner;
+    } catch {
+      current = null;
+    }
+    known.set(key, typeof current === "string" && current ? current : slug);
+  }
+  return known.get(key)!;
+}
+
+/**
+ * The checkout with this origin is a checkout of `slug` (the current name): by the origin's name, and a clone made before
+ * the repository's rename — by the name GitHub resolves its origin's name to (#560).
+ */
+function checkoutOfRepo(io: Io, origin: string, slug: string): boolean {
+  if (checkoutOf(origin, slug)) return true;
+  const repo = originRepo(origin);
+  return repo !== null && canonicalRepo(io, repo).toLowerCase() === slug.toLowerCase();
+}
+
 export function main(argv: string[], io: Io): number {
   const help = helpOf(argv);
   if (help) return io.out(help), 0;
@@ -3692,10 +3733,11 @@ export function main(argv: string[], io: Io): number {
       io.err("cloud session: GitHub Projects are unavailable to it (Projects v2 — 403, docs/cloud-sessions.md) — a local session checks and fixes the project");
       return 2;
     }
+    // the repository — under its current name: --repo or origin may still name it as it was before a rename (#560)
     const repoOf = (v: string | undefined) => {
       const slug = v ?? detectRepo();
       if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new GhError(`invalid --repo «${slug}», expected owner/repo`);
-      return slug;
+      return canonicalRepo(io, slug);
     };
     if (group === "pr") {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" } } });

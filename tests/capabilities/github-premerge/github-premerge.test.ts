@@ -112,10 +112,16 @@ function fakeGh(
   { suites = [CI], moved = "2026-10-02T09:30:00Z", state = "open", activity, main = {}, bugs = [], body = "", owner = "User" }: { suites?: string[]; moved?: string | null; state?: string; activity?: string; main?: MainChecks; bugs?: { number: number; title: string }[]; body?: string; owner?: string } = {},
 ) {
   const calls: string[] = [];
-  const gh = (args: string[]) => {
+  const gh = (args: string[], stdin?: string) => {
     const url = args[1] ?? "";
     calls.push(url);
     if (args[0] !== "api") throw new Error(`fake gh: неожиданный вызов gh ${args.join(" ")}`);
+    // нынешнее имя репозитория (RepoName): репозиторий проекта — SLUG, другого нет
+    if (url === "graphql") {
+      const { variables: v } = JSON.parse(stdin ?? "{}");
+      const full = `${v?.owner}/${v?.name}`;
+      return JSON.stringify(full === SLUG ? { data: { repository: { nameWithOwner: SLUG } } } : { data: { repository: null }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to a Repository with the name '${full}'.` }] });
+    }
     if (url === `repos/${SLUG}/pulls/${PR}`) return JSON.stringify({ id: 1, number: PR, state, merged: state !== "open", body, head: { sha: head, ref: "feat/7-x" }, base: { ref: "main", repo: { owner: { type: owner } } } });
     if (url.startsWith(`repos/${SLUG}/commits/main/check-runs`)) {
       const runs = (main.runs ?? []).map((r, i) => ({ id: r.id ?? i + 1, name: r.name, status: r.status ?? "completed", conclusion: r.conclusion }));
@@ -152,7 +158,7 @@ function processes() {
   return { run: githubOrigin(run), calls, seen };
 }
 
-function premerge(gh: (args: string[]) => string, cwd: string, run = processes().run) {
+function premerge(gh: (args: string[], stdin?: string) => string, cwd: string, run = processes().run) {
   const out: string[] = [];
   const err: string[] = [];
   const io: Io = { gh, out: (l) => out.push(l), err: (l) => err.push(l), env: {}, run, cwd };
