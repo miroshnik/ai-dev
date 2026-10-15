@@ -66,7 +66,7 @@ stderr, `--strict` — exit code 1. With both `<name>.test.*` and
 `<name>.e2e.ts` side by side, the main one is `.test.*`: the page opens with
 the unit statements, e2e follows, before the folder's other files. **Names**
 of `describe` and `it` are statements in the project language (`language` in
-`.agents/ai-dev.json` of the `--root` directory; `isStatement`): `ru` — a name
+`.agents/elves.json` of the `--root` directory; `isStatement`): `ru` — a name
 with Russian words, another language — a phrase of words (two or more, or one
 whole word); an identifier (`parseScenarios`, `foo_bar`, `fooBar`), a function
 or file name, a path, a word with a number — not a statement: a stderr line
