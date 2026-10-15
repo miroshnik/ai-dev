@@ -271,7 +271,7 @@ Mechanics the canon refers to; the agent reads them as needed.
 
 - [`docs/pr-checks.md`](docs/pr-checks.md) — waiting for PR and commit checks: polling, `bucket`, empty-list traps; a deploy — by the commit status, not by polling the site; the app's Auto-fix — off: a conflict is a rebase, not a merge of the base.
 - [`docs/ci-concurrency.md`](docs/ci-concurrency.md) — CI for parallel tasks: the full rule and workflow fragments — parallel branches, a non-cancellable `main`, a deploy queue.
-- [`docs/testing.md`](docs/testing.md) — how to test: a run's result by the runner's summary, the environment, e2e without flakes, UI state in the agent's browser — by the DOM, not a screenshot.
+- [`docs/testing.md`](docs/testing.md) — how to test: what runs before a commit and what is left to CI, a run's result by the runner's summary, the environment, e2e without flakes, UI state in the agent's browser — by the DOM, not a screenshot.
 - [`docs/judgment.md`](docs/judgment.md) — judgment and edits: a mistake disguised as an outcome, a label is a claim, editing exactly what was named, "it doesn't reproduce for me".
 - [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — parallel worktrees: the full rule, the task's Compose stack and what the compose file holds, callbacks of external services, the runner config, a shared `.git/config` — no `git config` in copies.
 - [`docs/cloud-sessions.md`](docs/cloud-sessions.md) — the Claude Code cloud session: what it can't access and how to close a task from there.
@@ -304,6 +304,7 @@ git show origin/spec:capabilities/est.md       # a decision page: why, what hold
 bun install
 bun run test:spec     # ai-dev standards — tests/standards, once: test doesn't repeat them
 bun run test          # fast level: script tests without standards, Docker and live servers
+bun run test --changed=origin/main   # before a commit — what the change affects; a changed script — its tests by path; in full — CI
 bun run test:slow     # slow level — *.slow.test.ts: Docker, live servers; CI runs both levels
 bun run typecheck     # bun check — Bun's own type checker, Bun 1.4.3 from packageManager
 bun run spec:doc      # docs/spec from test names, --strict

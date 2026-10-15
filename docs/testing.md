@@ -41,6 +41,38 @@ against the Playwright, Next.js, Vite, SvelteKit and Nuxt documentation.
   command with a generous timeout (in Claude Code — up to 2 h, completion
   wakes the session) or in a terminal; wait for the process to finish, not
   for a deadline.
+- **Before a commit — what the change affects; the full run is CI's.** A full
+  local run repeats what CI does anyway — in parallel jobs and shards, faster
+  and reproducibly; locally the agent waits twice — the queue and the run,
+  then CI — and the run holds the shared machine. An error before the push
+  is almost always caught by the tests the change itself affects. Before a
+  commit:
+  - `lint` and `typecheck` — in full: they are fast and incremental;
+  - `test:spec` — in full: standards read the code from disk and the
+    architecture model takes the whole tree, the import graph never selects
+    them;
+  - `test` — the affected: the runner's `--changed=origin/main` (Vitest,
+    `bun test`; Jest — `--changedSince=origin/main`) through the project's
+    script (`npm run test -- --changed=origin/main`) runs the test files that
+    import a file changed against `origin/main`, committed or not. Nothing
+    affected isn't an error: Vitest needs `--passWithNoTests` for it
+    (otherwise exit code 1), `bun test` passes by itself;
+  - tests that reach the code not by an import — a script started as a
+    process, a file read from disk, an app behind its server, a dynamic
+    `import()` — the graph doesn't see: a separate run by path — the tests
+    that name the changed file (`grep -rl <file> tests`) or its decision's
+    folder; a path together with `--changed` is their intersection, not a
+    union;
+  - `test` in full — when the change touches what every test depends on and
+    no import shows: the runner config, its global setup (`setupFiles`,
+    `globalSetup`, `preload` in `bunfig.toml`), the lock file;
+  - e2e — the changed specs (Playwright `--only-changed=origin/main
+    --pass-with-no-tests`): it follows the specs' own imports (fixtures, page
+    objects), not the app code the browser opens; the rest — CI;
+  - `test:slow` — when the change touches what it checks (below).
+
+  The full run is CI's; `github pr premerge` stays as it is: `typecheck` and
+  `test:spec` on the merge with a fresh `main` (`docs/pr-checks.md`).
 - **A slow level — a script of its own.** Tests that need Docker or a live
   server go into a separate script (`test:slow`, by file name — the runner
   selects files, not test blocks), so `test` stays fast before every commit.
