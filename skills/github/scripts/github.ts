@@ -1499,7 +1499,7 @@ function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "item
 
 /**
  * The personal configuration directory — `AI_DEV_CONFIG_DIR`, otherwise `~/.config/ai-dev`: one expression for all
- * scripts (the ai-dev `config-dir` standard) rather than a shared module — github imports no other skill
+ * scripts (the Elves `config-dir` standard) rather than a shared module — github imports no other skill
  * (tests/standards/skill-imports). est
  * moves the old `~/.claude/est` into the directory only while the directory doesn't exist (est.ts, `ensureConfigDir`):
  * creating it here first would leave est without its registry and prices. Before the move the configuration is the

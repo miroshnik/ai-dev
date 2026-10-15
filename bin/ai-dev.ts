@@ -1,22 +1,22 @@
 #!/usr/bin/env bun
 /**
- * ai-dev — installs the flow: the shared rules, references and all ai-dev skills into a project or onto the machine;
- * checks whether an install has fallen behind the latest ai-dev release, updates it and cuts a release.
+ * ai-dev — installs the flow: the shared rules, references and all Elves skills into a project or onto the machine;
+ * checks whether an install has fallen behind the latest Elves release, updates it and cuts a release.
  *
  *   bunx github:miroshnik/ai-dev install                — into the project: the git root (or the current directory)
  *   bunx github:miroshnik/ai-dev install -g             — machine-wide: skills and hook only, rules from the project
- *   bun <ai-dev clone>/bin/ai-dev.ts install -g --link  — from a clone: symlinks to the clone, edits show at once
+ *   bun <Elves clone>/bin/ai-dev.ts install -g --link   — from a clone: symlinks to the clone, edits show at once
  *   bunx github:miroshnik/ai-dev check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
  *   bunx github:miroshnik/ai-dev update [-g]            — bring the install up to date
- *   bun <ai-dev clone>/bin/ai-dev.ts release            — cut a release: a tag and the list of flow changes
+ *   bun <Elves clone>/bin/ai-dev.ts release             — cut a release: a tag and the list of flow changes
  *
  * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/ai-dev/` (AGENTS.md,
  * claude/CLAUDE.md, docs/*.md) and `.agents/skills/<name>/`; Claude Code gets symlinks in `.claude/skills` and
  * `.claude/rules` (it loads them itself, whatever the project's CLAUDE.md), the other agents — a link in the project's
  * `AGENTS.md`. On the machine (`-g`) there are no rules — only skills (`~/.agents/skills`, `~/.claude/skills`) and the
  * hook: rules load from the project, a second copy on the machine would cost ~20k tokens on every turn of every agent.
- * `.agents/ai-dev.json` — the ai-dev SHA it was installed from, the list of installed skills (by it a reinstall removes
- * skills ai-dev no longer has and leaves others' alone), for a machine with `--link` — the clone path, for a project —
+ * `.agents/ai-dev.json` — the Elves SHA it was installed from, the list of installed skills (by it a reinstall removes
+ * skills Elves no longer has and leaves others' alone), for a machine with `--link` — the clone path, for a project —
  * `auto`: whether the agent runs a task entirely by itself — answers to questions by recommendation, commit, push,
  * fixing CI and merging its own PR on green checks (AGENTS.md, "What I do without asking and what needs a yes"), and
  * `language` — the language the agent works in in the project: dialog, tasks, prompts, documents (AGENTS.md,
@@ -25,7 +25,7 @@
  * terminal and a flag — the previous value, `update` keeps it. An install of a previous version has no `language`
  * field, and the flow before it worked only in Russian: its language is `ru` (`LEGACY_LANGUAGE` of the github skill's
  * language module), `update` writes it. With auto `install` suggests the Claude Code permission rule for the merge
- * (MERGE_HINT) — it doesn't change the machine's settings. The flow isn't installed into an ai-dev clone (the canon is
+ * (MERGE_HINT) — it doesn't change the machine's settings. The flow isn't installed into an Elves clone (the canon is
  * at its root): `install` writes a single manifest there, with `auto` and `language`.
  * The copy in a project is committed — the flow files the project's git ignores (the `CLAUDE.md` template, the
  * `.claude/` directory) the install un-ignores with exceptions in an ai-dev block at the end of `.gitignore`, `check`
@@ -37,7 +37,7 @@
  * machine queue, the slot skill (`slotScripts`); if such a script calls turbo and turbo.json doesn't pass the queue
  * variables to tasks, it warns with a ready-made line (`turboEnv`).
  *
- * A copy (a project, a machine without `--link`) follows ai-dev releases — tags vYYYY.MM.DD — not main: the bunx
+ * A copy (a project, a machine without `--link`) follows Elves releases — tags vYYYY.MM.DD — not main: the bunx
  * package from main is only a launcher — it finds the latest release and restarts from it by SHA (`toRelease`).
  * `check` is the same install as a dry run: the release package lists what it would change. A machine with `--link`
  * is different: the clone is compared with `origin/main` after `git fetch`, `update` does `git pull --ff-only` and
@@ -91,7 +91,7 @@ const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md", "skills"];
 const RELEASED = [...FLOW, "bin"];
 /** Release tag: vYYYY.MM.DD, a same-day patch — vYYYY.MM.DD.N. */
 const RELEASE_TAG = /^v(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?$/;
-/** ai-dev releases on GitHub: a release's page is `${RELEASES}/tag/<tag>`. */
+/** Elves releases on GitHub: a release's page is `${RELEASES}/tag/<tag>`. */
 const RELEASES = `https://github.com/${SOURCE}/releases`;
 /** Lines of the change list in `check` output — beyond that, "… and N more". */
 const MAX_LINES = 20;
@@ -247,7 +247,7 @@ function reason(e: unknown) {
 const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : null);
 
 /**
- * The ai-dev SHA the install runs from: for a clone — HEAD; for the bunx package — the SHA of the spec bunx installed it
+ * The Elves SHA the install runs from: for a clone — HEAD; for the bunx package — the SHA of the spec bunx installed it
  * by, `github:miroshnik/ai-dev#<sha>` in the package.json of the bunx directory next to node_modules (bunx unpacks the
  * package from GitHub without `.git`, its `.bun-tag` holds only 7 characters of the SHA). The package from main — no SHA
  * in the spec — null: it is only a launcher (`toRelease`).
@@ -274,7 +274,7 @@ const lsRemote = (args: string[], cwd?: string) =>
   execFileSync("git", ["ls-remote", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
 
 /**
- * ai-dev releases in ascending order — RELEASE_TAG tags from `git ls-remote --tags remote` (by date, then by patch
+ * Elves releases in ascending order — RELEASE_TAG tags from `git ls-remote --tags remote` (by date, then by patch
  * number); for an annotated tag — the commit SHA, not the tag object's. Other tags don't count. A git error throws.
  * @param remote a URL or a remote name in cwd
  */
@@ -300,7 +300,7 @@ function mainHead(remote: string) {
 const repoUrl = () => process.env.AI_DEV_REPO || `https://github.com/${SOURCE}.git`;
 
 /**
- * A copy follows ai-dev releases, not main. bunx installs a package by its spec once and then runs it from its cache
+ * A copy follows Elves releases, not main. bunx installs a package by its spec once and then runs it from its cache
  * without the network: the package from main (`bunx github:miroshnik/ai-dev`) stays as old as its first run. So it is
  * only a launcher: it finds the latest release and restarts from it by the full SHA — a SHA doesn't change, the cache
  * doesn't harm it; no releases yet — by the SHA of main's head. A package installed by a SHA (`sourceSha`: the restart
@@ -405,7 +405,7 @@ function placeDir(src: string, dst: string, root: string, linkMode: boolean) {
   cpSync(src, dst, { recursive: true });
 }
 
-/** ai-dev skills: skills/<name> directories with SKILL.md. */
+/** Elves skills: skills/<name> directories with SKILL.md. */
 function sourceSkills(src: string) {
   return readdirSync(path.join(src, "skills"))
     .filter((n) => existsSync(path.join(src, "skills", n, "SKILL.md")))
@@ -450,7 +450,7 @@ function readManifest(root: string): Manifest {
 
 /**
  * Skills: `.agents/skills/<name>` — a copy (or a symlink to the clone), Claude Code — a symlink from `.claude/skills`.
- * Someone else's directory with the same name is left alone; skills from a previous install that ai-dev no longer
+ * Someone else's directory with the same name is left alone; skills from a previous install that Elves no longer
  * has are removed. `.agents/ai-dev.json` holds the source SHA, the release tag and the installed skills; a dry run
  * doesn't compare the SHA and the tag: the install is up to date if what it installs matches (a release that changes
  * only the installer doesn't touch projects). auto and language — the project settings "a task entirely without
@@ -458,9 +458,9 @@ function readManifest(root: string): Manifest {
  * the project's task stack settings (the task-env skill: HTTP services and their ports): the project writes it, the
  * install carries it over. A dry run doesn't compare them either: editing a field by hand doesn't make the install
  * "behind".
- * The order survives a run cut off midway (an agent's sandbox refuses writes to `.claude/skills`): skills ai-dev no
+ * The order survives a run cut off midway (an agent's sandbox refuses writes to `.claude/skills`): skills Elves no
  * longer has go while the old manifest still lists them, and the new manifest is written before the copies — a repeat
- * run takes them for ai-dev's and finishes the install instead of leaving them as someone else's.
+ * run takes them for the flow's and finishes the install instead of leaving them as someone else's.
  * @returns installed skills
  */
 function installSkills(src: string, root: string, linkMode: boolean, claude: boolean, auto?: boolean, language?: string) {
@@ -877,7 +877,7 @@ function projectRoot() {
   return gitRoot() ?? process.cwd();
 }
 
-/** An ai-dev clone: its canon is the root AGENTS.md, the flow needn't be installed into it. */
+/** An Elves clone: its canon is the root AGENTS.md, the flow needn't be installed into it. */
 function isAiDevClone(root: string) {
   try {
     return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).name === "ai-dev";
@@ -905,7 +905,7 @@ const modeLines = (root: string) => [`  tasks: ${autoOf(root) ? "entirely by its
 const CLONE_NOTE = "an Elves clone: the flow isn't installed into it — the canon is at its root";
 
 /**
- * An ai-dev clone: of the install it gets only the mode and the language, a manifest of two fields; the task stack
+ * An Elves clone: of the install it gets only the mode and the language, a manifest of two fields; the task stack
  * settings (`env`), if the clone has them, are carried over as in a project.
  */
 function installClone(root: string, auto: boolean, language: string) {
@@ -1137,7 +1137,7 @@ function target(global: boolean) {
   const home = os.homedir();
   const root = global ? home : projectRoot();
   const canon = path.join(root, ".agents/ai-dev");
-  // the home directory is the machine's install, not a project; an ai-dev clone is the canon itself: its manifest
+  // the home directory is the machine's install, not a project; an Elves clone is the canon itself: its manifest
   // keeps only the mode
   const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || (!samePath(root, home) && !isAiDevClone(root)));
   return { home, root, canon, installed };
@@ -1150,7 +1150,7 @@ function target(global: boolean) {
 function check(global: boolean): Result {
   const { home, root, installed } = target(global);
   const where = global ? "on the machine" : "in the project";
-  // an ai-dev clone has nothing to compare against, but the session mode is needed in it — as in a project
+  // an Elves clone has nothing to compare against, but the session mode is needed in it — as in a project
   if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`Elves ${where}: not installed — an Elves clone, the canon is at its root`, ...modeLines(root)].join("\n") };
   if (!installed) return { code: 0, text: `Elves ${where}: not installed`, absent: true };
   const clone = global ? linkedClone(home) : null;
@@ -1232,7 +1232,7 @@ function checkLink(home: string, clone: string): Result {
 
 /**
  * A reminder to the owner on a machine with a `--link` clone: origin/main has flow changes that aren't in the latest
- * release — projects won't get them until it's cut. Only in an ai-dev clone's session: a release is the owner's step
+ * release — projects won't get them until it's cut. Only in an Elves clone's session: a release is the owner's step
  * there, in a project's session the line is noise at every start. Not falling behind: it doesn't change the check's
  * code. Can't tell — no line.
  */
@@ -1404,7 +1404,7 @@ function hook(failed?: unknown) {
   }
   const [machine, project] = results;
   const shown = results.filter((r) => !r.absent);
-  // rules load only from the project: a git repository without the flow — how to install it (an ai-dev clone is the
+  // rules load only from the project: a git repository without the flow — how to install it (an Elves clone is the
   // canon itself, it isn't absent)
   if (project?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `Elves in the project: not installed — install it: ${RUN} install --lang <project language>` });
   const resume = resumeLines();
@@ -1495,7 +1495,7 @@ function whatChanged(from: { sha?: unknown; tag?: unknown }): string[] {
 }
 
 /**
- * The releases between two SHAs of ai-dev, newest first, each with its list of changes; commits after the last of them
+ * The releases between two SHAs of Elves, newest first, each with its list of changes; commits after the last of them
  * (no releases yet, an installer from a clone) — a group without a tag. The history comes from where the releases do,
  * fetched without file contents into a temporary repository: the bunx package has no `.git`. A release's list starts
  * from the previous release, the first one's — from `from`: with an install from a release that is exactly its GitHub
