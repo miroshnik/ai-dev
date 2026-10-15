@@ -858,7 +858,7 @@ describe("task status --branch переименовывает ветку worktre
     const main = path.join(dir, "main");
     mkdirSync(main);
     const repo = gitRepo(main);
-    repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
+    repo.commit({ "README.md": "x\n", ".agents/elves.json": '{ "language": "ru" }\n' }, "init");
     repo.git("remote", "add", "origin", origin);
     repo.git("push", "-q", "-u", "origin", "main");
     const work = path.join(dir, "wt");
@@ -1658,7 +1658,7 @@ function checkout(branch: string, { merged = true, slug = REPO, before = [] as s
   mkdirSync(work);
   const repo = gitRepo(work);
   // чекаут Elves: язык проекта — русский, как у записанного проекта GitHub
-  repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
+  repo.commit({ "README.md": "x\n", ".agents/elves.json": '{ "language": "ru" }\n' }, "init");
   repo.git("remote", "add", "origin", origin);
   repo.git("push", "-q", "-u", "origin", "main");
   for (const b of before) {
@@ -2120,24 +2120,24 @@ describe("task resume называет, какое ожидание переза
 });
 
 /**
- * Задачи — на языке проекта (`language` в `.agents/ai-dev.json` чекаута, канон, «Language»): каркас описания, статусы,
+ * Задачи — на языке проекта (`language` в `.agents/elves.json` чекаута, канон, «Language»): каркас описания, статусы,
  * тип, задание субагенту и комментарии пишутся названиями словаря `skills/github/locales/<язык>.json`, а разбирается
  * название любого его языка. Доска не на языке проекта (скрипт позван не из чекаута, язык сменили без fix) — задача
  * ведётся на языке доски: язык сверяет `project check`.
  */
-describe("Задачи — на языке проекта из .agents/ai-dev.json чекаута", () => {
+describe("Задачи — на языке проекта из .agents/elves.json чекаута", () => {
   /** Чекаут проекта с манифестом (null — без манифеста). */
   function checkoutWith(manifest: string | null): string {
     const dir = scratch();
     mkdirSync(path.join(dir, ".git"));
     if (manifest !== null) {
       mkdirSync(path.join(dir, ".agents"));
-      writeFileSync(path.join(dir, ".agents/ai-dev.json"), manifest);
+      writeFileSync(path.join(dir, ".agents/elves.json"), manifest);
     }
     return dir;
   }
   const EN = '{ "language": "en" }\n';
-  /** Доска проекта ai-dev на английском — как после project fix в проекте на en. */
+  /** Доска проекта Elves на английском — как после project fix в проекте на en. */
   function englishBoard(f: FakeGitHub): FakeGitHub {
     const ru: Record<string, string> = { Бэклог: "Backlog", "В работе": "In progress", Готово: "Done" };
     for (const o of f.field("Status").options) o.name = ru[o.name];
@@ -2435,7 +2435,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
   const projectDir = () => {
     const dir = scratch();
     mkdirSync(path.join(dir, ".agents"));
-    writeFileSync(path.join(dir, ".agents/ai-dev.json"), '{ "language": "ru" }\n');
+    writeFileSync(path.join(dir, ".agents/elves.json"), '{ "language": "ru" }\n');
     return dir;
   };
 

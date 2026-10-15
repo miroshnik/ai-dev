@@ -11,7 +11,7 @@ import { githubOrigin, gitRepo, tmpDir } from "../../lib/spec.ts";
 // git и test:spec — настоящие процессы во временном репозитории
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-const SLUG = "miroshnik/ai-dev";
+const SLUG = "miroshnik/elves";
 const PR = 7;
 const CI = "2026-10-02T10:00:00Z";
 
@@ -55,12 +55,12 @@ exit $fail
 `;
 
 /**
- * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/ai-dev.git. Голова PR лежит на
+ * Чекаут сессии на ветке PR и origin — bare-репозиторий с путём вида …/miroshnik/elves.git. Голова PR лежит на
  * origin в `headRef` — по умолчанию `refs/pull/<N>/head`, как на GitHub; null — её на origin нет; `mainAfter` —
  * коммит, влитый в main после CI PR.
  */
-// проект на русском, как Elves, чей проект GitHub записан: названия — из ru.json (язык — .agents/ai-dev.json чекаута)
-const RU = { ".agents/ai-dev.json": '{ "language": "ru" }\n' };
+// проект на русском, как Elves, чей проект GitHub записан: названия — из ru.json (язык — .agents/elves.json чекаута)
+const RU = { ".agents/elves.json": '{ "language": "ru" }\n' };
 
 function project({ pr, mainAfter, files = {}, headRef = `refs/pull/${PR}/head` }: { pr: Record<string, string | null>; mainAfter?: Record<string, string | null>; files?: Record<string, string | null>; headRef?: string | null }) {
   const dir = scratch();
@@ -148,7 +148,7 @@ function processes() {
     if (cmd === "bun" && args[0] === "run") seen.push(Object.fromEntries(["items.txt", "uses.txt"].map((f) => [f, existsSync(path.join(cwd!, f)) ? readFileSync(path.join(cwd!, f), "utf8") : null])));
     return realRun(cmd, args, cwd);
   };
-  // origin чекаута — bare-репозиторий …/miroshnik/ai-dev.git: для скрипта он — репозиторий GitHub
+  // origin чекаута — bare-репозиторий …/miroshnik/elves.git: для скрипта он — репозиторий GitHub
   return { run: githubOrigin(run), calls, seen };
 }
 
@@ -481,7 +481,7 @@ describe("pr premerge: main красный — не этот PR: не влива
   });
 
   it("pr premerge в проекте на en находит баг «main is red: …» и подсказывает его заголовок", () => {
-    const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
+    const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/elves.json": '{ "language": "en" }\n' } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "timed_out" }] };
     const found = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main is red: check deploy" }] }).gh, p.work);
     expect(found.out).toContain(`bug on red main — #41 «main is red: check deploy»: wait for it to close — bash ${WAIT} issue 41 as a background command`);
@@ -495,7 +495,7 @@ describe("pr premerge: main красный — не этот PR: не влива
   });
 
   it("баг на красную ветку на другом языке словаря тоже найден: проект на en, баг «main красный: чек deploy»", () => {
-    const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/ai-dev.json": '{ "language": "en" }\n' } });
+    const p = project({ pr: { "uses.txt": "a\n" }, files: { ".agents/elves.json": '{ "language": "en" }\n' } });
     const main: MainChecks = { runs: [{ name: "deploy", conclusion: "failure" }] };
     const r = premerge(fakeGh(p.head, { main, bugs: [{ number: 41, title: "main красный: чек deploy" }] }).gh, p.work);
     expect(r.out).toContain("bug on red main — #41 «main красный: чек deploy»: wait for it to close");
