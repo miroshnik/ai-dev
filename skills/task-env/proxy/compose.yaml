@@ -3,8 +3,8 @@
 # `task-env proxy up`. The name — the Compose project and the network —, the port and the provider's default network
 # come from ELVES_PROXY, ELVES_PROXY_PORT and ELVES_PROXY_DEFAULT_NETWORK, which scripts/task-env.ts passes explicitly
 # (`composeEnv`): their defaults live only there, so the file has none (`${…:?}`) and doesn't come up without the
-# script. The network of the proxy before the rename (ai-dev-proxy) the script adds on Compose's stdin when it is on
-# the machine — it isn't always, so it isn't here.
+# script. The network of the proxy before the rename (`FORMER_PROXY` of the script) the script adds on Compose's stdin
+# when it is on the machine — it isn't always, so it isn't here.
 name: ${ELVES_PROXY:?set by task-env.ts}
 services:
   traefik:

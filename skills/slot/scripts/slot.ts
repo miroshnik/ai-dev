@@ -17,10 +17,10 @@
  * No queue in CI (the machine is given to the run) and inside a slot (ELVES_SLOT): a script that calls another script
  * through the queue would otherwise wait for itself.
  *
- * The flow's former name (`ai-dev`, #545): a project whose copy `update` hasn't brought yet runs the slot of an earlier
- * release — it queues in `ai-dev/slots` of the temp directory, exports only AI_DEV_SLOT and AI_DEV_SLOT_CPUS, and its
- * runner configs and `turbo.json` pass those. So the queue is read from the former temp place too, the queue variables
- * go under both names, and either name marks a nested call (FORMER_ENV).
+ * The flow's former name (#545): a project whose copy `update` hasn't brought yet runs the slot of an earlier release —
+ * it queues in its own place of the temp directory (FORMER_TEMP), exports only the queue variables under the former name
+ * (FORMER_ENV), and its runner configs and `turbo.json` pass those. So the queue is read from the former temp place too,
+ * the queue variables go under both names, and either name marks a nested call.
  *
  * A package.json script takes its slot with `--for <shell PID>` (slot.sh next to this file): the ticket carries the
  * script's shell, not this process, and the queue variables are printed for the shell to export — the command runs

@@ -89,6 +89,8 @@ const CONFIG = ".config/elves";
  * release marks the agent's Bash with AI_DEV_AGENT_SHELL.
  */
 const FORMER = {
+  /** The flow's former name itself — in the output about what is left under it. */
+  name: "ai-dev",
   manifest: ".agents/ai-dev.json",
   canon: ".agents/ai-dev",
   rules: [".claude/rules/ai-dev.md", ".claude/rules/ai-dev-claude.md"],
@@ -105,7 +107,7 @@ const FORMER = {
   slotEnv: ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"],
 };
 /** What `check` adds to a line about a file or a directory under the former name. */
-const FORMER_NOTE = "the flow's former name (ai-dev) — update moves it";
+const FORMER_NOTE = `the flow's former name (${FORMER.name}) — update moves it`;
 
 const BEGIN = "<!-- elves:begin";
 const END = "<!-- elves:end -->";
@@ -469,7 +471,7 @@ function removeFormer(root: string, rel: string, ours = (_: string) => true) {
   if (!st || !ours(p)) return;
   if (dry) return void change("-", st.isDirectory() ? p + "/" : p, { note: FORMER_NOTE });
   rmSync(p, { recursive: true, force: true });
-  note(`${rel}${st.isDirectory() ? "/" : ""} — removed: the flow's former name (ai-dev)`);
+  note(`${rel}${st.isDirectory() ? "/" : ""} — removed: the flow's former name (${FORMER.name})`);
 }
 
 /** The rules canon: `.agents/elves/` — a copy of AGENTS.md, claude/CLAUDE.md and docs/*.md or a symlink to the clone. */
@@ -501,8 +503,8 @@ interface Manifest {
 }
 
 /**
- * The install's manifest: `.agents/elves.json`, until `update` moves it — `.agents/ai-dev.json` of an earlier release
- * (FORMER); missing or broken — empty.
+ * The install's manifest: `.agents/elves.json`, until `update` moves it — the manifest of an earlier release under the
+ * flow's former name (FORMER.manifest); missing or broken — empty.
  */
 function readManifest(root: string): Manifest {
   const file = [MANIFEST, FORMER.manifest].map((f) => path.join(root, f)).find((f) => existsSync(f));
@@ -980,8 +982,8 @@ function projectRoot() {
 
 /**
  * An Elves clone: its canon is the root AGENTS.md, the flow needn't be installed into it. The package is named after
- * the repository — `elves`, and `ai-dev` before the rename (LEGACY_SOURCE): a clone or a branch that hasn't pulled the
- * rename yet is a clone too.
+ * the repository — `elves`, and the repository's name before the rename (LEGACY_SOURCE): a clone or a branch that hasn't
+ * pulled the rename yet is a clone too.
  */
 function isElvesClone(root: string) {
   try {
@@ -1038,14 +1040,15 @@ function installProject(src: string, root: string, auto = autoOf(root), language
   return [...(gitignoreFlow(root) ? [".gitignore"] : []), ...(pkg ? ["package.json"] : [])];
 }
 
-/** Agents' global rule files that a previous install made symlinks to `~/.agents/ai-dev/AGENTS.md` (FORMER.canon). */
+/** Agents' global rule files that a previous install made symlinks to the AGENTS.md of the former canon (FORMER.canon). */
 const AGENT_RULE_FILES = [".codex/AGENTS.md", ".gemini/GEMINI.md", ".copilot/copilot-instructions.md", ".config/opencode/AGENTS.md", ".config/amp/AGENTS.md"];
 
 /**
  * There are no rules on the machine: the project loads them (`.claude/rules`, `AGENTS.md`), and a second copy from
  * the machine is the same ~20k tokens on every turn of every agent. A previous install put them there — we remove
- * them: `~/.agents/ai-dev` (a copy or a symlink to the clone), the `~/.claude/rules/ai-dev*.md` symlinks and the
- * symlinks of agents' global files to the canon. Someone else's file or symlink is left alone.
+ * them: the former canon in the home directory (FORMER.canon — a copy or a symlink to the clone), the symlinks of
+ * Claude Code's rules (FORMER.rules) and of agents' global files to the canon. Someone else's file or symlink is left
+ * alone.
  */
 function removeGlobalRules(home: string) {
   const canon = path.join(home, FORMER.canon);
@@ -1142,7 +1145,7 @@ function installGlobal(src: string, linkMode: boolean) {
 }
 
 /**
- * The personal configuration directory under the flow's former name (`~/.config/ai-dev`, FORMER) moves to
+ * The personal configuration directory under the flow's former name (FORMER.config in the home directory) moves to
  * `~/.config/elves`: a directory — whole, a symlink (to a private checkout, `ELVES_PRIVATE`) — the same symlink. In its
  * place stays a symlink to the new one: the scripts of earlier releases — a project copy `update` hasn't brought yet —
  * keep the same directory, and the queue, the pins and the registry don't split in two; the skills' scripts read the
@@ -1300,8 +1303,8 @@ const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `
 
 /**
  * The clone a `--link` install on the machine refers to: the path from the manifest; for an install of a previous
- * version — the `~/.agents/ai-dev` symlink (`update -g` removes it and writes the path). null — a copy or not
- * installed.
+ * version — the symlink of the former canon in the home directory (FORMER.canon; `update -g` removes it and writes the
+ * path). null — a copy or not installed.
  */
 function linkedClone(home: string) {
   const m = readManifest(home);
