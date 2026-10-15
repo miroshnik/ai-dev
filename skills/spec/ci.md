@@ -2,13 +2,16 @@
 
 The "Wiring into a repository" section of `SKILL.md`, item 4: pnpm
 (`packageManager` in `package.json`), standards and architecture in one
-`test-spec` job, the rest of Vitest in 3 shards, Playwright in 2;
+`test-spec` job, the rest of Vitest in 3 shards, Playwright in 2 — the
+shard's files by the last green run's durations (`spec-shard`, section
+"Shards by durations");
 concurrency — per `docs/ci-concurrency.md`. `test-spec` runs the `test:spec`
 script once per run, without shards and browsers: standards and architecture
 are static checks over the code (`checks.md`); `unit` runs `test`, which
 excludes them, `e2e` — only the browser tests. The jobs call the project's
 scripts, not the runner directly: the split between `test` and `test:spec` is
-in one place, and locally the same scripts run what CI runs. The scripts are
+in one place (only the shard listing repeats `test`'s `--exclude`), and
+locally the same scripts run what CI runs. The scripts are
 wrapped in `slot` under Bun (the `slot` skill; no queue in CI) — hence
 `oven-sh/setup-bun@v2` in those jobs. The jobs write blob reports, the
 `spec` job merges them with the runners' own tools and builds `docs/spec` with
@@ -50,6 +53,7 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
+    permissions: { contents: read, actions: read } # spec-run and gh run download: the last green run's reports
     strategy:
       fail-fast: false
       matrix: { shard: [1, 2, 3] }
@@ -60,10 +64,19 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - uses: oven-sh/setup-bun@v2
       - run: pnpm install --frozen-lockfile
-      # test excludes standards and architecture: test-spec runs them
-      - run: >-
-          pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-          --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
+      - name: the last green run's reports — durations for the shard
+        continue-on-error: true # without them the shards split by count
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --artifact spec-reports)
+          [ -z "$run" ] || gh run download "$run" --name spec-reports --dir .spec-last
+      # the files of test (the same --exclude: standards and architecture — test-spec) by the durations, not --shard
+      - run: |
+          pnpm exec vitest list --filesOnly --json=.spec-files.json --exclude 'tests/standards/**' --exclude 'tests/architecture/**'
+          files=$(bun --no-env-file .agents/skills/spec/scripts/spec-shard.ts --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner vitest --list .spec-files.json --report .spec-last/.spec-report.json)
+          [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no files"; exit 0; } # without filters the runner would run everything
+          list=(); while IFS= read -r f; do list+=("$f"); done <<< "$files"
+          pnpm test "${list[@]}" --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
       - uses: actions/upload-artifact@v7
         with: { name: 'vitest-blob-${{ matrix.shard }}', path: vitest-blob/, retention-days: 1 }
       - uses: actions/upload-artifact@v7 # entry-point log — for spec-claims
@@ -73,6 +86,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    permissions: { contents: read, actions: read }
     strategy:
       fail-fast: false
       matrix: { shard: [1, 2] }
@@ -81,10 +95,22 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
+      - uses: oven-sh/setup-bun@v2 # spec-run, spec-shard
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps
-      # only the browser tests: no test or test:spec step here
-      - run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=dot,blob
+      - name: the last green run's reports — durations for the shard
+        continue-on-error: true
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --artifact spec-reports)
+          [ -z "$run" ] || gh run download "$run" --name spec-reports --dir .spec-last
+      # only the browser tests: no test or test:spec step here; the login project (dependencies) runs in every shard by itself
+      - run: |
+          PLAYWRIGHT_JSON_OUTPUT_NAME=.spec-files.json pnpm exec playwright test --list --reporter=json
+          files=$(bun --no-env-file .agents/skills/spec/scripts/spec-shard.ts --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner playwright --list .spec-files.json --report .spec-last/.spec-playwright.json)
+          [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no files"; exit 0; }
+          list=(); while IFS= read -r f; do list+=("$f"); done <<< "$files"
+          pnpm exec playwright test "${list[@]}" --reporter=dot,blob
       - uses: actions/upload-artifact@v7
         with: { name: 'playwright-blob-${{ matrix.shard }}', path: blob-report/, retention-days: 1 }
       - uses: actions/upload-artifact@v7
@@ -162,7 +188,8 @@ The `.spec-*` reports and logs are hidden files: `upload-artifact` skips them
 without `include-hidden-files: true`, and the artifact comes out empty.
 
 No Playwright — no `e2e` job, no steps for it in `spec` and no second report
-in `spec:doc`. No shards — `unit` without the matrix; `test-spec` stays a job
+in `spec:doc`. No shards — `unit` without the matrix and the shard steps, `pnpm test`
+as is; `test-spec` stays a job
 of its own: it doesn't wait for the long branch, and a broken standard is
 visible in a minute. `spec-publish` stays separate as well.
 ai-dev itself runs on Bun — its `.github/workflows/ci.yml` is no model for a
@@ -175,6 +202,39 @@ order, and the "already newer" check (`spec-publish` prints `already newer`) kee
 an old one from landing over a new one — hence the checkout with history. A
 deploy can't do this in the same workflow — it needs merge order: a separate
 workflow (`docs/ci-concurrency.md`).
+
+## Shards by durations
+
+A runner's `--shard` doesn't look at time: Playwright cuts the suite in a row
+by the count of tests, Vitest — files by the hash of the path; the heavy tests
+of one folder land in one shard, the PR waits for it. The shard step lists the
+run's files with the runner (`vitest list --filesOnly`, `playwright test
+--list`), `spec-shard` lays them out greedily — the longest into the lightest
+shard — by the durations of the last green run and prints the shard's filters,
+the runner gets them as positional arguments. Merging the blob reports and the
+`spec` job don't change.
+
+- Durations — the `spec-reports` artifact of the `spec` job (the merged
+  `.spec-report.json` and `.spec-playwright.json`): `spec-run --artifact`
+  finds the newest green run with it, `gh run download` fetches it — hence
+  `actions: read`. It is uploaded on PRs and lives a day: no artifact (the
+  first run, a day without PRs) — the files split equally by count, a new
+  file gets the mean. The step is `continue-on-error`: durations are an
+  optimization, not a check.
+- `vitest list` doesn't run the `test` script: its `--exclude` is repeated in
+  the listing — keep them equal, otherwise standards land in the unit shards'
+  layout and `test` drops them.
+- An empty shard (more shards than files) doesn't start the runner: without
+  filters it would run everything.
+- A filter is what the runner understands: Vitest — the path (a substring),
+  Playwright — an escaped regular expression anchored at the end of the path.
+  A filter that also takes another file (`tests/a.test.ts` in
+  `packages/web/tests/a.test.ts`) — both go into one shard, a stderr line
+  says so.
+- A Playwright dependency project (login before the tests) runs in every
+  shard: the runner adds dependencies without the filters.
+- The unit is a file: a file longer than a shard's share stays the bound —
+  split the file.
 
 ## No CI on `main` — publishing on PR merge
 

@@ -11,7 +11,12 @@
  * running — polling until its outcome, not finished by the ceiling — an error; otherwise (no artifact, expired, from a
  * fork, the run isn't green) — skip: code 0, stdout empty, the reason in a stderr line.
  *
+ * `--artifact <name>` — for spec-shard: the newest green run of this repository with an unexpired artifact of that name
+ * (the `spec` job's reports — durations of the last green run). Without waiting: a run in progress isn't green yet, the
+ * previous green one does. None — code 0, stdout empty, the reason in stderr: the shards are split by count.
+ *
  *   bun spec-run.ts --tree <hash> [--timeout 1800] [--interval 15]
+ *   bun spec-run.ts --artifact <name>
  *
  * Codes: 0 — found or publishing skipped, 1 — the run didn't finish by the ceiling, 2 — a call error (arguments, gh).
  * Runs under Bun, no dependencies; needs `gh` with a token (in Actions — `GH_TOKEN`, `actions: read`).
@@ -20,16 +25,17 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 
-const USAGE = "spec-run --tree <hash> [--timeout 1800] [--interval 15]";
+const USAGE = "spec-run --tree <hash> [--timeout 1800] [--interval 15]\nspec-run --artifact <name>";
 /** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
 const HELP = `${USAGE}
 
 The green run that checked the merge commit's tree: its id to stdout, for gh run download of docs-spec-<tree hash>; no
 such run — skip: code 0, stdout empty, the reason in stderr. Code 1 — the run didn't finish by the ceiling, 2 — a call
-error.
+error. --artifact — the newest green run with an unexpired artifact of that name, without waiting (for spec-shard).
 
 Examples:
-  spec-run --tree "$(git rev-parse 'HEAD^{tree}')"`;
+  spec-run --tree "$(git rev-parse 'HEAD^{tree}')"
+  spec-run --artifact spec-reports`;
 
 interface Artifact {
   name: string;
@@ -62,16 +68,34 @@ function api<T>(endpoint: string): T {
 }
 
 /**
- * Runs with a live artifact of the tree. Only this repository's runs count: a PR run from a fork can upload an artifact
- * with any name too. The outcome — a separate request for the run: the artifact is uploaded mid-run and doesn't prove a
- * green outcome.
+ * Ids of the runs with a live artifact, newest first. Only this repository's runs count: a PR run from a fork can upload
+ * an artifact with any name too.
  */
-function runs(artifact: string): Run[] {
-  const { artifacts } = api<{ artifacts: Artifact[] }>(`repos/{owner}/{repo}/actions/artifacts?name=${artifact}`);
+function runIds(artifact: string): number[] {
+  const { artifacts } = api<{ artifacts: Artifact[] }>(`repos/{owner}/{repo}/actions/artifacts?name=${encodeURIComponent(artifact)}`);
   const own = artifacts.filter((a) => !a.expired && a.workflow_run && a.workflow_run.head_repository_id === a.workflow_run.repository_id);
   // a rerun uploads the artifact again under the same run id
-  const ids = [...new Set(own.map((a) => a.workflow_run!.id))];
-  return ids.map((id) => api<Run>(`repos/{owner}/{repo}/actions/runs/${id}`));
+  return [...new Set(own.map((a) => a.workflow_run!.id))];
+}
+
+/** The outcome — a separate request for the run: the artifact is uploaded mid-run and doesn't prove a green outcome. */
+const runOf = (id: number): Run => api<Run>(`repos/{owner}/{repo}/actions/runs/${id}`);
+
+/** The newest green run with the artifact (`--artifact`): runs are asked newest first, up to the first green one. */
+function latest(artifact: string): number {
+  const asked: Run[] = [];
+  for (const id of runIds(artifact)) {
+    const run = runOf(id);
+    if (run.status === "completed" && run.conclusion === "success") {
+      console.error(`spec-run: artifact ${artifact}: run ${run.id} succeeded — ${run.html_url}`);
+      process.stdout.write(`${run.id}\n`);
+      return 0;
+    }
+    asked.push(run);
+  }
+  const why = asked.length ? asked.map((r) => `${r.id} ${r.conclusion ?? r.status} ${r.html_url}`).join(", ") : `no artifact ${artifact}`;
+  console.error(`spec-run: artifact ${artifact}: no green run — ${why}`);
+  return 0;
 }
 
 const seconds = (name: string, value: string): number => {
@@ -88,6 +112,7 @@ export async function main(argv: string[]): Promise<number> {
         args: argv,
         options: {
           tree: { type: "string" },
+          artifact: { type: "string" },
           timeout: { type: "string", default: "1800" },
           interval: { type: "string", default: "15" },
           help: { type: "boolean", short: "h", default: false },
@@ -98,7 +123,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     const v = opts.values;
     if (v.help) return console.log(HELP), 0;
-    if (!v.tree) throw new Fail(`--tree <hash> is required\n${USAGE}`, 2);
+    if (v.tree && v.artifact) throw new Fail(`--tree and --artifact don't go together\n${USAGE}`, 2);
+    if (v.artifact) return latest(v.artifact);
+    if (!v.tree) throw new Fail(`--tree <hash> or --artifact <name> is required\n${USAGE}`, 2);
     if (!/^[0-9a-f]{40,64}$/.test(v.tree)) throw new Fail(`--tree: a full tree hash is needed (git rev-parse 'HEAD^{tree}'), not «${v.tree}»\n${USAGE}`, 2);
     const timeout = seconds("timeout", v.timeout);
     const interval = seconds("interval", v.interval);
@@ -107,7 +134,7 @@ export async function main(argv: string[]): Promise<number> {
     const deadline = Date.now() + timeout * 1000;
     let said = "";
     for (;;) {
-      const all = runs(artifact);
+      const all = runIds(artifact).map(runOf);
       // the listing is newest first: of several green runs the latest is taken
       const ok = all.find((r) => r.status === "completed" && r.conclusion === "success");
       if (ok) {

@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Specification from tests — the spec canon (canon.md), deterministic scripts and a checks harness. spec-doc builds docs/spec from runner reports (Vitest/Jest, Playwright, bun JUnit) along tests/capabilities, tests/architecture and tests/standards, with prose from JSDoc; spec-diff prints removed, changed and added test names for the PR body; spec-publish publishes docs/spec to the spec branch after a merge, spec-run finds the green run for it; spec-claims checks entry points against the call log; spec-break proves a check can fail; spec-exceptions moves exceptions.ts into exceptions/; harness.ts — mechanical checks (registry + invariant). When — before creating a PR; in CI on a PR and after a merge; reading a project's spec; wiring spec into a project's CI; a convention must hold for every item, not an example; proving a test catches a breakage; asked what the system does or which requirements a PR removes — even if "specification" wasn't said.
+description: Specification from tests — the spec canon (canon.md), deterministic scripts and a checks harness. spec-doc builds docs/spec from runner reports (Vitest/Jest, Playwright, bun JUnit) along tests/capabilities, tests/architecture and tests/standards, with prose from JSDoc; spec-diff prints removed, changed and added test names for the PR body; spec-publish publishes docs/spec to the spec branch after a merge, spec-run finds the green run for it; spec-shard splits CI shards by the last green run's durations; spec-claims checks entry points against the call log; spec-break proves a check can fail; spec-exceptions moves exceptions.ts into exceptions/; harness.ts — mechanical checks (registry + invariant). When — before creating a PR; in CI on a PR and after a merge; reading a project's spec; wiring spec into a project's CI; a convention must hold for every item, not an example; proving a test catches a breakage; asked what the system does or which requirements a PR removes — even if "specification" wasn't said.
 allowed-tools: Bash(bun *skills/spec/scripts/spec-doc.ts *) Bash(bun *skills/spec/scripts/spec-diff.ts *) Bash(bun run spec:*) Bash(bun *skills/spec/scripts/spec-claims.ts *) Bash(bun *skills/spec/scripts/spec-break.ts *) Bash(bun *skills/spec/scripts/spec-exceptions.ts *) Bash(pnpm spec:*) Bash(bunx vitest run *) Bash(git status *) Bash(git diff *)
 ---
 
@@ -24,6 +24,11 @@ per-repository configuration:
   documentation;
 - `spec-run.ts` — for publishing on a PR merge: the green run that checked
   exactly the tree of the merge commit; none — publishing is skipped;
+  `--artifact` — the last green run's reports for `spec-shard`;
+- `spec-shard.ts` — a CI shard's test files by the last green run's
+  durations, not by the count of tests: greedily, the longest into the
+  lightest shard; the runner gets them as filters instead of `--shard`
+  (`ci.md`, "Shards by durations");
 - `spec-claims.ts` — after a run: every entry point is called by a capability
   test (the harness's `journal`, `resetJournal` at the start of the run),
   registry ids don't repeat, journal ids come from the registry; the JUnit
@@ -52,7 +57,7 @@ skill directory: that is the version pinned for CI.
 | Moment | Action |
 |---|---|
 | Before a PR | 1. a test run with a JSON report (don't run e2e: for the names `playwright test --list --reporter=json > .spec-playwright.json` is enough); 2. `spec-doc --strict` with both reports — the tree and the main files are in order (`docs/spec` is in `.gitignore`, not committed); 3. `spec-diff --scenarios <task body>` → the `## Spec (tests)` section (in the project language) with the scenario check, into the PR body |
-| In CI on a PR | run → `spec-doc --strict` (section "spec-doc"); `spec-diff` into the summary |
+| In CI on a PR | shards — `spec-shard` (`ci.md`); run → `spec-doc --strict` (section "spec-doc"); `spec-diff` into the summary |
 | In CI after a merge | a run on `main` → `spec-doc` → `spec-publish`; without CI on `main` — `docs/spec` from the PR run's artifact and `spec-publish --source <merge SHA>` (`ci.md`). The `spec` branch = the built `docs/spec`, the script verifies it after the push |
 | Read a project's spec | `git fetch origin spec && git show origin/spec:README.md` (pages — `capabilities/<name>.md`…) or the tests themselves |
 | Asked for documentation, "what does the system do" | `spec-doc <report> --stdout` — one document, files aren't touched |
@@ -218,7 +223,8 @@ project's own runner on Node. Each step with its details — `reference.md`,
    `playwright-blob/`.
 3. **`docs/spec/` isn't committed to `main`** — CI publishes it to the `spec`
    branch.
-4. **CI** — shards write blob reports, a `spec` job merges them and builds
+4. **CI** — a shard's files from `spec-shard` by the last green run's
+   durations, shards write blob reports, a `spec` job merges them and builds
    `docs/spec` with `--strict`, only `spec-publish` has a write token,
    `spec-diff` is a light job of its own: the workflow fragment — `ci.md`.
 5. **Monorepo** — a decision's tests in package subfolders

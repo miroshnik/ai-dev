@@ -349,6 +349,69 @@ merge with a matching tree, but isn't rolled back. Exit codes: 0 — found or
 publishing skipped, 1 — the run didn't finish by the ceiling, 2 — a call
 error or `gh`.
 
+`--artifact <name>` — for `spec-shard`: the newest green run of this
+repository with an unexpired artifact of that name (`spec-reports` — the
+merged reports of the `spec` job). Runs are asked newest first, up to the
+first `success`; one in progress isn't waited for — its outcome is unknown,
+the previous green one does. None — code 0, stdout empty, in stderr «no green
+run» with the runs asked: the shards split by count.
+
+## spec-shard — CI shards by durations
+
+A runner's `--shard` doesn't look at time: Playwright cuts the suite in a row
+by the count of tests in path order, Vitest — files by the hash of the path.
+The heavy tests of one folder land in one shard, the PR waits for it, the
+others stand idle. `spec-shard --shard k/n --runner vitest|playwright --list
+<file> --report <file>…` prints shard k's filters, one per line; the CI step
+(`ci.md`, "Shards by durations") passes them to the runner instead of
+`--shard`.
+
+- **The list** — the runner's own: `vitest list --filesOnly --json=<file>`
+  (`[{ file }]`, absolute paths), `playwright test --list --reporter=json`
+  (file suites relative to `config.rootDir`) or one path per line. Absolute
+  paths become relative to the root (`--root`, default — the current
+  directory: the runner reads the filters from it).
+- **Durations** — the reports `spec-doc` reads: Vitest/Jest — the file's
+  `endTime - startTime` (hooks between tests count), without them — the sum
+  of its tests; Playwright — the sum of all results of the file's tests (each
+  project and retry takes a worker's time); `bun test` JUnit — the file
+  suite's `time`. A report's path goes to the listed file it ends with: a
+  report from another machine (the CI artifact) works without a common
+  root. A file in several reports — the longest. A missing report file isn't
+  an error (the artifact may be gone); no durations — every file weighs the
+  same, the split is by count; a file without a measurement gets the mean of
+  the measured ones.
+- **Layout** — greedy (LPT): groups from the heaviest into the lightest
+  shard; ties — by path (the sort is stable, the list is sorted). The same
+  inputs give the same shards in every job of the matrix: each job computes
+  its own shard, and the shards must agree.
+- **Filters.** Vitest takes a file whose path relative to its project's root
+  contains the filter (or the filter's path relative to that root),
+  case-insensitively (`filterFiles` in `vitest/node`) — the filter is the
+  path. Playwright tests a regular expression against the absolute path —
+  the filter is `/(^|\/)<escaped path>$/`: a dot stays a dot, and the path
+  ends where the file does. A filter that still takes another file
+  (`tests/a.test.ts` in `packages/web/tests/a.test.ts`; for Vitest — inside
+  any directory common to both paths: the project root isn't known) — both
+  go into one shard, a stderr line names them: the shard's filters take
+  exactly its files. The guard — a real Playwright run over the shards'
+  filters: every file once, in its shard.
+- **Playwright dependencies** (a login project before the tests) aren't cut
+  by filters: the runner adds dependency projects without them — the login
+  runs in every shard. Its file in the list adds its time to one shard only.
+- **An empty shard** (more shards than files) — stdout is empty, code 0: the
+  step doesn't start the runner, without filters it would run everything.
+- **The unit is a file:** a file longer than a shard's share stays the bound —
+  split the file. With `--shard` Playwright splits a file between shards
+  (`fullyParallel`); with filters the file's tests spread over the shard's
+  workers.
+- Rejected: a durations file in the repository — it goes stale and needs
+  commits; Vitest's `sequencer.shard` hook — a module in the project's
+  config, and Playwright has no such hook; Playwright's `--test-list` (an
+  exact list) — one mechanism for both runners instead of two.
+- Codes: 0 — the shard is printed, 2 — a call error (arguments, the list or
+  a report unreadable).
+
 ## spec-break — breakages and the revert
 
 A decision's check must be able to fail: a breakage is a code edit that
@@ -461,6 +524,8 @@ section "Wiring into the project's CI" below.
    builds `docs/spec` with `--strict`; on `main` it hands it as an artifact to
    the `spec-publish` job — only that job has a write token
    (`contents: write`), and it doesn't install the project's dependencies. A
+   shard's files — from `spec-shard` by the last green run's durations
+   (section "spec-shard — CI shards by durations"). A
    test failed — `spec` doesn't run: there is no point building documentation
    from a red run. `spec-diff` is its own light job: it needs git history and
    Bun, not tests, so the section is in the summary even with red tests. A
