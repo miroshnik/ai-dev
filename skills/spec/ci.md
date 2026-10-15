@@ -192,7 +192,7 @@ in `spec:doc`. No shards — `unit` without the matrix and the shard steps, `pnp
 as is; `test-spec` stays a job
 of its own: it doesn't wait for the long branch, and a broken standard is
 visible in a minute. `spec-publish` stays separate as well.
-ai-dev itself runs on Bun — its `.github/workflows/ci.yml` is no model for a
+Elves itself runs on Bun — its `.github/workflows/ci.yml` is no model for a
 project on Node.
 
 The `main` run is in its own group (`github.run_id`): the tests need no shared

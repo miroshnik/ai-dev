@@ -450,7 +450,7 @@ folder and subfolders (`import exceptions from "./exceptions.ts"`) — to
 to the old file in `package.json` and `.github/workflows/*.yml` (`spec-claims
 --exceptions`) — to the directory. Which file belongs to whom — one rule,
 `exceptionFile` (`speclib.ts`), for the harness, spec-diff and
-spec-exceptions (the ai-dev standard `exception-files`); the
+spec-exceptions (the Elves standard `exception-files`); the
 command doesn't touch files outside decision folders. Output
 — lines `-` (file moved), `+` (new file), `~` (import or path rewritten), `!`
 (fix by hand: a reference from another folder, no harness import). Exit codes:
@@ -470,7 +470,7 @@ under Bun — the flow's only runtime, a Node project included (in CI — the
 config import — `harness.ts`, `architecture.ts`, `eslint-config.ts` — load
 under the project's own runner (Vitest, Jest, Playwright, ESLint on Node), not
 Bun: only `node:` APIs and erasable TypeScript, no `import.meta` and no
-top-level `await` (Playwright and Jest load them as CommonJS). The ai-dev flow
+top-level `await` (Playwright and Jest load them as CommonJS). The Elves flow
 install puts the copy there, and it is committed: the agent before a PR and CI call the same
 project `spec:doc` / `spec:diff` over the same files, so what the agent sees
 locally matches CI. Why a copy and not a submodule, a checkout in the workflow or a package —
@@ -483,7 +483,7 @@ section "Wiring into the project's CI" below.
    ```
    - Exclude `.agents/` and `.claude/` from the project's linters and
      formatters (`ignores` in ESLint, `.prettierignore`, `include` in
-     tsconfig): they hold ai-dev code and Markdown.
+     tsconfig): they hold Elves code and Markdown.
    - Update — the same command in a separate PR, then the reports and
      `spec:doc --strict`; if the format changed — CI publishes the new one
      after the merge.
@@ -744,13 +744,13 @@ section "Wiring into the project's CI" below.
 - The skill's tests — `bun test` (imports from `bun:test`; it also understands
   imports from `vitest`): runner overhead of 0.01 s versus 0.3 s for Vitest per
   file. Scripts in the tests are run via `bun` — what the user runs. Node in
-  ai-dev's CI is the runner image's own: `harness-load` runs Playwright on it.
+  the CI of Elves is the runner image's own: `harness-load` runs Playwright on it.
 
 ## Wiring into the project's CI
 
 - **The scripts' source is the skill's copy in the project.** The agent
   before a PR and CI need one version: the `docs/spec` format changes (as it
-  did in #32), and documentation built by the skill from a fresh ai-dev
+  did in #32), and documentation built by the skill from a fresh Elves
   wouldn't match CI on another version. Installing the flow
   (`bunx github:miroshnik/ai-dev install`) puts the skill into
   `.agents/skills/spec`, and it is committed with the project: the project's
@@ -758,10 +758,10 @@ section "Wiring into the project's CI" below.
   cloud session; an update is an ordinary PR. The same mechanism installs the
   rules and the other skills — there is no separate path for CI.
 - Rejected:
-  - an ai-dev submodule: an extra step in every clone and worktree
-    (`git submodule update --init`), and ai-dev's tests and code arrive in the
+  - an Elves submodule: an extra step in every clone and worktree
+    (`git submodule update --init`), and its tests and code arrive in the
     project, where the project's Vitest and ESLint pick them up;
-  - an ai-dev checkout in the workflow (`repository` + `ref: <SHA>`) pins only
+  - an Elves checkout in the workflow (`repository` + `ref: <SHA>`) pins only
     CI: the agent locally calls the skill of another version;
   - a package (`github:miroshnik/ai-dev#<SHA>` in devDependencies): the
     project's runner imports the harness from it, and Node doesn't strip types

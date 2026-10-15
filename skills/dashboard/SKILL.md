@@ -169,7 +169,7 @@ no ring and no ratio.
   the cost several-fold under the same flow. The «Cost by model» tile
   shows whether the model changed; the flow's effect — by tokens and hours.
 - The effect of a flow change — compare the trend before and after the date
-  of an ai-dev release (tags `vYYYY.MM.DD`) or of the
+  of an Elves release (tags `vYYYY.MM.DD`) or of the
   `chore(agents): ai-dev flow …` commit in the project;
   fewer than ten tasks after the change so far — too early to draw a
   conclusion. The chart doesn't see flow without tasks (PRs without an issue)
@@ -208,5 +208,5 @@ no ring and no ratio.
   it to the skill's compose file.
 - A Claude Code cloud session (`CLAUDE_CODE_REMOTE=true`): GitHub Projects are
   closed there, and its localhost isn't visible to the user's browser — the
-  script exits with an explanation (`docs/cloud-sessions.md` in ai-dev).
+  script exits with an explanation (`docs/cloud-sessions.md` in Elves).
 - Few or no dots — closed tasks have no actual: `est fact --sweep --write`.

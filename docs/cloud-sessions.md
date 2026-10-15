@@ -11,7 +11,7 @@ Only the project repository. Skills from the user's machine
 the canon and skills only if the flow is installed in the project:
 `bunx github:miroshnik/ai-dev install` puts a copy into `.agents/`, and the
 symlinks in `.claude/rules` and `.claude/skills` come with the clone (the
-ai-dev README, "Installation"). It works in the project language, just like a
+Elves README, "Installation"). It works in the project language, just like a
 local session: `language` in `.agents/ai-dev.json`, which comes with the
 clone too. The version is the committed one: a cloud session doesn't update
 the flow even if `check` says it is behind — a local session of the update

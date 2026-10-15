@@ -66,5 +66,5 @@ loads them whatever the project's `CLAUDE.md`.
   `dismiss_task` removes an extra one. A chip is single-use, the task list is
   Backlog: I recreate chips from issues. A chip prompt arriving in this same
   session — I don't execute it.
-- In an ai-dev clone the canon loads from the root (`AGENTS.md`), this file —
+- In an Elves clone the canon loads from the root (`AGENTS.md`), this file —
   via the committed symlink `.claude/rules/ai-dev-claude.md`.
