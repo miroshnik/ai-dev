@@ -4,7 +4,8 @@
  * checks whether an install has fallen behind the latest Elves release, updates it and cuts a release.
  *
  *   bunx github:miroshnik/elves install                — into the project: the git root (or the current directory)
- *   bunx github:miroshnik/elves install -g             — machine-wide: skills and hook only, rules from the project
+ *   bunx github:miroshnik/elves install -g             — machine-wide: the canon, skills and hook
+ *   elves install -g                                   — the same from the npm package (npm i -g @miroshnik/elves)
  *   bun <Elves clone>/bin/elves.ts install -g --link   — from a clone: symlinks to the clone, edits show at once
  *   bunx github:miroshnik/elves check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
  *   bunx github:miroshnik/elves update [-g]            — bring the install up to date
@@ -15,8 +16,11 @@
  * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/elves/` (AGENTS.md,
  * claude/CLAUDE.md, docs/*.md) and `.agents/skills/<name>/`; Claude Code gets symlinks in `.claude/skills` and
  * `.claude/rules` (it loads them itself, whatever the project's CLAUDE.md), the other agents — a link in the project's
- * `AGENTS.md`. On the machine (`-g`) there are no rules — only skills (`~/.agents/skills`, `~/.claude/skills`) and the
- * hook: rules load from the project, a second copy on the machine would cost ~20k tokens on every turn of every agent.
+ * `AGENTS.md`. On the machine (`-g`) the same layout in the home directory (#557): the canon `~/.agents/elves/` with
+ * Claude Code's rules `~/.claude/rules/elves*.md` — they load without the external-imports dialog in every project of
+ * the machine — and the global rule files of the other agents linking to it (`agentRules`), skills (`~/.agents/skills`,
+ * `~/.claude/skills`) and the hook: a thin project has no copy of the canon, its agents get it from the machine. A
+ * project that still has a copy loads the canon twice until it moves — the hook names it (`twiceLines`).
  * `.agents/elves.json` — the Elves SHA it was installed from, the list of installed skills (by it a reinstall removes
  * skills Elves no longer has and leaves others' alone), for a machine with `--link` — the clone path, for a project —
  * `auto`: whether the agent runs a task entirely by itself — answers to questions by recommendation, commit, push,
@@ -40,7 +44,9 @@
  * variables to tasks, it warns with a ready-made line (`turboEnv`).
  *
  * A copy (a project, a machine without `--link`) follows Elves releases — tags vYYYY.MM.DD — not main: the bunx
- * package from main is only a launcher — it finds the latest release and restarts from it by SHA (`toRelease`).
+ * package from main is only a launcher — it finds the latest release and restarts from it by SHA (`toRelease`). The
+ * npm package is a release itself — its version (`npmRelease`): `install` from it installs that release without the
+ * network, `check` and `update` restart from the latest release's npm package.
  * `check` is the same install as a dry run: the release package lists what it would change. A machine with `--link`
  * is different: the clone is compared with `origin/main` after `git fetch`, `update` does `git pull --ff-only` and
  * re-creates the links with the code of the updated clone.
@@ -169,9 +175,12 @@ merge — Bash(gh pr merge *) in ~/.claude/settings.json: the owner adds it, ins
 settings. --lang <code> — the project language the agent works in: dialog, tasks, prompts, documents (language in
 .agents/elves.json, a BCP 47 code: ru, en, pt-BR); in a terminal — a question, en by default, without the flag and a
 terminal — the previous one. In an Elves clone writes only auto and language.
--g — onto the machine only the skills (~/.agents/skills, ~/.claude/skills) and the SessionStart hook; the rules come
-from the project, a machine copy of a previous install is removed. --link — from an Elves clone: symlinks to the clone
-instead of copies, edits show up immediately.
+-g — onto the machine: the canon in ~/.agents/elves with Claude Code's rules ~/.claude/rules/elves*.md and the global
+rule files of Codex, Gemini CLI, Copilot, OpenCode and Amp linking to it (someone else's file stays), the skills
+(~/.agents/skills, ~/.claude/skills) and the SessionStart hook; without a terminal too — a cloud environment's setup
+script (CLAUDE_CODE_REMOTE=true) gets the canon and skills without the hook: the cloud doesn't read
+~/.claude/settings.json. From the npm package (npm i -g / bun add -g ${PACKAGE}) — the release of its version, without
+the network. --link — from an Elves clone: symlinks to the clone instead of copies, edits show up immediately.
 
 Examples:
   elves install --auto --lang en
@@ -181,7 +190,8 @@ elves check --hook
 
 Whether the install is behind, changes nothing: 0 — up to date, 1 — behind, the project's git ignores flow files, its
 compose file breaks task isolation or standards and architecture have no test:spec script, 2 — the check is
-unavailable; a copy is compared with the latest release, a --link clone — with origin/main. For a project names the
+unavailable; a copy is compared with the latest release (from the npm package — by restarting from the latest
+release's package), a --link clone — with origin/main. For a project names the
 mode (auto) and the language, holds the compose file to the task isolation rules (❌ per violation, ○ — not checked: no
 docker compose; the task-env skill), names a test that runs standards and architecture again next to test:spec (○, the
 ready test without them) and warns (!) if a script in slot calls turbo and turbo.json doesn't pass the queue variables
@@ -193,16 +203,18 @@ variables under the former name (AI_DEV_*) with the new one, run from the agent'
 without the agent's Bash environment, for a --link clone run from an Elves clone — flow commits not in a release yet.
 --hook — the machine and the project at once for the Claude Code SessionStart hook: the exit code is always 0, errors
 go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE — zsh without errors on a glob without matches
-and on =word, timeout from bin/shims.
+and on =word, timeout from bin/shims; a project with a copy of the canon next to the machine's rules — the canon loads
+twice: names it and the project's update task that moves it to the thin project.
 
 Examples:
   elves check
   elves check -g`,
   update: `elves update [-g]
 
-Brings it up to date: a --link clone — git pull --ff-only, a copy — install of the latest release (the project's mode
-and language are kept; an install of a previous version without a language gets ru: before the field the flow worked in
-Russian); in a project install and update un-ignore flow files from .gitignore patterns with exceptions at its end and
+Brings it up to date: a --link clone — git pull --ff-only, a copy — install of the latest release: on the machine the
+canon, the skills and the hook; from the npm package — by restarting from the latest release's package (the project's
+mode and language are kept; an install of a previous version without a language gets ru: before the field the flow
+worked in Russian); in a project install and update un-ignore flow files from .gitignore patterns with exceptions at its end and
 wrap the package.json checks (lint, typecheck, test, test:*) in the machine queue slot; prints what changed: every
 release after the installed one, newest first, with the list of changes of its GitHub Release (a --link clone — the
 flow commits it pulled). An install from before the rename to Elves — the ai-dev names (.agents/ai-dev.json,
@@ -222,9 +234,10 @@ Examples:
   pack: `elves pack <tag>
 
 From an Elves checkout, in CI on a release tag: the npm package ${PACKAGE} of that release — the version
-from the tag into package.json (vYYYY.MM.DD.N → YYYY.MMDD.N: semver without leading zeros, versions sort as tags) and
-the modules a project imports (exports of package.json: the harness, the architecture model, the ESLint fragment,
-github) built for Node into dist/; then npm publish. Not a release tag — code 2, nothing changes.
+from the tag into package.json (vYYYY.MM.DD.N → YYYY.MMDD.N: semver without leading zeros, versions sort as tags), the
+release commit into its gitHead and the modules a project imports (exports of package.json: the harness, the
+architecture model, the ESLint fragment, github) built for Node into dist/; then npm publish. Not a release tag — code
+2, nothing changes.
 
 Examples:
   elves pack v2026.10.15.1`,
@@ -350,7 +363,8 @@ const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : null)
  * by, `github:miroshnik/elves#<sha>` in the package.json of the bunx directory next to node_modules (bunx unpacks the
  * package from GitHub without `.git`, its `.bun-tag` holds only 7 characters of the SHA). The package under its scope
  * (`node_modules/@miroshnik/elves`) — the spec under the full name. The package from main — no SHA in the spec — null:
- * it is only a launcher (`toRelease`).
+ * it is only a launcher (`toRelease`). The npm package (`npmRelease`) — the commit `pack` wrote into its `gitHead`: its
+ * spec is a version, `npm i -g` has no package.json above it at all.
  */
 function sourceSha(src: string) {
   if (existsSync(path.join(src, ".git"))) {
@@ -359,6 +373,10 @@ function sourceSha(src: string) {
     } catch {
       return null;
     }
+  }
+  if (npmRelease(src)) {
+    const head: unknown = ownPackage(src).gitHead;
+    return typeof head === "string" && /^[0-9a-f]{40}$/.test(head) ? head : null;
   }
   const scope = path.basename(path.dirname(src)).startsWith("@") ? path.basename(path.dirname(src)) : null;
   const nm = scope ? path.dirname(path.dirname(src)) : path.dirname(src);
@@ -370,6 +388,46 @@ function sourceSha(src: string) {
   } catch {
     return null;
   }
+}
+
+/** The package's own package.json; unreadable — empty. */
+function ownPackage(src: string): { name?: unknown; version?: unknown; gitHead?: unknown } {
+  try {
+    return JSON.parse(readFileSync(path.join(src, "package.json"), "utf8")) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The release of the npm package — `npm i -g`, `bun add -g`, a project's devDependencies: the package is a release
+ * itself, its version is the release tag (`npmVersion` back, `releaseTag`). A clone, a package from GitHub (the
+ * repository's version 0.0.0 — `pack` sets the release version only in CI) — null.
+ */
+function npmRelease(src: string): string | null {
+  if (existsSync(path.join(src, ".git"))) return null;
+  const { name, version } = ownPackage(src);
+  return name === PACKAGE && typeof version === "string" ? releaseTag(version) : null;
+}
+
+/**
+ * The release tag of an npm version — `npmVersion` back: YYYY.MMDD.N → vYYYY.MM.DD.N, .0 — without a patch; not a
+ * release version — null.
+ */
+function releaseTag(version: string): string | null {
+  const m = /^(\d{4})\.(\d{3,4})\.(\d+)$/.exec(version);
+  if (!m) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const md = Number(m[2]);
+  const tag = `v${m[1]}.${pad(Math.floor(md / 100))}.${pad(md % 100)}${m[3] === "0" ? "" : `.${m[3]}`}`;
+  return npmVersion(tag) === version ? tag : null;
+}
+
+/** Release tags in order: by date, then by patch number; negative — a is older. */
+function compareTags(a: string, b: string) {
+  const key = (tag: string) => (RELEASE_TAG.exec(tag) ?? []).slice(1).map((n) => Number(n ?? 0));
+  const [ka, kb] = [key(a), key(b)];
+  return ka.reduce((r, n, i) => r || n - (kb[i] ?? 0), 0);
 }
 
 const lsRemote = (args: string[], cwd?: string) =>
@@ -388,9 +446,7 @@ function releases(remote: string, cwd?: string): { tag: string; sha: string }[] 
     // `tag^{}` comes after the tag: the annotated tag's commit
     if (sha && m?.[1] && RELEASE_TAG.test(m[1]) && (m[2] || !tags.has(m[1]))) tags.set(m[1], sha);
   }
-  const key = (tag: string) => (RELEASE_TAG.exec(tag) ?? []).slice(1).map((n) => Number(n ?? 0));
-  const cmp = (a: number[], b: number[]) => a.reduce((r, n, i) => r || n - (b[i] ?? 0), 0);
-  return [...tags].map(([tag, sha]) => ({ tag, sha })).sort((a, b) => cmp(key(a.tag), key(b.tag)));
+  return [...tags].map(([tag, sha]) => ({ tag, sha })).sort((a, b) => compareTags(a.tag, b.tag));
 }
 
 /** The commit of the remote's HEAD — main; an empty repository — null. A git error throws. */
@@ -409,10 +465,16 @@ const repoUrl = () => process.env.ELVES_REPO || `https://github.com/${SOURCE}.gi
  * or the user's own pin) works itself; ELVES_RELEASE — the tag the launcher restarted to. A clone installs itself as
  * is. Tags come from ELVES_REPO (a mirror, tests) or GitHub. The launcher is as old as its first run, the release may be
  * older than the launcher: the tag goes under the former name too (FORMER.release) — each reads its own.
+ * The npm package is a release itself (`npmRelease`): from it `install` installs its own version — no launcher and no
+ * network, as a cloud environment's setup script needs it (`github:` there would install from GitHub, not npm, and in
+ * the cloud session itself it is 403); `check` and `update` compare with and bring to the latest release —
+ * `toLatestNpm`.
  * @returns the restarted process's code; null — work here
  */
 function toRelease(argv: string[]): number | null {
   if (existsSync(path.join(SRC, ".git"))) return null;
+  const own = npmRelease(SRC);
+  if (own) return (release = own), argv[0] === "install" ? null : toLatestNpm(own, argv);
   if (sourceSha(SRC)) return (release = process.env.ELVES_RELEASE || process.env[FORMER.release] || null), null;
   let to: { tag?: string; sha: string } | undefined;
   try {
@@ -429,6 +491,29 @@ function toRelease(argv: string[]): number | null {
   }
   const r = spawnSync("bunx", ["--silent", `github:${SOURCE}#${to.sha}`, ...argv], { stdio: "inherit", env });
   if (r.error) throw new Error(`can't run ${to.tag ? `release ${to.tag}` : `Elves ${short(to.sha)}`} — ${reason(r.error)}`);
+  return r.status ?? 2;
+}
+
+/**
+ * `check` and `update` from the npm package: the latest release — by the tags, as for the launcher (a tag and an npm
+ * version are one release, CI publishes on the tag); newer than this package — a restart from its npm package by the
+ * exact version, not from GitHub: npm is reachable wherever the package came from. ELVES_RELEASE — the tag the
+ * restart went to: the restarted package doesn't look it up a second time. This package is the latest — null.
+ * @returns the restarted process's code; null — work here
+ */
+function toLatestNpm(own: string, argv: string[]): number | null {
+  if (process.env.ELVES_RELEASE === own) return null;
+  let latest: { tag: string } | undefined;
+  try {
+    latest = releases(repoUrl()).at(-1);
+  } catch (e) {
+    throw new Error(`can't find out the latest Elves release — ${reason(e)}`);
+  }
+  if (!latest || compareTags(latest.tag, own) <= 0) return null;
+  const env: NodeJS.ProcessEnv = { ...process.env, ELVES_RELEASE: latest.tag };
+  delete env[FORMER.release];
+  const r = spawnSync("bunx", ["--silent", `${PACKAGE}@${npmVersion(latest.tag)}`, ...argv], { stdio: "inherit", env });
+  if (r.error) throw new Error(`can't run release ${latest.tag} — ${reason(r.error)}`);
   return r.status ?? 2;
 }
 
@@ -1096,33 +1181,37 @@ function installProject(src: string, root: string, auto = autoOf(root), language
   return [...(gitignoreFlow(root) ? [".gitignore"] : []), ...(pkg ? ["package.json"] : [])];
 }
 
-/** Agents' global rule files that a previous install made symlinks to the AGENTS.md of the former canon (FORMER.canon). */
-const AGENT_RULE_FILES = [".codex/AGENTS.md", ".gemini/GEMINI.md", ".copilot/copilot-instructions.md", ".config/opencode/AGENTS.md", ".config/amp/AGENTS.md"];
+/**
+ * Agents' global rule files: the agent is on the machine — its directory in the home directory (or the command on
+ * PATH), the file — the canon's AGENTS.md. Cursor has no such file.
+ */
+const AGENT_RULES = [
+  { dir: ".codex", cmd: "codex", file: ".codex/AGENTS.md" },
+  { dir: ".gemini", file: ".gemini/GEMINI.md" },
+  { dir: ".copilot", file: ".copilot/copilot-instructions.md" },
+  { dir: ".config/opencode", file: ".config/opencode/AGENTS.md" },
+  { dir: ".config/amp", file: ".config/amp/AGENTS.md" },
+];
 
 /**
- * There are no rules on the machine: the project loads them (`.claude/rules`, `AGENTS.md`), and a second copy from
- * the machine is the same ~20k tokens on every turn of every agent. A previous install put them there — we remove
- * them: the former canon in the home directory (FORMER.canon — a copy or a symlink to the clone), the symlinks of
- * Claude Code's rules (FORMER.rules) and of agents' global files to the canon. Someone else's file or symlink is left
- * alone.
+ * The other agents get the machine's canon by their global rule file — a symlink to the canon's AGENTS.md, as before
+ * #180: Codex glues it to the project's AGENTS.md, Gemini CLI, Copilot, OpenCode and Amp read it the same way. A file
+ * is ours when it is missing, empty or a symlink into the canon — the current one or under the flow's former name
+ * (FORMER.canon, a previous install); someone else's file or symlink — the user's own rules — stays, with a line
+ * where the canon is.
  */
-function removeGlobalRules(home: string) {
-  const canon = path.join(home, FORMER.canon);
-  const st = lstat(canon);
-  if (st) {
-    if (dry) change("-", canon + "/");
-    else if (st.isSymbolicLink()) rmSync(canon);
-    else rmSync(canon, { recursive: true, force: true });
+function agentRules(home: string, has: (dir: string, cmd?: string) => boolean) {
+  const canons = [CANON, FORMER.canon].map((c) => path.join(home, c) + path.sep);
+  const ours = (file: string) => {
+    const st = lstat(file);
+    if (!st || (st.isFile() && st.size === 0)) return true;
+    return st.isSymbolicLink() && canons.some((c) => path.resolve(path.dirname(file), readlinkSync(file)).startsWith(c));
+  };
+  for (const { dir, cmd, file } of AGENT_RULES) {
+    if (!has(dir, cmd)) continue;
+    if (ours(path.join(home, file))) link(path.join(home, CANON, "AGENTS.md"), path.join(home, file), home);
+    else note(`~/${file} — the user's own rules: left as is; the canon — ~/${CANON}/AGENTS.md`);
   }
-  const removed: string[] = [];
-  for (const rel of [...FORMER.rules, ...AGENT_RULE_FILES]) {
-    const file = path.join(home, rel);
-    const ls = lstat(file);
-    if (!ls?.isSymbolicLink() || !path.resolve(path.dirname(file), readlinkSync(file)).startsWith(canon + path.sep)) continue;
-    if (dry) change("-", file);
-    else rmSync(file), removed.push(rel);
-  }
-  if (!dry && (st || removed.length)) note(`rules on the machine removed (${[st ? `${FORMER.canon}/` : "", ...removed].filter(Boolean).join(", ")}): rules load from the project`);
 }
 
 /**
@@ -1160,25 +1249,37 @@ function cloneOrigin(clone: string) {
   }
 }
 
+/** A Claude Code cloud environment (claude.ai/code): its setup script and its sessions have this variable. */
+const remote = () => process.env.CLAUDE_CODE_REMOTE === "true";
+
+/**
+ * The machine (#557): the canon `~/.agents/elves/` — a copy or, with `--link`, a symlink to the clone — with Claude
+ * Code's rules `~/.claude/rules/elves*.md` (the same `installRules` and `claudeRules` as in a project: what a previous
+ * install left under the flow's former name moves), the other agents' rule files (`agentRules`), skills and the hook.
+ * Claude Code is on the machine — `~/.claude`, `claude` on PATH or a cloud environment: its setup script runs in a
+ * fresh home before Claude Code starts. The cloud doesn't read `~/.claude/settings.json` — no hook there.
+ */
 function installGlobal(src: string, linkMode: boolean) {
   const home = os.homedir();
   const has = (dir: string, cmd = "") => existsSync(path.join(home, dir)) || (cmd !== "" && onPath(cmd));
-  const claude = has(".claude", "claude");
+  const claude = has(".claude", "claude") || remote();
+  installRules(src, home, linkMode);
   installSkills(src, home, linkMode, claude);
-  removeGlobalRules(home);
+  agentRules(home, has);
   if (linkMode) cloneOrigin(src);
 
   if (claude) {
-    claudeHook(home);
+    claudeRules(home);
+    if (!remote()) claudeHook(home);
     // install.sh installed ~/.claude/CLAUDE.md as a symlink to claude/CLAUDE.md, and that one imported AGENTS.md
     const old = path.join(home, ".claude/CLAUDE.md");
     if (lstat(old)?.isSymbolicLink() && readlinkSync(old).endsWith(path.join("claude", "CLAUDE.md"))) {
       if (dry) change("-", old);
-      else rmSync(old), note(".claude/CLAUDE.md — the old install.sh symlink removed: rules now come only from the project");
+      else rmSync(old), note(".claude/CLAUDE.md — the old install.sh symlink removed: the canon comes from ~/.claude/rules");
     }
   }
 
-  if (has(".cursor")) note("Cursor: sees the skills in ~/.agents/skills; rules — from the project's AGENTS.md");
+  if (has(".cursor")) note(`Cursor: sees the skills in ~/.agents/skills; it has no global rules file — paste ~/${CANON}/AGENTS.md into Settings → Rules → User Rules`);
 
   // The default location of the personal configuration. ELVES_CONFIG_DIR is deliberately not read here: the
   // variable overrides the whole directory and needs no symlink — the skills' scripts look where it points
@@ -1432,9 +1533,9 @@ function check(global: boolean): Result {
 }
 
 /**
- * A machine with `--link`: the clone against `origin/main` after `git fetch` — skill files the clone doesn't have
- * yet, and missing links (a new skill, the hook). Rules and references in main don't affect the machine (the project
- * loads them), commits without skill files aren't falling behind.
+ * A machine with `--link`: the clone against `origin/main` after `git fetch` — flow files the clone doesn't have yet
+ * (the canon of the machine is the clone's: rules, references, skills), and missing links (a new skill, the rules, the
+ * hook). Commits without flow files aren't falling behind.
  */
 function checkLink(home: string, clone: string): Result {
   const where = `on the machine (clone ${clone})`;
@@ -1444,7 +1545,7 @@ function checkLink(home: string, clone: string): Result {
     head = git(clone, "rev-parse", "HEAD");
     main = git(clone, "rev-parse", "origin/main");
     behind = Number(git(clone, "rev-list", "--count", "HEAD..origin/main"));
-    files = git(clone, "diff", "--no-renames", "--name-status", "HEAD...origin/main", "--", "skills").split("\n").filter(Boolean);
+    files = git(clone, "diff", "--no-renames", "--name-status", "HEAD...origin/main", "--", ...FLOW).split("\n").filter(Boolean);
   } catch (e) {
     return { code: 2, text: `Elves ${where}: check unavailable — ${reason(e)}` };
   }
@@ -1646,6 +1747,28 @@ function resumeLines(): string[] {
 }
 
 /**
+ * The canon loads twice (#557): Claude Code reads the machine's rules (`~/.claude/rules/elves*.md`, `install -g`) and
+ * the project's copy (`.claude/rules/elves*.md`, under the flow's former name too) — both, on every turn. Allowed for
+ * the move (#180 removed the machine's rules only because of that copy, and projects with a copy are few): the hook
+ * names it and the move — the project's update task, `update` turns the copy into the thin project. A rule that doesn't
+ * load (a dangling symlink) doesn't count; an Elves clone has no copy, the home directory isn't a project.
+ */
+function twiceLines(home: string, root: string): string[] {
+  const loads = (p: string) => {
+    try {
+      return statSync(p).isFile();
+    } catch {
+      return false;
+    }
+  };
+  if (samePath(root, home) || isElvesClone(root)) return [];
+  const machine = Object.values(RULES).filter((rel) => loads(path.join(home, rel)));
+  const project = [...Object.values(RULES), ...FORMER.rules].filter((rel) => loads(path.join(root, rel)));
+  if (!machine.length || !project.length) return [];
+  return [`  canon loaded twice: the machine's rules ${machine.map((r) => `~/${r}`).join(", ")} and the project's copy ${project.join(", ")} — Claude Code reads both on every turn until the project moves to the thin project: its update, in a task of its own`];
+}
+
+/**
  * The SessionStart hook: the agent's Bash environment, then the machine and the project in one output to the session
  * context, then the wait a resumed session restarts; the code is always 0, errors go to stdout. failed — the latest
  * release couldn't be found: what's installed is "check unavailable", the environment is written all the same.
@@ -1662,9 +1785,12 @@ function hook(failed?: unknown) {
   }
   const [machine, project] = results;
   const shown = results.filter((r) => !r.absent);
-  // rules load only from the project: a git repository without the flow — how to install it (an Elves clone is the
-  // canon itself, it isn't absent)
+  // a git repository without the flow — how to install it (an Elves clone is the canon itself, it isn't absent)
   if (project?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `Elves in the project: not installed — install it: ${RUN} install --lang <project language>` });
+  // the canon twice: the update task's line — once, the project's behind text may have printed it already
+  const root = projectRoot();
+  const twice = twiceLines(os.homedir(), root);
+  if (twice.length) shown.push({ code: 0, text: [...twice, ...(project?.run ? [] : [updateTaskLine(root)])].join("\n") });
   const resume = resumeLines();
   if (!shown.length && !resume.length) return 0;
   const tail = [];
@@ -1675,6 +1801,9 @@ function hook(failed?: unknown) {
     tail.push(
       "The project's flow needs update — not in a task session: recommend it to the user and ask whether to queue its task (task new above): yes — a background executor (the github skill, «Dispatcher»); work by the current flow. The update task — update, tell the user what changed, commit the copy into its branch, re-read what was updated.",
     );
+  }
+  if (twice.length) {
+    tail.push("The canon loads twice — the machine's rules and the project's copy: recommend the project's move to the thin project and ask whether to queue its update task (task new above); work by the current flow.");
   }
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, committed with the copy in the update task; a rule outside the project — fix it yourself.");
   // the session has no task yet at its start, and one session is one task: the fix goes into a task of its own
@@ -1889,8 +2018,10 @@ function builtExports(pkg: { exports?: unknown }): { src: string; out: string }[
 }
 
 /**
- * `pack`, CI on a release tag: the npm package of the release — the version from the tag into package.json and the
- * modules a project imports (`builtExports`) built into dist/. Node doesn't strip types in node_modules
+ * `pack`, CI on a release tag: the npm package of the release — the version from the tag into package.json, the release
+ * commit into its `gitHead` (the package knows its SHA without the network: the manifest of an install from it and
+ * what `update` lists — `sourceSha`) and the modules a project imports (`builtExports`) built into dist/. Node doesn't
+ * strip types in node_modules
  * (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING): a project's `eslint.config.js`, `node --test`, Playwright and Jest load
  * the JS (`default`), Bun and the type checker — the TypeScript source (`bun`, `types`). One build with shared chunks:
  * the modules share the language module and the TypeScript parser. A built module is a project's import, never the entry
@@ -1918,7 +2049,7 @@ function pack(tag: string | undefined): number {
   if (missing.length) return warn(`pack: the build has no ${missing.map((e) => e.out).join(", ")} — exports of package.json lead past it`), 2;
   const baked = [...walk(dist).entries()].filter(([, file]) => readFileSync(file, "utf8").includes(SRC)).map(([rel]) => `dist/${rel}`);
   if (baked.length) return warn(`pack: ${baked.join(", ")} — the build machine's path ${SRC} is baked in: the package would lead into nowhere`), 2;
-  writeFileSync(file, JSON.stringify({ ...pkg, version }, null, 2) + "\n");
+  writeFileSync(file, JSON.stringify({ ...pkg, version, gitHead: git(SRC, "rev-parse", "HEAD") }, null, 2) + "\n");
   note(`${PACKAGE}@${version} — release ${tag}: dist/ ← ${entries.map((e) => e.src).join(", ")}; next: npm publish`);
   return 0;
 }

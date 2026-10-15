@@ -174,14 +174,16 @@ describe("Релиз публикуется в npm пакетом @miroshnik/elv
   /**
    * Тег календарный, а npm требует semver: без ведущих нулей, патч дня — своим числом. Пререлиз (`-1`) в semver младше
    * самого релиза, build-метаданные (`+1`) npm не различает — поэтому `vГГГГ.ММ.ДД.N` — `ГГГГ.ММДД.N`: порядок версий —
-   * порядок тегов.
+   * порядок тегов. Коммит релиза — в `gitHead`: пакет из npm знает свой SHA без сети (#557).
    */
-  it("версия пакета соответствует тегу релиза", () => {
+  it("версия пакета соответствует тегу релиза, gitHead — его коммиту", () => {
     const pkg = copyPackage(base, path.join(sb.tmp, "package"));
     const versionOf = (tag: string) => {
       const r = elves(sb, ["pack", tag], { bin: pkg.bin, cwd: pkg.dir });
       expect({ tag, code: r.code, stderr: r.stderr }).toEqual({ tag, code: 0, stderr: "" });
-      return JSON.parse(read(path.join(pkg.dir, "package.json"))).version as string;
+      const json = JSON.parse(read(path.join(pkg.dir, "package.json")));
+      expect(json.gitHead).toBe(pkg.sha);
+      return json.version as string;
     };
     const tags = ["v2025.12.31.3", "v2026.01.05", "v2026.01.05.1", "v2026.10.15", "v2026.10.15.2", "v2026.10.15.12"];
     const versions = tags.map(versionOf);

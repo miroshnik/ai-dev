@@ -1,8 +1,9 @@
 # Claude Code
 
 Shared rules — `AGENTS.md`; here — only what Claude Code has. Install puts
-both into `.claude/rules/` (`elves.md`, `elves-claude.md`): Claude Code
-loads them whatever the project's `CLAUDE.md`.
+both into `.claude/rules/` (`elves.md`, `elves-claude.md`), `install -g` —
+into `~/.claude/rules/`: Claude Code loads them whatever the project's
+`CLAUDE.md`.
 
 - Session transcripts (`~/.claude/projects/<path-with-dashes>*/`) are the
   source of actuals for the `est` skill; `~/.claude/settings.json` must have
@@ -65,5 +66,6 @@ loads them whatever the project's `CLAUDE.md`.
   question «queue #M?», on "yes" its executor — `Agent` with `isolation:
   "worktree"`, `run_in_background: true` and the prompt `github` printed.
   The executor isn't `TaskStop`ped: the last line — after its answer.
-- In an Elves clone the canon loads from the root (`AGENTS.md`), this file —
-  via the committed symlink `.claude/rules/elves-claude.md`.
+- In an Elves clone the canon loads from the machine — `install -g --link`
+  links `~/.claude/rules/elves*.md` to the clone; its `.claude/CLAUDE.md`
+  keeps the root `AGENTS.md` from loading a second time.
