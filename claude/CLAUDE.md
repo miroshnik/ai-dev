@@ -61,10 +61,9 @@ loads them whatever the project's `CLAUDE.md`.
 - In a cloud session (claude.ai/code) the cloud assigns the branch — rename
   it or push to another one only with the user's permission
   (`docs/cloud-sessions.md`).
-- A chip is `spawn_task`: `title` — `#M` and the task title (≤ 60
-  characters), `prompt` starts with `#M`, `cwd` — the task's repository;
-  `dismiss_task` removes an extra one. A chip is single-use, the task list is
-  Backlog: I recreate chips from issues. A chip prompt arriving in this same
-  session — I don't execute it.
+- Another task isn't a session card (`spawn_task`, `start_session`): the
+  question «queue #M?», on "yes" its executor — `Agent` with `isolation:
+  "worktree"`, `run_in_background: true` and the prompt `github` printed.
+  The executor isn't `TaskStop`ped: the last line — after its answer.
 - In an Elves clone the canon loads from the root (`AGENTS.md`), this file —
   via the committed symlink `.claude/rules/ai-dev-claude.md`.

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -126,15 +126,34 @@ describe("task new заводит задачу со всем сразу", () => 
     expect(r.out).toContain("+ milestone «GitHub · 1 · Проект»");
   });
 
-  // заведённую задачу сессия с закреплённой задачей сама не возьмёт (`task status` откажет) — вывод сразу называет, куда её нести
-  it("в сессии с закреплённой задачей «Next:» называет новую сессию и первый промпт #M", () => {
+  /**
+   * Заведённую задачу сессия с закреплённой задачей сама не возьмёт (`task status` откажет). Карточку новой сессии
+   * запускал владелец кликом, и её работа выпадала из виду этой сессии (#546): теперь вывод велит спросить владельца,
+   * ставить ли задачу в очередь, и даёт промпт исполнителя — на «да» сессия сразу запускает фонового субагента.
+   */
+  it("в сессии с закреплённой задачей «Next:» — вопрос владельцу, ставить ли новую задачу в очередь, и промпт её исполнителя", () => {
     const f = new FakeGitHub(REC);
     const io = inSession(scratch());
     expect(task(f, ["new", "--branch-type", "feat", "--title", "Импорт"], REPO, io).out).not.toContain("the session runs");
     task(f, ["status", "49", "В работе"], REPO, io);
-    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт"], REPO, io);
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--epic", "45"], REPO, io);
     expect(r.code).toBe(0);
-    expect(r.out.split("\n").at(-1)).toBe("Next: the session runs miroshnik/ai-dev#49 — #51 in a new session, first prompt: #51.");
+    const last = r.out.split("\n").at(-1)!;
+    expect(last).toStartWith(
+      "Next: the session runs miroshnik/ai-dev#49; #51 isn't taken here — the question to the owner «queue #51?» — yes: a background subagent in its own worktree, " +
+        "its prompt: Задача #51 в miroshnik/ai-dev (эпик #45): ты исполнитель сессии-диспетчера. Задание целиком печатает `bun --no-env-file ",
+    );
+    expect(last).toContain("task queue --assignment 51 --repo miroshnik/ai-dev`");
+  });
+
+  // эпик заводят — владельца спрашивают, запускать ли диспетчера на его задачи, а не раздают карточки сессий (#546)
+  it("эпик заведён — «Next:» велит спросить владельца, запускать ли диспетчера на задачи эпика, и называет команду очереди", () => {
+    const f = new FakeGitHub(REC);
+    const r = task(f, ["new", "--title", "Импорт · Импорт задач из CSV", "--type", "Эпик"]);
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n").at(-1)).toMatch(
+      /^Next: once its subtasks are created — the question to the owner «run the dispatcher on epic #50\?»; yes — bun --no-env-file \S+github\.ts task queue --epic 50 --repo miroshnik\/ai-dev in this session, its executors — background subagents\.$/,
+    );
   });
 
   describe("ошибка до создания — задача не заводится наполовину", () => {
@@ -633,13 +652,19 @@ describe("task status берёт в работу одну задачу на се
     expect(pinned(config)).toBe("miroshnik/ai-dev#49");
   });
 
-  it("другая задача «В работе» в той же сессии — отказ (код 2) до изменений: закреплённая задача, первый промпт новой сессии и файл закрепления — одной строкой", () => {
+  it("другая задача «В работе» в той же сессии — отказ (код 2) до изменений: закреплённая задача, вопрос владельцу о постановке в очередь с промптом исполнителя и файл закрепления — одной строкой", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
     task(f, ["status", "49", "В работе"], REPO, inSession(config));
     const r = task(f, ["status", "42", "В работе"], REPO, inSession(config));
     expect(r.code).toBe(2);
-    expect(r.err).toBe(`error: the session runs miroshnik/ai-dev#49; #42 — in a new session, first prompt: #42 (pin: ${pinFile(config)} — a mistaken one is removed by a human)`);
+    expect(r.err.split("\n")).toHaveLength(1);
+    expect(r.err).toStartWith(
+      "error: the session runs miroshnik/ai-dev#49; #42 isn't taken here — the question to the owner «queue #42?» — yes: a background subagent in its own worktree, " +
+        "its prompt: Задача #42 в miroshnik/ai-dev: ты исполнитель сессии-диспетчера. Задание целиком печатает `bun --no-env-file ",
+    );
+    expect(r.err).toContain("task queue --assignment 42 --repo miroshnik/ai-dev`");
+    expect(r.err).toEndWith(` (pin: ${pinFile(config)} — a mistaken one is removed by a human)`);
     expect(r.out).toBe("");
     expect(statusSet(f)).toEqual([[49, "В работе"]]);
     expect(f.mutations).toHaveLength(1);
@@ -674,7 +699,7 @@ describe("task status берёт в работу одну задачу на се
     const other = new FakeGitHub(asOrg(REC));
     const r = task(other, ["status", "49", "В работе"], ORG, inSession(config));
     expect(r.code).toBe(2);
-    expect(r.err).toContain("the session runs miroshnik/ai-dev#49; #49 — in a new session, first prompt: #49");
+    expect(r.err).toContain("the session runs miroshnik/ai-dev#49; #49 isn't taken here — the question to the owner «queue #49?»");
     expect(other.mutations).toEqual([]);
   });
 
@@ -2257,14 +2282,44 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(f.mutations).toEqual([]);
   });
 
-  // без перегиба: задание вне сессии-диспетчера выдачи не помнит — в обычной сессии его печатают для чтения
-  it("задание в сессии не диспетчера задачу не держит", () => {
+  /**
+   * На «да» владельца исполнителя запускает и сессия без очереди (#546) — с закреплённой задачей или ещё без неё.
+   * Субагент делит id сессии: без выдачи его «В работе» отказала бы закреплённая задача, а в сессии без задачи — его
+   * задача закрепилась бы за сессией, и следующего исполнителя и задачу самой сессии отказало бы уже оно.
+   */
+  it("задание исполнителя в сессии с закреплённой задачей пишет выдачу: его «В работе» не закрепляется и не отказывает, закрепление сессии остаётся", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const config = scratch();
+    task(f, ["status", "49", "В работе"], REPO, inSession(config));
+    expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
+    const r = task(f, ["status", "47", "В работе"], REPO, inSession(config));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("○ #47 is handed out to an executor of this session — not pinned: the executor is a subagent with the session's id, est links the work by «Задача #47» in the assignment");
+    expect(statusSet(f)).toEqual([[49, "В работе"], [47, "В работе"]]);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+    // не выданная задача — по-прежнему отказ
+    expect(task(f, ["status", "42", "В работе"], REPO, inSession(config)).code).toBe(2);
+  });
+
+  it("задание исполнителя в сессии без задачи пишет выдачу: его «В работе» не закрепляет сессию, и она потом берёт свою задачу", () => {
     const f = new FakeGitHub(REC);
     f.status(47, "Бэклог");
     const config = scratch();
     expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
-    expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
-    expect(heads(task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config)).out)[1]).toBe(`+ #47 «${f.issue(47).title}»`);
+    expect(task(f, ["status", "47", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(existsSync(pinFile(config))).toBe(false);
+    expect(task(f, ["status", "49", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#49");
+  });
+
+  // без перегиба: сессия, закреплённая за этой же задачей, — её задача, а не выдача исполнителю
+  it("задание в сессии, закреплённой за этой же задачей, выдачу не пишет", () => {
+    const f = new FakeGitHub(REC);
+    const config = scratch();
+    task(f, ["status", "47", "В работе"], REPO, inSession(config));
+    expect(task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() }).code).toBe(0);
+    expect(existsSync(path.join(config, "dispatchers", `${SESSION}.tasks`))).toBe(false);
   });
 
   /**
@@ -2412,14 +2467,35 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(existsSync(pinFile(config))).toBe(false);
   });
 
-  it("в сессии с закреплённой задачей — отказ (код 2) до чтения очереди: диспетчер — отдельная сессия", () => {
+  // «да» владельца диспетчеру эпика — сразу работа в этой сессии, без новой (#546): её задача остаётся за ней
+  it("сессия с закреплённой задачей ведёт очередь: её задача — строкой `=`, закрепление остаётся, вторую задачу она не берёт", () => {
     const f = new FakeGitHub(REC);
+    f.status(42, "Бэклог");
+    const config = scratch();
+    task(f, ["status", "47", "В работе"], REPO, inSession(config));
+    const r = task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
+    expect(r.code).toBe(0);
+    expect(heads(r.out)).toContain(`= #47 «${f.issue(47).title}» — «В работе»`);
+    expect(existsSync(path.join(config, "dispatchers", SESSION))).toBe(true);
+    expect(task(f, ["status", "47", "В работе"], REPO, inSession(config)).code).toBe(0);
+    expect(pinned(config)).toBe("miroshnik/ai-dev#47");
+    expect(task(f, ["status", "42", "В работе"], REPO, inSession(config)).code).toBe(2);
+  });
+
+  // после перезапуска приложения сессия с задачей продолжает и своих исполнителей, и ожидание своей задачи
+  it("строка возобновления сессии с закреплённой задачей и исполнителями велит продолжить их сообщением, а затем — ожидание её задачи", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
     const config = scratch();
     task(f, ["status", "49", "В работе"], REPO, inSession(config));
-    const r = task(f, ["queue", "--epic", "45"], REPO, dispatcherIo(config));
-    expect(r.code).toBe(2);
-    expect(r.err).toBe("error: the session runs miroshnik/ai-dev#49 — a dispatcher is a separate session: the request goes into a new one");
-    expect(existsSync(path.join(config, "dispatchers"))).toBe(false);
+    task(f, ["queue", "--assignment", "47"], REPO, { ...inSession(config), cwd: scratch() });
+    const lines = task(f, ["resume"], REPO, inSession(config)).out.split("\n");
+    expect(lines[0]).toBe(
+      "Dispatcher session: its executors (background subagents) stopped with the app's process, their transcripts are intact — " +
+        "continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree",
+    );
+    expect(lines[1]).toStartWith("Dispatcher session: a new executor — only for one that can't be continued");
+    expect(lines.slice(2).join("\n")).toMatch(/session task miroshnik\/ai-dev#49/i);
   });
 
   /**
@@ -2471,7 +2547,7 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(r.code).toBe(0);
     expect(r.out.split("\n")).toEqual([
       "Queue miroshnik/ai-dev (epic #45): ready 0, «В работе» 0, not ready 0",
-      "Queue is empty: nothing ready, nothing «В работе» — the dispatcher's summary (merged, questions, the not ready ones above) and the last line.",
+      "Queue is empty: nothing ready, nothing «В работе» — the dispatcher's summary (merged, questions, the not ready ones above) and the last line; a session with its own task — after it.",
     ]);
   });
 });
@@ -2621,5 +2697,32 @@ describe("task queue убирает worktree исполнителей закры
     git(d.work, "worktree", "remove", left);
     expect(d.cleanupLines(d.queue())).toEqual(["+ branch worktree-agent-a1 deleted: nothing outside origin/main", "○ branch worktree-agent-a2 left: 1 commit not in origin/main"]);
     expect(d.branches()).toEqual(["worktree-agent-a2"]);
+  });
+});
+
+/**
+ * Другую задачу сессия отдавала карточкой новой сессии: её запускал владелец кликом, и сессия о ней больше не знала
+ * (#546). Канон, скиллы и их скрипты — источник всего, что агент читает и что печатают команды, — её больше не
+ * предлагают: только вопрос владельцу, ставить ли задачу в очередь (на новый эпик — запускать ли диспетчера), а «да» —
+ * исполнитель, фоновый субагент этой же сессии.
+ */
+describe("Другая задача — вопрос о постановке в очередь, а не карточка новой сессии", () => {
+  const ROOT = path.resolve(import.meta.dir, "../../..");
+  /** Файлы канона, скиллов и скриптов: корневые документы и всё в каталогах. */
+  const files = ["AGENTS.md", "README.md", "claude", "docs", "skills", "bin"].flatMap((p) =>
+    statSync(path.join(ROOT, p)).isDirectory()
+      ? readdirSync(path.join(ROOT, p), { recursive: true, withFileTypes: true })
+          .filter((e) => e.isFile())
+          .map((e) => path.relative(ROOT, path.join(e.parentPath, e.name)))
+      : [p],
+  );
+
+  it("канон, скиллы и вывод скриптов не предлагают чип — только вопрос о постановке в очередь", () => {
+    expect(files.length).toBeGreaterThan(40);
+    expect(files.filter((f) => /\bchips?\b|чип/i.test(readFileSync(path.join(ROOT, f), "utf8")))).toEqual([]);
+    const canon = readFileSync(path.join(ROOT, "AGENTS.md"), "utf8").replace(/\s+/g, " ");
+    expect(canon).toContain("Another task — Backlog and the question «queue #263?»");
+    expect(canon).toContain("A new epic — the question «run the dispatcher on epic #M?»");
+    expect(canon).toContain("work outside the task — a Backlog task and the question «queue it?»");
   });
 });

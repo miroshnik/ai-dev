@@ -492,8 +492,14 @@ an epic has no branch and no estimate of its own). Fewer than two analogs with
 an actual in the repository — est prints «No estimate», the task stays without
 one; est is missing — the line `○ no estimate`, failed — its error as a `!`
 line; the task is created anyway (code 0). In a session with a
-pinned task (`task status` below) — a second line «Next:»:
-`the session runs owner/repo#N — #M in a new session, first prompt: #M`.
+pinned task (`task status` below) — a second line «Next:»: the session runs
+`owner/repo#N`, `#M` isn't taken here — the question to the owner «queue #M?»,
+"yes" — a background subagent in its own worktree with the printed prompt (the
+executor's, as in `task queue`): the session launches it at once and goes on
+with its own task (#546; a session card waited for the owner's click). An
+epic — instead, after the line about its estimate: once its subtasks are created,
+the question «run the dispatcher on epic #M?», "yes" — `task queue
+--epic M` in this session.
 
 ### task show
 
@@ -534,8 +540,11 @@ In progress pins the task to the session: the file
 `~/.config/ai-dev/sessions/<CLAUDE_CODE_SESSION_ID>` (or in
 `$AI_DEV_CONFIG_DIR`) with the line `owner/repo#N`. Another task In progress in
 the same session — a refusal (code 2) before any changes, in one line: the
-pinned task, the new session's first prompt (`#M`) and the file path. The same
-task again, an epic, Backlog and Done — no refusal. No command removes the pin:
+pinned task, the question to the owner «queue #M?» with its executor's prompt
+(as `task new` above) and the file path. The same task again, an epic, Backlog
+and Done — no refusal; a task handed out to an executor of this session (`task
+queue --assignment`, below) — neither a pin nor a refusal, an `○` line: the
+executor is a subagent with the session's id. No command removes the pin:
 a mistaken one is removed by a human, by deleting the file. A line not of the
 form `owner/repo#N` isn't a pin — for `est` and the dashboard either
 (`tests/standards/session-pin`): In progress replaces it with the task, an `○`
@@ -637,8 +646,8 @@ skill, as a background command: its completion wakes the session), then
 an open bug on the failed test (under another title) or the command
 `task new --type Bug` with the title
 «`<base>` is red: <check | typecheck | test:spec>» (`--priority Urgent` in an
-organization; add the failed test's decision label), a chip for the bug and
-the same wait. A PR that closes any open «`<base>` is red…» bug (`Closes #N`
+organization; add the failed test's decision label), the question to the owner
+whether to queue the bug and the same wait. A PR that closes any open «`<base>` is red…» bug (`Closes #N`
 in the body) is a fix, without matching the check: the same breakage is named
 by a script one time and by a CI check another; a red `main` doesn't stop it
 (an `○` line), its red merge is code `1`, as usual.
@@ -656,21 +665,23 @@ deploys, then `task close N`; no PR or the task is closed — an `○` line; no 
 an `○` line with the file path, code 0. Read-only. The Claude Code
 `SessionStart` hook runs it with the session id from its input (`check
 --hook`, `claude/CLAUDE.md`) — the machine's skill, otherwise the project's. In a
-dispatcher session it first says to continue the stopped executors (#528):
+dispatcher session — or one with its own task and executors (#546) — it first
+says to continue the stopped executors (#528):
 they stopped with the app's process, their transcripts are intact, and the
 app names them in its notification — each is continued with `SendMessage` by
 its id, with its context in its own worktree (the task branch, uncommitted
-work), then the queue command; the hand-outs (`dispatchers/<id>.tasks`, "task
-queue") stay. A new executor — only for one that can't be continued, with the
+work), then the queue command, if the session ran one; the hand-outs
+(`dispatchers/<id>.tasks`, "task queue") stay; then its own task's wait. A new executor — only for one that can't be continued, with the
 same prompt: a task In progress it continues in the worktree of its branch
 (the assignment's restart line), not in a new one — git won't give the branch
 to a second worktree.
 
 ### task queue
 
-A dispatcher session: "do all tasks of epic #M", "fix all
-High bugs" (`AGENTS.md`, "Session and branch — one task"). The session takes no
-task; the script prints the queue — ready tasks (open, not an epic, not in
+A dispatcher: "do all tasks of epic #M", "fix all
+High bugs", the owner's "yes" to «run the dispatcher on epic #M?» (`AGENTS.md`,
+"Session and branch — one task") — any session: one with its own task keeps it
+pinned, its task is `=` in the queue (#546). The script prints the queue — ready tasks (open, not an epic, not in
 work, no open blockers — another repository's named `owner/repo#N` —, no
 `external blocker` label — its line has the reason from the latest
 `External blocker: …` comment) by `Priority`, then number, each with an indented
@@ -696,12 +707,16 @@ otherwise the repository's open tasks (the first 100 of the search);
 dispatcher — `dispatchers/<CLAUDE_CODE_SESSION_ID>` in the configuration
 directory with the queue command: the executors are subagents with the
 session's id, a pin would refuse the second and give `est` the whole session as
-one task. A session with a pinned task — a refusal (code 2): the dispatcher is
-a separate session, named by meaning, without a number. `--assignment N` —
-read-only on GitHub, the executor's first call; in a dispatcher session it
-records the task as handed out — a line `owner/repo#N <worktree>` (the
-checkout the assignment is called in) in
-`dispatchers/<id>.tasks`, `=` in the queue for the whole session (an
+one task. `--assignment N` —
+read-only on GitHub, the executor's first call; in any session (not one pinned
+to `N`: that task is its own) it records the task as handed out — a line
+`owner/repo#N <worktree>` (the checkout the assignment is called in) in
+`dispatchers/<id>.tasks`: a session with its own task, or none yet, launches an
+executor on the owner's "yes" too (#546), and unrecorded, the executor's In
+progress would be refused by the session's pin or would pin the session to its
+task. `task status` doesn't pin a handed-out task; `est` gives a subagent with
+«Task #N» in its assignment to task N, not to the session's pin. A hand-out is
+`=` in the queue for the whole session (an
 executor's answer leaves the task not ready either: merged closes it, a question
 waits for the owner, failed isn't restarted; after the app restarts the executor
 is continued, "task resume"). The assignment: the task by the canon in auto mode, a
@@ -715,8 +730,9 @@ waits for CI and the deploy with regular calls
 Bash call lives 10 minutes), git in separate calls, writing subagents — as
 needed, without a limit (the limit of 3 is on executors), each in its own
 worktree with «Task #N» at the start of its prompt, their worktrees and
-branches removed by the executor after the merge, found work — `task new`
-without a chip; the answer — one line: merged, a question or failed.
+branches removed by the executor after the merge, found work — `task new`,
+named in the answer (whether to queue it is the owner's call); the answer — one
+line: merged, a question or failed.
 
 In Claude Code: an executor — `Agent` with `isolation: "worktree"` and
 `run_in_background: true`, the prompt — the indented line as is; at most 3 at
@@ -731,7 +747,9 @@ intact). Failed — a comment in the task with what stopped, no restart; failed
 on an external blocker — it's recorded ("Dependencies" above), and the queue
 stops giving the task out until it's lifted. Queue
 empty and nothing running — the summary (merged, questions, not ready, new
-tasks outside the queue), the last line and, in auto mode, archiving. The app's
+tasks outside the queue), the last line and, in auto mode, archiving; a session
+with its own task — after it. A running executor isn't stopped (`TaskStop`) to
+archive the session: its answer comes first. The app's
 child sessions (`start_session`) aren't given out yet (a server flag); when
 they are, an executor becomes a session.
 
@@ -910,7 +928,7 @@ Waiting for checks, the full SHA and a merge that deploys —
   branch is merged — the session panel and `git status` call for a second PR,
   and a push from it would resurrect the deleted remote branch. I don't touch
   others' branches or worktrees of live sessions, unmerged work — never. The
-  next task — a new session.
+  next task — not in this session.
 - `gh pr merge --delete-branch` from a worktree doesn't delete the local branch
   (an old gh fails with `'main' is already used by worktree`) — this isn't a
   merge error: I check `gh pr view <N> --json state`, I don't repeat the merge.

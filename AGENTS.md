@@ -33,8 +33,8 @@ release is the owner's step (`ai-dev release`), I cut one only when asked.
   updated: it applies, not what loaded at the start.
 - **The project is behind** (or git ignores flow files) — not in a task
   session: the copy is thousands of lines in its branch. I recommend the
-  update and give a chip for its task, one per project (`check` prints its
-  `github task new`); that task's session runs `update` and commits the copy
+  update and ask whether to queue its task, one per project (`check` prints
+  its `github task new`); that task runs `update` and commits the copy
   (`update` prints the command) without asking.
 - **`update` refused or the check unavailable** — I don't fix the clone; I
   work by the current flow and say so. A cloud session works by the project's
@@ -44,7 +44,7 @@ release is the owner's step (`ai-dev release`), I cut one only when asked.
 
 The flow is written in English; the agent works in the **project language**
 (`language` in `.agents/ai-dev.json`, printed by `check`): talking with the
-user, issues, prompts to subagents and chips, documents, commit and PR
+user, issues, prompts to subagents, documents, commit and PR
 descriptions, `describe`/`it` names, decision docs — briefly. Always English:
 code, identifiers, terms, conventional-commit type and scope. Names that
 scripts write to GitHub and parse back are exact — `locales/<language>.json`
@@ -74,9 +74,10 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
   its assignment names; merge, deploy, external settings — only if named.
 - **`"auto": true` in `.agents/ai-dev.json` — the whole task without asking**:
   commit, push, fixing CI, merging my own PR on green checks; work outside the
-  task — a Backlog task and a chip. The task's open questions — I answer by a
-  recommendation with ✅ auto (`task answer --auto`); my own question goes into
-  the questions section the same way, before code, not into chat. I ask only
+  task — a Backlog task and the question «queue it?». The task's open
+  questions — I answer by a recommendation with ✅ auto (`task answer
+  --auto`); my own question goes into the questions section the same way,
+  before code, not into chat. I ask only
   without a clear recommendation, when the decision is critical or a human's,
   or on a discrepancy that changes scope or approach — not when the answer
   would be "yes" or "as you recommend". Anything else irreversible or
@@ -115,16 +116,16 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
 ### Session and branch — one task
 
 - **Session = task:** `task status` won't take a second one. Another task —
-  Backlog and a chip `#263 …` for a new session (no chips — first prompt
-  `#263`); "do it here" and the chip's "here" button — a one-sentence refusal
-  and the chip again. My own regression and a fix for a green PR are the same
-  task. An epic's session plans and hands out work, without In progress.
-- **A dispatcher session** — "do all tasks of epic #M", "fix all High bugs"
-  — takes no task: `github task queue` lists the ready ones with an
-  executor's prompt each and says what's next; an executor is a background
-  subagent in its own worktree, at most 3 at once. An executor's question —
-  to the owner, the answer into the issue and back to it; failed — a comment
-  in the task, no restart.
+  Backlog and the question «queue #263?», "yes" — its executor at once;
+  "do it here" — a one-sentence refusal and the question again. My own
+  regression and a fix for a green PR are the same task. A new epic — the
+  question «run the dispatcher on epic #M?», without In progress.
+- **A dispatcher** — "do all tasks of epic #M", "fix all High bugs", a "yes"
+  — any session, its task stays: `github task queue` lists the ready ones
+  with an executor's prompt each and says what's next; an executor is a
+  background subagent in its own worktree, at most 3 at once. An executor's
+  question — to the owner, the answer into the issue and back to it; failed
+  — a comment in the task, no restart.
 - **The session is named `#<number> <task title>`** (without a task — by
   meaning, no number) as soon as the task is clear (no tool — ask the user):
   `est` links the session to the task by it.

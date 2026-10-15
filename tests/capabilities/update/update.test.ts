@@ -1098,12 +1098,12 @@ describe("В начале сессии Claude Code проверка идёт с�
   });
 
   /** Машина — скиллы в ~/.agents, ветку задачи её обновление не трогает; копия проекта — трогает. */
-  it("хук: флоу проекта отстал — рекомендовать обновление и чип на его задачу, в сессии задачи не обновлять; отстала только машина — update -g в сессии", () => {
+  it("хук: флоу проекта отстал — рекомендовать обновление и спросить, ставить ли его задачу в очередь, в сессии задачи не обновлять; отстала только машина — update -g в сессии", () => {
     aiDev(sb, ["install", "-g"]);
     aiDev(sb, ["install"]);
     bunxServes(newer.bin);
     const both = runHook().stdout;
-    expect(both).toContain(`${PROJECT_UPDATE}: recommend it to the user and give a chip for its task (task new above; no chips — the first prompt #N), work by the current flow.`);
+    expect(both).toContain(`${PROJECT_UPDATE}: recommend it to the user and ask whether to queue its task (task new above): yes — a background executor (the github skill, «Dispatcher»); work by the current flow.`);
     expect(both).toContain(MACHINE_BEHIND);
     expect(both).not.toContain("commit the project copy");
     aiDev(sb, ["install"], { bin: newer.bin });

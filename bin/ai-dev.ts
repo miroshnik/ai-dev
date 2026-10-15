@@ -1415,7 +1415,7 @@ function hook(failed?: unknown) {
   if (machine?.behind) tail.push("The machine is behind — update -g, tell the user what changed (update lists it), re-read what was updated.");
   if (project?.run) {
     tail.push(
-      "The project's flow needs update — not in a task session: recommend it to the user and give a chip for its task (task new above; no chips — the first prompt #N), work by the current flow. The update task's session — update, tell the user what changed, commit the copy into its branch, re-read what was updated.",
+      "The project's flow needs update — not in a task session: recommend it to the user and ask whether to queue its task (task new above): yes — a background executor (the github skill, «Dispatcher»); work by the current flow. The update task — update, tell the user what changed, commit the copy into its branch, re-read what was updated.",
     );
   }
   if (shown.some((r) => r.ignored)) tail.push("Git ignores flow files — update adds exceptions to .gitignore, committed with the copy in the update task; a rule outside the project — fix it yourself.");

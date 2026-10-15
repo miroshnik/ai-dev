@@ -14,12 +14,13 @@
  *   github task answer   — ✅ and the answer at a question of the questions section; none open — the label goes
  *   github task status   — Status in the project (and the epic's "In progress" once its first subtask is taken);
  *                          "In progress" pins the task to the session — another task in the same session is refused
+ *                          with the question whether to queue it
  *   github task drop     — close without doing it and remove from the project
  *   github task actualize — after the merge, in parallel with the deploy: the epic refresh's mechanics and the
  *                          subagent's prompt (or "not needed"); --assignment — the subagent's whole assignment
  *   github task close    — after the merge and the deploy: the actual, "Done", the epic and the milestone, the task's
  *                          stacks (task-env) and the task's merged branches removed
- *   github task queue    — the dispatcher session's ready tasks with the prompts of their executors (subagents);
+ *   github task queue    — the dispatcher's ready tasks with the prompts of their executors (subagents);
  *                          --assignment — an executor's whole assignment
  *   github pr labels     — decision labels for the task from "Closes #N" by the PR diff, for its epic — the union
  *   github pr premerge   — before the merge: the default branch moved after the PR's CI — typecheck and test:spec on
@@ -1545,17 +1546,40 @@ function pinnedTask(io: Io): { file: string; line: string; task: { slug: string;
 }
 
 /**
+ * Another task isn't taken in a session with a task (#546): the question to the owner whether to queue it, and its "yes"
+ * — a background executor this session launches right away, with the prompt `executorPrompt`. Not a new session: a
+ * session card waited for the owner's click, and its work fell out of this session's sight.
+ */
+function queueQuestion(slug: string, number: number, epic: number | null): string {
+  return `the question to the owner «queue #${number}?» — yes: a background subagent in its own worktree, its prompt: ${executorPrompt(slug, number, epic)}`;
+}
+
+/** The refusal of another task in a session with a pinned one: the pinned task, the queue question, the pin's file. */
+function anotherTask(runs: string, file: string, slug: string, number: number, epic: number | null): GhError {
+  return new GhError(`the session runs ${runs}; #${number} isn't taken here — ${queueQuestion(slug, number, epic)} (pin: ${file} — a mistaken one is removed by a human)`);
+}
+
+/**
  * A session runs one task: the first one taken "In progress" is pinned to the session, another is refused before any
  * change. The key is the session id (a subagent has the same one, /clear changes it), not the checkout: session
- * worktrees are reused. No command removes the pin — a human removes a mistaken one by deleting the file.
+ * worktrees are reused. No command removes the pin — a human removes a mistaken one by deleting the file. A task handed
+ * out to an executor of this session (`handedOutFile`) isn't pinned and isn't refused: the executor is a subagent with
+ * the session's id — in a dispatcher session and, since #546, in one with its own task.
  */
-function pinTask(io: Io, slug: string, number: number): void {
+function pinTask(io: Io, slug: string, number: number, epic: number | null): void {
   const file = pinFile(io);
   if (!file) return io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — the task isn't pinned");
+  const task = `${slug}#${number}`;
+  const held = pinnedTask(io)?.task;
+  const runs = held ? `${held.slug}#${held.number}` : null;
+  if (runs === task) return;
+  if (handedOut(io, slug).some((h) => h.number === number)) {
+    return io.out(`○ #${number} is handed out to an executor of this session — not pinned: the executor is a subagent with the session's id, est links the work by «${N.subagentPrompt.task} #${number}» in the assignment`);
+  }
+  if (runs) throw anotherTask(runs, file, slug, number, epic);
   if (isDispatcher(io)) {
     return io.out(`○ dispatcher session: #${number} isn't pinned — its executor is a subagent with the session's id, est links the work by «${N.subagentPrompt.task} #${number}» in the assignment`);
   }
-  const task = `${slug}#${number}`;
   const created = (f: string, text: string) => {
     try {
       writeFileSync(f, text, { flag: "wx" });
@@ -1569,14 +1593,15 @@ function pinTask(io: Io, slug: string, number: number): void {
   // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — pins aren't committed into it
   created(path.join(path.dirname(file), ".gitignore"), "*\n");
   if (created(file, pinLine(slug, number))) return;
-  const held = pinnedTask(io)!;
+  const now = pinnedTask(io)!;
   // not a pin — the session is free for est and the dashboard too: the file takes the task
-  if (!held.task) {
+  if (!now.task) {
     writeFileSync(file, pinLine(slug, number));
-    return io.out(`○ the session pin ${file} held «${held.line}», not owner/repo#N — replaced with ${task}`);
+    return io.out(`○ the session pin ${file} held «${now.line}», not owner/repo#N — replaced with ${task}`);
   }
-  const runs = `${held.task.slug}#${held.task.number}`;
-  if (runs !== task) throw new GhError(`the session runs ${runs}; #${number} — in a new session, first prompt: #${number} (pin: ${file} — a mistaken one is removed by a human)`);
+  // pinned by a parallel call meanwhile
+  const pinnedNow = `${now.task.slug}#${now.task.number}`;
+  if (pinnedNow !== task) throw anotherTask(pinnedNow, file, slug, number, epic);
 }
 
 /**
@@ -1808,14 +1833,20 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
 
   io.out(`Created #${created.number} ${created.title} — ${created.url}`);
   for (const d of done) io.out(`+ ${d}`);
-  if (o.type === N.issueTypes.epic) io.out(`Next: an epic isn't estimated — its ${q(N.fields.estimate)} is the sum of its subtasks' estimates.`);
-  else {
-    runEstimate(io, slug, created.number, branchType);
-    if (epic) io.out(`Next: ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks' estimates.`);
+  if (o.type === N.issueTypes.epic) {
+    io.out(`Next: an epic isn't estimated — its ${q(N.fields.estimate)} is the sum of its subtasks' estimates.`);
+    // an epic's work goes to the dispatcher on the owner's "yes" (#546), not to a session card per subtask
+    io.out(
+      `Next: once its subtasks are created — the question to the owner «run the dispatcher on epic #${created.number}?»; ` +
+        `yes — bun --no-env-file ${import.meta.path} task queue --epic ${created.number} --repo ${slug} in this session, its executors — background subagents.`,
+    );
+    return 0;
   }
-  // a session with a pinned task won't take a new one into work (pinTask)
+  runEstimate(io, slug, created.number, branchType);
+  if (epic) io.out(`Next: ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks' estimates.`);
+  // a session with a pinned task won't take a new one into work (pinTask): the owner decides whether to queue it
   const held = pinnedTask(io)?.task;
-  if (held) io.out(`Next: the session runs ${held.slug}#${held.number} — #${created.number} in a new session, first prompt: #${created.number}.`);
+  if (held) io.out(`Next: the session runs ${held.slug}#${held.number}; #${created.number} isn't taken here — ${queueQuestion(slug, created.number, epic?.number ?? null)}`);
   return 0;
 }
 
@@ -1832,7 +1863,7 @@ export function cmdTaskStatus(io: Io, slug: string, number: number, name: string
   const epicTask = isEpic(issue, ctx.repo.owner.org);
   if (branch !== undefined && epicTask) throw new GhError(`--branch: #${number} is an epic — an epic has no branch`);
   // an epic isn't pinned: its session plans and hands out work, and the first subtask also sets the epic "In progress"
-  if (status === N.status.inProgress && !epicTask) pinTask(io, slug, number);
+  if (status === N.status.inProgress && !epicTask) pinTask(io, slug, number, issue.parent?.number ?? null);
   const item = ensureItem(io, ctx, issue);
   setStatus(io, ctx, item.id, status);
   io.out(`+ #${issue.number}: ${STATUS} ${q(status)}${item.added ? " (added to the project)" : ""}`);
@@ -2062,18 +2093,16 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
 }
 
 /**
- * The dispatcher's queue: the session takes no task itself — its ready tasks go to background executors (subagents),
- * K at a time; the queue is re-read after each answer, so tasks that appeared meanwhile are picked up. Ready — open,
- * not an epic, not in work, no open blockers (other repositories' too), no external blocker label; order — Priority,
- * then the number. In work (`=`) — "In progress", an open PR (linked, or by the task branch and "Closes #N" among
- * recent PRs) named with its link, or handed out to an executor of this session (`handedOutFile`). Marks the session
- * as a dispatcher (`dispatcherFile`). Before the queue — finished agents' worktrees (`pruneAgentWorktrees`) but those of
- * executors whose handed-out tasks are open.
+ * The dispatcher's queue: its ready tasks go to background executors (subagents), K at a time; the queue is re-read
+ * after each answer, so tasks that appeared meanwhile are picked up. A session with its own task dispatches too (#546:
+ * the owner's "yes" to an epic's dispatcher becomes work at once, without a new session) — its pin stays, its task is
+ * in work. Ready — open, not an epic, not in work, no open blockers (other repositories' too), no external blocker
+ * label; order — Priority, then the number. In work (`=`) — "In progress", an open PR (linked, or by the task branch and
+ * "Closes #N" among recent PRs) named with its link, or handed out to an executor of this session (`handedOutFile`).
+ * Marks the session as a dispatcher (`dispatcherFile`). Before the queue — finished agents' worktrees
+ * (`pruneAgentWorktrees`) but those of executors whose handed-out tasks are open.
  */
 export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
-  // a line that isn't a pin leaves the session free, as for est and the dashboard (tests/standards/session-pin)
-  const held = pinnedTask(io)?.task;
-  if (held) throw new GhError(`the session runs ${held.slug}#${held.number} — a dispatcher is a separate session: the request goes into a new one`);
   const want = o.type === undefined ? undefined : typeAliases()[o.type.toLowerCase()];
   if (o.type !== undefined && (!want || want === N.issueTypes.epic)) throw new GhError(`--type: ${N.issueTypes.task} or ${N.issueTypes.bug}`);
   const bad = (o.priority ?? []).filter((p) => !(PRIORITIES as readonly string[]).includes(p));
@@ -2160,7 +2189,7 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
         "the indented line is its whole prompt. After each executor's answer — task queue again: new tasks get in.",
     );
   } else if (running.length) io.out("Next: no ready tasks — wait for the executors' answers; after each — task queue again.");
-  else io.out(`Queue is empty: nothing ready, nothing ${q(N.status.inProgress)} — the dispatcher's summary (merged, questions, the not ready ones above) and the last line.`);
+  else io.out(`Queue is empty: nothing ready, nothing ${q(N.status.inProgress)} — the dispatcher's summary (merged, questions, the not ready ones above) and the last line; a session with its own task — after it.`);
   return 0;
 }
 
@@ -2300,17 +2329,25 @@ function taskBranchesHere(io: Io, slug: string, number: number): string[] {
 /**
  * The executor's whole assignment (`task queue --assignment N`): the task by the canon, what a subagent does otherwise, the
  * answer form. The restart line — only when it is true: the task is In progress and has a branch `<type>/N-<slug>`
- * (#511); printed always, it misled the executor of a Backlog task, who argued with it in the answer. In a dispatcher
- * session the task is recorded as handed out with the executor's worktree (`handedOutFile`): the queue no longer gives
- * it out as ready and keeps the worktree while the task is open.
+ * (#511); printed always, it misled the executor of a Backlog task, who argued with it in the answer. The task is
+ * recorded as handed out with the executor's worktree (`handedOutFile`): the queue no longer gives it out as ready and
+ * keeps the worktree while the task is open, and `task status` in the executor doesn't pin it. In any identified
+ * session, not only a dispatcher's (#546): a session with its own task, or none yet, launches an executor on the
+ * owner's "yes" — unrecorded, its "In progress" would be refused by the session's pin or would pin the session to it.
+ * A session pinned to this very task records nothing: the task is its own.
  */
 export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
-  if (isDispatcher(io)) {
+  const file = handedOutFile(io);
+  const own = pinnedTask(io)?.task;
+  if (file && !(own?.slug === slug && own.number === number)) {
     // the executor's worktree — the checkout it calls the assignment in: the queue keeps it while the task is open (#533)
     const top = (io.run ?? realRun)("git", ["rev-parse", "--show-toplevel"], io.cwd);
     const worktree = top.status === 0 ? top.stdout.trim() : "";
-    appendFileSync(handedOutFile(io)!, `${slug}#${number}${worktree ? ` ${worktree}` : ""}\n`);
+    mkdirSync(path.dirname(file), { recursive: true });
+    // the configuration directory may be a personal git checkout (AI_DEV_PRIVATE) — hand-outs aren't committed into it
+    writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
+    appendFileSync(file, `${slug}#${number}${worktree ? ` ${worktree}` : ""}\n`);
   }
   const restart = itemIn(taskContext(io, slug), issue)?.status === N.status.inProgress ? taskBranchesHere(io, slug, number) : [];
   const vars = {
@@ -2639,14 +2676,17 @@ export function cmdTaskClose(io: Io, slug: string, number: number, o: { git: boo
  * A dispatcher's executors stopped with the app's process, but their transcripts are intact (#528): each is continued
  * with `SendMessage` — its context and worktree, where the task branch and uncommitted work are; a new executor would get
  * a fresh worktree, and git won't give it the branch. So the hand-outs stay (`handedOutFile`): their tasks aren't ready.
+ * A session with its own task and executors (#546) — the same lines, without the queue command if it ran none, and
+ * then its own task's wait.
  */
 export function cmdTaskResume(io: Io): number {
   const dispatcher = dispatcherFile(io);
-  if (dispatcher && existsSync(dispatcher)) {
+  const queued = !!dispatcher && existsSync(dispatcher);
+  if (queued || (dispatcher && existsSync(`${dispatcher}.tasks`))) {
     io.out(
       "Dispatcher session: its executors (background subagents) stopped with the app's process, their transcripts are intact — " +
-        "continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree; " +
-        `then re-read the queue: ${readFileSync(dispatcher, "utf8").trim()} — their tasks stay = in it`,
+        "continue each with SendMessage by its id from the app's notification, not a new executor: it goes on with its context in its own worktree" +
+        (queued ? `; then re-read the queue: ${readFileSync(dispatcher!, "utf8").trim()} — their tasks stay = in it` : ""),
     );
     io.out(
       "Dispatcher session: a new executor — only for one that can't be continued, with the same prompt; " +
@@ -3281,7 +3321,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     if (unnamed.length) {
       const priority = pr.base?.repo?.owner?.type === "Organization" ? " --priority Urgent" : "";
       const title = `${locale.fill(N.mainRed.title, { base })}: ${what(unnamed)}`;
-      io.out(`no bug on red ${base} about ${say(unnamed)} — find an open one on the failed test or file one (label — the failed test's decision) and give a chip: bun --no-env-file ${import.meta.path} task new --type ${N.issueTypes.bug}${priority} --title ${JSON.stringify(title)}; ${wait("<N>")}`);
+      io.out(`no bug on red ${base} about ${say(unnamed)} — find an open one on the failed test or file one (label — the failed test's decision) and ask the owner whether to queue it: bun --no-env-file ${import.meta.path} task new --type ${N.issueTypes.bug}${priority} --title ${JSON.stringify(title)}; ${wait("<N>")}`);
     }
     io.out(`⛔ don't merge: ${base} is red, not this PR — don't fix it in your PR`);
     return 3;
@@ -3493,9 +3533,10 @@ Examples:
 
 Status in the project (and the epic's In progress once its first subtask is taken). In progress pins the task to the
 session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): another task in the same session — a refusal
-(code 2), it needs a new session; a human removes the pin. --branch — the worktree tool's branch becomes the task branch
-(git branch -m with its .git/config section); a .git/config locked by another checkout — retried ~10 s, then a ! line
-with the command that finishes it (code 1).
+(code 2) with the question to the owner whether to queue it and its executor's prompt; a task handed out to an
+executor of this session (task queue --assignment) isn't pinned; a human removes the pin. --branch — the worktree
+tool's branch becomes the task branch (git branch -m with its .git/config section); a .git/config locked by another
+checkout — retried ~10 s, then a ! line with the command that finishes it (code 1).
 
 Examples:
   github task status 42 "In progress" --branch feat/42-invoice-export
@@ -3521,9 +3562,9 @@ Examples:
   "task resume": `github task resume
 
 The SessionStart hook runs it: the wait to restart for the task pinned to the session — an open PR's checks, a merged PR
-of an open task — the deploy and task close; no pin — nothing (code 0). Read-only on GitHub; a dispatcher session — its
-stopped executors continued with SendMessage, then the queue command; a new executor only for one that can't be
-continued, in the worktree of its task's branch.
+of an open task — the deploy and task close; no pin — nothing (code 0). Read-only on GitHub; a session with executors —
+its stopped executors continued with SendMessage, then the queue command (a dispatcher's); a new executor only for one
+that can't be continued, in the worktree of its task's branch.
 
 Examples:
   github task resume`,
@@ -3535,12 +3576,12 @@ too —, no external blocker label) by Priority, then number, each with its exec
 progress, an open PR with its link, handed out to an executor of this session) and ○ lines with the reason (the
 label's — from the latest «External blocker: …» comment). Marks the session as a dispatcher
 (dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the executors are subagents
-with the session's id; refused in a session with a pinned task. Before the queue, in the repository's checkout —
+with the session's id; a session with a pinned task keeps it. Before the queue, in the repository's checkout —
 finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-agent-*, not locked by a live process,
 not an executor's whose handed-out task is open): clean and merged (git cherry) — removed with the branch (+),
 otherwise left (○ with the reason); loose worktree-agent-* branches — the same. --type and --priority — in an
-organization. --assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a dispatcher
-session it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks).
+organization. --assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a session
+(not one pinned to N) it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks).
 
 Examples:
   github task queue --epic 40
