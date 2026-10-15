@@ -4487,6 +4487,13 @@
   "describes": [
    "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
   ],
+  "name": "pack с путём машины сборки в сборке — код 2, пакет не публикуется"
+ },
+ {
+  "path": "tests/capabilities/release/release.test.ts",
+  "describes": [
+   "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
+  ],
   "name": "версия пакета соответствует тегу релиза"
  },
  {
@@ -14013,6 +14020,13 @@
    "Тест проекта импортирует харнесс и модель из пакета @miroshnik/elves любым раннером"
   ],
   "name": "Playwright в проекте с \"type\": \"module\" (загрузка ESM) импортирует из пакета харнесс и модель и проходит тест"
+ },
+ {
+  "path": "tests/standards/harness-load/harness-load.test.ts",
+  "describes": [
+   "Тест проекта импортирует харнесс и модель из пакета @miroshnik/elves любым раннером"
+  ],
+  "name": "deadCode харнесса из пакета под Vitest зовёт knip с репортёром из самого пакета, а не с машины сборки"
  },
  {
   "path": "tests/standards/harness-load/harness-load.test.ts",
