@@ -24,7 +24,8 @@ per-repository configuration:
   documentation;
 - `spec-run.ts` — for publishing on a PR merge: the green run that checked
   exactly the tree of the merge commit; none — publishing is skipped;
-  `--artifact` — the last green run's reports for `spec-shard`;
+  `--artifact` — the last green run's reports for `spec-shard`, one for all
+  shards of a run (green by its start);
 - `spec-shard.ts` — a CI shard's test files by the last green run's
   durations, not by the count of tests: greedily, the longest into the
   lightest shard; the runner gets them as filters instead of `--shard`

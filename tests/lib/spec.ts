@@ -31,15 +31,19 @@ export function runScript(
   return { code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };
 }
 
-// `gh` для spec-run — внешний край, подменяется он. Два вызова `gh api` (REST GitHub Actions): артефакты репозитория с
-// фильтром по имени — из artifacts.json; прогон по id — из runs.json, `{ id: [ответ на каждый опрос…] }`, последний
-// повторяется. Вызовы — в calls.
+// `gh` для spec-run — внешний край, подменяется он. Три вызова `gh api` (REST GitHub Actions): артефакты репозитория с
+// фильтром по имени — из artifacts.json; попытка прогона — из attempts.json, `{ "id/k": ответ }`, нет ключа — ошибка,
+// как 404; прогон по id — из runs.json, `{ id: [ответ на каждый опрос…] }`, последний повторяется. Вызовы — в calls.
 const FAKE_GH = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_GH/calls"
 [ "$1" = api ] || { echo "fake gh: $*" >&2; exit 1; }
 case "$2" in
   "repos/{owner}/{repo}/actions/artifacts?name="*)
-    jq -c --arg name "\${2#*name=}" '[.[] | select(.name == $name)] | { total_count: length, artifacts: . }' "$FAKE_GH/artifacts.json" ;;
+    name="\${2#*name=}"
+    jq -c --arg name "\${name%%&*}" '[.[] | select(.name == $name)] | { total_count: length, artifacts: . }' "$FAKE_GH/artifacts.json" ;;
+  "repos/{owner}/{repo}/actions/runs/"*"/attempts/"*)
+    run="\${2#*/runs/}"
+    jq -ce --arg key "\${run%%/*}/\${2##*/}" '.[$key]' "$FAKE_GH/attempts.json" ;;
   "repos/{owner}/{repo}/actions/runs/"*)
     id="\${2##*/}"; n=$(cat "$FAKE_GH/n-$id" 2>/dev/null || echo 0); echo $((n + 1)) > "$FAKE_GH/n-$id"
     jq -ce --arg id "$id" --argjson n "$n" '.[$id] | (.[$n] // .[-1])' "$FAKE_GH/runs.json" ;;
@@ -52,27 +56,39 @@ export interface GhArtifact {
   id: number;
   name: string;
   expired: boolean;
+  /** когда выложен: ISO, как пишет GitHub */
+  created_at?: string;
   workflow_run: { id: number; repository_id: number; head_repository_id: number };
 }
 
-/** Прогон в ответе `gh api …/actions/runs/<id>`. */
+/** Прогон в ответе `gh api …/actions/runs/<id>` (его последняя попытка) или попытка `…/runs/<id>/attempts/<k>`. */
 export interface GhRun {
   id: number;
   status: string;
   conclusion: string | null;
   html_url: string;
+  run_attempt?: number;
+  run_started_at?: string;
+  updated_at?: string;
 }
 
-export const ghRun = (id: number, status: string, conclusion: string | null = null): GhRun => ({ id, status, conclusion, html_url: `https://github.test/runs/${id}` });
+export const ghRun = (id: number, status: string, conclusion: string | null = null, more: Partial<GhRun> = {}): GhRun => ({
+  id,
+  status,
+  conclusion,
+  html_url: `https://github.test/runs/${id}`,
+  ...more,
+});
 
 /** Заглушка `gh` в каталоге `bin` с ответами `github`: окружение запуска скрипта и вызовы `gh` после него. */
-export function fakeGh(bin: string, github: { artifacts: GhArtifact[]; runs?: Record<number, GhRun[]> }) {
+export function fakeGh(bin: string, github: { artifacts: GhArtifact[]; runs?: Record<number, GhRun[]>; attempts?: Record<string, GhRun> }) {
   rmSync(bin, { recursive: true, force: true });
   mkdirSync(bin, { recursive: true });
   writeFileSync(path.join(bin, "gh"), FAKE_GH);
   chmodSync(path.join(bin, "gh"), 0o755);
   writeFileSync(path.join(bin, "artifacts.json"), JSON.stringify(github.artifacts));
   writeFileSync(path.join(bin, "runs.json"), JSON.stringify(github.runs ?? {}));
+  writeFileSync(path.join(bin, "attempts.json"), JSON.stringify(github.attempts ?? {}));
   const log = path.join(bin, "calls");
   return {
     env: { PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin },
