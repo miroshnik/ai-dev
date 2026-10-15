@@ -65,7 +65,7 @@ function sample(commands: string[][], extra: Record<string, string> = {}): strin
     symlinkSync(path.join(ROOT, "skills"), path.join(dir, "skills"));
     const log = path.join(dir, "ran.log");
     // без очереди машины: прогон теста сам в слоте или в CI
-    for (const cmd of commands) spawnSync(cmd[0]!, cmd.slice(1), { cwd: dir, encoding: "utf8", env: { ...process.env, AI_DEV_SLOT: "fast-tests", LEVELS_LOG: log } });
+    for (const cmd of commands) spawnSync(cmd[0]!, cmd.slice(1), { cwd: dir, encoding: "utf8", env: { ...process.env, ELVES_SLOT: "fast-tests", LEVELS_LOG: log } });
     return [...new Set(readFileSync(log, "utf8").split("\n").filter(Boolean))].sort();
   } finally {
     cleanup();
