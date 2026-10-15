@@ -49,7 +49,7 @@ const probe = (name: string) => `import { appendFileSync } from "node:fs";\nimpo
 const STANDARD = { "tests/standards/s/s.test.ts": probe("s.test.ts") };
 
 /**
- * Проект-образец со скриптами `package.json` ai-dev, быстрым и медленным тестом (и файлами `extra`); скилы — клона
+ * Проект-образец со скриптами `package.json` Elves, быстрым и медленным тестом (и файлами `extra`); скилы — клона
  * (скрипты зовут slot и spec-doc по относительным путям). → прогон команд в нём: какие из файлов прошли.
  */
 function sample(commands: string[][], extra: Record<string, string> = {}): string[] {
@@ -92,7 +92,7 @@ function ciTestCommands(workflow: string): string[][] {
 
 describe("Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба", () => {
   invariant(it, {
-    registry: "тесты ai-dev, которым нужен Docker или живой сервер",
+    registry: "тесты Elves, которым нужен Docker или живой сервер",
     items: tests.filter((f) => reason(f.text)),
     name: (f) => `${f.path} (${reason(f.text)}) — в медленном уровне`,
     key: (f) => f.path,
@@ -105,7 +105,7 @@ describe("Локальный test — быстрый уровень: тесты 
 
   // без причины медленным тест не становится: иначе в test:slow уходило бы просто медленное и красное
   invariant(it, {
-    registry: "медленные тесты ai-dev",
+    registry: "медленные тесты Elves",
     items: tests.filter((f) => SLOW.test(f.path)),
     name: (f) => `${f.path} — медленный по причине: Docker или живой сервер`,
     key: (f) => f.path,
@@ -121,7 +121,7 @@ describe("Локальный test — быстрый уровень: тесты 
   });
 
   /** Стандарты — статические проверки, им хватает одного прогона: перед коммитом идут test:spec, затем test (#479). */
-  it("скрипт test не повторяет test:spec: стандарты ai-dev идут только скриптом test:spec", () => {
+  it("скрипт test не повторяет test:spec: стандарты Elves идут только скриптом test:spec", () => {
     const runsStandard = (script: string) => sample([["bun", "run", script]], STANDARD).includes("s.test.ts");
     expect(["test", "test:slow", "test:spec"].filter(runsStandard)).toEqual(["test:spec"]);
   });

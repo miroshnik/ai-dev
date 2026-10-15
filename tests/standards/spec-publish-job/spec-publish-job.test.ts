@@ -142,7 +142,7 @@ interface Job {
   key: string;
 }
 
-// шаг публикации: скрипт скилла или скрипт проекта, который его зовёт (CI ai-dev)
+// шаг публикации: скрипт скилла или скрипт проекта, который его зовёт (CI Elves)
 const PUBLISH_STEP = /spec-publish\.ts|\bspec:publish\b/;
 
 /** Имя check-run job: `name`, без него — ключ; с матрицей GitHub дописывает в скобках значения сочетания — здесь первого. */
@@ -215,7 +215,7 @@ const one = (file: string, text: string): Job => {
 
 const JOBS = FRAGMENT_FILES.flatMap((f) => jobsOf(f, readFragmentFile(f)));
 
-describe("job публикации во фрагментах CI скилла spec и в CI ai-dev назван так, что оба скрипта узнают его публикацией", () => {
+describe("job публикации во фрагментах CI скилла spec и в CI Elves назван так, что оба скрипта узнают его публикацией", () => {
   invariant(it, {
     registry: "job публикации спеки в .github/workflows и YAML-фрагментах skills/**/*.md и docs/*.md",
     items: JOBS,

@@ -147,7 +147,7 @@ describe("Релиз — тег по дате на origin/main и список �
     expect(r.stdout).toContain(`https://github.com/miroshnik/ai-dev/releases/tag/${tag}`);
   });
 
-  it("не из клона ai-dev — отказ, код 2", () => {
+  it("не из клона Elves — отказ, код 2", () => {
     const bin = bunxPackage(path.join(sb.tmp, "bunx"), base.dir, base.sha);
     const r = aiDev(sb, ["release", "--dry-run"], { bin });
     expect(r.code).toBe(2);

@@ -1,5 +1,5 @@
 /**
- * Фикстура «реальный проект» для e2e флоу: то, на чём флоу ломался в проектах, а не в тестах ai-dev, — `.gitignore`,
+ * Фикстура «реальный проект» для e2e флоу: то, на чём флоу ломался в проектах, а не в тестах Elves, — `.gitignore`,
  * прячущий файлы флоу (#299), ключи разработчика в `.env.local` (#424), `package.json` без `"type"` — Playwright грузит
  * тесты как CommonJS (#303), workspace-пакет, журнал spec-claims от двух раннеров и настоящий knip. Не спека.
  */
@@ -160,7 +160,7 @@ export interface RealProject {
 
 /**
  * Проект магазина в `sb.proj` — закоммичен, флоу ещё не стоит: workspace-пакет цен, маршруты, юниты под `bun test`,
- * стандарты своим `test:spec`, e2e под Playwright, реестр точек входа, deadCode. Зависимости — ссылки на `node_modules` ai-dev (knip и Playwright —
+ * стандарты своим `test:spec`, e2e под Playwright, реестр точек входа, deadCode. Зависимости — ссылки на `node_modules` Elves (knip и Playwright —
  * его devDependencies), пакет workspace — ссылкой, как его кладёт менеджер пакетов; в PATH песочницы — node: на нём
  * идут knip и Playwright.
  */

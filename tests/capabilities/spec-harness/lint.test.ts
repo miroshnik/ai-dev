@@ -108,7 +108,7 @@ let cleanup: () => void;
 beforeEach(() => ({ dir, cleanup } = tmpDir()));
 afterEach(() => cleanup());
 
-// ESLint — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
+// ESLint — из devDependencies Elves: во временном каталоге фикстуры своего node_modules нет
 const ESLINT = createRequire(import.meta.url).resolve("eslint");
 // типы проверяет `bun check`; типы Node — оттуда же
 const TYPES = path.join(path.dirname(createRequire(import.meta.url).resolve("@types/node/package.json")), "..");

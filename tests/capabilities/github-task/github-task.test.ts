@@ -1608,7 +1608,7 @@ function checkout(branch: string, { merged = true, slug = REPO, before = [] as s
   const work = path.join(dir, "work");
   mkdirSync(work);
   const repo = gitRepo(work);
-  // чекаут ai-dev: язык проекта — русский, как у записанного проекта GitHub
+  // чекаут Elves: язык проекта — русский, как у записанного проекта GitHub
   repo.commit({ "README.md": "x\n", ".agents/ai-dev.json": '{ "language": "ru" }\n' }, "init");
   repo.git("remote", "add", "origin", origin);
   repo.git("push", "-q", "-u", "origin", "main");
@@ -1873,7 +1873,7 @@ describe("task close снимает стеки задачи", () => {
 /**
  * Исполнители сессии-диспетчера зовут скрипты из клона машины, а клон за сессию никто не обновляет: исправления `est`,
  * влитые ранними исполнителями, поздние не получали — `task close` считал факт старым `est`, и его переписывали руками
- * (#517). Влитый PR меняет скрипты только у самого ai-dev — клон подтягивается перед фактом только у задачи репозитория
+ * (#517). Влитый PR меняет скрипты только у самого Elves — клон подтягивается перед фактом только у задачи репозитория
  * скриптов, и только перемоткой: другая ветка или правка в клоне — чья-то работа.
  */
 describe("task close подтягивает клон скриптов до влитого main перед фактом", () => {
@@ -1911,7 +1911,7 @@ describe("task close подтягивает клон скриптов до вл�
     return { ...r, codes, f };
   }
 
-  it("task close задачи ai-dev считает факт кодом из влитого main, а не из отставшего клона", () => {
+  it("task close задачи Elves считает факт кодом из влитого main, а не из отставшего клона", () => {
     const m = machineClone();
     const before = m.head();
     const r = close(m.clone);

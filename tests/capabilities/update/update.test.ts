@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
-// пакеты ai-dev собираются один раз на файл: base — как этот клон, newer — ai-dev ушёл вперёд
+// пакеты ai-dev собираются один раз на файл: base — как этот клон, newer — Elves ушёл вперёд
 let packages: { dir: string; cleanup: () => void };
 let base: AiDevPackage;
 let newer: AiDevPackage;
@@ -65,15 +65,15 @@ function linkedClone() {
   return { up, clone };
 }
 
-describe("Копия в проекте сверяется со свежим ai-dev и обновляется им", () => {
-  it("поставлено из того же ai-dev — актуально, код 0", () => {
+describe("Копия в проекте сверяется со свежим Elves и обновляется им", () => {
+  it("поставлено из того же Elves — актуально, код 0", () => {
     aiDev(sb, ["install"]);
     const r = aiDev(sb, ["check"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("in the project: up to date");
   });
 
-  it("ai-dev ушёл вперёд — отстаёт, код 1: стоит и свежий SHA, что изменится, команда обновления; check ничего не меняет", () => {
+  it("Elves ушёл вперёд — отстаёт, код 1: стоит и свежий SHA, что изменится, команда обновления; check ничего не меняет", () => {
     aiDev(sb, ["install"]);
     const before = snapshot(sb.proj);
     const r = aiDev(sb, ["check"], { bin: newer.bin });
@@ -228,8 +228,8 @@ describe("Копия в проекте сверяется со свежим ai-d
     expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("tasks:");
   });
 
-  /** Клон ai-dev — сам канон: сверять и обновлять в нём нечего, а режим сессии в нём знать нужно. */
-  it("в клоне ai-dev check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит", () => {
+  /** Клон Elves — сам канон: сверять и обновлять в нём нечего, а режим сессии в нём знать нужно. */
+  it("в клоне Elves check и хук называют режим, клон остаётся «not installed»: релиз не ищут, поставить флоу не зовут, update флоу в клон не ставит", () => {
     const clone = copyPackage(base, path.join(sb.tmp, "clone")).dir;
     // установщик — пакет bunx из main, релизы недоступны: поиск релиза дал бы код 2
     const bin = bunxPackage(path.join(sb.tmp, "bunx/main"), base.dir, null);
@@ -531,14 +531,14 @@ describe("check проекта с test:spec называет test, которы�
 describe("Копия на машине (-g) сверяется и обновляется так же — вместе с хуком SessionStart", () => {
   beforeEach(() => mkdirSync(path.join(sb.home, ".claude")));
 
-  it("поставлено из того же ai-dev — актуально, код 0", () => {
+  it("поставлено из того же Elves — актуально, код 0", () => {
     aiDev(sb, ["install", "-g"]);
     const r = aiDev(sb, ["check", "-g"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("on the machine: up to date");
   });
 
-  it("ai-dev ушёл вперёд (новый скилл) — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального, правил на машине по-прежнему нет", () => {
+  it("Elves ушёл вперёд (новый скилл) — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального, правил на машине по-прежнему нет", () => {
     aiDev(sb, ["install", "-g"]);
     const before = snapshot(sb.home);
     const r = aiDev(sb, ["check", "-g"], { bin: newer.bin });
@@ -602,7 +602,7 @@ describe("Копия на машине (-g) сверяется и обновля
   });
 });
 
-// ai-dev с релизами: upstream — git-репозиторий, откуда установщик берёт теги (AI_DEV_REPO); bunx песочницы отдаёт
+// Elves с релизами: upstream — git-репозиторий, откуда установщик берёт теги (AI_DEV_REPO); bunx песочницы отдаёт
 // пакеты его коммитов — пускатель из main по `github:miroshnik/ai-dev` и пакет каждого коммита по его SHA
 function withReleases() {
   const up = copyPackage(base, path.join(sb.tmp, "upstream"));
@@ -646,11 +646,11 @@ function withReleases() {
 }
 
 /**
- * Проекты и машина копией следуют за релизами ai-dev (теги vГГГГ.ММ.ДД), а не за main: коммит в main без релиза их
+ * Проекты и машина копией следуют за релизами Elves (теги vГГГГ.ММ.ДД), а не за main: коммит в main без релиза их
  * «отставшими» не делает. bunx ставит пакет из main один раз и дальше берёт его из кеша — он только пускатель: находит
  * последний релиз и перезапускается по его SHA, дальше и код, и файлы релиза.
  */
-describe("Копия следует за релизами ai-dev, а не за main", () => {
+describe("Копия следует за релизами Elves, а не за main", () => {
   const rule = (up: AiDevPackage, text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
 
   it("install ставит последний релиз, а не голову main: его файлы, тег и SHA в .agents/ai-dev.json", () => {
@@ -942,10 +942,10 @@ describe("Клон --link сверяется с origin/main, update подтяг
   });
 
   /**
-   * Напоминание владельцу в сессии клона ai-dev: без релиза проекты этих правок не получат. Отставанием не считается —
+   * Напоминание владельцу в сессии клона Elves: без релиза проекты этих правок не получат. Отставанием не считается —
    * код тот же.
    */
-  it("в клоне ai-dev: в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0", () => {
+  it("в клоне Elves: в main после последнего релиза изменения флоу — строка «not in a release» с тегом, числом и командой релиза; код 0", () => {
     const { up, clone } = linkedClone();
     up.repo.git("tag", "v2026.10.05");
     up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });
@@ -958,7 +958,7 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.stdout).toContain(`${path.join(clone, "bin/ai-dev.ts")} release`);
   });
 
-  it("в клоне ai-dev: всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано", () => {
+  it("в клоне Elves: всё в релизе — строки «not in a release» нет; релизов ещё нет — так и сказано", () => {
     const { up, clone } = linkedClone();
     expect(aiDev(sb, ["check", "-g"], { cwd: clone }).stdout).toContain("not in a release: no releases yet");
     up.repo.git("tag", "v2026.10.05");
@@ -966,8 +966,8 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(aiDev(sb, ["check", "-g"], { cwd: clone }).stdout).not.toContain("not in a release");
   });
 
-  /** Релиз — шаг владельца в клоне ai-dev; в сессии проекта строка о нём — шум в каждом старте. */
-  it("в проекте вывод хука не содержит строки о невыпущенных коммитах ai-dev", () => {
+  /** Релиз — шаг владельца в клоне Elves; в сессии проекта строка о нём — шум в каждом старте. */
+  it("в проекте вывод хука не содержит строки о невыпущенных коммитах Elves", () => {
     const { up, clone } = linkedClone();
     up.repo.git("tag", "v2026.10.05");
     up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE });

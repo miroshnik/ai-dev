@@ -235,7 +235,7 @@ describe("каждый обработчик экспортирует default", (
 const handlers = { "handlers/a.ts": "export default () => 1;\n", "handlers/b.ts": "export const b = 2;\n" };
 
 /**
- * Харнесс не зависит от раннера: `it` передаёт тест. Проекты гоняют Vitest под Node, ai-dev — bun test; тесты
+ * Харнесс не зависит от раннера: `it` передаёт тест. Проекты гоняют Vitest под Node, Elves — bun test; тесты
  * проверки видны в отчёте раннера, а значит и в спеке.
  */
 describe("Тесты проверки — в отчёте любого раннера: bun test, Vitest, node:test", () => {

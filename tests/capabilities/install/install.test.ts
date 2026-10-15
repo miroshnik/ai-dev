@@ -79,7 +79,7 @@ describe("В проект — копия, которую видят облачн
     expect(read(path.join(proj, "AGENTS.md"))).toMatch(/^<!-- ai-dev:begin[^]*<!-- ai-dev:end -->\n$/);
   });
 
-  it("скилл, которого больше нет в ai-dev, при переустановке удаляется; свой скилл проекта не трогается", () => {
+  it("скилл, которого больше нет в Elves, при переустановке удаляется; свой скилл проекта не трогается", () => {
     install();
     const manifest = path.join(proj, ".agents/ai-dev.json");
     const m = JSON.parse(read(manifest));
@@ -92,7 +92,7 @@ describe("В проект — копия, которую видят облачн
     expect(read(path.join(proj, ".agents/skills/mine/SKILL.md"))).toBe("mine");
   });
 
-  it("чужой каталог с именем скилла ai-dev не перезаписывается — предупреждение", () => {
+  it("чужой каталог с именем скилла Elves не перезаписывается — предупреждение", () => {
     writeTree(proj, { ".agents/skills/spec/SKILL.md": "свой spec" });
     const r = install();
     expect(read(path.join(proj, ".agents/skills/spec/SKILL.md"))).toBe("свой spec");
@@ -119,7 +119,7 @@ describe("В проект — копия, которую видят облачн
     expect(existsSync(path.join(proj, ".agents/skills/spec/scripts/package.json"))).toBe(true);
   });
 
-  it("в .agents/ai-dev.json — SHA ai-dev, из которого поставлено: у клона — его HEAD", () => {
+  it("в .agents/ai-dev.json — SHA Elves, из которого поставлено: у клона — его HEAD", () => {
     install();
     const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" }).trim();
     expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).sha).toBe(head);
@@ -396,7 +396,7 @@ describe("Проверки проекта идут очередью машины
   /**
    * knip разбирает скрипты package.json: по скрипту `bun test` плагин Bun берёт входами файлы тестов и `preload` из
    * bunfig.toml, по бинарнику команды зависимость считается использованной. Команду строкой-аргументом knip не видел —
-   * deadCode проекта краснел от установки флоу, а не от кода. knip — настоящий, из devDependencies ai-dev, под node.
+   * deadCode проекта краснел от установки флоу, а не от кода. knip — настоящий, из devDependencies Elves, под node.
    */
   it("после установки флоу knip видит команды обёрнутых скриптов: тесты bun test и preload — входы, бинарник команды — использованная зависимость", () => {
     writeTree(proj, {
@@ -617,8 +617,8 @@ describe("Задача целиком без спроса — настройка
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
   });
 
-  /** Клон ai-dev — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
-  it("в клоне ai-dev install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее", () => {
+  /** Клон Elves — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
+  it("в клоне Elves install флоу не ставит — пишет в .agents/ai-dev.json только auto и language: с флагом — его значение, без флага и терминала — прежнее", () => {
     const clone = path.join(tmp, "clone");
     writeTree(clone, { "package.json": JSON.stringify({ name: "ai-dev" }) });
     execFileSync("git", ["init", "-q"], { cwd: clone });

@@ -172,7 +172,7 @@ describe("Шард CI получает файлы по длительностя�
   });
 });
 
-// Playwright — из devDependencies ai-dev: во временном проекте своего node_modules нет, он — ссылка на node_modules ai-dev
+// Playwright — из devDependencies Elves: во временном проекте своего node_modules нет, он — ссылка на node_modules Elves
 const PLAYWRIGHT = path.join(path.dirname(createRequire(import.meta.url).resolve("@playwright/test/package.json")), "cli.js");
 
 /**

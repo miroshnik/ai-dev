@@ -22,11 +22,11 @@ afterEach(() => sb.cleanup());
 const failed = (r: { code: number | null; output: string }) => (r.code === 0 ? null : r.output.slice(-4000));
 
 /**
- * Половину багов флоу нашли проекты, а не тесты ai-dev: в ai-dev нет `.gitignore` с шаблонами агентов, ключей в
+ * Половину багов флоу нашли проекты, а не тесты Elves: в Elves нет `.gitignore` с шаблонами агентов, ключей в
  * `.env.local`, CommonJS, workspace, настоящего knip и журнала от двух раннеров. Поэтому установку и скрипты флоу
  * проверяет проект, где всё это есть, — так, как их гоняют агент и CI.
  */
-describe("Флоу работает в проекте, устроенном как настоящий, а не только в тестах ai-dev", () => {
+describe("Флоу работает в проекте, устроенном как настоящий, а не только в тестах Elves", () => {
   it("установка флоу в проект с .env.local, CJS package.json и workspace проходит, и скрипты флоу работают в нём", () => {
     const check = aiDev(sb, ["check"]);
     expect(check.stdout + check.stderr).not.toContain("❌");

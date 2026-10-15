@@ -16,7 +16,7 @@ const REC: Recording = JSON.parse(readFileSync(new URL("../../lib/github-ai-dev.
 const REPO = "miroshnik/ai-dev";
 const PROJECT_URL = "https://github.com/users/miroshnik/projects/6";
 
-/** `cwd` — чекаут проекта: язык названий канона — его `.agents/ai-dev.json`; без него — текущий каталог (клон ai-dev, ru). */
+/** `cwd` — чекаут проекта: язык названий канона — его `.agents/ai-dev.json`; без него — текущий каталог (клон Elves, ru). */
 function run(fake: FakeGitHub, args: string[], env: Record<string, string> = {}, cwd?: string) {
   const out: string[] = [];
   const err: string[] = [];
