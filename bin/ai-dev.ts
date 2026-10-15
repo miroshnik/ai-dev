@@ -110,16 +110,16 @@ const HELP: Record<string, string> = {
   install: `ai-dev install [--auto | --no-auto] [--lang <code>]
 ai-dev install -g [--link]
 
-Rules, references and all skills of the latest ai-dev release — into the project (the git root or the current
+Rules, references and all skills of the latest Elves release — into the project (the git root or the current
 directory); in a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
 fixing CI, merge on green checks (auto in .agents/ai-dev.json, default — no); without a terminal — the --auto or
 --no-auto flag, without the flag the previous answer stays; with auto prints the Claude Code permission rule for the
 merge — Bash(gh pr merge *) in ~/.claude/settings.json: the owner adds it, install doesn't change the machine's
 settings. --lang <code> — the project language the agent works in: dialog, tasks, prompts, documents (language in
 .agents/ai-dev.json, a BCP 47 code: ru, en, pt-BR); in a terminal — a question, en by default, without the flag and a
-terminal — the previous one. In an ai-dev clone writes only auto and language.
+terminal — the previous one. In an Elves clone writes only auto and language.
 -g — onto the machine only the skills (~/.agents/skills, ~/.claude/skills) and the SessionStart hook; the rules come
-from the project, a machine copy of a previous install is removed. --link — from an ai-dev clone: symlinks to the clone
+from the project, a machine copy of a previous install is removed. --link — from an Elves clone: symlinks to the clone
 instead of copies, edits show up immediately.
 
 Examples:
@@ -138,7 +138,7 @@ to tasks (the exit code stays the same); a project that
 needs update — the update in a task of its own, not in a task session: the task new command of the github skill, one
 task per project. For the machine names the task-env proxy of *.localhost addresses — running or not, with the start
 command (with Docker on the machine; the exit code stays the same), run from the agent's Bash in Claude Code — a
-session without the agent's Bash environment, for a --link clone run from an ai-dev clone — flow commits not in a
+session without the agent's Bash environment, for a --link clone run from an Elves clone — flow commits not in a
 release yet.
 --hook — the machine and the project at once for the Claude Code SessionStart hook: the exit code is always 0, errors
 go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE — zsh without errors on a glob without matches
@@ -161,7 +161,7 @@ Examples:
   ai-dev update -g`,
   release: `ai-dev release [--dry-run]
 
-From an ai-dev clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow changes since the previous
+From an Elves clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow changes since the previous
 release; --dry-run — only show them.
 
 Examples:
@@ -170,7 +170,7 @@ Examples:
 
 /** `ai-dev --help`: the synopsis of each command and how to run it. */
 const OVERVIEW = [
-  "ai-dev — the flow's rules and skills: install, check, update, release",
+  "ai-dev — the rules and skills of the Elves flow: install, check, update, release",
   "",
   ...Object.values(HELP).map((h) => h.split("\n\n")[0]!.replace(/^/gm, "  ")),
   "",
@@ -316,14 +316,14 @@ function toRelease(argv: string[]): number | null {
     const head = (sha: string | null) => (sha ? { sha } : undefined);
     to = releases(repoUrl()).at(-1) ?? head(mainHead(repoUrl()));
   } catch (e) {
-    throw new Error(`can't find out the latest ai-dev release — ${reason(e)}`);
+    throw new Error(`can't find out the latest Elves release — ${reason(e)}`);
   }
   if (!to) return null;
   const env = { ...process.env };
   delete env.AI_DEV_RELEASE;
   if (to.tag) env.AI_DEV_RELEASE = to.tag;
   const r = spawnSync("bunx", ["--silent", `github:${SOURCE}#${to.sha}`, ...argv], { stdio: "inherit", env });
-  if (r.error) throw new Error(`can't run ${to.tag ? `release ${to.tag}` : `ai-dev ${short(to.sha)}`} — ${reason(r.error)}`);
+  if (r.error) throw new Error(`can't run ${to.tag ? `release ${to.tag}` : `Elves ${short(to.sha)}`} — ${reason(r.error)}`);
   return r.status ?? 2;
 }
 
@@ -472,7 +472,7 @@ function installSkills(src: string, root: string, linkMode: boolean, claude: boo
     const dst = path.join(root, ".agents/skills", name);
     const st = lstat(dst);
     if (!st || st.isSymbolicLink() || before.includes(name)) return true;
-    warn(`${path.relative(root, dst)} already exists and isn't an ai-dev skill — left; remove it to install the ai-dev skill`);
+    warn(`${path.relative(root, dst)} already exists and isn't an Elves skill — left; remove it to install the Elves skill`);
     return false;
   });
   for (const name of before.filter((n) => !names.includes(n))) {
@@ -483,7 +483,7 @@ function installSkills(src: string, root: string, linkMode: boolean, claude: boo
     }
     remove(dst);
     if (lstat(path.join(root, ".claude/skills", name))?.isSymbolicLink()) rmSync(path.join(root, ".claude/skills", name));
-    note(`${path.relative(root, dst)} — removed: ai-dev no longer has it`);
+    note(`${path.relative(root, dst)} — removed: Elves no longer has it`);
   }
   const clone = linkMode ? path.resolve(src) : undefined; // a --link machine: check and update find the clone by it
   if (dry) {
@@ -857,8 +857,8 @@ function gitignoreFlow(root: string) {
   const after = withGiBlock(base, lines);
   put(after);
   for (const p of stuck.keys()) fixed.delete(p);
-  if (fixed.size) note(`.gitignore — ai-dev exceptions: git ignored ${[...fixed].map(([p, i]) => `${p} (${i.rule})`).join(", ")}`);
-  else if (after !== before && !lines.length) note(".gitignore — the ai-dev exceptions block removed: git doesn't ignore flow files");
+  if (fixed.size) note(`.gitignore — Elves exceptions: git ignored ${[...fixed].map(([p, i]) => `${p} (${i.rule})`).join(", ")}`);
+  else if (after !== before && !lines.length) note(".gitignore — the Elves exceptions block removed: git doesn't ignore flow files");
   for (const [p, i] of stuck) fail(`${p} — ${ignoredNote(i, true)}`);
   return after !== before;
 }
@@ -902,7 +902,7 @@ const languageOf = (root: string) => locale.projectLanguage(root);
 /** Lines with the project's mode and language in `check` output: the session start (hook) sees them. */
 const modeLines = (root: string) => [`  tasks: ${autoOf(root) ? "entirely by itself" : "with permission"}`, `  language: ${languageOf(root)}`];
 
-const CLONE_NOTE = "an ai-dev clone: the flow isn't installed into it — the canon is at its root";
+const CLONE_NOTE = "an Elves clone: the flow isn't installed into it — the canon is at its root";
 
 /**
  * An ai-dev clone: of the install it gets only the mode and the language, a manifest of two fields; the task stack
@@ -1118,7 +1118,7 @@ function specScript(root: string): { lines: string[]; missing: boolean } {
 }
 
 /** The check failed: what and why. */
-const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `ai-dev ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
+const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `Elves ${global ? "on the machine" : "in the project"}: check unavailable — ${reason(e)}` });
 
 /**
  * The clone a `--link` install on the machine refers to: the path from the manifest; for an install of a previous
@@ -1151,8 +1151,8 @@ function check(global: boolean): Result {
   const { home, root, installed } = target(global);
   const where = global ? "on the machine" : "in the project";
   // an ai-dev clone has nothing to compare against, but the session mode is needed in it — as in a project
-  if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`ai-dev ${where}: not installed — an ai-dev clone, the canon is at its root`, ...modeLines(root)].join("\n") };
-  if (!installed) return { code: 0, text: `ai-dev ${where}: not installed`, absent: true };
+  if (!installed && !global && isAiDevClone(root)) return { code: 0, text: [`Elves ${where}: not installed — an Elves clone, the canon is at its root`, ...modeLines(root)].join("\n") };
+  if (!installed) return { code: 0, text: `Elves ${where}: not installed`, absent: true };
   const clone = global ? linkedClone(home) : null;
   if (clone) return checkLink(home, clone);
   const changes = dryRun(() => (global ? installGlobal(SRC, false) : installProject(SRC, root)));
@@ -1168,7 +1168,7 @@ function check(global: boolean): Result {
   const project = [...warnings, ...compose.lines, ...spec.lines, ...mode];
   const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
   const ignored = changes.filter((c) => c.op === "❌");
-  if (!stale.length && !ignored.length) return { code: compose.violations || spec.missing ? 1 : 0, compose: compose.violations, spec: spec.missing, text: [`ai-dev ${where}: up to date (${fresh})`, ...project].join("\n") };
+  if (!stale.length && !ignored.length) return { code: compose.violations || spec.missing ? 1 : 0, compose: compose.violations, spec: spec.missing, text: [`Elves ${where}: up to date (${fresh})`, ...project].join("\n") };
   const m = readManifest(root);
   const fixable = ignored.some((c) => !c.manual);
   const lost = "ignores flow files — they are missing from the commit, other checkouts and the cloud session:";
@@ -1180,7 +1180,7 @@ function check(global: boolean): Result {
     spec: spec.missing,
     run: stale.length > 0 || fixable,
     text: [
-      stale.length ? `ai-dev ${where}: behind — installed ${m.tag ?? short(m.sha) ?? "without SHA"}, latest ${fresh}` : `ai-dev ${where}: up to date (${fresh}), but git ${lost}`,
+      stale.length ? `Elves ${where}: behind — installed ${m.tag ?? short(m.sha) ?? "without SHA"}, latest ${fresh}` : `Elves ${where}: up to date (${fresh}), but git ${lost}`,
       ...capped(changeLines(stale, root, global)),
       ...(stale.length && ignored.length ? [`Git ${lost}`] : []),
       ...capped(changeLines(ignored, root, global)),
@@ -1210,19 +1210,19 @@ function checkLink(home: string, clone: string): Result {
     behind = Number(git(clone, "rev-list", "--count", "HEAD..origin/main"));
     files = git(clone, "diff", "--no-renames", "--name-status", "HEAD...origin/main", "--", "skills").split("\n").filter(Boolean);
   } catch (e) {
-    return { code: 2, text: `ai-dev ${where}: check unavailable — ${reason(e)}` };
+    return { code: 2, text: `Elves ${where}: check unavailable — ${reason(e)}` };
   }
   const links = dryRun(() => installGlobal(clone, true));
   if (!files.length && !links.length) {
     const ahead = behind ? `; origin/main ${short(main)} is ahead by ${behind}, the flow isn't affected` : "";
-    return { code: 0, text: [`ai-dev ${where}: up to date (${short(head)}${ahead})`, ...unreleased(clone)].join("\n") };
+    return { code: 0, text: [`Elves ${where}: up to date (${short(head)}${ahead})`, ...unreleased(clone)].join("\n") };
   }
   const op = (status: string) => (status === "A" ? "+" : status === "D" ? "-" : "~");
   return {
     code: 1,
     behind: true,
     text: [
-      `ai-dev ${where}: behind — clone ${short(head)}, origin/main ${short(main)}`,
+      `Elves ${where}: behind — clone ${short(head)}, origin/main ${short(main)}`,
       ...capped([...files.map((l) => `  ${op(l.split("\t")[0] ?? "")} ${l.split("\t")[1]}`), ...changeLines(links, home, true)]),
       `Update: ${RUN} update -g`,
       ...unreleased(clone),
@@ -1287,7 +1287,7 @@ const shQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 
 function agentShellScript() {
   return [
-    `# ai-dev: the agent's Bash environment, written by the SessionStart hook (${RUN} check --hook)`,
+    `# Elves: the agent's Bash environment, written by the SessionStart hook (${RUN} check --hook)`,
     `export ${AGENT_SHELL}=1`,
     'if [ -n "${ZSH_VERSION-}" ]; then setopt NO_NOMATCH NO_EQUALS; fi',
     `export PATH="\${PATH:+$PATH:}"${shQuote(path.join(SRC, "bin/shims"))}`,
@@ -1321,7 +1321,7 @@ function writeAgentShell(): string[] {
  */
 function agentShellLines(): string[] {
   if (process.env.CLAUDECODE !== "1" || process.env[AGENT_SHELL]) return [];
-  return [`  agent Bash: not set up — this session got no environment from the ai-dev SessionStart hook (its output at the session start says why); ${SHELL_FALLBACK}`];
+  return [`  agent Bash: not set up — this session got no environment from the Elves SessionStart hook (its output at the session start says why); ${SHELL_FALLBACK}`];
 }
 
 /**
@@ -1406,7 +1406,7 @@ function hook(failed?: unknown) {
   const shown = results.filter((r) => !r.absent);
   // rules load only from the project: a git repository without the flow — how to install it (an ai-dev clone is the
   // canon itself, it isn't absent)
-  if (project?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `ai-dev in the project: not installed — install it: ${RUN} install --lang <project language>` });
+  if (project?.absent && gitRoot()) shown.push({ code: 0, run: true, text: `Elves in the project: not installed — install it: ${RUN} install --lang <project language>` });
   const resume = resumeLines();
   if (!shown.length && !resume.length) return 0;
   const tail = [];
@@ -1424,7 +1424,7 @@ function hook(failed?: unknown) {
   if (shown.some((r) => r.spec)) tail.push("No test:spec script — pr premerge doesn't run standards and architecture on the merge; the ❌ line names the package.json scripts; adding them is a task of its own in the project.");
   if (shown.some((r) => r.code === 2)) tail.push("Check unavailable — work by the current flow and say so.");
   if (shown.some((r) => r.run)) tail.push(SANDBOX_HINT);
-  note(["ai-dev flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...resume, ...tail].join("\n"));
+  note(["Elves flow (AGENTS.md, «First step of a session»):", ...shown.map((r) => r.text), ...resume, ...tail].join("\n"));
   return 0;
 }
 
@@ -1476,8 +1476,8 @@ function whatChanged(from: { sha?: unknown; tag?: unknown }): string[] {
   const sha = typeof from.sha === "string" ? from.sha : null;
   const was = (typeof from.tag === "string" && from.tag) || short(sha) || "without SHA";
   const now = release ?? short(to) ?? "SHA unknown";
-  if (sha && sha === to) return [`ai-dev flow ${now} was already installed — nothing changed`];
-  const unavailable = (why: string) => [`ai-dev flow ${was} → ${now}: changes unavailable — ${why}; releases: ${RELEASES}`];
+  if (sha && sha === to) return [`Elves ${now} was already installed — nothing changed`];
+  const unavailable = (why: string) => [`Elves ${was} → ${now}: changes unavailable — ${why}; releases: ${RELEASES}`];
   if (!sha) return unavailable("installed without SHA");
   if (!to) return unavailable("the SHA of this package is unknown");
   let groups;
@@ -1488,7 +1488,7 @@ function whatChanged(from: { sha?: unknown; tag?: unknown }): string[] {
   }
   const tags = groups.filter((g) => g.tag).length;
   return [
-    `ai-dev flow ${was} → ${now}${tags ? `, new releases: ${tags}` : ""} — tell the user what changed:`,
+    `Elves ${was} → ${now}${tags ? `, new releases: ${tags}` : ""} — tell the user what changed:`,
     // commits after the last release (an installer from a clone) are named only next to releases
     ...groups.flatMap((g) => [...(g.tag ? [`${g.tag} — ${RELEASES}/tag/${g.tag}`] : tags ? [`${short(to)} — not in a release`] : []), ...g.items.map((i) => `  ${i}`)]),
   ];
@@ -1574,7 +1574,7 @@ function updateLink(clone: string) {
  * @param preview `--dry-run`: show the tag and the list, create nothing
  */
 function releaseCmd(preview: boolean) {
-  if (!existsSync(path.join(SRC, ".git"))) return warn("release — only from an ai-dev clone: bun <clone>/bin/ai-dev.ts release"), 2;
+  if (!existsSync(path.join(SRC, ".git"))) return warn("release — only from an Elves clone: bun <clone>/bin/ai-dev.ts release"), 2;
   let head, tags, items;
   try {
     git(SRC, "fetch", "--quiet", "origin", "main");
@@ -1588,7 +1588,7 @@ function releaseCmd(preview: boolean) {
   const last = tags.at(-1);
   if (last?.sha === head) return warn(`release: origin/main ${short(head)} is already in release ${last.tag}`), 1;
   if (last && !items.length) return warn(`release: the flow hasn't changed since ${last.tag} — no release needed`), 1;
-  const notes = last ? [`Flow changes since ${last.tag}:`, "", ...items].join("\n") : "First release: projects install and update the flow by ai-dev releases, not by main.";
+  const notes = last ? [`Flow changes since ${last.tag}:`, "", ...items].join("\n") : "First release: projects install and update the flow by Elves releases, not by main.";
   const day = `v${new Date().toISOString().slice(0, 10).replaceAll("-", ".")}`;
   const names = new Set(tags.map((t) => t.tag));
   let tag = day;
@@ -1756,7 +1756,7 @@ function main(argv: string[]) {
   }
   const linkMode = flags.includes("--link");
   if (linkMode && (!global || !existsSync(path.join(SRC, ".git")))) {
-    warn("--link — only with -g and only from an ai-dev clone: a project commits a copy, not a link to a local clone");
+    warn("--link — only with -g and only from an Elves clone: a project commits a copy, not a link to a local clone");
     return 2;
   }
   const [on, off] = [flags.includes("--auto"), flags.includes("--no-auto")];

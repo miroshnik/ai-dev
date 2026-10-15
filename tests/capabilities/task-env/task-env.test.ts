@@ -66,7 +66,7 @@ describe("check -g называет прокси на машине: работа
     spawnSync("rm", [path.join(sb.bin, "docker")]);
     const r = check("running");
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("ai-dev on the machine: up to date");
+    expect(r.stdout).toContain("Elves on the machine: up to date");
     expect(r.stdout).not.toContain("proxy");
   });
 
@@ -82,7 +82,7 @@ describe("check -g называет прокси на машине: работа
   it("хук SessionStart показывает строку прокси вместе с машиной", () => {
     const r = aiDev(sb, ["check", "--hook"], { env: { FAKE_DOCKER: "none", FAKE_DOCKER_LOG: log } });
     expect(r.code).toBe(0);
-    expect(r.stdout).toMatch(/ai-dev on the machine: up to date[^\n]*\n {2}proxy \*\.localhost: not running/);
+    expect(r.stdout).toMatch(/Elves on the machine: up to date[^\n]*\n {2}proxy \*\.localhost: not running/);
   });
 });
 

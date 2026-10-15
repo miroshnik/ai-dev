@@ -3289,7 +3289,7 @@ export function factCommentBody(res: Fact, est: number | null, keptLines: string
 // (cloud)" with a link to the session. A local session gives the number: importing the cloud session's events
 // (est cloud-import, parseCloudFile).
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
-const CLOUD_ERR = "Claude Code cloud session: GitHub GraphQL and projects are unreachable from here — estimate, history and sweep only in a local session (docs/cloud-sessions.md in ai-dev)";
+const CLOUD_ERR = "Claude Code cloud session: GitHub GraphQL and projects are unreachable from here — estimate, history and sweep only in a local session (docs/cloud-sessions.md in Elves)";
 
 /** "Actual" comment of a task closed from a cloud session: actual unavailable, a marker with cov none and src cloud. */
 /** Cloud session id for a link: env gives cse_…, the link needs session_…. */

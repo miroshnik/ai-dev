@@ -234,7 +234,7 @@ describe("Копия в проекте сверяется со свежим ai-d
     // установщик — пакет bunx из main, релизы недоступны: поиск релиза дал бы код 2
     const bin = bunxPackage(path.join(sb.tmp, "bunx/main"), base.dir, null);
     const run = (...args: string[]) => aiDev(sb, args, { cwd: clone, bin, env: { AI_DEV_REPO: path.join(sb.tmp, "nowhere") } });
-    const ABSENT = "ai-dev in the project: not installed — an ai-dev clone, the canon is at its root\n";
+    const ABSENT = "Elves in the project: not installed — an Elves clone, the canon is at its root\n";
     expect(run("check")).toMatchObject({ code: 0, stdout: ABSENT + MODE_ASK });
     expect(aiDev(sb, ["install", "--auto"], { cwd: clone }).code).toBe(0);
     expect(run("check")).toMatchObject({ code: 0, stdout: ABSENT + MODE_AUTO });
@@ -342,7 +342,7 @@ describe("check проекта держит compose-файл правил изо
   /** Без docker в PATH: начни check скрипт в проекте без compose-файла — была бы строка ○ «docker not found». */
   it("проект без compose-файла — ни строки сверх обычных, скрипт не запускается; чистый compose-файл — тоже ни строки; код 0", () => {
     aiDev(sb, ["install"]);
-    const upToDate = /^ai-dev in the project: up to date \([^)\n]+\)\n {2}tasks: with permission\n {2}language: en\n$/;
+    const upToDate = /^Elves in the project: up to date \([^)\n]+\)\n {2}tasks: with permission\n {2}language: en\n$/;
     expect(aiDev(sb, ["check"])).toMatchObject({ code: 0, stdout: expect.stringMatching(upToDate) });
     withDocker();
     composeFile("services:\n  db:\n    image: postgres\n    ports: ['127.0.0.1::5432']\n");
@@ -523,7 +523,7 @@ describe("check проекта с test:spec называет test, которы�
     withSpec("vitest run");
     const r = aiDev(sb, ["check"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toStartWith("ai-dev in the project: up to date");
+    expect(r.stdout).toStartWith("Elves in the project: up to date");
     expect(r.stdout).toEndWith(REPEATS("tests/standards", inSlot("vitest run --exclude 'tests/standards/**'")) + MODE_ASK);
   });
 });
@@ -767,11 +767,11 @@ describe("Копия следует за релизами ai-dev, а не за m
     const before = snapshot(sb.proj);
     const c = r.run(["check"], offline);
     expect(c.code).toBe(2);
-    expect(c.stderr).toContain("in the project: check unavailable — can't find out the latest ai-dev release");
+    expect(c.stderr).toContain("in the project: check unavailable — can't find out the latest Elves release");
     for (const cmd of ["install", "update"]) {
       const u = r.run([cmd], offline);
       expect(u.code).toBe(2);
-      expect(u.stderr).toContain("can't find out the latest ai-dev release");
+      expect(u.stderr).toContain("can't find out the latest Elves release");
     }
     expect(snapshot(sb.proj)).toEqual(before);
   });
@@ -782,7 +782,7 @@ describe("Копия следует за релизами ai-dev, а не за m
     r.run(["install"]);
     const h = r.run(["check", "--hook"], { AI_DEV_REPO: path.join(sb.tmp, "nowhere") });
     expect(h.code).toBe(0);
-    expect(h.stdout).toContain("in the project: check unavailable — can't find out the latest ai-dev release");
+    expect(h.stdout).toContain("in the project: check unavailable — can't find out the latest Elves release");
   });
 });
 
@@ -810,7 +810,7 @@ describe("update называет изменения каждого пропущ
     expect(u.code).toBe(0);
     expect(a).toEqual(["- feat(agents): правило A (#7)"]);
     expect(b).toEqual(["- fix(est): правка B (#8)"]);
-    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → v2026.10.12, new releases: 2 — tell the user what changed:\n${block("v2026.10.12", b)}\n${block("v2026.10.08", a)}\nCommit the project copy`);
+    expect(u.stdout).toContain(`Elves v2026.10.05 → v2026.10.12, new releases: 2 — tell the user what changed:\n${block("v2026.10.12", b)}\n${block("v2026.10.08", a)}\nCommit the project copy`);
     expect(u.stdout).not.toContain("только тесты");
     expect(u.stdout).not.toContain("правило из main");
   });
@@ -822,10 +822,10 @@ describe("update называет изменения каждого пропущ
     r.commit(rule(r.up, "Правило A."), "feat(agents): правило A");
     r.release("v2026.10.12");
     const u = r.run(["update"]);
-    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n${block("v2026.10.12", ["- feat(agents): правило A"])}\n`);
+    expect(u.stdout).toContain(`Elves v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n${block("v2026.10.12", ["- feat(agents): правило A"])}\n`);
     const again = r.run(["update"]);
     expect(again.code).toBe(0);
-    expect(again.stdout).toContain("ai-dev flow v2026.10.12 was already installed — nothing changed");
+    expect(again.stdout).toContain("Elves v2026.10.12 was already installed — nothing changed");
   });
 
   it("релизов ещё нет — список коммитов флоу от стоявшего SHA до новой головы", () => {
@@ -836,7 +836,7 @@ describe("update называет изменения каждого пропущ
     const to = r.commit(rule(r.up, "Правило A."), "feat(agents): правило A\n\nRefs #7");
     const u = r.run(["update"]);
     expect(u.code).toBe(0);
-    expect(u.stdout).toContain(`ai-dev flow ${short(from)} → ${short(to)} — tell the user what changed:\n  - feat(agents): правило A (#7)\nCommit the project copy`);
+    expect(u.stdout).toContain(`Elves ${short(from)} → ${short(to)} — tell the user what changed:\n  - feat(agents): правило A (#7)\nCommit the project copy`);
     expect(u.stdout).not.toContain("только тесты");
   });
 
@@ -849,7 +849,7 @@ describe("update называет изменения каждого пропущ
     const head = r.commit(rule(r.up, "Правило B."), "feat(agents): правило B");
     const u = aiDev(sb, ["update"], { bin: r.up.bin, env: { AI_DEV_REPO: r.up.dir } });
     expect(u.code).toBe(0);
-    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → ${short(head)}, new releases: 1 — tell the user what changed:\n${short(head)} — not in a release\n  - feat(agents): правило B\n${block("v2026.10.12", ["- feat(agents): правило A"])}\n`);
+    expect(u.stdout).toContain(`Elves v2026.10.05 → ${short(head)}, new releases: 1 — tell the user what changed:\n${short(head)} — not in a release\n  - feat(agents): правило B\n${block("v2026.10.12", ["- feat(agents): правило A"])}\n`);
   });
 
   it("update -g копией на машине — тот же список", () => {
@@ -861,7 +861,7 @@ describe("update называет изменения каждого пропущ
     r.release("v2026.10.12");
     const u = r.run(["update", "-g"]);
     expect(u.code).toBe(0);
-    expect(u.stdout).toContain(`ai-dev flow v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n${block("v2026.10.12", ["- feat(agents): правило A (#7)"])}\n`);
+    expect(u.stdout).toContain(`Elves v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n${block("v2026.10.12", ["- feat(agents): правило A (#7)"])}\n`);
   });
 
   it("список не узнать (в манифесте нет SHA, стоявшего SHA нет в истории) — update всё равно завершается кодом 0, строка с причиной и ссылкой на релизы", () => {
@@ -873,12 +873,12 @@ describe("update называет изменения каждого пропущ
     dropSha(sb.proj);
     const u = r.run(["update"]);
     expect(u.code).toBe(0);
-    expect(u.stdout).toContain("ai-dev flow v2026.10.05 → v2026.10.12: changes unavailable — installed without SHA; releases: https://github.com/miroshnik/ai-dev/releases\n");
+    expect(u.stdout).toContain("Elves v2026.10.05 → v2026.10.12: changes unavailable — installed without SHA; releases: https://github.com/miroshnik/ai-dev/releases\n");
     expect(JSON.parse(read(manifest(sb.proj)))).toMatchObject({ tag: "v2026.10.12" });
     editManifest(sb.proj, { sha: "1".repeat(40) });
     const lost = r.run(["update"]);
     expect(lost.code).toBe(0);
-    expect(lost.stdout).toMatch(/ai-dev flow v2026\.10\.12 → v2026\.10\.12: changes unavailable — .+; releases: https:\/\/github\.com\/miroshnik\/ai-dev\/releases\n/);
+    expect(lost.stdout).toMatch(/Elves v2026\.10\.12 → v2026\.10\.12: changes unavailable — .+; releases: https:\/\/github\.com\/miroshnik\/ai-dev\/releases\n/);
   });
 });
 
@@ -975,7 +975,7 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(aiDev(sb, ["check", "--hook"], { cwd: clone }).stdout).toContain("not in a release: flow commits after v2026.10.05 — 1");
     const r = aiDev(sb, ["check", "--hook"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("ai-dev on the machine (clone");
+    expect(r.stdout).toContain("Elves on the machine (clone");
     expect(r.stdout).not.toContain("not in a release");
     expect(aiDev(sb, ["check", "-g"]).stdout).not.toContain("not in a release");
   });
@@ -1078,8 +1078,23 @@ describe("В начале сессии Claude Code проверка идёт с�
     bunxServes(newer.bin);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("ai-dev on the machine: behind");
-    expect(r.stdout).toContain("ai-dev in the project: behind");
+    expect(r.stdout).toContain("Elves on the machine: behind");
+    expect(r.stdout).toContain("Elves in the project: behind");
+  });
+
+  /** Имя флоу — Elves; `ai-dev` в выводе — только адрес и команда (`bunx github:miroshnik/ai-dev …`). */
+  it("check называет флоу Elves", () => {
+    aiDev(sb, ["install", "-g"]);
+    aiDev(sb, ["install"]);
+    bunxServes(base.bin);
+    const project = aiDev(sb, ["check"]).stdout;
+    const machine = aiDev(sb, ["check", "-g"]).stdout;
+    const hook = runHook().stdout;
+    expect(project).toStartWith("Elves in the project: up to date");
+    expect(machine).toStartWith("Elves on the machine: up to date");
+    expect(hook).toStartWith("Elves flow (AGENTS.md, «First step of a session»):\nElves on the machine: up to date");
+    expect(hook).toContain("\nElves in the project: up to date");
+    expect(`${project}${machine}${hook}`.replaceAll("miroshnik/ai-dev", "")).not.toContain("ai-dev");
   });
 
   /** Машина — скиллы в ~/.agents, ветку задачи её обновление не трогает; копия проекта — трогает. */
@@ -1102,7 +1117,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     bunxServes(base.bin);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("ai-dev in the project: not installed — install it: bunx github:miroshnik/ai-dev install --lang <project language>");
+    expect(r.stdout).toContain("Elves in the project: not installed — install it: bunx github:miroshnik/ai-dev install --lang <project language>");
     expect(aiDev(sb, ["check", "--hook"], { cwd: sb.tmp }).stdout).not.toContain("in the project");
   });
 
@@ -1113,7 +1128,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     aiDev(sb, ["install", "--auto"]);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toMatch(/ai-dev in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: en\n/);
+    expect(r.stdout).toMatch(/Elves in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: en\n/);
   });
 
   /** Вывод check и хука — сообщение флоу агенту, а не артефакт проекта: по-английски при любом языке проекта. */
@@ -1121,7 +1136,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     aiDev(sb, ["install", "-g"]);
     bunxServes(base.bin);
     aiDev(sb, ["install", "--auto", "--lang", "ru"]);
-    const mode = /ai-dev in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: ru\n/;
+    const mode = /Elves in the project: up to date[^\n]*\n {2}tasks: entirely by itself\n {2}language: ru\n/;
     const check = aiDev(sb, ["check"]);
     expect(check).toMatchObject({ code: 0, stdout: expect.stringMatching(mode) });
     const hook = runHook();

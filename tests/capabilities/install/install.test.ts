@@ -164,13 +164,13 @@ describe("Отказ в записи посреди установки — по�
     expect(r.stderr).not.toMatch(/\n\s+at /);
   });
 
-  it("повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an ai-dev skill» нет", () => {
+  it("повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an Elves skill» нет", () => {
     lock();
     install();
     chmodSync(skillsDir(), 0o755);
     const r = install();
     expect(r.code).toBe(0);
-    expect(r.stderr).not.toContain("isn't an ai-dev skill");
+    expect(r.stderr).not.toContain("isn't an Elves skill");
     for (const s of SKILLS) expect(readlinkSync(path.join(skillsDir(), s))).toBe(`../../.agents/skills/${s}`);
     expect(JSON.parse(read(path.join(proj, ".agents/ai-dev.json"))).skills).toEqual(SKILLS);
   });

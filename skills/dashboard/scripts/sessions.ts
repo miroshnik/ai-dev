@@ -756,7 +756,7 @@ function graphql(query: string, variables: Record<string, unknown>): Promise<Any
  */
 export async function liveQuery(full: string, projectId: string): Promise<Live> {
   // a cloud session has Projects v2 closed to it; dashboard exits earlier, this is for a call that bypasses it
-  if (process.env.CLAUDE_CODE_REMOTE === "true") throw new EstError("Claude Code cloud session: GitHub projects aren't reachable from here (docs/cloud-sessions.md in ai-dev)");
+  if (process.env.CLAUDE_CODE_REMOTE === "true") throw new EstError("Claude Code cloud session: GitHub projects aren't reachable from here (docs/cloud-sessions.md in Elves)");
   const [o, r] = full.split("/");
   const q = `query($o:String!,$r:String!,$p:ID!,$q:String!,$since:DateTime!){
     project: node(id:$p){ ... on ProjectV2{ items(first:100, query:$q){ nodes{ content{ __typename
