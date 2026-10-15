@@ -29,7 +29,7 @@
  * Runs on Bun (`bun github.ts …`), only `node:` APIs + the `gh` CLI. Check and fix are one function, `analyze`: each
  * discrepancy carries its own fix step, so `check` and `fix` don't diverge.
  * Decision labels are checked against the spec tree of the default branch; the architecture model is read by a
- * separate process of the same runtime (`modelModules`). Merging into the default branch — the `ai-dev` ruleset:
+ * separate process of the same runtime (`modelModules`). Merging into the default branch — the `elves` ruleset:
  * required checks, green on the last merged PRs; the merge method — rebase only (a repository setting, REST).
  */
 
@@ -98,7 +98,12 @@ export const DEFAULT_TEMPLATE = "miroshnik/6";
  * The default-branch ruleset that fix sets: GitHub doesn't let a branch with a red required check be merged. It doesn't
  * require the branch to be up to date (strict is off): the next PR's CI shows that two green PRs are incompatible.
  */
-export const RULESET = "ai-dev";
+export const RULESET = "elves";
+/**
+ * The name `RULESET` had before the flow was renamed to Elves: a repository set up by an earlier fix has its ruleset
+ * under it. Check finds it as its own (`RULESET` first), fix renames it with the same edit — not a second ruleset.
+ */
+const FORMER_RULESET = "ai-dev";
 /** A required check is green on each of this many last merged PRs with checks. */
 export const STABLE_PRS = 10;
 /** The repository admin role (`repositoryRoleDatabaseId`) bypasses the ruleset: direct push, `gh pr merge --admin`. */
@@ -256,6 +261,8 @@ interface Head {
 }
 interface Ruleset {
   id: string;
+  /** `RULESET`, or `FORMER_RULESET` until fix renames it. */
+  name: string;
   enforcement: string;
   include: string[];
   strict: boolean;
@@ -269,7 +276,7 @@ export interface Merge {
   unavailable: string | null;
   /** Active rules with required checks: a ruleset of any level and classic branch protection. */
   rules: { source: string; contexts: string[] }[];
-  /** Our own ruleset — this repository's `RULESET`, in any state. */
+  /** Our own ruleset — this repository's `RULESET` (otherwise `FORMER_RULESET`), in any state. */
   own: Ruleset | null;
   /** The last `STABLE_PRS` merged PRs with checks, oldest to newest. */
   merged: Head[];
@@ -747,7 +754,8 @@ function loadMerge(io: Io, slug: string): Merge | null {
     return sc ? [{ source: `ruleset ${q(x.repositoryRuleset?.name ?? "?")}`, contexts: sc.contexts }] : [];
   });
   if (bp?.requiredStatusCheckContexts?.length) rules.push({ source: "branch protection", contexts: bp.requiredStatusCheckContexts });
-  const o = (r.rulesets?.nodes ?? []).find((x: Any) => x?.name === RULESET);
+  const sets: Any[] = r.rulesets?.nodes ?? [];
+  const o = sets.find((x) => x?.name === RULESET) ?? sets.find((x) => x?.name === FORMER_RULESET);
   const osc = o ? ((o.rules?.nodes ?? []).map(statusChecks).find(Boolean) ?? { strict: false, contexts: [] }) : null;
   return {
     branch: b.name,
@@ -756,6 +764,7 @@ function loadMerge(io: Io, slug: string): Merge | null {
     own: o
       ? {
           id: o.id,
+          name: o.name,
           enforcement: o.enforcement,
           include: o.conditions?.refName?.include ?? [],
           ...osc!,
@@ -1236,12 +1245,15 @@ function analyzeMerge(m: Merge, repositoryId: string, merge: ((text: string, ...
     return merge(`no rule with required checks: a branch with a red check can be merged`, step);
   }
   const want = [...new Set([...own.contexts.filter((c) => !gone(c)), ...stable])].sort();
-  const step: Step = { kind: "api", text: `ruleset ${q(RULESET)}: default branch, required ${list(want) || "—"}, bypass — admin`, mutations: [{ op: "UpdateRuleset", input: { repositoryRulesetId: own.id, ...rulesetInput(want) } }] };
+  // the input carries `name: RULESET` — the same edit renames a ruleset under the former name
+  const named = own.name === RULESET ? q(RULESET) : `${q(own.name)} → ${q(RULESET)}`;
+  const step: Step = { kind: "api", text: `ruleset ${named}: default branch, required ${list(want) || "—"}, bypass — admin`, mutations: [{ op: "UpdateRuleset", input: { repositoryRulesetId: own.id, ...rulesetInput(want) } }] };
   const why: string[] = [];
-  if (own.enforcement !== "ACTIVE") why.push(`ruleset ${q(RULESET)} — ${own.enforcement}, not in effect`);
-  if (!own.include.includes("~DEFAULT_BRANCH")) why.push(`ruleset ${q(RULESET)} is not on the default branch: ${own.include.join(", ") || "—"}`);
-  if (own.strict) why.push(`ruleset ${q(RULESET)}: strict is on — GitHub won't merge a branch that fell behind`);
-  if (!own.bypassAdmin) why.push(`ruleset ${q(RULESET)}: admin can't bypass — no direct push to ${m.branch}`);
+  if (own.name !== RULESET) why.push(`ruleset ${q(own.name)} — the flow's former name: fix renames it to ${q(RULESET)}`);
+  if (own.enforcement !== "ACTIVE") why.push(`ruleset ${q(own.name)} — ${own.enforcement}, not in effect`);
+  if (!own.include.includes("~DEFAULT_BRANCH")) why.push(`ruleset ${q(own.name)} is not on the default branch: ${own.include.join(", ") || "—"}`);
+  if (own.strict) why.push(`ruleset ${q(own.name)}: strict is on — GitHub won't merge a branch that fell behind`);
+  if (!own.bypassAdmin) why.push(`ruleset ${q(own.name)}: admin can't bypass — no direct push to ${m.branch}`);
   for (const c of own.contexts.filter((x) => gone(x))) why.push(`required ${q(c)} didn't come to PR #${gone(c)!.number} — the PR would wait for it forever`);
   const add = stable.filter((c) => !own.contexts.includes(c));
   if (add.length) why.push(`green on the last ${m.merged.length} merged PRs, but not required: ${list(add)}`);
