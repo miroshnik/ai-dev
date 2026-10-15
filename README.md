@@ -1,6 +1,8 @@
 <div align="center">
 
-# ai-dev
+# Elves
+
+*Elves at work*
 
 **A development flow with AI agents: one canon of rules, skills with scripts<br>and a specification checked by the machine, not by the agent's memory.**
 
@@ -11,7 +13,7 @@ Claude Code · Codex · Gemini CLI · Cursor · Copilot · OpenCode · Amp
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-standard-6f42c1)](https://agentskills.io)
 [![Spec](https://img.shields.io/badge/spec-branch-0e8a16)](https://github.com/miroshnik/ai-dev/tree/spec)
 
-[The idea](#the-idea) · [Why](#why) · [Principles](#principles) · [ai-dev and OpenSpec](#ai-dev-and-openspec) · [Installation](#installation) · [Skills](#skills) · [Layout](#repository-layout)
+[The idea](#the-idea) · [Why](#why) · [Principles](#principles) · [Elves and OpenSpec](#elves-and-openspec) · [Installation](#installation) · [Skills](#skills) · [Layout](#repository-layout)
 
 </div>
 
@@ -19,7 +21,7 @@ Claude Code · Codex · Gemini CLI · Cursor · Copilot · OpenCode · Amp
 
 ## What it is
 
-ai-dev is how an agent carries a task from issue to production, written down once for all agents and all projects:
+Elves is how an agent carries a task from issue to production, written down once for all agents and all projects:
 
 - **The canon** [`AGENTS.md`](AGENTS.md) — the rules: tasks and estimates, branches and PRs, merging and CI, the specification, production.
 - **Skills** following the open [Agent Skills](https://agentskills.io) standard — a prompt plus a script for everything deterministic: the GitHub project, estimates from actuals, the spec from tests, waiting for CI.
@@ -83,7 +85,7 @@ Any decision can be changed — through its check: the check changes first and g
 
 An agent writes code fast. Everything around the code is what becomes slow and expensive:
 
-| Without the flow | With ai-dev |
+| Without the flow | With Elves |
 |---|---|
 | Knowledge lives in the chat and in the agent's memory — the next session, another agent or account starts from scratch | Everything decided is in the issue and the repository; before a pause — a State comment, and any agent can continue |
 | Specs and rules-as-text go stale silently — you see it only once a bug has happened | Every decision — functional and non-functional — is held by a check; a change without one turns CI red |
@@ -97,7 +99,7 @@ The full canon is [`AGENTS.md`](AGENTS.md); here is what it stands on.
 
 1. **Code is what is; checks are what should be.** Code describes what the system does and how it is built now, so it can't be the source of what should be. What should be lives in checks, and they are all of the project's decisions: functional — tests in `tests/capabilities`, what the system must do; non-functional — architectural (`tests/architecture`, what it's made of) and standards (`tests/standards`, which rules the code obeys and which qualities it holds: performance, security, accessibility). They diverge — red CI, not silent drift. A decision changes through its check: the check first, red on the current code, then the code. → [Specification — decisions](AGENTS.md#specification--decisions)
 2. **No check — no decision.** A decision exists while a mechanism checks it: behavior — a test, a convention — a lint rule or "registry + invariant", architecture — a C1–C3 model with checks over it, a quality — a budget in a capability's test or a standard's cross-cutting invariant. Prose doesn't have to be true; a test fails. Documentation is generated from test names and published to the `spec` branch after merge: it isn't in `main` — a derived copy would conflict in every parallel PR, and review goes by the diff of requirements (`spec-diff`). → [Specification — decisions](AGENTS.md#specification--decisions)
-3. **One fact — one home.** Every fact has exactly one place: a cross-cutting rule — in a standard, behavior — in its capability, a decision's reason — in `<decision>.md` next to its check, the plan and agreements — in the issue, what is shared by all projects — in ai-dev, what is project-specific — in the project's spec. A copy goes stale silently: that's how specs diverge — a change edits one place out of several. → [Project knowledge and handoff](AGENTS.md#project-knowledge-and-handoff)
+3. **One fact — one home.** Every fact has exactly one place: a cross-cutting rule — in a standard, behavior — in its capability, a decision's reason — in `<decision>.md` next to its check, the plan and agreements — in the issue, what is shared by all projects — in Elves, what is project-specific — in the project's spec. A copy goes stale silently: that's how specs diverge — a change edits one place out of several. → [Project knowledge and handoff](AGENTS.md#project-knowledge-and-handoff)
 4. **A check must be able to fail.** A test is written before the code and is red first — the decision's acceptance test; green after the code, it stays as its regression test. A regression test is proven by reverting the fix, an inherited one — by breaking the code. A test that can't fail is worse than a missing one. → [Tests and code](AGENTS.md#tests-and-code)
 5. **The issue is the only place to agree.** The goal, `## Questions` with answers, `## Scenarios` — future test names, visible before code; status and links — GitHub fields and relationships. No proposal files, no TODOs, no plan in the agent's memory. → [Task tracking](AGENTS.md#task-tracking)
 6. **Session = task = branch = PR.** Session `#42 …`, branch `feat/42-slug`, `Closes #42` in the PR: work is always linked to a task, so the task has an actual. A session won't take a second task into work (`task status` refuses): it goes to Backlog and into a new session. → [Session and branch](AGENTS.md#session-and-branch--one-task)
@@ -107,11 +109,11 @@ The full canon is [`AGENTS.md`](AGENTS.md); here is what it stands on.
 10. **Into `main` — each green on its own.** Merge as soon as the PR's own checks are green, without a queue or an up-to-date-branch requirement; before merging, if `main` moved after the PR's CI — fast checks on the merge with a fresh `main`; after a deploy — waiting for its statuses; a test failed — the root cause is fixed, not a retry added. → [Git, PRs and merging](AGENTS.md#git-prs-and-merging)
 11. **One canon, versions by releases.** A project pins a copy of the flow with a commit and updates by release; a session starts by checking whether the flow is behind. → [First step of a session](AGENTS.md#first-step-of-a-session--an-up-to-date-flow)
 
-## ai-dev and OpenSpec
+## Elves and OpenSpec
 
-[OpenSpec](https://github.com/Fission-AI/OpenSpec) is a popular spec-driven framework: requirements in Markdown (`SHALL`, `WHEN` / `THEN` scenarios), every change is a folder in `openspec/changes/` with `proposal.md`, `tasks.md`, `design.md` and spec deltas that are merged into `openspec/specs/` after rollout (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`). ai-dev used to run on top of OpenSpec; now it replaces it entirely.
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) is a popular spec-driven framework: requirements in Markdown (`SHALL`, `WHEN` / `THEN` scenarios), every change is a folder in `openspec/changes/` with `proposal.md`, `tasks.md`, `design.md` and spec deltas that are merged into `openspec/specs/` after rollout (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`). Elves used to run on top of OpenSpec; now it replaces it entirely.
 
-| | OpenSpec | ai-dev |
+| | OpenSpec | Elves |
 |---|---|---|
 | **Where a requirement lives** | `openspec/specs/<capability>/spec.md` — prose | `tests/capabilities/<capability>/` — `describe` is the requirement, `it` a scenario; it runs |
 | **What keeps the spec true** | the agent's discipline; `validate` checks structure, not truth | CI: behavior changed without a test — red |
@@ -146,7 +148,7 @@ How to migrate — the reference [`skills/spec/migration.md`](skills/spec/migrat
 
 No exaggeration: the spec format isn't the main token cost; what costs more is how many subagents are launched and what they are told to read. Task hours and cost before and after are to be compared by `est` actuals, once a sample accumulates.
 
-**When OpenSpec fits better:** you need a requirements document for people outside the code; the project has no tests and won't have them; you need a "proposal before code" gate as a separate artifact. ai-dev moves this gate into the issue — scenarios are visible before code — but not into a file.
+**When OpenSpec fits better:** you need a requirements document for people outside the code; the project has no tests and won't have them; you need a "proposal before code" gate as a separate artifact. Elves moves this gate into the issue — scenarios are visible before code — but not into a file.
 
 ## Installation
 
@@ -173,14 +175,14 @@ An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun
 
 `install` in a project asks in the terminal whether the agent should do tasks entirely by itself — answer the task's questions by recommendation, commit, push, fix CI and merge its own PR on green checks (default — no); without a terminal — `install --auto` or `--no-auto`, without the flag the previous answer stays. `check` names the mode. With auto, `install` prints a hint for Claude Code: the app rejects a merge without human review in this mode too, and the session merges its own PR by itself only with the `Bash(gh pr merge *)` rule in `permissions.allow` of `~/.claude/settings.json` — the owner adds it, `install` doesn't change the machine's permission settings.
 
-`install` also asks for the **project language** the agent works in: dialog, tasks, prompts, documents; the flow itself is written in English. It is stored in `.agents/ai-dev.json` as `language` — a BCP 47 code (`ru`, `en`, `pt-BR`), `en` by default; an install of a previous version without the field counts as `ru`. Without a terminal — `install --lang <code>`, without the flag the previous language stays; `update` keeps it, `check` and the hook name it. The flow isn't installed into an ai-dev clone — `install` writes only these two settings there.
+`install` also asks for the **project language** the agent works in: dialog, tasks, prompts, documents; the flow itself is written in English. It is stored in `.agents/ai-dev.json` as `language` — a BCP 47 code (`ru`, `en`, `pt-BR`), `en` by default; an install of a previous version without the field counts as `ru`. Without a terminal — `install --lang <code>`, without the flag the previous language stays; `update` keeps it, `check` and the hook name it. The flow isn't installed into an Elves clone — `install` writes only these two settings there.
 
 <details>
 <summary><b>What goes where</b></summary>
 
 **Into a project** — everything as a copy in `.agents/`, committed with the project: the cloud session (claude.ai/code sees only the repository), colleagues and CI get exactly this version.
 
-- `.agents/ai-dev/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; `.agents/skills/<name>/` — all skills; `.agents/ai-dev.json` — the SHA and release tag it was installed from, the list of skills (a reinstall removes skills that ai-dev no longer has), `auto` — whether the agent runs a task entirely by itself, without a "yes" for commit, push and merge, and `language` — the project language.
+- `.agents/ai-dev/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; `.agents/skills/<name>/` — all skills; `.agents/ai-dev.json` — the SHA and release tag it was installed from, the list of skills (a reinstall removes skills that Elves no longer has), `auto` — whether the agent runs a task entirely by itself, without a "yes" for commit, push and merge, and `language` — the project language.
 - Claude Code — symlinks `.claude/rules/ai-dev.md`, `.claude/rules/ai-dev-claude.md` (loaded automatically, whatever the project's `CLAUDE.md`) and `.claude/skills/<name>`.
 - Other agents — a block at the top of the project's `AGENTS.md` linking to `.agents/ai-dev/AGENTS.md` (the whole canon won't fit Codex's budget — 32 KiB for all of a project's `AGENTS.md` files) and `.agents/skills/` — the shared skills location of Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp.
 - Updating — `update` and a commit of the copy, `chore(agents): ai-dev flow <tag>`, in a task of its own: a task session doesn't update the project (the copy is thousands of lines in its branch) — it recommends the update and gives a chip for that task, one per project, `check` prints its `task new`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
@@ -284,14 +286,14 @@ AGENTS.md          the canon of rules — for all agents
 claude/CLAUDE.md   only what Claude Code has
 docs/              references the canon links to
 skills/<name>/     SKILL.md + scripts/ — TypeScript under Bun, no dependencies
-tests/             ai-dev's own spec: capabilities/ and standards/
+tests/             Elves' own spec: capabilities/ and standards/
 bin/ai-dev.ts      the installer — TypeScript under Bun too: bunx runs it from node_modules by its shebang
 bin/shims/         commands the SessionStart hook adds to the end of the agent's Bash PATH: timeout
 ```
 
-**A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description` ≤ 1,024 characters; at most 2,500 words — when and what to call) and `scripts/` for the deterministic part; reference material — `reference.md` and the scripts' `--help`. The canon is budgeted too: `AGENTS.md` ≤ 3,000 words, `claude/CLAUDE.md` ≤ 700 (standard `canon-size`). Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in ai-dev's `tests/` over the same tree. The installer `bin/ai-dev.ts` is the same TypeScript under Bun and imports skill modules instead of copying their values. A skill imports another skill only by the dependency list of the `skill-imports` standard: `github`, `task-env`, `ci-wait` and `slot` import none, so a rule they share with a neighbor lives as a copy in each script, and a standard keeps the copies identical. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.
+**A skill = a prompt + scripts** following the open [Agent Skills](https://agentskills.io) standard: a `<name>/` folder with `SKILL.md` (frontmatter `name` = the folder name, `description` ≤ 1,024 characters; at most 2,500 words — when and what to call) and `scripts/` for the deterministic part; reference material — `reference.md` and the scripts' `--help`. The canon is budgeted too: `AGENTS.md` ≤ 3,000 words, `claude/CLAUDE.md` ≤ 700 (standard `canon-size`). Scripts are TypeScript under Bun (`bun script.ts`: no build, no dependencies, imports with `.ts`); script tests — `bun test` in the `tests/` of Elves over the same tree. The installer `bin/ai-dev.ts` is the same TypeScript under Bun and imports skill modules instead of copying their values. A skill imports another skill only by the dependency list of the `skill-imports` standard: `github`, `task-env`, `ci-wait` and `slot` import none, so a rule they share with a neighbor lives as a copy in each script, and a standard keeps the copies identical. Third-party code a script can't do without goes into `scripts/vendor/` as a file with its license, not as a dependency: that's how `spec` carries a TypeScript parser (`@babel/parser`). Everything that depends on specific repositories goes into local configuration, not into the skill.
 
-ai-dev lives by its own flow: the spec — [`tests/`](tests), its documentation — in the [`spec` branch](https://github.com/miroshnik/ai-dev/tree/spec), tasks — in [Issues](https://github.com/miroshnik/ai-dev/issues) and the [ai-dev project](https://github.com/users/miroshnik/projects/6).
+Elves lives by its own flow: the spec — [`tests/`](tests), its documentation — in the [`spec` branch](https://github.com/miroshnik/ai-dev/tree/spec), tasks — in [Issues](https://github.com/miroshnik/ai-dev/issues) and the [ai-dev project](https://github.com/users/miroshnik/projects/6).
 
 The spec is read from the branch, not from the working tree — the same in any project with the flow:
 
@@ -303,7 +305,7 @@ git show origin/spec:capabilities/est.md       # a decision page: why, what hold
 
 ```bash
 bun install
-bun run test:spec     # ai-dev standards — tests/standards, once: test doesn't repeat them
+bun run test:spec     # Elves standards — tests/standards, once: test doesn't repeat them
 bun run test          # fast level: script tests without standards, Docker and live servers
 bun run test --changed=origin/main   # before a commit — what the change affects; a changed script — its tests by path; in full — CI
 bun run test:slow     # slow level — *.slow.test.ts: Docker, live servers; CI runs both levels
