@@ -85,9 +85,11 @@
     "wait": "- wait for CI and the deploy with a regular call, not in the background: a background command doesn't wake a subagent, and a Bash call lives up to 10 minutes — `{waitCi} pr <PR> --timeout 540` (after the merge — `merged <PR>`), on TIMEOUT — the same call again;",
     "git": "- git — in separate calls, without `cd`, `&&` and `|`: worktree isolation refuses a compound command with git;",
     "subagents": "- writing subagents — launch as needed, no limit: each gets its own worktree and «{task} #{number}» at the start of its prompt (`est` links its work by it); bring their commits into your branch, remove their worktrees and branches yourself after the merge — what didn't go, name in the answer;",
+    "live": "- while any of your subagents works, don't answer: wait for their answers — a background subagent wakes you with its answer; an answer with live subagents looks like a failure, and the dispatcher would give the task to a second executor next to you. Can't wait — answer `waits for subagents: <which and what they do>`: it isn't `failed`, there will be no second executor;",
     "found": "- work found outside the task — `{script} task new …` (work of the task's epic — with `--epic`: the dispatcher picks it up) — name it in the answer: whether to queue it is the owner's call;",
     "question": "- a question without a clear recommendation — into «{questions}» of the task; don't start the code that depends on it and answer the dispatcher: the owner's answer comes back here.",
-    "answer": "The answer to the dispatcher — one line: `merged #<PR>` · `question: <the question, options, recommendation>` · `failed: <what stopped and where>`."
+    "answer": "The answer to the dispatcher — one line: `merged #<PR>` · `question: <the question, options, recommendation>` · `waits for subagents: <which and what they do>` · `failed: <what stopped and where>`.",
+    "alive": "{task} #{number} in {repo}: the task's previous executor or its subagent is alive — the `!` lines above. Don't take the task and change nothing: answer the dispatcher in one line `waits for the previous executor: <the worktree and why it is alive>` — the dispatcher restarts the task only when no worktree of the previous executor and its subagents is locked by a live process or gets commits."
   },
   "est": {
     "answer": "Answer",

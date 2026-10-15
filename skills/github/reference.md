@@ -721,7 +721,8 @@ task. `task status` doesn't pin a handed-out task; `est` gives a subagent with
 «Task #N» in its assignment to task N, not to the session's pin. A hand-out is
 `=` in the queue for the whole session (an
 executor's answer leaves the task not ready either: merged closes it, a question
-waits for the owner, failed isn't restarted; after the app restarts the executor
+waits for the owner, waits for subagents — the same executor answers again,
+failed isn't restarted; after the app restarts the executor
 is continued, "task resume"). The assignment: the task by the canon in auto mode, a
 restart line only for an In progress task with a branch `*/N-*` in the
 checkout or on its origin (it names the branch; the branch checked out in
@@ -733,9 +734,27 @@ waits for CI and the deploy with regular calls
 Bash call lives 10 minutes), git in separate calls, writing subagents — as
 needed, without a limit (the limit of 3 is on executors), each in its own
 worktree with «Task #N» at the start of its prompt, their worktrees and
-branches removed by the executor after the merge, found work — `task new`,
+branches removed by the executor after the merge, no answer while any of its
+subagents works (#565: an answer with live subagents reads as a failure — the
+executor of #545 answered failed, its subagents' answers woke it, and it merged
+the task while a second executor, launched on the owner's restart, worked on the
+same branch), found work — `task new`,
 named in the answer (whether to queue it is the owner's call); the answer — one
-line: merged, a question or failed.
+line: merged, a question, waits for subagents (it can't wait — not a failure) or
+failed.
+
+A restart is a new executor on a task handed out before or on a task branch:
+its `--assignment` refuses (code 1, no hand-out) while the previous executor or
+its subagent is alive — `!` lines with each live worktree, and the answer
+«waits for the previous executor». The previous executor's worktrees — its
+hand-outs of the task in any session's `dispatchers/*.tasks` and a worktree on
+the task branch, the caller's own aside; its subagents' (`agent-<id>`) — by
+`parentAgentId` of Claude Code's subagent metadata
+(`projects/<directory>/<session id>/subagents/agent-<id>.meta.json` in its
+configuration directory), at any depth. Alive — locked by a live process, or HEAD moved (a commit, a switch) in
+the last 15 minutes: Claude Code doesn't lock the worktree of an agent continued
+after its answer, and the woken executor of #545 worked unlocked; the wait for CI
+is a Bash call of up to 9 minutes without commits.
 
 In Claude Code: an executor — `Agent` with `isolation: "worktree"` and
 `run_in_background: true`, the prompt — the indented line as is; at most 3 at
@@ -746,7 +765,10 @@ executors, the running ones finish, then `Remaining: N tasks, the limit`. An
 answer arrives as the subagent's notification; after each — `task queue`
 again. A question — to the owner in text; the answer — ✅ in the task's
 questions section and to the same executor with `SendMessage` (its context is
-intact). Failed — a comment in the task with what stopped, no restart; failed
+intact). Waits for subagents — no restart: its subagents' answers wake it, and it
+answers again. Failed — a comment in the task with what stopped, no restart; the
+owner's restart — the refused assignment's «waits for the previous executor» —
+wait for the previous executor's answer, not a third executor; failed
 on an external blocker — it's recorded ("Dependencies" above), and the queue
 stops giving the task out until it's lifted. Queue
 empty and nothing running — the summary (merged, questions, not ready, new
