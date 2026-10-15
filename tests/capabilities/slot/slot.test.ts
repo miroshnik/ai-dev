@@ -55,8 +55,8 @@ afterEach(() => {
  * очередь машины; прогон самого теста может идти в CI, внутри слота, в Claude Code или скриптом `bun run` — не в счёт.
  */
 function envOf(extra: Record<string, string> = {}) {
-  const env: Record<string, string | undefined> = { ...process.env, AI_DEV_CONFIG_DIR: config, TMPDIR: tmp, ...extra };
-  for (const k of ["CI", "AI_DEV_SLOT", "AI_DEV_SLOT_CPUS", "CLAUDE_TMPDIR", "npm_lifecycle_script", "npm_lifecycle_event"]) if (!(k in extra)) delete env[k];
+  const env: Record<string, string | undefined> = { ...process.env, ELVES_CONFIG_DIR: config, TMPDIR: tmp, ...extra };
+  for (const k of ["CI", "ELVES_SLOT", "ELVES_SLOT_CPUS", "AI_DEV_SLOT", "AI_DEV_SLOT_CPUS", "AI_DEV_CONFIG_DIR", "CLAUDE_TMPDIR", "npm_lifecycle_script", "npm_lifecycle_event"]) if (!(k in extra)) delete env[k];
   return env;
 }
 
@@ -182,8 +182,8 @@ describe("Тяжёлые прогоны машины идут очередью: 
 });
 
 describe("Команда в слоте — как без него, с долей ядер для раннера", () => {
-  it("команда получает четверть ядер в AI_DEV_SLOT_CPUS", () => {
-    const r = run(['echo "$AI_DEV_SLOT_CPUS"']);
+  it("команда получает четверть ядер в ELVES_SLOT_CPUS", () => {
+    const r = run(['echo "$ELVES_SLOT_CPUS"']);
     expect(exitOf(r)).toBe(0);
     expect(r.stdout.trim()).toBe(String(Math.max(1, Math.floor(os.availableParallelism() / 4))));
   });
@@ -222,11 +222,26 @@ describe("Скрипт package.json берёт слот своим shell, ком
     hold("a");
     await until(() => started("a"), "один слот занят");
     // скрипт занимает второй слот: вложенный без отметки «уже в слоте» ждал бы его вечно
-    const r = runScript(`echo "$AI_DEV_SLOT_CPUS|$AI_DEV_SLOT|$$" && sh -c '${SCRIPT}echo inner'`);
+    const r = runScript(`echo "$ELVES_SLOT_CPUS|$ELVES_SLOT|$$" && sh -c '${SCRIPT}echo inner'`);
     expect(exitOf(r)).toBe(0);
     const [cpus, slot, shell] = r.stdout.split("\n")[0]!.split("|");
     expect(cpus).toBe(String(Math.max(1, Math.floor(os.availableParallelism() / 4))));
     expect(slot).toMatch(new RegExp(`^\\d+-${shell}$`));
+    expect(r.stdout.split("\n")[1]).toBe("inner");
+    release("a");
+  });
+
+  // slot прошлого релиза — в проекте, копию которого update ещё не принёс: его вложенный вызов, конфиги раннеров и
+  // turbo.json проекта знают только прежние имена переменных
+  it("slot экспортирует ELVES_SLOT, ELVES_SLOT_CPUS и AI_DEV_SLOT, AI_DEV_SLOT_CPUS; вложенный вызов только с AI_DEV_SLOT своего слота не ждёт", async () => {
+    hold("a");
+    await until(() => started("a"), "один слот занят");
+    const r = runScript(`echo "$ELVES_SLOT|$ELVES_SLOT_CPUS|$AI_DEV_SLOT|$AI_DEV_SLOT_CPUS" && sh -c 'unset ELVES_SLOT ELVES_SLOT_CPUS; ${SCRIPT}echo inner'`);
+    expect(exitOf(r)).toBe(0);
+    const [slot, cpus, formerSlot, formerCpus] = r.stdout.split("\n")[0]!.split("|");
+    expect(slot).toMatch(/^\d+-\d+$/);
+    expect(cpus).toBe(String(Math.max(1, Math.floor(os.availableParallelism() / 4))));
+    expect([formerSlot, formerCpus]).toEqual([slot, cpus]);
     expect(r.stdout.split("\n")[1]).toBe("inner");
     release("a");
   });
@@ -247,7 +262,7 @@ describe("Скрипт package.json берёт слот своим shell, ком
     hold("a");
     hold("b");
     await until(() => started("a") && started("b"), "оба слота заняты");
-    const r = runScript('echo "ci[$AI_DEV_SLOT_CPUS]"', { CI: "true" });
+    const r = runScript('echo "ci[$ELVES_SLOT_CPUS]"', { CI: "true" });
     expect(exitOf(r)).toBe(0);
     expect(r.stdout).toBe("ci[]\n");
     for (const n of ["a", "b"]) release(n);
@@ -289,7 +304,7 @@ describe("Без очереди — там, где она лишняя или ж
     hold("a");
     hold("b");
     await until(() => started("a") && started("b"), "оба слота заняты");
-    const r = run(['echo "ci[$AI_DEV_SLOT_CPUS]"'], { CI: "true" });
+    const r = run(['echo "ci[$ELVES_SLOT_CPUS]"'], { CI: "true" });
     expect(exitOf(r)).toBe(0);
     expect(r.stdout).toBe("ci[]\n");
     for (const n of ["a", "b"]) release(n);
@@ -312,7 +327,7 @@ describe("Песочница агента не роняет очередь", () 
     await until(() => started("a") && started("b"), "две первые команды стартовали");
     const c = hold("c");
     await waiting(c, "третья");
-    expect(readdirSync(path.join(tmp, "ai-dev", "slots"))).toHaveLength(3);
+    expect(readdirSync(path.join(tmp, "elves", "slots"))).toHaveLength(3);
     release("a");
     expect(await a.done).toBe(0);
     await until(() => started("c"), "третья стартовала после первой");
@@ -326,7 +341,7 @@ describe("Песочница агента не роняет очередь", () 
     lock(path.join(config, "slots"));
     const c = hold("c");
     await waiting(c, "третья в песочнице");
-    expect(readdirSync(path.join(tmp, "ai-dev", "slots"))).toHaveLength(1);
+    expect(readdirSync(path.join(tmp, "elves", "slots"))).toHaveLength(1);
     // билет убитой первой остаётся в каталоге, который песочнице не убрать
     process.kill(-a.proc.pid!, "SIGKILL");
     await until(() => started("c"), "третья стартовала после убитой первой");
@@ -353,10 +368,26 @@ describe("Песочница агента не роняет очередь", () 
     expect([await b.done, await c.done]).toEqual([0, 0]);
   });
 
+  // slot прошлого релиза в песочнице кладёт билет в ai-dev/slots временного каталога
+  it("очередь видит билеты slot прошлого релиза в ai-dev/slots временного каталога", async () => {
+    const former = path.join(tmp, "ai-dev", "slots");
+    mkdirSync(former, { recursive: true });
+    const sleeper = spawn("sleep", ["60"], { detached: true });
+    running.push(sleeper);
+    for (const pid of [process.pid, sleeper.pid!]) writeFileSync(path.join(former, `${String(Date.now()).padStart(15, "0")}-${pid}`), JSON.stringify({ cwd: dir, cmd: "bun test" }));
+    const c = hold("c");
+    await waiting(c, "команда за билетами прежнего slot");
+    expect(started("c")).toBe(false);
+    process.kill(sleeper.pid!, "SIGKILL");
+    await until(() => started("c"), "команда стартовала после убитого прежнего прогона");
+    release("c");
+    expect(await c.done).toBe(0);
+  });
+
   it("очереди нет — одна строка предупреждения, команда идёт без неё", () => {
     lock(path.join(config, "slots"));
-    lock(path.join(tmp, "ai-dev", "slots"));
-    const r = run(['echo "ran[$AI_DEV_SLOT_CPUS]"; exit 3']);
+    lock(path.join(tmp, "elves", "slots"));
+    const r = run(['echo "ran[$ELVES_SLOT_CPUS]"; exit 3']);
     expect(exitOf(r)).toBe(3);
     expect(r.stdout).toBe("ran[]\n");
     expect(r.stderr).toMatch(/^slot: [^\n]*without the queue[^\n]*\n$/);
