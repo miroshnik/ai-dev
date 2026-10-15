@@ -1,0 +1,4421 @@
+{
+ "RepoState {\"name\":\"elves\",\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "id": "R_kgDOUd0OBQ",
+    "name": "elves",
+    "nameWithOwner": "miroshnik/elves",
+    "owner": {
+     "__typename": "User",
+     "id": "MDQ6VXNlcjgxOTM4Ng==",
+     "login": "miroshnik"
+    },
+    "projectsV2": {
+     "nodes": [
+      {
+       "id": "PVT_kwHOAAyAus4BjsdO",
+       "number": 6,
+       "title": "elves",
+       "url": "https://github.com/users/miroshnik/projects/6",
+       "closed": false
+      }
+     ]
+    }
+   }
+  }
+ },
+ "RepoIssues {\"name\":\"elves\",\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issues": {
+     "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMC0xNVQxMjoxMTo0MlrPAAAAAV2h2ks="
+     },
+     "nodes": [
+      {
+       "id": "I_kwDOUd0OBc8AAAABTq3jXA",
+       "number": 146
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXYlsxw",
+       "number": 542
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXYmuAw",
+       "number": 545
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXZ25RA",
+       "number": 553
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaD1lg",
+       "number": 554
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaEFHw",
+       "number": 555
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaE6Yw",
+       "number": 556
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaFjsA",
+       "number": 557
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaGGtg",
+       "number": 558
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaGlOA",
+       "number": 559
+      },
+      {
+       "id": "I_kwDOUd0OBc8AAAABXaHaSw",
+       "number": 560
+      }
+     ]
+    }
+   }
+  }
+ },
+ "ProjectState {\"id\":\"PVT_kwHOAAyAus4BjsdO\"}": {
+  "data": {
+   "node": {
+    "id": "PVT_kwHOAAyAus4BjsdO",
+    "number": 6,
+    "title": "elves",
+    "url": "https://github.com/users/miroshnik/projects/6",
+    "closed": false,
+    "views": {
+     "nodes": [
+      {
+       "id": "PVTV_lAHOAAyAus4BjsdOzgLrw5g",
+       "number": 1,
+       "name": "Таблица",
+       "layout": "TABLE_LAYOUT",
+       "filter": "",
+       "sortByFields": {
+        "nodes": []
+       },
+       "verticalGroupByFields": {
+        "nodes": []
+       }
+      },
+      {
+       "id": "PVTV_lAHOAAyAus4BjsdOzgLrw5k",
+       "number": 2,
+       "name": "Доска",
+       "layout": "BOARD_LAYOUT",
+       "filter": "",
+       "sortByFields": {
+        "nodes": []
+       },
+       "verticalGroupByFields": {
+        "nodes": [
+         {
+          "name": "Status"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PVTV_lAHOAAyAus4BjsdOzgLrw5o",
+       "number": 3,
+       "name": "Роадмэп",
+       "layout": "ROADMAP_LAYOUT",
+       "filter": null,
+       "sortByFields": {
+        "nodes": []
+       },
+       "verticalGroupByFields": {
+        "nodes": []
+       }
+      }
+     ]
+    },
+    "fields": {
+     "nodes": [
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MA",
+       "name": "Title",
+       "dataType": "TITLE",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1ME",
+       "name": "Assignees",
+       "dataType": "ASSIGNEES",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2SingleSelectField",
+       "id": "PVTSSF_lAHOAAyAus4BjsdOzhif1MI",
+       "name": "Status",
+       "dataType": "SINGLE_SELECT",
+       "isIssueField": false,
+       "options": [
+        {
+         "id": "f75ad846",
+         "name": "Бэклог",
+         "color": "GREEN",
+         "description": ""
+        },
+        {
+         "id": "47fc9ee4",
+         "name": "В работе",
+         "color": "YELLOW",
+         "description": ""
+        },
+        {
+         "id": "98236657",
+         "name": "Готово",
+         "color": "PURPLE",
+         "description": ""
+        }
+       ]
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MM",
+       "name": "Labels",
+       "dataType": "LABELS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MQ",
+       "name": "Linked pull requests",
+       "dataType": "LINKED_PULL_REQUESTS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MU",
+       "name": "Milestone",
+       "dataType": "MILESTONE",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1MY",
+       "name": "Repository",
+       "dataType": "REPOSITORY",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mg",
+       "name": "Reviewers",
+       "dataType": "REVIEWERS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mk",
+       "name": "Parent issue",
+       "dataType": "PARENT_ISSUE",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mo",
+       "name": "Sub-issues progress",
+       "dataType": "SUB_ISSUES_PROGRESS",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Ms",
+       "name": "Created",
+       "dataType": "CREATED",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1Mw",
+       "name": "Updated",
+       "dataType": "UPDATED",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1M0",
+       "name": "Closed",
+       "dataType": "CLOSED",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1NA",
+       "name": "Оценка, ч",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhif1NE",
+       "name": "Факт, ч",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhjAgBg",
+       "name": "Токены, млн",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      },
+      {
+       "__typename": "ProjectV2Field",
+       "id": "PVTF_lAHOAAyAus4BjsdOzhjAgCc",
+       "name": "Стоимость, $",
+       "dataType": "NUMBER",
+       "isIssueField": false
+      }
+     ]
+    },
+    "workflows": {
+     "nodes": [
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgcYd28",
+       "number": 5,
+       "fullDatabaseId": "119043951",
+       "name": "Auto-add to project",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgb8uXY",
+       "number": 3,
+       "fullDatabaseId": "117225846",
+       "name": "Auto-close issue",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgcYdrg",
+       "number": 4,
+       "fullDatabaseId": "119043768",
+       "name": "Item added to project",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgb8uXQ",
+       "number": 1,
+       "fullDatabaseId": "117225844",
+       "name": "Item closed",
+       "enabled": true
+      },
+      {
+       "id": "PWF_lAHOAAyAus4BjsdOzgb8uXU",
+       "number": 2,
+       "fullDatabaseId": "117225845",
+       "name": "Pull request merged",
+       "enabled": true
+      }
+     ]
+    }
+   }
+  }
+ },
+ "ProjectItems {\"id\":\"PVT_kwHOAAyAus4BjsdO\"}": {
+  "data": {
+   "node": {
+    "items": {
+     "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": "Y3Vyc29yOnYyOpK5MDAwMDAwMDAuMDAzNDI0NjU3NTM0MjQ2Nc4QPjai"
+     },
+     "nodes": [
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg7SAig",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABRoQj_A",
+        "number": 1,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8BiEc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSb-73w",
+        "number": 2,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc3A",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCcYA",
+        "number": 3,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc40",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCdEA",
+        "number": 4,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc7M",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCd5A",
+        "number": 5,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc84",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCenw",
+        "number": 6,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hc_A",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCfYA",
+        "number": 7,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdAg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCgIg",
+        "number": 8,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdCY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiChAg",
+        "number": 9,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdD8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiChnQ",
+        "number": 10,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdF4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCijw",
+        "number": 11,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8HdIA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiCjUg",
+        "number": 12,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8Hh5c",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSiHptw",
+        "number": 13,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8JAhU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSjvvPg",
+        "number": 24,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8RCEA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSsq7SA",
+        "number": 26,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8RCFA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSsq71Q",
+        "number": 27,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8R0Cg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABStgBag",
+        "number": 30,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8R8_0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABStoncA",
+        "number": 32,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8SlAg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABSuCtbw",
+        "number": 34,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8jI9o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABS-hYtw",
+        "number": 36,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8tJ8o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTJRKvA",
+        "number": 37,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8tJ90",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTJRLcg",
+        "number": 38,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8tTo0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTJcRRA",
+        "number": 39,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xUxM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNZ9Qw",
+        "number": 42,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xgp8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+        "number": 45,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xgsQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNmC6w",
+        "number": 46,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8xguM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTNmEXA",
+        "number": 47,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8x3J8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTN95KA",
+        "number": 49,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8yBQY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTOHWLw",
+        "number": 50,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8yQck",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTOUUJQ",
+        "number": 52,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8yxtQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTO0Fhg",
+        "number": 56,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg8yyxY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTO1MFA",
+        "number": 57,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg86YTQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTXEgOA",
+        "number": 60,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg86aTM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTXGviQ",
+        "number": 62,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg86g5A",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTXOCAw",
+        "number": 63,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg86xS8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTXedVA",
+        "number": 66,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9AOwk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTdjjjg",
+        "number": 68,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9ATqk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTdo6Xw",
+        "number": 70,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9A-tA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTedOiw",
+        "number": 71,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPFo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevQCA",
+        "number": 72,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPII",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevSLQ",
+        "number": 73,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPKI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevUOg",
+        "number": 74,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPNQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevXGw",
+        "number": 75,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPRY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevaew",
+        "number": 76,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPU0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevdoA",
+        "number": 77,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPYU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevg2Q",
+        "number": 78,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPcI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevj4Q",
+        "number": 79,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPfM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevm6A",
+        "number": 80,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPhg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevqew",
+        "number": 81,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPk0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevuGg",
+        "number": 82,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPow",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTevxSg",
+        "number": 83,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPrY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTev0vg",
+        "number": 84,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BPv8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTev5Aw",
+        "number": 85,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BQE0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTewQZA",
+        "number": 86,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BZiE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTe5sVQ",
+        "number": 87,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BdXY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTe9zxw",
+        "number": 88,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Bdbc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTe92hA",
+        "number": 89,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Bdgc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTe95HA",
+        "number": 90,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9BdjM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTe978w",
+        "number": 91,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9CGak",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTfsTIA",
+        "number": 93,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9ElTY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTiCiKQ",
+        "number": 114,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9FUN8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTi07pA",
+        "number": 116,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9FURw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTi0-wg",
+        "number": 117,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9FUX4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTi1CZA",
+        "number": 118,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9FUe4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTi1Gcg",
+        "number": 119,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9FUjE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTi1K2w",
+        "number": 120,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9IYZE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTl7c-w",
+        "number": 127,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Jvj4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTnNx9Q",
+        "number": 129,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9J3m0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTnVzNw",
+        "number": 130,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Ltqc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTpK_xA",
+        "number": 134,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9L2dE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTpTZVw",
+        "number": 135,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9L_HY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTpc3Hg",
+        "number": 136,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9MRMM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTpxZUw",
+        "number": 138,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Mozs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTqLM9g",
+        "number": 141,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9MrRI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTqN6ug",
+        "number": 142,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9NOeo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTq0Jwg",
+        "number": 145,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9NSIo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABTq3jXA",
+        "number": 146,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9YQpU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT2SJkw",
+        "number": 149,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9ZIZE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT3KKig",
+        "number": 151,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Zqr0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT3scww",
+        "number": 153,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9ZqxY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT3sjZw",
+        "number": 154,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Zq0g",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT3sniA",
+        "number": 155,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Zq4Y",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT3srDw",
+        "number": 156,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9Zq8w",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT3swCQ",
+        "number": 157,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9aB0s",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT4EwKg",
+        "number": 158,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9aLzw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT4OxTw",
+        "number": 159,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9aME4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT4PEAQ",
+        "number": 160,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9atdk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT4wejQ",
+        "number": 164,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9ayk0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT419Kg",
+        "number": 166,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9bf2Y",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT5iM1A",
+        "number": 171,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9bvdY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT5xFpw",
+        "number": 174,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9b6gQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT57UUw",
+        "number": 176,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9cp30",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT6mmRg",
+        "number": 179,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9cxWU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT6tjfQ",
+        "number": 180,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9cxgE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT6tsgw",
+        "number": 181,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9cxsE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT6t22g",
+        "number": 182,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9cx0k",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT6t-7Q",
+        "number": 183,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9cyWc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT6uhZQ",
+        "number": 184,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9gwXk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT-oiUQ",
+        "number": 190,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9gwbE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT-ol1A",
+        "number": 191,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9gwdw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT-oo9w",
+        "number": 192,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9g9dA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT-4F1g",
+        "number": 196,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9hxpo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABT_w4uQ",
+        "number": 198,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9svSI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABULCboQ",
+        "number": 200,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9wwa0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUPFomQ",
+        "number": 202,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9wx_E",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUPHTqg",
+        "number": 203,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg938Co",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUWMwPA",
+        "number": 206,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94HrM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUWYIwQ",
+        "number": 207,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94HxU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUWYO3w",
+        "number": 208,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94H3I",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUWYUrg",
+        "number": 209,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94IBc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUWYbTw",
+        "number": 210,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94INg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUWYoDg",
+        "number": 211,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94maE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUW3pvg",
+        "number": 213,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94qn8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUW7xGw",
+        "number": 214,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg94tXo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUW-1AQ",
+        "number": 215,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg942T8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUXIekQ",
+        "number": 219,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg95APg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUXTOKQ",
+        "number": 221,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg95CIw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUXU5og",
+        "number": 223,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg95mA0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUX4Eog",
+        "number": 229,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9517M",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUYG_Cg",
+        "number": 231,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg96ATY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUYQS3Q",
+        "number": 233,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg965Qg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUZKpoA",
+        "number": 235,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg97z2c",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUaJqpw",
+        "number": 236,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9-yOU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUdZgFQ",
+        "number": 239,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9_Doc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUdrS2A",
+        "number": 240,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg9_1es",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUegayQ",
+        "number": 244,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-AU0k",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUfFdcw",
+        "number": 246,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-BPuQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUgEOjQ",
+        "number": 247,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-Bsk4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUgf1fw",
+        "number": 250,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-Egls",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUjJTCA",
+        "number": 252,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-Jzys",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUn7WrA",
+        "number": 254,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-K8vc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUpAgig",
+        "number": 256,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-K834",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUpAqsg",
+        "number": 257,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-K_Zo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUpDKgQ",
+        "number": 258,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-LFG4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUpI72A",
+        "number": 259,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-LYZI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUpbr5g",
+        "number": 264,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-LpUM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUptkJw",
+        "number": 267,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-L350",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUp8Eug",
+        "number": 269,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-MBVw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUqGS5Q",
+        "number": 271,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-OKz4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABUsY5Fg",
+        "number": 273,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-fgPU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABU-5xIQ",
+        "number": 275,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-kxYA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVED1UA",
+        "number": 277,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-kxeo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVED43Q",
+        "number": 278,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-kxjY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVED8Yg",
+        "number": 279,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-kxpY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEEBOw",
+        "number": 280,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-kxs0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEEEtA",
+        "number": 281,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-k43s",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEJNbw",
+        "number": 282,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-lH4g",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEXmnw",
+        "number": 285,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-lNuU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEdDIw",
+        "number": 289,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-lR-8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEg6OA",
+        "number": 290,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-lS8k",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVEhzHQ",
+        "number": 292,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-mk6s",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVFx5gw",
+        "number": 296,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-moso",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVF169g",
+        "number": 297,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-nLgI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVGb36g",
+        "number": 299,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-nr_o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVG_wUg",
+        "number": 301,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-n2EU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVHKFOA",
+        "number": 303,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-oCvY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVHXmWw",
+        "number": 304,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-oV-k",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVHpI1Q",
+        "number": 306,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-opyI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVH9V1g",
+        "number": 307,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-oxDU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVIFZpg",
+        "number": 313,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-o5bQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVIOmZQ",
+        "number": 314,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-p9eU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVJRdBw",
+        "number": 318,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-qGdw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVJa-gw",
+        "number": 319,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-sNt4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVLm-RA",
+        "number": 322,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-sz_I",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVMOWiA",
+        "number": 324,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-s7ec",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVMVzig",
+        "number": 325,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-s7jg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVMV4oQ",
+        "number": 326,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-s7pI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVMV-kw",
+        "number": 327,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-s8q8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVMXBrQ",
+        "number": 328,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-v3uU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVPTi_g",
+        "number": 330,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-v4GI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVPUEPA",
+        "number": 331,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-0m6c",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVTxLSg",
+        "number": 338,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-1Hzo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVUMMRg",
+        "number": 340,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-2Ewg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVVCZNQ",
+        "number": 343,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-2vMM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVVpjnQ",
+        "number": 345,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-2vPQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVVpm-A",
+        "number": 346,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-2vTs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVVpsEg",
+        "number": 347,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-2vnY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVVp-Sw",
+        "number": 348,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-4UZY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVXIIqQ",
+        "number": 353,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-4miY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVXaEPQ",
+        "number": 355,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-5iRg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVYQC8Q",
+        "number": 356,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg-5pv8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVYWNig",
+        "number": 357,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_LFM8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVpGjaQ",
+        "number": 360,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_NVWo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABVrOAuw",
+        "number": 362,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_pK3w",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGIbkA",
+        "number": 364,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_pLGs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGIqKg",
+        "number": 365,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_pLSs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGI18w",
+        "number": 366,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_pLeM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGJAIw",
+        "number": 367,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_pLkI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGJHeQ",
+        "number": 368,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_pzq0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGtfvQ",
+        "number": 371,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzg_p3Fo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWGwk9A",
+        "number": 372,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhACQOU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWfBenQ",
+        "number": 376,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhACez8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWfPfUA",
+        "number": 378,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhACe2Q",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWfPg-g",
+        "number": 379,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhACj2M",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWfTd5A",
+        "number": 381,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhACuoc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWfewbQ",
+        "number": 384,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhACusk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWfe0TA",
+        "number": 385,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAD9zY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABWgscCg",
+        "number": 390,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZR2M",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2A6Sg",
+        "number": 392,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZSTU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2BSOQ",
+        "number": 393,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZS-8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2B4cg",
+        "number": 394,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZTiM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2CcOQ",
+        "number": 395,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZT0Y",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2CtyA",
+        "number": 396,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZibg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2RZvQ",
+        "number": 397,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZjMY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2SDhg",
+        "number": 398,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAZzgw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW2ik8w",
+        "number": 399,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAaJWo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW24QTA",
+        "number": 403,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAajOw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW3QjwQ",
+        "number": 405,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAatgw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW3agRg",
+        "number": 407,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAbLXE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW35DyQ",
+        "number": 412,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAbL1o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW35g2g",
+        "number": 413,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAbbzE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW4ICNA",
+        "number": 417,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAbeQs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW4KfjQ",
+        "number": 418,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAdvFc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW6UJ5g",
+        "number": 422,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAgxWI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW9T2Cw",
+        "number": 424,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAjFLI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABW_qO_Q",
+        "number": 426,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqZHc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGfbEA",
+        "number": 428,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqZVQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGfoSA",
+        "number": 429,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqZzY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGgFkA",
+        "number": 430,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqaGo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGgYJA",
+        "number": 431,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqaWg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGgrfg",
+        "number": 432,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqamg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGg85A",
+        "number": 433,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqa2M",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGhNwA",
+        "number": 434,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqbHk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGhevg",
+        "number": 435,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqbdA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGhyxw",
+        "number": 436,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqbsw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGiCYg",
+        "number": 437,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqcCg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGiVCQ",
+        "number": 438,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAqcmU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXGiy3g",
+        "number": 439,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAq-iw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHCnMQ",
+        "number": 441,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAq-uE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHCyjA",
+        "number": 442,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAq--k",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHDEyQ",
+        "number": 443,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAq_Q8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHDWHw",
+        "number": 444,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAq_jE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHDnGQ",
+        "number": 445,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArAH8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHELHA",
+        "number": 446,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArCYY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHGcZA",
+        "number": 447,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArCsM",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHGxqw",
+        "number": 448,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArLuc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHPqPg",
+        "number": 452,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAraLE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHckFQ",
+        "number": 463,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArf0o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHiK7A",
+        "number": 466,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArmJ4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHoUhA",
+        "number": 470,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArn_s",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHqNDg",
+        "number": 471,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArqRk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHsWcA",
+        "number": 472,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArqq4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHs1-A",
+        "number": 473,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArsK8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHuT0Q",
+        "number": 475,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArvEg",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHxCMg",
+        "number": 477,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArvYo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHxUoA",
+        "number": 478,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhArxUs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXHzR0w",
+        "number": 479,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAsCmc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXIDT2g",
+        "number": 484,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAsJWs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXIJZPg",
+        "number": 485,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAsL8o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXIL1Ug",
+        "number": 486,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAsgMA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXIgEuw",
+        "number": 487,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAsmRU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXIlwoA",
+        "number": 490,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAsp5A",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXIpV_A",
+        "number": 492,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAs3Ss",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXI3Eow",
+        "number": 495,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAtHeI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXJFwSQ",
+        "number": 498,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAtjas",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXJgSYQ",
+        "number": 501,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAt-G8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXJ5Lmw",
+        "number": 505,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAuScI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXKNWmQ",
+        "number": 508,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvYck",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLPQyg",
+        "number": 511,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvY3c",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLPlWg",
+        "number": 512,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvZaA",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLP--A",
+        "number": 513,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvZ9o",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLQalg",
+        "number": 514,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvagw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLQ7Tg",
+        "number": 515,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAva54",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLRRkA",
+        "number": 516,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvbSk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLRo0w",
+        "number": 517,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAvlKw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXLbTCA",
+        "number": 518,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAwQy8",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXMJshQ",
+        "number": 524,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAw4Vs",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXMypYw",
+        "number": 528,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAw4mk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXMy7tw",
+        "number": 529,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAxFvI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXM_sIQ",
+        "number": 532,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAxKS0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXNFMvg",
+        "number": 533,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhAyDaQ",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXOE7Wg",
+        "number": 536,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA7Ge4",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXXJJ7g",
+        "number": 538,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA7VBw",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXXUmPQ",
+        "number": 539,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA8s0g",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXYlsxw",
+        "number": 542,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "В работе"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA8tCc",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXYl6qg",
+        "number": 543,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA8tZo",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXYmSeA",
+        "number": 544,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA8t5Y",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXYmuAw",
+        "number": 545,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "В работе"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA8vVI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXYn_DA",
+        "number": 546,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA8-3U",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXY2R9g",
+        "number": 548,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA92Wk",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXZuqjg",
+        "number": 552,
+        "state": "CLOSED",
+        "stateReason": "COMPLETED"
+       },
+       "status": {
+        "name": "Готово"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA99-I",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXZ25RA",
+        "number": 553,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-J5k",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaD1lg",
+        "number": 554,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-KIE",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaEFHw",
+        "number": 555,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-K7U",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaE6Yw",
+        "number": 556,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-LsU",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaFjsA",
+        "number": 557,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-MR0",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaGGtg",
+        "number": 558,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-MwY",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaGlOA",
+        "number": 559,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      },
+      {
+       "id": "PVTI_lAHOAAyAus4BjsdOzhA-NqI",
+       "content": {
+        "__typename": "Issue",
+        "id": "I_kwDOUd0OBc8AAAABXaHaSw",
+        "number": 560,
+        "state": "OPEN",
+        "stateReason": null
+       },
+       "status": {
+        "name": "Бэклог"
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "OwnerProjects {\"login\":\"miroshnik\",\"query\":\"elves\"}": {
+  "data": {
+   "repositoryOwner": {
+    "projectsV2": {
+     "nodes": [
+      {
+       "id": "PVT_kwHOAAyAus4BjsdO",
+       "number": 6,
+       "title": "elves",
+       "url": "https://github.com/users/miroshnik/projects/6",
+       "closed": false
+      }
+     ]
+    }
+   }
+  }
+ },
+ "TemplateProject {\"login\":\"miroshnik\",\"number\":6}": {
+  "data": {
+   "repositoryOwner": {
+    "projectV2": {
+     "id": "PVT_kwHOAAyAus4BjsdO",
+     "number": 6,
+     "title": "elves",
+     "url": "https://github.com/users/miroshnik/projects/6",
+     "closed": false
+    }
+   }
+  }
+ },
+ "TaskContext {\"name\":\"elves\",\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "label": {
+     "id": "LA_kwDOUd0OBc8AAAAC3XsoCw"
+    },
+    "milestones": {
+     "nodes": []
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"elves\",\"number\":42,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNZ9Qw",
+     "number": 42,
+     "title": "est · облачная часть задачи: покрытие partial по трейлеру Claude-Session, импорт событий облачной сессии",
+     "state": "CLOSED",
+     "stateReason": "COMPLETED",
+     "url": "https://github.com/miroshnik/elves/issues/42",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": null,
+     "subIssues": {
+      "nodes": []
+     },
+     "blockedBy": {
+      "nodes": []
+     },
+     "milestone": null,
+     "closedByPullRequestsReferences": {
+      "nodes": [
+       {
+        "number": 55,
+        "state": "MERGED",
+        "merged": true,
+        "headRefName": "feat/42-est-cloud-sessions",
+        "baseRefName": "main"
+       }
+      ]
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xUxM",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Готово"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"elves\",\"number\":45,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+     "number": 45,
+     "title": "GitHub · Скилл github: проект и задачи по канону одной командой",
+     "state": "CLOSED",
+     "stateReason": "COMPLETED",
+     "url": "https://github.com/miroshnik/elves/issues/45",
+     "issueType": null,
+     "labels": {
+      "nodes": [
+       {
+        "name": "epic"
+       }
+      ]
+     },
+     "parent": null,
+     "subIssues": {
+      "nodes": [
+       {
+        "number": 46,
+        "state": "CLOSED",
+        "title": "GitHub · Проект по канону — github project check и fix"
+       },
+       {
+        "number": 47,
+        "state": "CLOSED",
+        "title": "GitHub · Задача одной командой — github task"
+       },
+       {
+        "number": 50,
+        "state": "CLOSED",
+        "title": "GitHub · Проверить: sortByFields видит сортировку по полю issue Priority"
+       }
+      ]
+     },
+     "blockedBy": {
+      "nodes": []
+     },
+     "milestone": null,
+     "closedByPullRequestsReferences": {
+      "nodes": []
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xgp8",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Готово"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"elves\",\"number\":46,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNmC6w",
+     "number": 46,
+     "title": "GitHub · Проект по канону — github project check и fix",
+     "state": "CLOSED",
+     "stateReason": "COMPLETED",
+     "url": "https://github.com/miroshnik/elves/issues/46",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": {
+      "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+      "number": 45
+     },
+     "subIssues": {
+      "nodes": []
+     },
+     "blockedBy": {
+      "nodes": []
+     },
+     "milestone": null,
+     "closedByPullRequestsReferences": {
+      "nodes": [
+       {
+        "number": 48,
+        "state": "MERGED",
+        "merged": true,
+        "headRefName": "feat/46-github-project",
+        "baseRefName": "main"
+       }
+      ]
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xgsQ",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Готово"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"elves\",\"number\":47,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTNmEXA",
+     "number": 47,
+     "title": "GitHub · Задача одной командой — github task",
+     "state": "CLOSED",
+     "stateReason": "COMPLETED",
+     "url": "https://github.com/miroshnik/elves/issues/47",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": {
+      "id": "I_kwDOUd0OBc8AAAABTNmBeQ",
+      "number": 45
+     },
+     "subIssues": {
+      "nodes": []
+     },
+     "blockedBy": {
+      "nodes": []
+     },
+     "milestone": null,
+     "closedByPullRequestsReferences": {
+      "nodes": [
+       {
+        "number": 51,
+        "state": "MERGED",
+        "merged": true,
+        "headRefName": "feat/47-github-task",
+        "baseRefName": "main"
+       }
+      ]
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8xguM",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Готово"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ },
+ "IssueRef {\"name\":\"elves\",\"number\":49,\"owner\":\"miroshnik\"}": {
+  "data": {
+   "repository": {
+    "issue": {
+     "id": "I_kwDOUd0OBc8AAAABTN95KA",
+     "number": 49,
+     "title": "Стандарт · облачная сессия — скрипты скиллов с Projects v2 выходят с объяснением",
+     "state": "CLOSED",
+     "stateReason": "COMPLETED",
+     "url": "https://github.com/miroshnik/elves/issues/49",
+     "issueType": null,
+     "labels": {
+      "nodes": []
+     },
+     "parent": null,
+     "subIssues": {
+      "nodes": []
+     },
+     "blockedBy": {
+      "nodes": []
+     },
+     "milestone": null,
+     "closedByPullRequestsReferences": {
+      "nodes": [
+       {
+        "number": 53,
+        "state": "MERGED",
+        "merged": true,
+        "headRefName": "test/49-cloud-session-standard",
+        "baseRefName": "main"
+       }
+      ]
+     },
+     "projectItems": {
+      "nodes": [
+       {
+        "id": "PVTI_lAHOAAyAus4BjsdOzg8x3J8",
+        "project": {
+         "id": "PVT_kwHOAAyAus4BjsdO"
+        },
+        "status": {
+         "name": "Готово"
+        }
+       }
+      ]
+     },
+     "issueFieldValues": {
+      "nodes": []
+     }
+    }
+   }
+  }
+ }
+}
