@@ -14824,6 +14824,13 @@
   "describes": [
    "примеры"
   ],
+  "name": "old-name не читает файлы, которые git игнорирует: сгенерированный docs/spec не делает стандарт красным"
+ },
+ {
+  "path": "tests/standards/old-name/old-name.test.ts",
+  "describes": [
+   "примеры"
+  ],
   "name": "место документа — абзац с фразой или раздел под заголовком; в JSON — путь ключа; файл под старым именем — место целиком"
  },
  {
@@ -17200,6 +17207,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/standards/harness-load/harness-load.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/old-name/old-name.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
