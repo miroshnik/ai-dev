@@ -3,7 +3,7 @@
  * правками, снимок дерева. Не спека — в документацию не попадает.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,7 +25,7 @@ export interface Sandbox {
 /**
  * HOME и git-проект во временном каталоге. PATH — только bun прогона, git и sh: агенты на машине определяются по
  * каталогам в HOME, а не по тому, что стоит у раннера; bunx в PATH нет — его даёт тест, которому он нужен
- * (bunxServesPackages). AI_DEV_REPO — пустой репозиторий: установщик из пакета ищет релизы в нём, а не на GitHub, и
+ * (bunxServesPackages). ELVES_REPO — пустой репозиторий: установщик из пакета ищет релизы в нём, а не на GitHub, и
  * тест не зависит от сети и настоящих релизов (#145); тест с релизами даёт своё зеркало. TMPDIR — каталог песочницы:
  * временные каталоги установщика (история для списка изменений `update`) — в нём, а не в системном /tmp, куда песочница
  * агента не пускает. BUN_JSC_useJIT — из окружения прогона: дочерний bun на macOS — без JIT
@@ -45,7 +45,7 @@ export function sandbox(): Sandbox {
   const found = execFileSync("sh", ["-c", `for c in ${cmds.join(" ")}; do command -v "$c"; done`], { encoding: "utf8" }).trim().split("\n");
   cmds.forEach((cmd, i) => symlinkSync(found[i]!, path.join(bin, cmd)));
   symlinkSync(process.execPath, path.join(bin, "bun"));
-  const env: Record<string, string> = { HOME: home, PATH: bin, TMPDIR: tmp, AI_DEV_REPO: noReleases, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" };
+  const env: Record<string, string> = { HOME: home, PATH: bin, TMPDIR: tmp, ELVES_REPO: noReleases, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" };
   if (process.env.BUN_JSC_useJIT) env.BUN_JSC_useJIT = process.env.BUN_JSC_useJIT;
   return { tmp, home, proj, bin, env, cleanup };
 }
@@ -114,6 +114,38 @@ export function bunxServesPackages(sb: Sandbox, dir: string) {
     `exec "${process.execPath}" "${dir}/$pkg/node_modules/elves/bin/elves.ts" "$@"`,
   ].join("\n");
   writeFileSync(path.join(sb.bin, "bunx"), script + "\n", { mode: 0o755 });
+}
+
+/**
+ * Установка прошлого релиза — до переименования флоу в Elves (#545) — из свежей установки в root (проект или HOME):
+ * то же содержимое под прежними именами, как его писал тогдашний установщик, — манифест `.agents/ai-dev.json`, канон
+ * `.agents/ai-dev/`, симлинки правил `.claude/rules/ai-dev.md` и `ai-dev-claude.md` в него, блоки `ai-dev:begin` …
+ * `ai-dev:end` в AGENTS.md и .gitignore с путями прежних имён.
+ */
+export function toFormer(root: string) {
+  const at = (rel: string) => path.join(root, rel);
+  const exists = (rel: string) => lstatSync(at(rel), { throwIfNoEntry: false }) !== undefined;
+  for (const [from, to] of [
+    [".agents/elves.json", ".agents/ai-dev.json"],
+    [".agents/elves", ".agents/ai-dev"],
+  ] as const) {
+    if (exists(from)) renameSync(at(from), at(to));
+  }
+  for (const [from, to] of [
+    ["elves.md", "ai-dev.md"],
+    ["elves-claude.md", "ai-dev-claude.md"],
+  ] as const) {
+    const rel = `.claude/rules/${from}`;
+    if (!exists(rel)) continue;
+    const target = readlinkSync(at(rel)).replace(".agents/elves/", ".agents/ai-dev/");
+    rmSync(at(rel));
+    symlinkSync(target, at(`.claude/rules/${to}`));
+  }
+  for (const rel of ["AGENTS.md", ".gitignore"]) {
+    if (!exists(rel)) continue;
+    const text = readFileSync(at(rel), "utf8");
+    writeFileSync(at(rel), text.replace(/\belves:(begin|end)\b/g, "ai-dev:$1").replace(/\.agents\/elves\b/g, ".agents/ai-dev").replace(/rules\/elves\b/g, "rules/ai-dev"));
+  }
 }
 
 /** Дерево каталога: путь → содержимое файла или «-> цель» симлинка; в `.git` не заходит. */

@@ -131,12 +131,16 @@ describe("timeout там, где его нет у машины, ведёт се�
 describe("Окружение Bash агента не настроено — об этом говорят check -g и хук", () => {
   const NOT_SET_UP = "agent Bash: not set up";
 
-  /** Из Bash агента: Claude Code ставит в нём CLAUDECODE=1, а метку AI_DEV_AGENT_SHELL — окружение хука. */
-  it("`check -g` называет, если окружение Bash агента не настроено", () => {
+  /**
+   * Из Bash агента: Claude Code ставит в нём CLAUDECODE=1, а метку ELVES_AGENT_SHELL — окружение хука. Сессия, начатая
+   * до `update -g`, несёт метку хука прошлого релиза — AI_DEV_AGENT_SHELL (прежнее имя флоу, #545): окружение у неё есть.
+   */
+  it("`check -g` называет, если окружение Bash агента не настроено; метка хука прошлого релиза — тоже окружение", () => {
     const bare = elves(sb, ["check", "-g"], { env: { CLAUDECODE: "1" } });
     expect(bare.code).toBe(0);
     expect(bare.stdout).toContain(`  ${NOT_SET_UP} — this session got no environment from the Elves SessionStart hook`);
     expect(bare.stdout).toContain("quote globs");
+    expect(elves(sb, ["check", "-g"], { env: { CLAUDECODE: "1", ELVES_AGENT_SHELL: "1" } }).stdout).not.toContain(NOT_SET_UP);
     expect(elves(sb, ["check", "-g"], { env: { CLAUDECODE: "1", AI_DEV_AGENT_SHELL: "1" } }).stdout).not.toContain(NOT_SET_UP);
   });
 
@@ -146,7 +150,7 @@ describe("Окружение Bash агента не настроено — об 
 
   it("окружение Bash агента ставит метку, по которой его узнаёт check -g", () => {
     hook();
-    expect(agentBash('echo "$AI_DEV_AGENT_SHELL"').stdout).toBe("1\n");
+    expect(agentBash('echo "$ELVES_AGENT_SHELL"').stdout).toBe("1\n");
   });
 
   it("хук без CLAUDE_ENV_FILE или с файлом, который не записать, — строка с причиной; записал — строки нет", () => {

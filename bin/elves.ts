@@ -10,12 +10,12 @@
  *   bunx github:miroshnik/elves update [-g]            — bring the install up to date
  *   bun <Elves clone>/bin/elves.ts release             — cut a release: a tag and the list of flow changes
  *
- * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/ai-dev/` (AGENTS.md,
+ * The layout is as with skills (`npx skills`): the canon is in `.agents/` — `.agents/elves/` (AGENTS.md,
  * claude/CLAUDE.md, docs/*.md) and `.agents/skills/<name>/`; Claude Code gets symlinks in `.claude/skills` and
  * `.claude/rules` (it loads them itself, whatever the project's CLAUDE.md), the other agents — a link in the project's
  * `AGENTS.md`. On the machine (`-g`) there are no rules — only skills (`~/.agents/skills`, `~/.claude/skills`) and the
  * hook: rules load from the project, a second copy on the machine would cost ~20k tokens on every turn of every agent.
- * `.agents/ai-dev.json` — the Elves SHA it was installed from, the list of installed skills (by it a reinstall removes
+ * `.agents/elves.json` — the Elves SHA it was installed from, the list of installed skills (by it a reinstall removes
  * skills Elves no longer has and leaves others' alone), for a machine with `--link` — the clone path, for a project —
  * `auto`: whether the agent runs a task entirely by itself — answers to questions by recommendation, commit, push,
  * fixing CI and merging its own PR on green checks (AGENTS.md, "What I do without asking and what needs a yes"), and
@@ -28,7 +28,7 @@
  * (MERGE_HINT) — it doesn't change the machine's settings. The flow isn't installed into an Elves clone (the canon is
  * at its root): `install` writes a single manifest there, with `auto` and `language`.
  * The copy in a project is committed — the flow files the project's git ignores (the `CLAUDE.md` template, the
- * `.claude/` directory) the install un-ignores with exceptions in an ai-dev block at the end of `.gitignore`, `check`
+ * `.claude/` directory) the install un-ignores with exceptions in an Elves block at the end of `.gitignore`, `check`
  * reports them as a mismatch (`gitignoreFlow`). A project's compose file `check` holds to the task isolation rules
  * with the task-env skill's command (`composeCheck`): a violation is a mismatch too, `update` doesn't fix it; so is a
  * project with standards or architecture without a `test:spec` script — `check` names the lines (`specScript`); a
@@ -51,7 +51,7 @@
  * proxy name) instead of holding copies. No dependencies, only node: APIs.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isatty } from "node:tty";
@@ -59,7 +59,7 @@ import { fileURLToPath } from "node:url";
 
 import { packageManager, specRoots } from "../skills/github/scripts/github.ts";
 import locale from "../skills/github/scripts/locale.ts";
-import { COMPOSE_FILES, proxyName } from "../skills/task-env/scripts/task-env.ts";
+import { COMPOSE_FILES, FORMER_PROXY, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const SOURCE = "miroshnik/elves";
@@ -71,11 +71,47 @@ const SOURCE = "miroshnik/elves";
 const LEGACY_SOURCE = "miroshnik/ai-dev";
 /** The command the output names: the installer from GitHub through bunx, then the subcommand. */
 const RUN = `bunx github:${SOURCE}`;
-const BEGIN = "<!-- ai-dev:begin";
-const END = "<!-- ai-dev:end -->";
+
+/** The install's manifest: `.agents/elves.json`. */
+const MANIFEST = ".agents/elves.json";
+/** The rules canon in a project: a copy of AGENTS.md, claude/CLAUDE.md and docs/*.md. */
+const CANON = ".agents/elves";
+/** Claude Code's rules: symlinks to the canon's AGENTS.md and claude/CLAUDE.md. */
+const RULES = { agents: ".claude/rules/elves.md", claude: ".claude/rules/elves-claude.md" };
+/** The personal configuration directory, from the home directory (tests/standards/config-dir). */
+const CONFIG = ".config/elves";
+
+/**
+ * The flow's names before the rename to Elves (#545). An install of an earlier release has them: `update` moves each to
+ * its new name and replaces a block instead of adding a second one, the skills' scripts read the former manifest and
+ * configuration directory until it does, `check` names what is left. A user's variable `update` can't rename — `check
+ * -g` names it with the new name; the launcher of an earlier release passes AI_DEV_RELEASE, the hook of an earlier
+ * release marks the agent's Bash with AI_DEV_AGENT_SHELL.
+ */
+const FORMER = {
+  manifest: ".agents/ai-dev.json",
+  canon: ".agents/ai-dev",
+  rules: [".claude/rules/ai-dev.md", ".claude/rules/ai-dev-claude.md"],
+  begin: "<!-- ai-dev:begin",
+  end: "<!-- ai-dev:end -->",
+  giBegin: "# ai-dev:begin",
+  giEnd: "# ai-dev:end",
+  config: ".config/ai-dev",
+  release: "AI_DEV_RELEASE",
+  agentShell: "AI_DEV_AGENT_SHELL",
+  /** A user's variables under the former name: the new name → the former one. */
+  env: { ELVES_CONFIG_DIR: "AI_DEV_CONFIG_DIR", ELVES_PRIVATE: "AI_DEV_PRIVATE", ELVES_PROXY: "AI_DEV_PROXY", ELVES_PROXY_PORT: "AI_DEV_PROXY_PORT" },
+  /** The slot skill's queue variables: runner configs and `turbo.json` of projects pass them until renamed. */
+  slotEnv: ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"],
+};
+/** What `check` adds to a line about a file or a directory under the former name. */
+const FORMER_NOTE = "the flow's former name (ai-dev) — update moves it";
+
+const BEGIN = "<!-- elves:begin";
+const END = "<!-- elves:end -->";
 const BLOCK = [
   `${BEGIN} — set by \`${RUN} install\`, don't edit by hand -->`,
-  "Shared rules — `.agents/ai-dev/AGENTS.md`: read them before starting work (references — `.agents/ai-dev/docs/`).",
+  `Shared rules — \`${CANON}/AGENTS.md\`: read them before starting work (references — \`${CANON}/docs/\`).`,
   "Skills — `.agents/skills/`.",
   END,
 ].join("\n");
@@ -118,11 +154,11 @@ elves install -g [--link]
 
 Rules, references and all skills of the latest Elves release — into the project (the git root or the current
 directory); in a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
-fixing CI, merge on green checks (auto in .agents/ai-dev.json, default — no); without a terminal — the --auto or
+fixing CI, merge on green checks (auto in .agents/elves.json, default — no); without a terminal — the --auto or
 --no-auto flag, without the flag the previous answer stays; with auto prints the Claude Code permission rule for the
 merge — Bash(gh pr merge *) in ~/.claude/settings.json: the owner adds it, install doesn't change the machine's
 settings. --lang <code> — the project language the agent works in: dialog, tasks, prompts, documents (language in
-.agents/ai-dev.json, a BCP 47 code: ru, en, pt-BR); in a terminal — a question, en by default, without the flag and a
+.agents/elves.json, a BCP 47 code: ru, en, pt-BR); in a terminal — a question, en by default, without the flag and a
 terminal — the previous one. In an Elves clone writes only auto and language.
 -g — onto the machine only the skills (~/.agents/skills, ~/.claude/skills) and the SessionStart hook; the rules come
 from the project, a machine copy of a previous install is removed. --link — from an Elves clone: symlinks to the clone
@@ -302,21 +338,22 @@ function mainHead(remote: string) {
   return lsRemote([remote, "HEAD"]).split("\t")[0]?.trim() || null;
 }
 
-/** Where releases and their history come from: AI_DEV_REPO (a mirror, tests) or GitHub. */
-const repoUrl = () => process.env.AI_DEV_REPO || `https://github.com/${SOURCE}.git`;
+/** Where releases and their history come from: ELVES_REPO (a mirror, tests) or GitHub. */
+const repoUrl = () => process.env.ELVES_REPO || `https://github.com/${SOURCE}.git`;
 
 /**
  * A copy follows Elves releases, not main. bunx installs a package by its spec once and then runs it from its cache
  * without the network: the package from main (`bunx github:miroshnik/elves`) stays as old as its first run. So it is
  * only a launcher: it finds the latest release and restarts from it by the full SHA — a SHA doesn't change, the cache
  * doesn't harm it; no releases yet — by the SHA of main's head. A package installed by a SHA (`sourceSha`: the restart
- * or the user's own pin) works itself; AI_DEV_RELEASE — the tag the launcher restarted to. A clone installs itself as
- * is. Tags come from AI_DEV_REPO (a mirror, tests) or GitHub.
+ * or the user's own pin) works itself; ELVES_RELEASE — the tag the launcher restarted to. A clone installs itself as
+ * is. Tags come from ELVES_REPO (a mirror, tests) or GitHub. The launcher is as old as its first run, the release may be
+ * older than the launcher: the tag goes under the former name too (FORMER.release) — each reads its own.
  * @returns the restarted process's code; null — work here
  */
 function toRelease(argv: string[]): number | null {
   if (existsSync(path.join(SRC, ".git"))) return null;
-  if (sourceSha(SRC)) return (release = process.env.AI_DEV_RELEASE || null), null;
+  if (sourceSha(SRC)) return (release = process.env.ELVES_RELEASE || process.env[FORMER.release] || null), null;
   let to: { tag?: string; sha: string } | undefined;
   try {
     const head = (sha: string | null) => (sha ? { sha } : undefined);
@@ -326,8 +363,10 @@ function toRelease(argv: string[]): number | null {
   }
   if (!to) return null;
   const env = { ...process.env };
-  delete env.AI_DEV_RELEASE;
-  if (to.tag) env.AI_DEV_RELEASE = to.tag;
+  for (const name of ["ELVES_RELEASE", FORMER.release]) {
+    delete env[name];
+    if (to.tag) env[name] = to.tag;
+  }
   const r = spawnSync("bunx", ["--silent", `github:${SOURCE}#${to.sha}`, ...argv], { stdio: "inherit", env });
   if (r.error) throw new Error(`can't run ${to.tag ? `release ${to.tag}` : `Elves ${short(to.sha)}`} — ${reason(r.error)}`);
   return r.status ?? 2;
@@ -418,9 +457,23 @@ function sourceSkills(src: string) {
     .sort();
 }
 
-/** The rules canon: `.agents/ai-dev/` — a copy of AGENTS.md, claude/CLAUDE.md and docs/*.md or a symlink to the clone. */
+/**
+ * A file or a directory of the install under the flow's former name (FORMER) goes: the install writes its new name.
+ * `ours` — for a path that may be someone else's: the rules' symlinks go only if they lead into the former canon.
+ */
+function removeFormer(root: string, rel: string, ours = (_: string) => true) {
+  const p = path.join(root, rel);
+  const st = lstat(p);
+  if (!st || !ours(p)) return;
+  if (dry) return void change("-", st.isDirectory() ? p + "/" : p, { note: FORMER_NOTE });
+  rmSync(p, { recursive: true, force: true });
+  note(`${rel}${st.isDirectory() ? "/" : ""} — removed: the flow's former name (ai-dev)`);
+}
+
+/** The rules canon: `.agents/elves/` — a copy of AGENTS.md, claude/CLAUDE.md and docs/*.md or a symlink to the clone. */
 function installRules(src: string, root: string, linkMode: boolean) {
-  const canon = path.join(root, ".agents/ai-dev");
+  const canon = path.join(root, CANON);
+  removeFormer(root, FORMER.canon);
   if (linkMode) return placeDir(src, canon, root, true);
   const docs = readdirSync(path.join(src, "docs")).filter((f) => f.endsWith(".md") && statSync(path.join(src, "docs", f)).isFile());
   const files = ["AGENTS.md", "claude/CLAUDE.md", ...docs.map((f) => `docs/${f}`)];
@@ -433,7 +486,7 @@ function installRules(src: string, root: string, linkMode: boolean) {
   note(`${path.relative(root, canon)}/ ← AGENTS.md, claude/CLAUDE.md, docs/ (${docs.length})`);
 }
 
-/** The install's `.agents/ai-dev.json`. */
+/** The install's `.agents/elves.json`. */
 interface Manifest {
   source?: string;
   sha?: string;
@@ -445,10 +498,14 @@ interface Manifest {
   env?: unknown;
 }
 
-/** The install's `.agents/ai-dev.json`; missing or broken — empty. */
+/**
+ * The install's manifest: `.agents/elves.json`, until `update` moves it — `.agents/ai-dev.json` of an earlier release
+ * (FORMER); missing or broken — empty.
+ */
 function readManifest(root: string): Manifest {
+  const file = [MANIFEST, FORMER.manifest].map((f) => path.join(root, f)).find((f) => existsSync(f));
   try {
-    return JSON.parse(readFileSync(path.join(root, ".agents/ai-dev.json"), "utf8"));
+    return file ? JSON.parse(readFileSync(file, "utf8")) : {};
   } catch {
     return {};
   }
@@ -457,7 +514,8 @@ function readManifest(root: string): Manifest {
 /**
  * Skills: `.agents/skills/<name>` — a copy (or a symlink to the clone), Claude Code — a symlink from `.claude/skills`.
  * Someone else's directory with the same name is left alone; skills from a previous install that Elves no longer
- * has are removed. `.agents/ai-dev.json` holds the source SHA, the release tag and the installed skills; a dry run
+ * has are removed. `.agents/elves.json` holds the source SHA, the release tag and the installed skills — the manifest
+ * under the former name (FORMER) is read and moved into it, its fields carried over; a dry run
  * doesn't compare the SHA and the tag: the install is up to date if what it installs matches (a release that changes
  * only the installer doesn't touch projects). auto and language — the project settings "a task entirely without
  * asking" and the language the agent works in, always written; the machine doesn't have them (undefined). `env` —
@@ -470,7 +528,7 @@ function readManifest(root: string): Manifest {
  * @returns installed skills
  */
 function installSkills(src: string, root: string, linkMode: boolean, claude: boolean, auto?: boolean, language?: string) {
-  const manifestPath = path.join(root, ".agents/ai-dev.json");
+  const manifestPath = path.join(root, MANIFEST);
   const before = readManifest(root).skills ?? [];
   const names = sourceSkills(src);
   const env = readManifest(root).env;
@@ -494,13 +552,15 @@ function installSkills(src: string, root: string, linkMode: boolean, claude: boo
   const clone = linkMode ? path.resolve(src) : undefined; // a --link machine: check and update find the clone by it
   if (dry) {
     const m = readManifest(root);
-    if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
+    if (m.source !== SOURCE || JSON.stringify(m.skills) !== JSON.stringify(installed) || m.clone !== clone || !existsSync(manifestPath)) change(existsSync(manifestPath) ? "~" : "+", manifestPath);
   } else {
     const sha = sourceSha(src);
     const manifest = { source: SOURCE, ...(sha ? { sha } : {}), ...(release ? { tag: release } : {}), ...(clone ? { clone } : {}), skills: installed, ...(auto === undefined ? {} : { auto }), ...(language === undefined ? {} : { language }), ...(env === undefined ? {} : { env }) };
     mkdirSync(path.dirname(manifestPath), { recursive: true });
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   }
+  // after the new one is written: a run cut off in between reads the new one
+  removeFormer(root, FORMER.manifest);
   for (const name of installed) placeDir(path.join(src, "skills", name), path.join(root, ".agents/skills", name), root, linkMode);
   if (!linkMode) note(`.agents/skills/ ← ${installed.join(", ")}`);
   if (claude) for (const name of installed) link(path.join(root, ".agents/skills", name), path.join(root, ".claude/skills", name), root);
@@ -588,7 +648,7 @@ function slotScripts(root: string, skills: string[]) {
  * Queue variables a command in a slot needs: the runner's share of cores and "already in a slot" for a nested script
  * in slot.
  */
-const SLOT_ENV = ["AI_DEV_SLOT", "AI_DEV_SLOT_CPUS"];
+const SLOT_ENV = ["ELVES_SLOT", "ELVES_SLOT_CPUS"];
 /**
  * The command calls turbo — `turbo run test`, `turbo test`, `npx turbo …` — but not the `--turbo` flag and not the
  * `turbo.json` path.
@@ -610,11 +670,13 @@ function envMatch(mask: string, name: string) {
 
 /**
  * turbo 2 in strict env mode (the default) passes to tasks only the variables named in turbo.json: a script in slot
- * that calls turbo loses `AI_DEV_SLOT_CPUS` on the way — the runner takes the whole machine — and `AI_DEV_SLOT` — a
+ * that calls turbo loses `ELVES_SLOT_CPUS` on the way — the runner takes the whole machine — and `ELVES_SLOT` — a
  * nested script in slot waits for its own slot. The pass-through is `globalPassThroughEnv`, not `globalEnv`: it isn't
- * part of the cache hash, and `AI_DEV_SLOT` is different on every run. The project owns turbo.json, and it may have
+ * part of the cache hash, and `ELVES_SLOT` is different on every run. The project owns turbo.json, and it may have
  * comments (JSONC) — we don't edit it but warn with a ready-made line; in `check` — a `!` line, not falling behind.
- * turbo.json can't be parsed — we stay silent: turbo itself will parse it.
+ * turbo.json can't be parsed — we stay silent: turbo itself will parse it. A turbo.json that passes the variables only
+ * under the flow's former names (FORMER.slotEnv: slot exports both for now) — the same line, which adds the new names
+ * and keeps the former ones: the project's runner configs may still read them.
  */
 function turboEnv(root: string) {
   let scripts: unknown;
@@ -643,15 +705,24 @@ function turboEnv(root: string) {
   if (!missing.length) return;
   const keep = list(cfg?.globalPassThroughEnv).filter((m) => !SLOT_ENV.some((v) => negated(m, v)));
   const line = `"globalPassThroughEnv": [${[...keep, ...missing.filter((v) => !keep.includes(v))].map((m) => JSON.stringify(m)).join(", ")}]`;
-  const text = `${missing.join(", ")} ${missing.length > 1 ? "don't reach" : "doesn't reach"} the runner: turbo in strict env mode passes to tasks only the variables named in ${name} — put at its root ${line}`;
+  const former = FORMER.slotEnv.filter((v) => reaches(v));
+  const why = former.length
+    ? `${name} passes the queue variables only under the flow's former names ${former.join(", ")} — runner configs and nested scripts in slot that read ${missing.join(", ")} don't get ${missing.length > 1 ? "them" : "it"}`
+    : `${missing.join(", ")} ${missing.length > 1 ? "don't reach" : "doesn't reach"} the runner: turbo in strict env mode passes to tasks only the variables named in ${name}`;
+  const text = `${why} — put at its root ${line}`;
   if (dry) change("!", path.join(root, name), { note: text });
   else warn(`${name} — ${text}`);
 }
 
-/** Claude Code: rules from `.claude/rules` load by themselves, whatever the CLAUDE.md. */
+/**
+ * Claude Code: rules from `.claude/rules` load by themselves, whatever the CLAUDE.md. The symlinks under the former
+ * name go — Claude Code would load the rules twice; only ours, into the former canon.
+ */
 function claudeRules(root: string) {
-  link(path.join(root, ".agents/ai-dev/AGENTS.md"), path.join(root, ".claude/rules/ai-dev.md"), root);
-  link(path.join(root, ".agents/ai-dev/claude/CLAUDE.md"), path.join(root, ".claude/rules/ai-dev-claude.md"), root);
+  const intoFormer = (p: string) => Boolean(lstat(p)?.isSymbolicLink()) && path.resolve(path.dirname(p), readlinkSync(p)).startsWith(path.join(root, FORMER.canon) + path.sep);
+  for (const rel of FORMER.rules) removeFormer(root, rel, intoFormer);
+  link(path.join(root, CANON, "AGENTS.md"), path.join(root, RULES.agents), root);
+  link(path.join(root, CANON, "claude/CLAUDE.md"), path.join(root, RULES.claude), root);
 }
 
 /**
@@ -682,33 +753,54 @@ function claudeHook(home: string) {
   note(".claude/settings.json — SessionStart hook: elves check --hook");
 }
 
-/** The block linking to the rules in the project's AGENTS.md: at the start of the file, a repeated install replaces it. */
+/**
+ * The block linking to the rules in the project's AGENTS.md: at the start of the file, a repeated install replaces it.
+ * The block under the flow's former name (FORMER) is replaced in its place: the project's text around it stays, and
+ * there is no second block.
+ */
 function agentsBlock(root: string) {
   const file = path.join(root, "AGENTS.md");
   const text = existsSync(file) ? readFileSync(file, "utf8") : "";
-  const b = text.indexOf(BEGIN);
-  const e = text.indexOf(END);
-  let out;
-  if (b >= 0 && e > b) out = text.slice(0, b) + BLOCK + text.slice(e + END.length);
-  else out = text ? `${BLOCK}\n\n${text}` : `${BLOCK}\n`;
+  let out = text;
+  let placed = false;
+  for (const [begin, end] of [
+    [BEGIN, END],
+    [FORMER.begin, FORMER.end],
+  ] as const) {
+    const b = out.indexOf(begin);
+    const e = out.indexOf(end, b);
+    if (b < 0 || e < 0) continue;
+    // a second block goes with the empty lines after it
+    out = placed ? out.slice(0, b) + out.slice(e + end.length).replace(/^\n+/, "") : out.slice(0, b) + BLOCK + out.slice(e + end.length);
+    placed = true;
+  }
+  if (!placed) out = text ? `${BLOCK}\n\n${text}` : `${BLOCK}\n`;
   if (out !== text) {
-    if (dry) return change(text ? "~" : "+", file);
+    const former = text.includes(FORMER.begin) ? { note: `the block under the flow's former name (${FORMER.begin.slice(5)}) — update replaces it` } : {};
+    if (dry) return change(text ? "~" : "+", file, former);
     writeFileSync(file, out);
   }
-  note("AGENTS.md — a block linking to .agents/ai-dev/AGENTS.md");
+  note(`AGENTS.md — a block linking to ${CANON}/AGENTS.md`);
 }
 
-const GI_BEGIN = "# ai-dev:begin";
-const GI_END = "# ai-dev:end";
+const GI_BEGIN = "# elves:begin";
+const GI_END = "# elves:end";
 const GI_HEAD = `${GI_BEGIN} — flow files git would otherwise ignore; set by \`${RUN} install\`, don't edit by hand`;
 
-/** `.gitignore` without the ai-dev block; no block — as is. */
+/** `.gitignore` without the Elves block and the block under the flow's former name (FORMER); no block — as is. */
 function withoutGiBlock(text: string) {
-  const b = text.indexOf(GI_BEGIN);
-  const e = text.indexOf(GI_END, b);
-  if (b < 0 || e < 0) return text;
-  const rest = [text.slice(0, b).replace(/\n+$/, ""), text.slice(e + GI_END.length).replace(/^\n+|\n+$/g, "")].filter(Boolean).join("\n");
-  return rest ? rest + "\n" : "";
+  let out = text;
+  for (const [begin, end] of [
+    [GI_BEGIN, GI_END],
+    [FORMER.giBegin, FORMER.giEnd],
+  ] as const) {
+    const b = out.indexOf(begin);
+    const e = out.indexOf(end, b);
+    if (b < 0 || e < 0) continue;
+    const rest = [out.slice(0, b).replace(/\n+$/, ""), out.slice(e + end.length).replace(/^\n+|\n+$/g, "")].filter(Boolean).join("\n");
+    out = rest ? rest + "\n" : "";
+  }
+  return out;
 }
 
 /** The block goes at the end of `.gitignore`: an exception works only if it comes after the ignoring rule. */
@@ -756,11 +848,11 @@ function ignoredBy(root: string, paths: string[]) {
 function flowEntries(root: string) {
   const skills = readManifest(root).skills ?? [];
   return [
-    { path: ".agents/ai-dev", dir: true },
+    { path: CANON, dir: true },
     ...skills.map((n) => ({ path: `.agents/skills/${n}`, dir: true })),
-    { path: ".agents/ai-dev.json", dir: false },
-    { path: ".claude/rules/ai-dev.md", dir: false },
-    { path: ".claude/rules/ai-dev-claude.md", dir: false },
+    { path: MANIFEST, dir: false },
+    { path: RULES.agents, dir: false },
+    { path: RULES.claude, dir: false },
     ...skills.map((n) => ({ path: `.claude/skills/${n}`, dir: false })),
     { path: "AGENTS.md", dir: false },
   ].filter((e) => lstat(path.join(root, e.path))?.isDirectory() === e.dir);
@@ -816,7 +908,7 @@ function ignoredNote(i: Ignored, stuck: boolean) {
 
 /**
  * Flow files go into the commit: a copy the project's git ignores is invisible to another checkout and to a cloud
- * session, and the committed symlink `.claude/rules` points into nowhere. Exceptions — as an ai-dev block at the end
+ * session, and the committed symlink `.claude/rules` points into nowhere. Exceptions — as an Elves block at the end
  * of the root `.gitignore` (giRound), rebuilt by every install: passes while new lines appear; not needed — removed.
  * What an exception can't un-ignore — `❌`. A dry run only names what is ignored. Not git — nothing to check.
  * @returns `.gitignore` changed
@@ -828,11 +920,12 @@ function gitignoreFlow(root: string) {
     return false;
   }
   const entries = flowEntries(root);
+  const file = path.join(root, ".gitignore");
   if (dry) {
     for (const [p, i] of giRound(root, entries).found) change("❌", path.join(root, p), { note: ignoredNote(i, false), manual: Boolean(i.personal) });
+    if (existsSync(file) && readFileSync(file, "utf8").includes(FORMER.giBegin)) change("~", file, { note: `the block under the flow's former name (${FORMER.giBegin.slice(2)}) — update replaces it` });
     return false;
   }
-  const file = path.join(root, ".gitignore");
   const before = existsSync(file) ? readFileSync(file, "utf8") : "";
   const put = (text: string) => {
     if (text === (existsSync(file) ? readFileSync(file, "utf8") : "")) return;
@@ -917,14 +1010,15 @@ const CLONE_NOTE = "an Elves clone: the flow isn't installed into it — the can
 
 /**
  * An Elves clone: of the install it gets only the mode and the language, a manifest of two fields; the task stack
- * settings (`env`), if the clone has them, are carried over as in a project.
+ * settings (`env`), if the clone has them, are carried over as in a project; the manifest under the former name goes.
  */
 function installClone(root: string, auto: boolean, language: string) {
-  const file = path.join(root, ".agents/ai-dev.json");
+  const file = path.join(root, MANIFEST);
   const env = readManifest(root).env;
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ auto, language, ...(env === undefined ? {} : { env }) }, null, 2) + "\n");
-  note(`.agents/ai-dev.json — auto: ${auto}, language: ${language}; ${CLONE_NOTE}`);
+  removeFormer(root, FORMER.manifest);
+  note(`${MANIFEST} — auto: ${auto}, language: ${language}; ${CLONE_NOTE}`);
 }
 
 /**
@@ -942,7 +1036,7 @@ function installProject(src: string, root: string, auto = autoOf(root), language
   return [...(gitignoreFlow(root) ? [".gitignore"] : []), ...(pkg ? ["package.json"] : [])];
 }
 
-/** Agents' global rule files that a previous install made symlinks to `~/.agents/ai-dev/AGENTS.md`. */
+/** Agents' global rule files that a previous install made symlinks to `~/.agents/ai-dev/AGENTS.md` (FORMER.canon). */
 const AGENT_RULE_FILES = [".codex/AGENTS.md", ".gemini/GEMINI.md", ".copilot/copilot-instructions.md", ".config/opencode/AGENTS.md", ".config/amp/AGENTS.md"];
 
 /**
@@ -952,7 +1046,7 @@ const AGENT_RULE_FILES = [".codex/AGENTS.md", ".gemini/GEMINI.md", ".copilot/cop
  * symlinks of agents' global files to the canon. Someone else's file or symlink is left alone.
  */
 function removeGlobalRules(home: string) {
-  const canon = path.join(home, ".agents/ai-dev");
+  const canon = path.join(home, FORMER.canon);
   const st = lstat(canon);
   if (st) {
     if (dry) change("-", canon + "/");
@@ -960,14 +1054,14 @@ function removeGlobalRules(home: string) {
     else rmSync(canon, { recursive: true, force: true });
   }
   const removed: string[] = [];
-  for (const rel of [".claude/rules/ai-dev.md", ".claude/rules/ai-dev-claude.md", ...AGENT_RULE_FILES]) {
+  for (const rel of [...FORMER.rules, ...AGENT_RULE_FILES]) {
     const file = path.join(home, rel);
     const ls = lstat(file);
     if (!ls?.isSymbolicLink() || !path.resolve(path.dirname(file), readlinkSync(file)).startsWith(canon + path.sep)) continue;
     if (dry) change("-", file);
     else rmSync(file), removed.push(rel);
   }
-  if (!dry && (st || removed.length)) note(`rules on the machine removed (${[st ? ".agents/ai-dev/" : "", ...removed].filter(Boolean).join(", ")}): rules load from the project`);
+  if (!dry && (st || removed.length)) note(`rules on the machine removed (${[st ? `${FORMER.canon}/` : "", ...removed].filter(Boolean).join(", ")}): rules load from the project`);
 }
 
 /**
@@ -1025,23 +1119,51 @@ function installGlobal(src: string, linkMode: boolean) {
 
   if (has(".cursor")) note("Cursor: sees the skills in ~/.agents/skills; rules — from the project's AGENTS.md");
 
-  // The default location of the personal configuration. AI_DEV_CONFIG_DIR is deliberately not read here: the
+  // The default location of the personal configuration. ELVES_CONFIG_DIR is deliberately not read here: the
   // variable overrides the whole directory and needs no symlink — the skills' scripts look where it points
   // (tests/standards/config-dir).
-  const priv = process.env.AI_DEV_PRIVATE;
+  moveConfig(home);
+  const priv = process.env.ELVES_PRIVATE || process.env[FORMER.env.ELVES_PRIVATE];
   if (priv) {
-    const dst = path.join(home, ".config/ai-dev");
+    const dst = path.join(home, CONFIG);
     const st = lstat(dst);
-    if (st && !st.isSymbolicLink()) warn(`~/.config/ai-dev already exists and isn't a symlink — move its contents to ${priv} and remove it`);
+    if (st && !st.isSymbolicLink()) warn(`~/${CONFIG} already exists and isn't a symlink — move its contents to ${priv} and remove it`);
     else if (dry) {
       if (!st || readlinkSync(dst) !== priv) change(st ? "~" : "+", dst);
     } else {
       if (st) rmSync(dst);
       mkdirSync(path.dirname(dst), { recursive: true });
       symlinkSync(priv, dst);
-      note(`.config/ai-dev → ${priv}`);
+      note(`${CONFIG} → ${priv}`);
     }
   }
+}
+
+/**
+ * The personal configuration directory under the flow's former name (`~/.config/ai-dev`, FORMER) moves to
+ * `~/.config/elves`: a directory — whole, a symlink (to a private checkout, `ELVES_PRIVATE`) — the same symlink. In its
+ * place stays a symlink to the new one: the scripts of earlier releases — a project copy `update` hasn't brought yet —
+ * keep the same directory, and the queue, the pins and the registry don't split in two; the skills' scripts read the
+ * former directory until the move (tests/standards/config-dir). Both exist — not merged by the script: a warning with
+ * what to do.
+ */
+function moveConfig(home: string) {
+  const from = path.join(home, FORMER.config);
+  const to = path.join(home, CONFIG);
+  const st = lstat(from);
+  if (!st) return;
+  const backLink = path.basename(to);
+  if (st.isSymbolicLink() && path.resolve(path.dirname(from), readlinkSync(from)) === to) return;
+  if (lstat(to)) {
+    const text = `~/${FORMER.config} and ~/${CONFIG} both exist — move what ~/${FORMER.config} has into ~/${CONFIG} yourself and replace it with a symlink: ln -sfn ${backLink} ~/${FORMER.config}`;
+    if (dry) return void change("!", from, { note: text });
+    return void warn(text);
+  }
+  if (dry) return void change("~", from + (st.isDirectory() ? "/" : ""), { note: `${FORMER_NOTE} to ~/${CONFIG}` });
+  if (st.isSymbolicLink()) symlinkSync(readlinkSync(from), to), rmSync(from);
+  else renameSync(from, to);
+  symlinkSync(backLink, from);
+  note(`${FORMER.config} → ${CONFIG}: the flow's former name; ${FORMER.config} stays a symlink to it for the scripts of earlier releases`);
 }
 
 /** A dry-run install: what it would change. */
@@ -1182,7 +1304,7 @@ const unavailable = (global: boolean, e: unknown): Result => ({ code: 2, text: `
 function linkedClone(home: string) {
   const m = readManifest(home);
   if (typeof m.clone === "string") return m.clone;
-  const canon = path.join(home, ".agents/ai-dev");
+  const canon = path.join(home, FORMER.canon);
   return lstat(canon)?.isSymbolicLink() ? path.resolve(path.dirname(canon), readlinkSync(canon)) : null;
 }
 
@@ -1190,11 +1312,10 @@ function linkedClone(home: string) {
 function target(global: boolean) {
   const home = os.homedir();
   const root = global ? home : projectRoot();
-  const canon = path.join(root, ".agents/ai-dev");
   // the home directory is the machine's install, not a project; an Elves clone is the canon itself: its manifest
-  // keeps only the mode
-  const installed = Boolean(lstat(canon) || existsSync(path.join(root, ".agents/ai-dev.json"))) && (global || (!samePath(root, home) && !isElvesClone(root)));
-  return { home, root, canon, installed };
+  // keeps only the mode. An install of an earlier release — by the former names (FORMER)
+  const installed = [CANON, MANIFEST, FORMER.canon, FORMER.manifest].some((p) => lstat(path.join(root, p))) && (global || (!samePath(root, home) && !isElvesClone(root)));
+  return { home, root, installed };
 }
 
 /**
@@ -1266,10 +1387,13 @@ function checkLink(home: string, clone: string): Result {
   } catch (e) {
     return { code: 2, text: `Elves ${where}: check unavailable — ${reason(e)}` };
   }
-  const links = dryRun(() => installGlobal(clone, true));
+  const all = dryRun(() => installGlobal(clone, true));
+  // warnings — what update doesn't fix: `!` lines, not falling behind
+  const links = all.filter((c) => c.op !== "!");
+  const warnings = changeLines(all.filter((c) => c.op === "!"), home, true);
   if (!files.length && !links.length) {
     const ahead = behind ? `; origin/main ${short(main)} is ahead by ${behind}, the flow isn't affected` : "";
-    return { code: 0, text: [`Elves ${where}: up to date (${short(head)}${ahead})`, ...unreleased(clone)].join("\n") };
+    return { code: 0, text: [`Elves ${where}: up to date (${short(head)}${ahead})`, ...warnings, ...unreleased(clone)].join("\n") };
   }
   const op = (status: string) => (status === "A" ? "+" : status === "D" ? "-" : "~");
   return {
@@ -1279,6 +1403,7 @@ function checkLink(home: string, clone: string): Result {
       `Elves ${where}: behind — clone ${short(head)}, origin/main ${short(main)}`,
       ...capped([...files.map((l) => `  ${op(l.split("\t")[0] ?? "")} ${l.split("\t")[1]}`), ...changeLines(links, home, true)]),
       `Update: ${RUN} update -g`,
+      ...warnings,
       ...unreleased(clone),
     ].join("\n"),
   };
@@ -1306,22 +1431,37 @@ function unreleased(clone: string): string[] {
 /**
  * The machine's proxy for task addresses (the task-env skill): one Traefik per machine gives containers of task stacks
  * the addresses `<service>.<N>.<project>.localhost` by their labels. Its Compose project is the skill's `proxyName`
- * (`$AI_DEV_PROXY`, by default `ai-dev-proxy`). A line for `check -g` and the hook: running, not running — with the
+ * (`$ELVES_PROXY`, by default `elves-proxy`). A line for `check -g` and the hook: running, not running — with the
  * start command, Docker unavailable — with the reason. No task-env skill or no docker on the machine — no line: without
  * Docker there are no task stacks, and a line in every session would be noise. Asks docker itself — the skill's
  * `proxyRunning` folds "docker not found" into its reason. Doesn't change the check's code — the proxy isn't the flow
- * falling behind.
+ * falling behind. Not running, while the proxy of an earlier release under the flow's former name (`FORMER_PROXY` of
+ * the skill) is — it holds the port: the line names it, and `proxy up` of the skill replaces it.
  */
 function proxyLines(home: string): string[] {
   if (!existsSync(path.join(home, ".agents/skills/task-env/scripts/task-env.ts"))) return [];
   const name = proxyName();
-  const filters = ["--filter", `label=com.docker.compose.project=${name}`, "--filter", "label=com.docker.compose.service=traefik"];
-  const r = spawnSync("docker", ["ps", "--all", ...filters, "--format", "{{.State}}"], { encoding: "utf8", timeout: 10_000 });
+  const ps = (project: string) =>
+    spawnSync("docker", ["ps", "--all", "--filter", `label=com.docker.compose.project=${project}`, "--filter", "label=com.docker.compose.service=traefik", "--format", "{{.State}}"], { encoding: "utf8", timeout: 10_000 });
+  const r = ps(name);
   const err = r.error as NodeJS.ErrnoException | undefined;
   if (err?.code === "ENOENT") return [];
   if (err || r.status !== 0) return [`  proxy *.localhost: Docker unavailable — ${err ? (err.code === "ETIMEDOUT" ? "docker didn't answer in 10 s" : err.message) : String(r.stderr).trim().split("\n")[0]}`];
-  if (r.stdout.split("\n").includes("running")) return [`  proxy *.localhost: running (${name})`];
-  return ["  proxy *.localhost: not running — start: bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up"];
+  const running = (x: ReturnType<typeof ps>) => !x.error && x.status === 0 && x.stdout.split("\n").includes("running");
+  if (running(r)) return [`  proxy *.localhost: running (${name})`];
+  const up = "bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up";
+  if (name !== FORMER_PROXY && running(ps(FORMER_PROXY))) return [`  proxy *.localhost: running under the flow's former name (${FORMER_PROXY}) — replace it: ${up}`];
+  return [`  proxy *.localhost: not running — start: ${up}`];
+}
+
+/**
+ * A user's variables under the flow's former name (FORMER.env) — set where `update` doesn't reach (the shell profile):
+ * a line each with the new name. The skills' scripts read them until renamed.
+ */
+function formerEnvLines(): string[] {
+  return Object.entries(FORMER.env)
+    .filter(([, former]) => process.env[former])
+    .map(([name, former]) => `  ${former}: the flow's former name — rename it to ${name} where it is set (the shell profile)`);
 }
 
 /**
@@ -1334,7 +1474,7 @@ function proxyLines(home: string): string[] {
  * package's `bin/shims` (`timeout`) at the end of PATH — a real `timeout` wins — and the AGENT_SHELL mark `check -g`
  * recognises the environment by.
  */
-const AGENT_SHELL = "AI_DEV_AGENT_SHELL";
+const AGENT_SHELL = "ELVES_AGENT_SHELL";
 
 /** A word for sh: in single quotes. */
 const shQuote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
@@ -1371,20 +1511,22 @@ function writeAgentShell(): string[] {
 
 /**
  * `check -g` from the agent's Bash (Claude Code sets CLAUDECODE=1 in it): no AGENT_SHELL mark — the session didn't get
- * the environment. From a terminal the agent's shell can't be seen — no line.
+ * the environment. From a terminal the agent's shell can't be seen — no line. A session started before `update -g`
+ * has the mark of the hook of an earlier release (FORMER.agentShell) — the environment is there.
  */
 function agentShellLines(): string[] {
-  if (process.env.CLAUDECODE !== "1" || process.env[AGENT_SHELL]) return [];
+  if (process.env.CLAUDECODE !== "1" || process.env[AGENT_SHELL] || process.env[FORMER.agentShell]) return [];
   return [`  agent Bash: not set up — this session got no environment from the Elves SessionStart hook (its output at the session start says why); ${SHELL_FALLBACK}`];
 }
 
 /**
- * The check's result plus the machine's lines, installed or not, behind or not: the proxy (`proxyLines`) and the
- * agent's Bash environment — the hook passes what writing it gave, `check -g` asks `agentShellLines`.
+ * The check's result plus the machine's lines, installed or not, behind or not: the proxy (`proxyLines`), the agent's
+ * Bash environment — the hook passes what writing it gave, `check -g` asks `agentShellLines` — and the user's variables
+ * under the flow's former name (`formerEnvLines`).
  */
 function withMachine(global: boolean, r: Result, shell = agentShellLines()): Result {
   if (!global || r.absent) return r;
-  const lines = [...proxyLines(os.homedir()), ...shell];
+  const lines = [...proxyLines(os.homedir()), ...shell, ...formerEnvLines()];
   return lines.length ? { ...r, text: [r.text, ...lines].join("\n") } : r;
 }
 
