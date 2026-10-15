@@ -34,7 +34,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -1659,7 +1659,12 @@ interface HandOut {
 /** The repository's tasks handed out to this dispatcher's executors (`handedOutFile`); a line without a worktree — `null`. */
 function handedOut(io: Io, slug: string): HandOut[] {
   const file = handedOutFile(io);
-  if (!file || !existsSync(file)) return [];
+  return file ? handOutsIn(file, slug) : [];
+}
+
+/** The repository's hand-outs in a `<session id>.tasks` file; no file — none. */
+function handOutsIn(file: string, slug: string): HandOut[] {
+  if (!existsSync(file)) return [];
   const lines = readFileSync(file, "utf8").split("\n").map((l) => l.trim());
   return lines
     .filter((l) => l.startsWith(`${slug}#`))
@@ -2342,6 +2347,112 @@ function pruneAgentWorktrees(io: Io, slug: string, kept: (dir: string) => boolea
 }
 
 /**
+ * A worktree whose HEAD moved (a commit, a switch, a rebase) this recently still has an agent at work: Claude Code
+ * doesn't lock the worktree of an agent continued after its answer (#533) — woken by its subagents' answers, the
+ * executor of #545 worked unlocked (#565). The wait for CI is a Bash call of up to 9 minutes without commits.
+ */
+const QUIET_MINUTES = 15;
+
+/** Why a worktree is alive: a lock held by a live process, or HEAD moved less than `QUIET_MINUTES` ago; quiet — null. */
+function aliveWhy(io: Io, w: Worktree): string | null {
+  if (w.locked !== null && lockHolds(w.locked)) return `locked by a live process — ${w.locked || "no reason"}`;
+  // the worktree's own HEAD log: the time of its latest entry (`HEAD@{<unix time>}`)
+  const r = (io.run ?? realRun)("git", ["reflog", "-1", "--date=unix", "--format=%gd"], w.path);
+  const at = Number(/@\{(\d+)\}/.exec(r.stdout)?.[1]);
+  const minutes = Math.floor((Date.now() / 1000 - at) / 60);
+  return r.status === 0 && at > 0 && minutes < QUIET_MINUTES ? `HEAD moved ${Math.max(0, minutes)} min ago (a commit or a switch), quiet after ${QUIET_MINUTES}` : null;
+}
+
+/**
+ * The agent that launched each of the sessions' Claude Code subagents, by id (`agent-<id>` — its worktree's name too):
+ * `parentAgentId` of the subagent metadata `<Claude Code configuration>/projects/<directory>/<session id>/subagents/
+ * agent-<id>.meta.json`; one the session itself launched has none. No metadata — an empty map.
+ */
+function agentParents(io: Io, sessions: string[]): Map<string, string | null> {
+  const parents = new Map<string, string | null>();
+  const projects = path.join(io.env.CLAUDE_CONFIG_DIR || path.join(io.env.HOME || os.homedir(), ".claude"), "projects");
+  let dirs: string[];
+  try {
+    dirs = readdirSync(projects);
+  } catch {
+    return parents;
+  }
+  for (const dir of dirs) {
+    for (const session of new Set(sessions)) {
+      const sub = path.join(projects, dir, session, "subagents");
+      let names: string[];
+      try {
+        names = readdirSync(sub);
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        const id = /^agent-(.+)\.meta\.json$/.exec(name)?.[1];
+        if (!id) continue;
+        try {
+          const parent = JSON.parse(readFileSync(path.join(sub, name), "utf8"))?.parentAgentId;
+          parents.set(id, typeof parent === "string" && parent ? parent : null);
+        } catch {
+          // the app is writing it — the agent has only just started, its worktree is locked
+        }
+      }
+    }
+  }
+  return parents;
+}
+
+/**
+ * The task's previous executor and its subagents still alive (#565): the `!` lines with each live worktree. The
+ * executor of #545 answered «failed» while two of its background subagents were still working; their answers woke it,
+ * and it merged the task — while a second executor, launched on the owner's restart, worked on the same branch. The
+ * previous executor's worktrees — its hand-outs of the task in any dispatcher session (`dispatchers/*.tasks`) and a
+ * worktree on the task branch, the caller's own aside; its subagents' — by Claude Code's metadata (`agentParents`), at any
+ * depth. Alive — `aliveWhy`. The directory isn't a checkout of the repository — none: the script doesn't see the worktrees.
+ */
+function livePredecessors(io: Io, slug: string, number: number, own: string): string[] {
+  if (!checkoutOfRepo(io, originUrl(io), slug)) return [];
+  const listed = (io.run ?? realRun)("git", ["worktree", "list", "--porcelain"], io.cwd);
+  if (listed.status !== 0) return [];
+  const mine = realPath(own);
+  const all = worktreeList(listed.stdout).filter((w) => !w.prunable && realPath(w.path) !== mine);
+  const dir = path.join(configDir(io.env), "dispatchers");
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith(".tasks"));
+  } catch {
+    files = [];
+  }
+  const handOuts = files.flatMap((f) =>
+    handOutsIn(path.join(dir, f), slug)
+      .filter((h) => h.number === number && h.worktree !== null)
+      .map((h) => ({ session: f.slice(0, -".tasks".length), worktree: realPath(h.worktree!) })),
+  );
+  const executors = all.filter((w) => handOuts.some((h) => h.worktree === realPath(w.path)) || (w.branch !== null && isTaskBranch(w.branch, number)));
+  if (!executors.length) return [];
+  const agentId = (dir: string) => (AGENT_WORKTREE.test(dir) ? path.basename(dir).slice("agent-".length) : null);
+  const parents = agentParents(io, [...handOuts.map((h) => h.session), io.env.CLAUDE_CODE_SESSION_ID ?? ""].filter(Boolean));
+  // the executors' agents and everything they launched
+  const family = new Set(executors.map((w) => agentId(w.path)).filter((id): id is string => id !== null));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id, parent] of parents) {
+      if (parent !== null && family.has(parent) && !family.has(id)) {
+        family.add(id);
+        grew = true;
+      }
+    }
+  }
+  const lines: string[] = [];
+  for (const w of all) {
+    const parent = parents.get(agentId(w.path) ?? "");
+    const role = executors.includes(w) ? "the previous executor" : parent && family.has(parent) ? `a subagent of agent-${parent}` : null;
+    const why = role && aliveWhy(io, w);
+    if (why) lines.push(`! worktree ${w.path} (${role}): ${why}`);
+  }
+  return lines;
+}
+
+/**
  * The task's branches `[<area>/]<type>/<N>-<slug>`: local ones of the current directory's checkout and those on its origin
  * (`git ls-remote`: the executor's fresh worktree hasn't fetched a branch its predecessor pushed). The directory isn't a
  * checkout of the repository — none: the script doesn't see the branches and claims nothing.
@@ -2361,16 +2472,24 @@ function taskBranchesHere(io: Io, slug: string, number: number): string[] {
  * keeps the worktree while the task is open, and `task status` in the executor doesn't pin it. In any identified
  * session, not only a dispatcher's (#546): a session with its own task, or none yet, launches an executor on the
  * owner's "yes" — unrecorded, its "In progress" would be refused by the session's pin or would pin the session to it.
- * A session pinned to this very task records nothing: the task is its own.
+ * A session pinned to this very task records nothing: the task is its own. A restart while the previous executor or its
+ * subagent is alive (`livePredecessors`, #565) — no assignment and no hand-out: the `!` lines and the answer that
+ * makes the dispatcher wait, code 1.
  */
 export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
   const issue = loadIssue(io, slug, number);
   const file = handedOutFile(io);
   const own = pinnedTask(io)?.task;
+  // the executor's worktree — the checkout it calls the assignment in: the queue keeps it while the task is open (#533)
+  const top = (io.run ?? realRun)("git", ["rev-parse", "--show-toplevel"], io.cwd);
+  const worktree = top.status === 0 ? top.stdout.trim() : "";
+  const alive = worktree ? livePredecessors(io, slug, number, worktree) : [];
+  if (alive.length) {
+    for (const line of alive) io.out(line);
+    io.out(locale.fill(N.queue.alive, { task: N.subagentPrompt.task, number, repo: slug }));
+    return 1;
+  }
   if (file && !(own?.slug === slug && own.number === number)) {
-    // the executor's worktree — the checkout it calls the assignment in: the queue keeps it while the task is open (#533)
-    const top = (io.run ?? realRun)("git", ["rev-parse", "--show-toplevel"], io.cwd);
-    const worktree = top.status === 0 ? top.stdout.trim() : "";
     mkdirSync(path.dirname(file), { recursive: true });
     // the configuration directory may be a personal git checkout (ELVES_PRIVATE) — hand-outs aren't committed into it
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
@@ -2390,7 +2509,7 @@ export function cmdTaskAssignment(io: Io, slug: string, number: number): number 
     questions: N.sections.questions,
     branches: restart.map((b) => `\`${b}\``).join(", "),
   };
-  const lines = [N.queue.lead, ...(restart.length ? [N.queue.resume] : []), N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.subagents, N.queue.found, N.queue.question, N.queue.answer];
+  const lines = [N.queue.lead, ...(restart.length ? [N.queue.resume] : []), N.queue.subagent, N.queue.session, N.queue.wait, N.queue.git, N.queue.subagents, N.queue.live, N.queue.found, N.queue.question, N.queue.answer];
   for (const line of lines) io.out(locale.fill(line, vars));
   return 0;
 }
@@ -3608,7 +3727,9 @@ finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-a
 not an executor's whose handed-out task is open): clean and merged (git cherry) — removed with the branch (+),
 otherwise left (○ with the reason); loose worktree-agent-* branches — the same. --type and --priority — in an
 organization. --assignment N (the executor's first call; read-only on GitHub) — its whole assignment; in a session
-(not one pinned to N) it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks).
+(not one pinned to N) it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks). A
+restart while the task's previous executor or its subagent is alive — a worktree of it locked by a live process or with
+HEAD moved in the last ${QUIET_MINUTES} min — code 1: ! lines and the answer that makes the dispatcher wait, no hand-out.
 
 Examples:
   github task queue --epic 40

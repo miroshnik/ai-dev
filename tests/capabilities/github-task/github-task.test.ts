@@ -2478,8 +2478,28 @@ describe("task queue раздаёт задачи эпика или фильтр�
     expect(lines).toContain("Ты субагент, а не сессия:");
     expect(r.out).toContain("последнюю строку («Всё сделано. Сессию можно закрывать.») не пиши");
     expect(r.out).toContain("pr <PR> --timeout 540");
-    expect(lines.at(-1)).toBe("Ответ диспетчеру — одной строкой: `влито #<PR>` · `вопрос: <вопрос, варианты, рекомендация>` · `сломалось: <что и где остановилось>`.");
+    expect(lines.at(-1)).toBe(
+      "Ответ диспетчеру — одной строкой: `влито #<PR>` · `вопрос: <вопрос, варианты, рекомендация>` · `ждёт субагентов: <какие и что делают>` · `сломалось: <что и где остановилось>`.",
+    );
     expect(f.mutations).toEqual([]);
+  });
+
+  /**
+   * Исполнитель #545 ответил «сломалось», пока два его фоновых субагента ещё работали (#565): их ответы разбудили его, и он
+   * довёл задачу до мержа, а владелец по отчёту уже решил её перезапустить — диспетчер запустил второго исполнителя на ту
+   * же ветку, и CI, `pr premerge` и `project fix` прогнали оба. Ответ при живых субагентах выглядит провалом: задание
+   * велит ждать их, а если ждать нельзя — ответить «ждёт субагентов», и это не «сломалось».
+   */
+  it("задание исполнителя запрещает ответ, пока его субагенты работают", () => {
+    const r = task(new FakeGitHub(REC), ["queue", "--assignment", "47"], REPO, { cwd: projectDir() });
+    expect(r.code).toBe(0);
+    const lines = r.out.split("\n");
+    expect(lines).toContain(
+      "- пока работает хоть один твой субагент, ответ не отдавай: жди их ответов — фоновый субагент будит тебя своим ответом; " +
+        "ответ при живых субагентах выглядит провалом, и диспетчер отдал бы задачу второму исполнителю рядом с тобой. " +
+        "Ждать нельзя — ответь `ждёт субагентов: <какие и что делают>`: это не «сломалось», второго исполнителя не будет;",
+    );
+    expect(lines.at(-1)).toContain("· `ждёт субагентов: <какие и что делают>` ·");
   });
 
   /**
@@ -2797,6 +2817,110 @@ describe("task queue убирает worktree исполнителей закры
     git(d.work, "worktree", "remove", left);
     expect(d.cleanupLines(d.queue())).toEqual(["+ branch worktree-agent-a1 deleted: nothing outside origin/main", "○ branch worktree-agent-a2 left: 1 commit not in origin/main"]);
     expect(d.branches()).toEqual(["worktree-agent-a2"]);
+  });
+});
+
+/**
+ * Владелец по ответу «сломалось» исполнителя #545 решил перезапустить задачу, а прежний исполнитель был жив: его разбудили
+ * ответы двух его фоновых субагентов (#565). Диспетчер запустил второго, задание отправило его в worktree ветки задачи —
+ * и два исполнителя шли параллельно. Прежний исполнитель мёртв, только когда ни один его worktree и ни один worktree его
+ * субагентов не заблокирован живым процессом и не получает коммитов: продолженного агента Claude Code не блокирует
+ * (#533), живым его видно по коммитам. Его субагентов называют метаданные субагентов Claude Code (`parentAgentId`).
+ */
+describe("task queue не выдаёт задачу второму исполнителю при живом прежнем", () => {
+  /** Давнее время коммитов и переключений: worktree, которого с тех пор не трогали, затих. */
+  const LONG_AGO = "2026-01-01T00:00:00Z";
+  const quietGit = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_COMMITTER_DATE: LONG_AGO } }).trim();
+  /** Блокировка, которую Claude Code ставит на worktree работающего агента. */
+  const lock = (pid: number, agent: string) => `claude agent ${agent} (pid ${pid} start Thu Oct 15 10:10:30 2026)`;
+  /** pid процесса, которого нет: блокировка осталась от приложения до перезапуска. */
+  const DEAD = 99999999;
+
+  /**
+   * Задача #47 «В работе»: прежний исполнитель (agent-a1) взял её на ветку feat/47-export в своём worktree и позвал задание
+   * оттуда, его субагент (agent-a2) и субагент субагента (agent-a5) — в своих worktree, о них — метаданные Claude Code;
+   * новый исполнитель — agent-a3. Все затихли давно и без блокировок — живое каждый тест задаёт сам.
+   */
+  function restart() {
+    const c = checkout("fix/49-x");
+    temp.push(c.cleanup);
+    // путь — как его называет git: без симлинков временного каталога (/var → /private/var на macOS)
+    const work = realpathSync(c.work);
+    git(work, "switch", "-q", "main");
+    const add = (name: string, branch: string) => {
+      const dir = path.join(work, ".claude/worktrees", name);
+      quietGit(work, "worktree", "add", "-q", "-b", branch, dir, "main");
+      return dir;
+    };
+    const f = new FakeGitHub(REC);
+    f.status(47, "В работе");
+    const config = scratch();
+    const claude = scratch();
+    const env = { ...inSession(config).env, CLAUDE_CONFIG_DIR: claude };
+    const assignment = (cwd: string) => task(f, ["queue", "--assignment", "47"], REPO, { env, run: noEst, cwd });
+    const previous = add("agent-a1", "feat/47-export");
+    // без перегиба: первая выдача проходит
+    expect(assignment(previous).code).toBe(0);
+    const sub = add("agent-a2", "worktree-agent-a2");
+    const deeper = add("agent-a5", "worktree-agent-a5");
+    const meta = (worktreePath: string, parentAgentId: string, spawnDepth: number) => JSON.stringify({ agentType: "general-purpose", worktreePath, parentAgentId, spawnDepth });
+    writeTree(claude, {
+      [`projects/-work/${SESSION}/subagents/agent-a2.meta.json`]: meta(sub, "a1", 2),
+      [`projects/-work/${SESSION}/subagents/agent-a5.meta.json`]: meta(deeper, "a2", 3),
+    });
+    const next = add("agent-a3", "worktree-agent-a3");
+    const handOuts = () => readFileSync(path.join(config, "dispatchers", `${SESSION}.tasks`), "utf8").trim().split("\n");
+    return { work, add, previous, sub, deeper, next, again: () => assignment(next), handOuts };
+  }
+
+  it("task queue не выдаёт задачу повторно, пока жив worktree её прежнего исполнителя или его субагентов", () => {
+    const r = restart();
+    const refused = (line: (l: string) => boolean) => {
+      const a = r.again();
+      expect(a.code).toBe(1);
+      const lines = a.out.split("\n");
+      expect(lines.filter((l) => l.startsWith("! "))).toEqual([expect.anything()]);
+      expect(line(lines[0]!)).toBe(true);
+      expect(lines.slice(1)).toEqual([
+        "Задача #47 в miroshnik/elves: у задачи жив прежний исполнитель или его субагент — строки `!` выше. Задачу не бери и ничего не меняй: " +
+          "ответь диспетчеру одной строкой `ждёт прежнего исполнителя: <worktree и почему он жив>` — диспетчер перезапускает задачу, только когда " +
+          "ни один worktree прежнего исполнителя и его субагентов не заблокирован живым процессом и не получает коммитов.",
+      ]);
+      // отказ выдачу не пишет: worktree нового исполнителя очередь уберёт, как любой затихший
+      expect(r.handOuts()).toEqual([`miroshnik/elves#47 ${r.previous}`]);
+    };
+    // прежний исполнитель работает: Claude Code держит блокировку его worktree
+    git(r.work, "worktree", "lock", "--reason", lock(process.pid, "agent-a1"), r.previous);
+    refused((l) => l === `! worktree ${r.previous} (the previous executor): locked by a live process — ${lock(process.pid, "agent-a1")}`);
+    // он ответил «сломалось» — блокировку сняли, — а его субагент ещё работает
+    git(r.work, "worktree", "unlock", r.previous);
+    git(r.work, "worktree", "lock", "--reason", lock(process.pid, "agent-a2"), r.sub);
+    refused((l) => l === `! worktree ${r.sub} (a subagent of agent-a1): locked by a live process — ${lock(process.pid, "agent-a2")}`);
+    // субагент ждёт своего субагента
+    git(r.work, "worktree", "unlock", r.sub);
+    git(r.work, "worktree", "lock", "--reason", lock(process.pid, "agent-a5"), r.deeper);
+    refused((l) => l === `! worktree ${r.deeper} (a subagent of agent-a2): locked by a live process — ${lock(process.pid, "agent-a5")}`);
+    // субагенты ответили и разбудили исполнителя: продолженного Claude Code не блокирует, а коммиты в его worktree идут
+    git(r.work, "worktree", "unlock", r.deeper);
+    git(r.previous, "-c", "user.email=spec@example.test", "-c", "user.name=spec", "commit", "-q", "--allow-empty", "-m", "work");
+    refused((l) => l === `! worktree ${r.previous} (the previous executor): HEAD moved 0 min ago (a commit or a switch), quiet after 15`);
+  });
+
+  // без перегиба: перезапуск, ради которого задание его и печатает, — прежний исполнитель затих; живые агенты других задач не держат
+  it("прежний исполнитель и его субагенты затихли — задание выдаётся снова, живые агенты других задач его не держат", () => {
+    const r = restart();
+    // приложение перезапустилось: блокировку держит процесс, которого нет
+    git(r.work, "worktree", "lock", "--reason", lock(DEAD, "agent-a1"), r.previous);
+    git(r.work, "worktree", "lock", "--reason", lock(DEAD, "agent-a2"), r.sub);
+    git(r.work, "worktree", "lock", "--reason", lock(DEAD, "agent-a5"), r.deeper);
+    // исполнитель другой задачи работает
+    const other = r.add("agent-a4", "feat/48-other");
+    git(r.work, "worktree", "lock", "--reason", lock(process.pid, "agent-a4"), other);
+    const a = r.again();
+    expect(a.code).toBe(0);
+    expect(a.out.split("\n").filter((l) => l.startsWith("! "))).toEqual([]);
+    expect(a.out.split("\n")[1]).toStartWith("Задача уже «В работе» и у неё есть ветка `feat/47-export` — это перезапуск");
+    expect(r.handOuts()).toEqual([`miroshnik/elves#47 ${r.previous}`, `miroshnik/elves#47 ${r.next}`]);
   });
 });
 

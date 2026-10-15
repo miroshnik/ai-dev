@@ -98,9 +98,13 @@ export interface Names {
     wait: string;
     git: string;
     subagents: string;
+    /** The executor's answer waits for its own subagents (#565). */
+    live: string;
     found: string;
     question: string;
     answer: string;
+    /** The assignment refused: the task's previous executor or its subagent is alive (#565). */
+    alive: string;
   };
   /** The est skill's "Estimate" and "Actual" comments and the lines a human appends to them. */
   est: {
