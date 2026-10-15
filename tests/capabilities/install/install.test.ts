@@ -1,15 +1,18 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { elves, elvesPackage, bunxPackage, loadedAtStart, REPO, sandbox, snapshot, type Sandbox } from "../../lib/elves.ts";
-import { writeTree } from "../../lib/spec.ts";
+import { BIN, elves, elvesPackage, bunxPackage, loadedAtStart, npmPackage, REPO, sandbox, snapshot, type ElvesPackage, type Sandbox } from "../../lib/elves.ts";
+import { npmRegistry, type Registry } from "../../lib/registry.ts";
+import { tmpDir, writeTree } from "../../lib/spec.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
 const SKILLS = ["ci-wait", "dashboard", "est", "github", "slot", "spec", "task-env"];
+/** Версия пакета релиза, которым ставится флоу, — `2026.1015.1` у тега `v2026.10.15.1`. */
+const VERSION = "2026.1015.1";
 
 let sb: Sandbox;
 let tmp: string;
@@ -23,35 +26,109 @@ beforeEach(() => {
 });
 afterEach(() => sb.cleanup());
 
+// пакет Elves этого клона (src), он же из npm версии VERSION (release — сам релиз, #557) и реестр npm с ней: один раз
+// на файл
+let packages: { dir: string; cleanup: () => void };
+let src: ElvesPackage;
+let release: { bin: string };
+let registry: Registry;
+beforeAll(async () => {
+  packages = tmpDir();
+  src = elvesPackage(path.join(packages.dir, "src"));
+  release = { bin: npmPackage(path.join(packages.dir, "npm"), src.dir, VERSION, src.sha) };
+  registry = await npmRegistry([VERSION]);
+});
+afterAll(() => {
+  registry.stop();
+  packages.cleanup();
+});
+
 function install(args: string[] = [], cwd = proj, extra: Record<string, string> = {}) {
   return elves(sb, ["install", ...args], { cwd, env: extra });
 }
 
 const read = (p: string) => readFileSync(p, "utf8");
 const isLink = (p: string) => lstatSync(p).isSymbolicLink();
+const gone = (p: string) => lstatSync(p, { throwIfNoEntry: false }) === undefined;
 
-describe("В проект — копия, которую видят облачная сессия и CI", () => {
-  it("правила, справочники и все скиллы — копией в .agents, Claude Code получает их симлинками из .claude", () => {
-    expect(install().code).toBe(0);
-    expect(read(path.join(proj, ".agents/elves/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
-    expect(existsSync(path.join(proj, ".agents/elves/docs/ci-concurrency.md"))).toBe(true);
-    expect(isLink(path.join(proj, ".agents/elves"))).toBe(false);
-    for (const s of SKILLS) {
-      expect(read(path.join(proj, ".agents/skills", s, "SKILL.md"))).toBe(read(path.join(REPO, "skills", s, "SKILL.md")));
-      expect(isLink(path.join(proj, ".agents/skills", s))).toBe(false);
-      expect(readlinkSync(path.join(proj, ".claude/skills", s))).toBe(`../../.agents/skills/${s}`);
-    }
-    expect(readlinkSync(path.join(proj, ".claude/rules/elves.md"))).toBe("../../.agents/elves/AGENTS.md");
-    expect(read(path.join(proj, ".claude/rules/elves-claude.md"))).toBe(read(path.join(REPO, "claude/CLAUDE.md")));
+/**
+ * Проект на bun со своей зависимостью — пакетом workspace по `file:`: lockfile есть, как у живого проекта, а реестр для
+ * него не нужен.
+ */
+function bunProject(fields: Record<string, unknown> = {}) {
+  writeTree(proj, {
+    "package.json": JSON.stringify({ name: "app", private: true, dependencies: { "@app/util": "file:./util" }, ...fields }, null, 2) + "\n",
+    "util/package.json": JSON.stringify({ name: "@app/util", version: "1.0.0" }) + "\n",
+  });
+  const r = spawnSync(process.execPath, ["install"], { cwd: proj, env, encoding: "utf8" });
+  expect(r.status).toBe(0);
+  expect(existsSync(path.join(proj, "bun.lock"))).toBe(true);
+}
+
+/**
+ * Проект тонкий (#552): в репозитории — версия пакета `@miroshnik/elves` для харнесса, spec-скриптов и CI, манифест, шим
+ * очереди и блок AGENTS.md; канон и скиллы — на машине. Обновление проекта — подъём версии, а не копия на тысячи строк.
+ */
+describe("В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу", () => {
+  it("install в проект без флоу ставит devDependency пакета, .agents/elves.json, шим slot и блок AGENTS.md — без копии флоу", () => {
+    bunProject();
+    const r = elves(sb, ["install"], { bin: release.bin, env: registry.env });
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`package.json, bun.lock — @miroshnik/elves ${VERSION} (bun install)`);
+    const pkg = JSON.parse(read(path.join(proj, "package.json")));
+    expect(pkg.devDependencies).toEqual({ "@miroshnik/elves": VERSION });
+    expect(pkg.dependencies).toEqual({ "@app/util": "file:./util" });
+    expect(read(path.join(proj, "bun.lock"))).toContain(`"@miroshnik/elves@${VERSION}"`);
+    expect(JSON.parse(read(path.join(proj, "node_modules/@miroshnik/elves/package.json"))).version).toBe(VERSION);
+    expect(JSON.parse(read(path.join(proj, ".agents/elves.json")))).toEqual({ auto: false, language: "en" });
+    expect(read(path.join(proj, ".agents/slot.sh"))).toContain("elves slot --for $$");
+    expect(read(path.join(proj, "AGENTS.md"))).toContain("Shared rules — `~/.agents/elves/AGENTS.md` on the machine");
+    expect(readdirSync(path.join(proj, ".agents")).sort()).toEqual(["elves.json", "slot.sh"]);
+    expect(gone(path.join(proj, ".claude"))).toBe(true);
   });
 
-  it("в AGENTS.md проекта — блок со ссылкой на правила: свой текст проекта на месте, повторная установка блок не дублирует", () => {
+  /** Lockfile проекта установка не заводит: без него менеджер пакетов не запускается, команда — строкой. */
+  it("без lockfile — только версия в package.json и команда установки зависимостей; lockfile не появляется", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ name: "app", private: true }, null, 2) + "\n" });
+    const r = elves(sb, ["install"], { bin: release.bin, env: registry.env });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`package.json — @miroshnik/elves ${VERSION}; no lockfile — install the dependencies: npm install`);
+    expect(JSON.parse(read(path.join(proj, "package.json"))).devDependencies).toEqual({ "@miroshnik/elves": VERSION });
+    expect(readdirSync(proj).sort()).toEqual([".agents", ".git", "AGENTS.md", "package.json"]);
+  });
+
+  it("менеджер пакетов не поставил пакет (нет сети) — версия в package.json, предупреждение с командой, код 0", () => {
+    bunProject();
+    const r = elves(sb, ["install"], { bin: release.bin, env: { npm_config_registry: "http://127.0.0.1:9/" } });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toMatch(/^!! package\.json — @miroshnik\/elves 2026\.1015\.1, but bun\.lock isn't updated: bun install — .*; run it yourself$/m);
+    expect(JSON.parse(read(path.join(proj, "package.json"))).devDependencies).toEqual({ "@miroshnik/elves": VERSION });
+  });
+
+  /** Ни скриптов, ни тестов на JS — закреплять нечего; канон и скиллы проекту дают машина и блок AGENTS.md. */
+  it("проект без package.json — без devDependency: манифест, шим и блок AGENTS.md", () => {
+    expect(elves(sb, ["install"], { bin: release.bin }).code).toBe(0);
+    expect(readdirSync(proj).sort()).toEqual([".agents", ".git", "AGENTS.md"]);
+    expect(readdirSync(path.join(proj, ".agents")).sort()).toEqual(["elves.json", "slot.sh"]);
+  });
+
+  /** Клон — не релиз: версии, которую закрепить, у него нет (#558, вопрос 5). */
+  it("установщик не релиз (клон) — devDependency не трогает: предупреждение с причиной", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ name: "app", private: true }, null, 2) + "\n" });
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("!! package.json — @miroshnik/elves isn't added: this installer isn't a release (a clone or no releases yet)");
+    expect(JSON.parse(read(path.join(proj, "package.json")))).toEqual({ name: "app", private: true });
+  });
+
+  it("в AGENTS.md проекта — блок со ссылкой на канон машины: свой текст проекта на месте, повторная установка блок не дублирует", () => {
     writeFileSync(path.join(proj, "AGENTS.md"), "# Проект\n\nСвои правила.\n");
     install();
     install();
     const text = read(path.join(proj, "AGENTS.md"));
     expect(text.match(/<!-- elves:begin/g)).toHaveLength(1);
-    expect(text).toContain("`.agents/elves/AGENTS.md`");
+    expect(text).toContain("`~/.agents/elves/AGENTS.md`");
     expect(text).toContain("# Проект\n\nСвои правила.\n");
   });
 
@@ -69,7 +146,7 @@ describe("В проект — копия, которую видят облачн
     const text = read(path.join(proj, "AGENTS.md"));
     expect(text.match(/<!-- elves:begin/g)).toHaveLength(1);
     const block = /^<!-- elves:begin[^]*?<!-- elves:end -->/.exec(text)?.[0] ?? "";
-    expect(block).toContain("Shared rules — `.agents/elves/AGENTS.md`");
+    expect(block).toContain("Shared rules — `~/.agents/elves/AGENTS.md`");
     expect(block).not.toMatch(/\p{Script=Cyrillic}/u);
     expect(text).toEndWith("<!-- elves:end -->\n\n# Проект\n\nСвои правила.\n");
   });
@@ -79,31 +156,11 @@ describe("В проект — копия, которую видят облачн
     expect(read(path.join(proj, "AGENTS.md"))).toMatch(/^<!-- elves:begin[^]*<!-- elves:end -->\n$/);
   });
 
-  it("скилл, которого больше нет в Elves, при переустановке удаляется; свой скилл проекта не трогается", () => {
-    install();
-    const manifest = path.join(proj, ".agents/elves.json");
-    const m = JSON.parse(read(manifest));
-    writeFileSync(manifest, JSON.stringify({ ...m, skills: [...m.skills, "old"] }));
-    writeTree(proj, { ".agents/skills/old/SKILL.md": "old", ".agents/skills/mine/SKILL.md": "mine" });
-    symlinkSync("../../.agents/skills/old", path.join(proj, ".claude/skills/old"));
-    install();
-    expect(existsSync(path.join(proj, ".agents/skills/old"))).toBe(false);
-    expect(existsSync(path.join(proj, ".claude/skills/old"))).toBe(false);
-    expect(read(path.join(proj, ".agents/skills/mine/SKILL.md"))).toBe("mine");
-  });
-
-  it("чужой каталог с именем скилла Elves не перезаписывается — предупреждение", () => {
-    writeTree(proj, { ".agents/skills/spec/SKILL.md": "свой spec" });
-    const r = install();
-    expect(read(path.join(proj, ".agents/skills/spec/SKILL.md"))).toBe("свой spec");
-    expect(r.stderr).toContain(".agents/skills/spec");
-  });
-
   /**
    * bunx ставит пакет в node_modules своего каталога и запускает его bin по шебангу — так же, как `bun add` пакета из
    * `bun pm pack`: только файлы из `files`, TypeScript в node_modules Bun стирает сам. Кеш bun — свой, в песочнице.
    */
-  it("через bunx из пакета Elves: bin из node_modules под Bun ставит правила и скиллы", () => {
+  it("через bunx из пакета Elves: bin из node_modules под Bun ставит тонкий флоу", () => {
     const bunEnv = { ...env, BUN_INSTALL_CACHE_DIR: path.join(tmp, "bun-cache") };
     const pack = spawnSync(process.execPath, ["pm", "pack", "--destination", tmp, "--quiet"], { cwd: REPO, env: bunEnv, encoding: "utf8" });
     expect(pack.status).toBe(0);
@@ -114,148 +171,108 @@ describe("В проект — копия, которую видят облачн
     const r = spawnSync(path.join(bunx, "node_modules/.bin/elves"), ["install"], { cwd: proj, env, encoding: "utf8" });
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    expect(read(path.join(proj, ".agents/elves/AGENTS.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
-    expect(existsSync(path.join(proj, ".agents/elves/docs/ci-concurrency.md"))).toBe(true);
-    expect(existsSync(path.join(proj, ".agents/skills/spec/scripts/package.json"))).toBe(true);
-  });
-
-  it("в .agents/elves.json — SHA Elves, из которого поставлено: у клона — его HEAD", () => {
-    install();
-    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" }).trim();
-    expect(JSON.parse(read(path.join(proj, ".agents/elves.json"))).sha).toBe(head);
-  });
-
-  /**
-   * bunx ставит пакет из GitHub архивом, без `.git`, и в `.bun-tag` оставляет лишь 7 знаков SHA: полный коммит виден
-   * только в спецификаторе, по которому поставлено, — `package.json` каталога bunx рядом с node_modules.
-   */
-  it("из пакета bunx — SHA из спецификатора в package.json каталога bunx", () => {
-    const sha = "0123456789abcdef0123456789abcdef01234567";
-    const bin = bunxPackage(path.join(tmp, "bunx"), REPO, sha);
-    expect(elves(sb, ["install"], { bin }).code).toBe(0);
-    expect(JSON.parse(read(path.join(proj, ".agents/elves.json"))).sha).toBe(sha);
-  });
-
-  /**
-   * Пакет называется `@miroshnik/elves` (#556): bun кладёт зависимость по имени пакета — в `node_modules/@miroshnik/elves`,
-   * спецификатор — под полным именем. Не узнай установщик SHA, пакет релиза счёл бы себя пускателем из main и
-   * перезапускался бы снова и снова.
-   */
-  it("из пакета под scope @miroshnik — SHA из спецификатора под полным именем пакета", () => {
-    const sha = "0123456789abcdef0123456789abcdef01234567";
-    const bin = bunxPackage(path.join(tmp, "bunx"), REPO, sha, "@miroshnik/elves");
-    expect(elves(sb, ["install"], { bin }).code).toBe(0);
-    expect(JSON.parse(read(path.join(proj, ".agents/elves.json"))).sha).toBe(sha);
+    expect(JSON.parse(read(path.join(proj, ".agents/elves.json")))).toEqual({ auto: false, language: "en" });
+    expect(read(path.join(proj, ".agents/slot.sh"))).toContain("elves slot --for $$");
+    expect(read(path.join(proj, "AGENTS.md"))).toContain("`~/.agents/elves/AGENTS.md`");
   });
 
   it("корень установки — корень git-репозитория, даже при запуске из подкаталога", () => {
     mkdirSync(path.join(proj, "src/app"), { recursive: true });
     expect(install([], path.join(proj, "src/app")).code).toBe(0);
-    expect(existsSync(path.join(proj, ".agents/elves/AGENTS.md"))).toBe(true);
+    expect(existsSync(path.join(proj, ".agents/elves.json"))).toBe(true);
     expect(existsSync(path.join(proj, "src/app/.agents"))).toBe(false);
   });
 });
 
 /**
- * Песочница агента не пускает запись в `.claude/skills` проекта (Seatbelt у Claude Code — EPERM): установка
- * обрывается на симлинках, когда копии в `.agents/skills` уже легли. Тест закрывает каталог правами — отказ тот же
+ * Песочница агента не пускает запись в `.claude/skills` (Seatbelt у Claude Code — EPERM): установка на машину
+ * обрывается на симлинках, когда копии в `~/.agents/skills` уже легли. Тест закрывает каталог правами — отказ тот же
  * по сути (EACCES).
  */
 describe("Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку", () => {
-  const skillsDir = () => path.join(proj, ".claude/skills");
+  const skillsDir = () => path.join(home, ".claude/skills");
   const lock = () => (mkdirSync(skillsDir(), { recursive: true }), chmodSync(skillsDir(), 0o555));
+  // машина с Claude Code: симлинки скиллов ставятся в ~/.claude/skills
+  beforeEach(() => mkdirSync(path.join(home, ".claude"), { recursive: true }));
   // каталог без права записи не удалить — права возвращаются до уборки песочницы
   afterEach(() => existsSync(skillsDir()) && chmodSync(skillsDir(), 0o755));
 
-  it("нет права писать в .claude/skills — install: код 2, строка с путём и командой для своего терминала, без стека", () => {
+  it("нет права писать в ~/.claude/skills — install -g: код 2, строка с путём и командой для своего терминала, без стека", () => {
     lock();
-    const r = install(["--lang", "ru"]);
+    const r = install(["-g"]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain(".claude/skills/ci-wait");
-    expect(r.stderr).toContain("bunx github:miroshnik/elves install --lang ru");
+    expect(r.stderr).toContain("~/.claude/skills/ci-wait");
+    expect(r.stderr).toContain("bunx github:miroshnik/elves install -g");
     expect(r.stderr).not.toMatch(/\n\s+at /);
   });
 
-  it("повтор после отказа на .claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an Elves skill» нет", () => {
+  it("повтор после отказа на ~/.claude/skills доводит установку: скиллы признаны своими, симлинки на месте, предупреждения «isn't an Elves skill» нет", () => {
     lock();
-    install();
+    install(["-g"]);
     chmodSync(skillsDir(), 0o755);
-    const r = install();
+    const r = install(["-g"]);
     expect(r.code).toBe(0);
     expect(r.stderr).not.toContain("isn't an Elves skill");
     for (const s of SKILLS) expect(readlinkSync(path.join(skillsDir(), s))).toBe(`../../.agents/skills/${s}`);
-    expect(JSON.parse(read(path.join(proj, ".agents/elves.json"))).skills).toEqual(SKILLS);
+    expect(JSON.parse(read(path.join(home, ".agents/elves.json"))).skills).toEqual(SKILLS);
   });
 
-  it("update: нет права писать в .claude/skills — код 2, та же строка с командой update", () => {
-    install();
+  it("update -g: нет права писать в ~/.claude/skills — код 2, та же строка с командой update -g", () => {
+    install(["-g"]);
     rmSync(path.join(skillsDir(), "spec"));
     chmodSync(skillsDir(), 0o555);
-    const r = elves(sb, ["update"]);
+    const r = elves(sb, ["update", "-g"]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain(".claude/skills/spec");
-    expect(r.stderr).toContain("bunx github:miroshnik/elves update");
+    expect(r.stderr).toContain("~/.claude/skills/spec");
+    expect(r.stderr).toContain("bunx github:miroshnik/elves update -g");
   });
 
-  it("симлинк, который уже ведёт куда надо, установка не пересоздаёт: .claude/skills без права записи не мешает повтору без нового скилла", () => {
-    install();
+  it("симлинк, который уже ведёт куда надо, установка не пересоздаёт: ~/.claude/skills без права записи не мешает повтору без нового скилла", () => {
+    install(["-g"]);
     chmodSync(skillsDir(), 0o555);
-    expect(install().code).toBe(0);
-    expect(elves(sb, ["update"]).code).toBe(0);
+    expect(install(["-g"]).code).toBe(0);
+    expect(elves(sb, ["update", "-g"]).code).toBe(0);
   });
 });
 
 /**
- * Копия флоу коммитится: облачная сессия, чужой чекаут и CI видят только репозиторий. Шаблон из .gitignore проекта
- * (`CLAUDE.md` — частая практика прятать личные заметки агента, `.claude/`, `vendor/`) молча оставляет файл флоу вне
- * коммита, а закоммиченный симлинк `.claude/rules` — ведущим в пустоту. Исключение действует, только если идёт после
- * игнорирующего правила, — поэтому блок Elves в конце `.gitignore`.
+ * Файлы тонкого проекта коммитятся: без шима `.agents/slot.sh` в коммите скрипт package.json в CI и чужом чекауте падает
+ * на `. .agents/slot.sh`, без манифеста облачная сессия не знает режима и языка (#558, вопрос 4). Исключение действует,
+ * только если идёт после игнорирующего правила, — поэтому блок Elves в конце `.gitignore`.
  */
-describe("Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и облачной сессии", () => {
+describe("Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI", () => {
   const gitignore = () => read(path.join(proj, ".gitignore"));
   // игнорируемые git файлы проекта — по одному, и внутри игнорируемых каталогов
   const ignored = () => execFileSync("git", ["ls-files", "--others", "--ignored", "--exclude-standard"], { cwd: proj, env, encoding: "utf8" }).split("\n").filter(Boolean).sort();
 
-  it("шаблон CLAUDE.md в .gitignore проекта — install дописывает в конец .gitignore блок Elves с исключением: копия claude/CLAUDE.md не игнорируется, свои строки .gitignore на месте, повторная установка блок не дублирует", () => {
-    writeTree(proj, { ".gitignore": "node_modules/\nCLAUDE.md\n", "notes/CLAUDE.md": "мои заметки\n" });
+  it(".agents/ в .gitignore проекта — install дописывает в конец .gitignore блок Elves: манифест и шим не игнорируются, своё в .agents — как прежде, свои строки на месте, повтор блок не дублирует", () => {
+    writeTree(proj, { ".gitignore": "node_modules/\n.agents/\n", ".agents/notes.md": "мои заметки\n" });
     const r = install();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain(".gitignore");
-    expect(ignored()).toEqual(["notes/CLAUDE.md"]);
+    expect(ignored()).toEqual([".agents/notes.md"]);
     const text = gitignore();
-    expect(text).toStartWith("node_modules/\nCLAUDE.md\n");
-    expect(text).toContain("\n!/.agents/elves/claude/CLAUDE.md\n");
+    expect(text).toStartWith("node_modules/\n.agents/\n");
+    expect(text).toContain("\n!/.agents/elves.json\n!/.agents/slot.sh\n");
     expect(text).toMatch(/\n# elves:begin[^\n]*\n[^]*\n# elves:end\n$/);
     install();
     expect(gitignore()).toBe(text);
   });
 
-  /** Шапка блока прошлой версии — по-русски; маркеры begin и end у него те же: по ним установка его находит. */
-  it("блок исключений прошлой версии с шапкой по-русски установка заменяет английским, а не ставит второй", () => {
-    const old = ["# ai-dev:begin — файлы флоу, которые иначе игнорирует git; ставит `npx -y github:miroshnik/ai-dev install`, руками не править", "!/.agents/ai-dev/claude/CLAUDE.md", "# ai-dev:end"].join("\n");
-    writeTree(proj, { ".gitignore": `node_modules/\nCLAUDE.md\n\n${old}\n` });
+  /** Шаблоны, которые прятали файлы копии (`CLAUDE.md`, `.claude/`), тонкому проекту безразличны: его файлы — не там. */
+  it("шаблоны CLAUDE.md и .claude/ тонкому проекту не мешают — исключений нет, .gitignore не меняется", () => {
+    writeTree(proj, { ".gitignore": "CLAUDE.md\n.claude/\nvendor/\n" });
     expect(install().code).toBe(0);
-    install();
-    const text = gitignore();
-    expect(text.match(/# elves:begin/g)).toHaveLength(1);
-    expect(text).toStartWith("node_modules/\nCLAUDE.md\n\n# elves:begin — flow files git would otherwise ignore; ");
-    expect(text).toContain("\n!/.agents/elves/claude/CLAUDE.md\n");
-    expect(text).toEndWith("\n# elves:end\n");
-    expect(text).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(gitignore()).toBe("CLAUDE.md\n.claude/\nvendor/\n");
     expect(ignored()).toEqual([]);
   });
 
-  it("каталог .claude/ в .gitignore проекта — исключения снимают его только с файлов флоу: правила и скиллы не игнорируются, свои файлы в .claude по-прежнему игнорируются", () => {
-    writeTree(proj, { ".gitignore": ".claude/\n", ".claude/settings.local.json": "{}\n", ".claude/rules/mine.md": "моё правило\n", ".claude/skills/mine/SKILL.md": "мой скилл\n" });
+  /** Шапка блока прошлой версии — по-русски; маркеры begin и end у него те же: по ним установка его находит. */
+  it("блок исключений копии прошлой версии с шапкой по-русски установка убирает — файлам тонкого проекта исключения не нужны", () => {
+    const old = ["# ai-dev:begin — файлы флоу, которые иначе игнорирует git; ставит `npx -y github:miroshnik/ai-dev install`, руками не править", "!/.agents/ai-dev/claude/CLAUDE.md", "# ai-dev:end"].join("\n");
+    writeTree(proj, { ".gitignore": `node_modules/\nCLAUDE.md\n\n${old}\n` });
     expect(install().code).toBe(0);
-    expect(ignored()).toEqual([".claude/rules/mine.md", ".claude/settings.local.json", ".claude/skills/mine/SKILL.md"]);
-  });
-
-  /** `vendor/` — у скилла spec есть `scripts/vendor`: шаблон внутри скилла снимается уже после исключения на `.agents`. */
-  it("игнорируются .agents/ и vendor/ — после install ни один файл флоу не игнорируется, свои vendor/ проекта и прочее в .agents игнорируются", () => {
-    writeTree(proj, { ".gitignore": ".agents/\nvendor/\n", "vendor/lib.js": "// чужое\n", ".agents/notes.md": "мои заметки\n" });
-    expect(install().code).toBe(0);
-    expect(ignored()).toEqual([".agents/notes.md", "vendor/lib.js"]);
+    expect(gitignore()).toBe("node_modules/\nCLAUDE.md\n");
   });
 
   it("ничего не игнорируется — .gitignore не создаётся и не меняется; ставший ненужным блок убирается", () => {
@@ -264,10 +281,10 @@ describe("Файлы флоу не игнорируются git проекта �
     writeFileSync(path.join(proj, ".gitignore"), "dist");
     install();
     expect(gitignore()).toBe("dist");
-    writeFileSync(path.join(proj, ".gitignore"), "dist\nCLAUDE.md\n");
+    writeFileSync(path.join(proj, ".gitignore"), "dist\n.agents/\n");
     install();
     expect(gitignore()).toContain("# elves:begin");
-    writeFileSync(path.join(proj, ".gitignore"), gitignore().replace("dist\nCLAUDE.md\n", "dist\n"));
+    writeFileSync(path.join(proj, ".gitignore"), gitignore().replace("dist\n.agents/\n", "dist\n"));
     install();
     expect(gitignore()).toBe("dist\n");
   });
@@ -277,23 +294,26 @@ describe("Файлы флоу не игнорируются git проекта �
    * исключение каталога с `/<каталог>/*` спрятало бы остальное в нём у тех, у кого такого правила нет.
    */
   it("шаблон файла вне проекта (core.excludesFile) снимается исключением в .gitignore проекта; каталог, исключённый вне проекта, — ❌ с правилом, исключений на него в .gitignore проекта нет", () => {
-    writeTree(home, { ".config/git/ignore": "CLAUDE.md\n.claude/\n" });
+    writeTree(home, { ".config/git/ignore": "slot.sh\n" });
+    expect(install().code).toBe(0);
+    expect(gitignore()).toContain("\n!/.agents/slot.sh\n");
+    rmSync(path.join(proj, ".gitignore"));
+    writeTree(home, { ".config/git/ignore": ".agents/\n" });
     const r = install();
     expect(r.code).toBe(0);
-    expect(gitignore()).toContain("\n!/.agents/elves/claude/CLAUDE.md\n");
-    expect(gitignore()).not.toContain("/.claude");
-    expect(r.stderr).toContain("❌ .claude/ — ");
-    expect(r.stderr).toContain(".config/git/ignore:2 «.claude/»");
-    expect(ignored()).toEqual([".claude/rules/elves-claude.md", ".claude/rules/elves.md", ...SKILLS.map((s) => `.claude/skills/${s}`)]);
+    expect(existsSync(path.join(proj, ".gitignore"))).toBe(false);
+    expect(r.stderr).toContain("❌ .agents/ — ");
+    expect(r.stderr).toContain(".config/git/ignore:1 «.agents/»");
+    expect(ignored()).toEqual([".agents/elves.json", ".agents/slot.sh"]);
   });
 });
 
 /**
  * Тяжёлые проверки проекта идут очередью машины (capability `slot`). Обёртка — в самих скриптах `package.json`: их
  * зовёт любой — Claude, Codex, человек в терминале. `build` не оборачивается — его запускают хостинг и Docker, где
- * копии скилла может не быть; watch — долгий, занял бы слот надолго.
+ * шима или пакета может не быть; watch — долгий, занял бы слот надолго.
  */
-describe("Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в slot", () => {
+describe("Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot", () => {
   const SCRIPTS = {
     build: "next build",
     dev: "next dev",
@@ -305,9 +325,13 @@ describe("Проверки проекта идут очередью машины
   };
   const pkgFile = () => path.join(proj, "package.json");
   const scripts = () => JSON.parse(read(pkgFile())).scripts;
-  const slot = (cmd: string) => `. .agents/skills/slot/scripts/slot.sh && ${cmd}`;
-  /** Обёртка прошлых установок: команда — строкой-аргументом slot.ts. */
+  const slot = (cmd: string) => `. .agents/slot.sh && ${cmd}`;
+  /** Обёртка копии флоу прошлых установок: её slot.sh. */
+  const copySlot = (cmd: string) => `. .agents/skills/slot/scripts/slot.sh && ${cmd}`;
+  /** Обёртка ещё раньше: команда — строкой-аргументом slot.ts копии. */
   const slotString = (cmd: string, runtime = "bun --no-env-file") => `${runtime} .agents/skills/slot/scripts/slot.ts '${cmd}'`;
+  /** elves песочницы — bin этого клона: шим зовёт `elves slot` из PATH, как из node_modules/.bin проекта. */
+  const elvesOnPath = () => symlinkSync(BIN, path.join(sb.bin, "elves"));
 
   it("установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет", () => {
     writeTree(proj, { "package.json": JSON.stringify({ name: "app", scripts: SCRIPTS }, null, 2) + "\n" });
@@ -323,10 +347,27 @@ describe("Проверки проекта идут очередью машины
     });
   });
 
+  /**
+   * Шим — slot.sh скилла вокруг `elves slot` пакета проекта, в `if command -v elves`: без elves на PATH (CI до установки
+   * зависимостей, чекаут без пакета) команда идёт как есть, сбой elves роняет скрипт его кодом — проверено в #552.
+   */
+  it("скрипты package.json тонкого проекта идут через шим slot: с elves на PATH — в слоте машины, без elves — как есть, сбой elves роняет скрипт с его кодом", () => {
+    writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: 'echo "slot=[$ELVES_SLOT_CPUS]"' } }) });
+    install();
+    const run = () => spawnSync("sh", ["-c", scripts().test], { cwd: proj, env, encoding: "utf8" });
+    expect(run()).toMatchObject({ status: 0, stdout: "slot=[]\n" });
+    elvesOnPath();
+    expect(run()).toMatchObject({ status: 0, stdout: expect.stringMatching(/^slot=\[[1-9]\d*\]\n$/) });
+    rmSync(path.join(sb.bin, "elves"));
+    writeFileSync(path.join(sb.bin, "elves"), "#!/bin/sh\nexit 3\n", { mode: 0o755 });
+    expect(run()).toMatchObject({ status: 3, stdout: "" });
+  });
+
   /** npm и bun дописывают аргументы к скрипту в конец его строки: `npm test -- <файл>` — так же и с обёрткой. */
   it("обёрнутый скрипт идёт как прежде: кавычки команды на месте, аргументы — в её конце", () => {
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { test: `printf '%s|' "it's"` } }) });
     install();
+    elvesOnPath();
     const r = spawnSync("sh", ["-c", `${scripts().test} 'a b'`], { cwd: proj, env, encoding: "utf8" });
     expect(r.stderr).toBe("");
     expect(r.stdout).toBe("it's|a b|");
@@ -339,14 +380,15 @@ describe("Проверки проекта идут очередью машины
    */
   it("команда под slot не видит ключей env-файлов рабочего каталога", () => {
     writeTree(proj, {
-      "package.json": JSON.stringify({ scripts: { test: `echo "[$ELVES_DOTENV|$ELVES_DOTENV_LOCAL]"` } }),
+      "package.json": JSON.stringify({ scripts: { test: `echo "[$ELVES_DOTENV|$ELVES_DOTENV_LOCAL|\${ELVES_SLOT_CPUS:+slot}]"` } }),
       ".env": "ELVES_DOTENV=dotenv\n",
       ".env.local": "ELVES_DOTENV_LOCAL=prod-key\n",
     });
     install();
+    elvesOnPath();
     const r = spawnSync("sh", ["-c", scripts().test], { cwd: proj, env, encoding: "utf8" });
     expect(r.stderr).toBe("");
-    expect(r.stdout).toBe("[|]\n");
+    expect(r.stdout).toBe("[||slot]\n");
   });
 
   it("повторная установка не оборачивает дважды, отступ и конец package.json — как были", () => {
@@ -359,31 +401,58 @@ describe("Проверки проекта идут очередью машины
   });
 
   /**
-   * Прошлые установки передавали команду slot.ts строкой — через node в проекте на Node, через bun без отключения
-   * env-файлов, через bun с ним: knip такую команду не видит.
+   * Копия флоу подключала свой slot.sh; ещё раньше установки передавали команду slot.ts строкой — через node в проекте на
+   * Node, через bun без отключения env-файлов, через bun с ним: knip такую команду не видит.
    */
-  it("обёртка прошлой установки — команда строкой у slot.ts через node или bun — переписывается, команда та же", () => {
+  it("обёртка прошлой установки — slot.sh копии или команда строкой у slot.ts через node или bun — переписывается, команда та же", () => {
     const quoted = `printf '%s' "it's"`;
     writeTree(proj, {
       "package.json": JSON.stringify({
-        scripts: { test: slotString("vitest run", "node"), lint: slotString("eslint .", "bun"), typecheck: slotString(quoted.replaceAll("'", "'\\''")) },
+        scripts: { test: slotString("vitest run", "node"), lint: slotString("eslint .", "bun"), typecheck: slotString(quoted.replaceAll("'", "'\\''")), "test:e2e": copySlot("playwright test") },
       }),
     });
     install();
-    expect(scripts()).toEqual({ test: slot("vitest run"), lint: slot("eslint ."), typecheck: slot(quoted) });
+    expect(scripts()).toEqual({ test: slot("vitest run"), lint: slot("eslint ."), typecheck: slot(quoted), "test:e2e": slot("playwright test") });
   });
 
   /**
-   * Yarn 2+ выполняет скрипты своим shell (`@yarnpkg/shell`): в нём нет `.`, `eval` и `export`, и подключить slot.sh
-   * нечем. Там команда остаётся строкой у slot.ts — knip её не видит, но проверки идут очередью.
+   * Скрипты spec копии флоу шли по её пути (`bun .agents/skills/spec/scripts/<скрипт>.ts`), репортёр knip для `report`
+   * харнесса — тоже; в тонком проекте их даёт пакет: `elves <скрипт>` из node_modules/.bin, репортёр — файлом пакета.
    */
-  it("в проекте на Yarn 2+ команда остаётся строкой у slot.ts: shell Yarn не подключает slot.sh", () => {
+  it("скрипты копии флоу — bun .agents/skills/spec/scripts/<скрипт>.ts — переписываются на elves <скрипт>, репортёр knip — на файл пакета", () => {
+    writeTree(proj, {
+      "package.json": JSON.stringify({
+        scripts: {
+          "spec:doc": "bun --no-env-file .agents/skills/spec/scripts/spec-doc.ts .spec-report.xml --strict",
+          "spec:claims": "bun .agents/skills/spec/scripts/spec-claims.ts --entries tests/entries.ts",
+          "test:spec": copySlot("bun test tests/standards && bun --no-env-file ./.agents/skills/spec/scripts/spec-diff.ts --base origin/main"),
+          knip: "knip --reporter json --reporter .agents/skills/spec/scripts/knip-hints.cjs > .knip.json",
+        },
+      }),
+    });
+    const r = install();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("package.json — the flow copy's scripts through the package (elves <script>): spec:doc, spec:claims, test:spec, knip");
+    expect(scripts()).toEqual({
+      "spec:doc": "elves spec-doc .spec-report.xml --strict",
+      "spec:claims": "elves spec-claims --entries tests/entries.ts",
+      "test:spec": slot("bun test tests/standards && elves spec-diff --base origin/main"),
+      knip: "knip --reporter json --reporter node_modules/@miroshnik/elves/skills/spec/scripts/knip-hints.cjs > .knip.json",
+    });
+  });
+
+  /**
+   * Yarn 2+ выполняет скрипты своим shell (`@yarnpkg/shell`): в нём нет `.`, `eval` и `export`, и подключить шим нечем.
+   * Там команда остаётся строкой у `elves slot` — knip её не видит, но проверки идут очередью.
+   */
+  it("в проекте на Yarn 2+ команда остаётся строкой у elves slot: shell Yarn не подключает шим", () => {
+    const yarnSlot = (cmd: string) => `elves slot '${cmd}'`;
     const markers: [Record<string, string>, string?][] = [[{ ".yarnrc.yml": "nodeLinker: node-modules\n" }], [{}, "yarn@4.9.1"]];
     for (const [files, packageManager] of markers) {
       rmSync(path.join(proj, ".yarnrc.yml"), { force: true });
-      writeTree(proj, { ...files, "package.json": JSON.stringify({ packageManager, scripts: { test: "vitest run", lint: slot("eslint .") } }) });
+      writeTree(proj, { ...files, "package.json": JSON.stringify({ packageManager, scripts: { test: "vitest run", lint: slot("eslint ."), typecheck: slotString("tsc") } }) });
       install();
-      expect(scripts()).toEqual({ test: slotString("vitest run"), lint: slotString("eslint .") });
+      expect(scripts()).toEqual({ test: yarnSlot("vitest run"), lint: yarnSlot("eslint ."), typecheck: yarnSlot("tsc") });
       expect(elves(sb, ["check"]).code).toBe(0);
     }
     writeTree(proj, { "package.json": JSON.stringify({ packageManager: "yarn@1.22.22", scripts: { test: "vitest run" } }) });
@@ -397,7 +466,7 @@ describe("Проверки проекта идут очередью машины
     writeTree(proj, { "package.json": JSON.stringify({ scripts: { lint: scripts().lint, test: slotString("vitest run") } }) });
     const c = elves(sb, ["check"]);
     expect(c.code).toBe(1);
-    expect(c.stdout).toMatch(/~ package\.json — [^\n]*previous install[^\n]*\btest\b/);
+    expect(c.stdout).toMatch(/~ package\.json — [^\n]*previous install — knip doesn't see the command[^\n]*\btest\b/);
     expect(c.stdout).not.toMatch(/~ package\.json — [^\n]*\blint\b/);
     const u = elves(sb, ["update"]);
     expect(u.code).toBe(0);
@@ -441,9 +510,10 @@ describe("Проверки проекта идут очередью машины
     const u = elves(sb, ["update"]);
     expect(u.code).toBe(0);
     expect(scripts().test).toBe(slot("vitest run"));
-    expect(u.stdout).toMatch(/git add [^\n]* package\.json/);
+    expect(u.stdout).toMatch(/\n {2}git add -A -- package\.json [^\n]*&& git commit/);
     expect(elves(sb, ["check"]).code).toBe(0);
   });
+
 
   /**
    * turbo 2 в strict env mode пропускает задачам только переменные, названные в turbo.json: без проброса раннер не
@@ -512,8 +582,57 @@ describe("Проверки проекта идут очередью машины
  * #180 убрал правила с машины только из-за второй копии в проекте.
  */
 describe("На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины", () => {
-  const gone = (p: string) => lstatSync(p, { throwIfNoEntry: false }) === undefined;
   const canon = () => realpathSync(path.join(home, ".agents/elves/AGENTS.md"));
+
+  it("скилл, которого больше нет в Elves, при переустановке удаляется; свой скилл на машине не трогается", () => {
+    mkdirSync(path.join(home, ".claude"));
+    install(["-g"]);
+    const manifest = path.join(home, ".agents/elves.json");
+    const m = JSON.parse(read(manifest));
+    writeFileSync(manifest, JSON.stringify({ ...m, skills: [...m.skills, "old"] }));
+    writeTree(home, { ".agents/skills/old/SKILL.md": "old", ".agents/skills/mine/SKILL.md": "mine" });
+    symlinkSync("../../.agents/skills/old", path.join(home, ".claude/skills/old"));
+    install(["-g"]);
+    expect(existsSync(path.join(home, ".agents/skills/old"))).toBe(false);
+    expect(existsSync(path.join(home, ".claude/skills/old"))).toBe(false);
+    expect(read(path.join(home, ".agents/skills/mine/SKILL.md"))).toBe("mine");
+  });
+
+  it("чужой каталог с именем скилла Elves не перезаписывается — предупреждение", () => {
+    writeTree(home, { ".agents/skills/spec/SKILL.md": "свой spec" });
+    const r = install(["-g"]);
+    expect(read(path.join(home, ".agents/skills/spec/SKILL.md"))).toBe("свой spec");
+    expect(r.stderr).toContain(".agents/skills/spec");
+  });
+
+  it("в ~/.agents/elves.json — SHA Elves, из которого поставлено: у клона — его HEAD", () => {
+    install(["-g"]);
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" }).trim();
+    expect(JSON.parse(read(path.join(home, ".agents/elves.json"))).sha).toBe(head);
+  });
+
+  /**
+   * bunx ставит пакет из GitHub архивом, без `.git`, и в `.bun-tag` оставляет лишь 7 знаков SHA: полный коммит виден
+   * только в спецификаторе, по которому поставлено, — `package.json` каталога bunx рядом с node_modules.
+   */
+  it("из пакета bunx — SHA из спецификатора в package.json каталога bunx", () => {
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const bin = bunxPackage(path.join(tmp, "bunx"), src.dir, sha);
+    expect(elves(sb, ["install", "-g"], { bin }).code).toBe(0);
+    expect(JSON.parse(read(path.join(home, ".agents/elves.json"))).sha).toBe(sha);
+  });
+
+  /**
+   * Пакет называется `@miroshnik/elves` (#556): bun кладёт зависимость по имени пакета — в `node_modules/@miroshnik/elves`,
+   * спецификатор — под полным именем. Не узнай установщик SHA, пакет релиза счёл бы себя пускателем из main и
+   * перезапускался бы снова и снова.
+   */
+  it("из пакета под scope @miroshnik — SHA из спецификатора под полным именем пакета", () => {
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const bin = bunxPackage(path.join(tmp, "bunx"), src.dir, sha, "@miroshnik/elves");
+    expect(elves(sb, ["install", "-g"], { bin }).code).toBe(0);
+    expect(JSON.parse(read(path.join(home, ".agents/elves.json"))).sha).toBe(sha);
+  });
 
   it("install -g ставит канон в ~/.agents/elves и симлинки ~/.claude/rules/elves*.md", () => {
     mkdirSync(path.join(home, ".claude"));
@@ -861,7 +980,7 @@ describe("Мерж своего PR в Claude Code — правило разре�
 });
 
 describe("Неверный вызов — код 2 с объяснением", () => {
-  it("--link без -g — код 2: в проект коммитится копия, не ссылка на локальный клон", () => {
+  it("--link без -g — код 2: проект держит версию пакета, а не ссылку на локальный клон", () => {
     const r = install(["--link"]);
     expect(r.code).toBe(2);
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
