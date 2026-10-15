@@ -202,6 +202,24 @@ describe("Релиз публикуется в npm пакетом @miroshnik/elv
   });
 
   /**
+   * Сборка идёт на машине CI, а работает у проекта: путь машины сборки в ней (`__filename` CommonJS-модуля, который
+   * сборщик заменяет строкой) вёл бы в никуда. Такой модуль pack оставляет файлом рядом со сборкой, а путь, всё же
+   * запечённый в неё, — отказ до публикации.
+   */
+  it("pack с путём машины сборки в сборке — код 2, пакет не публикуется", () => {
+    const pkg = copyPackage(base, path.join(sb.tmp, "package"));
+    const manifest = JSON.parse(read(path.join(pkg.dir, "package.json")));
+    manifest.exports["./spec/where"] = { bun: "./skills/spec/scripts/where.ts", default: "./dist/spec/scripts/where.js" };
+    writeFileSync(path.join(pkg.dir, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
+    writeFileSync(path.join(pkg.dir, "skills/spec/scripts/where.cjs"), "module.exports = __filename;\n");
+    writeFileSync(path.join(pkg.dir, "skills/spec/scripts/where.ts"), 'import where from "./where.cjs";\n\nexport const file: string = where;\n');
+    const r = elves(sb, ["pack", "v2026.10.15"], { bin: pkg.bin, cwd: pkg.dir });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("the build machine's path");
+    expect(JSON.parse(read(path.join(pkg.dir, "package.json"))).version).toBe("0.0.0");
+  });
+
+  /**
    * CI по тегу: `elves pack` ставит версию и собирает модули для Node, `npm publish` публикует с provenance — npm
    * подписывает, из какого прогона пакет. Публикация тега не отменяется: очередь `npm-publish` (стандарт ci-concurrency).
    */

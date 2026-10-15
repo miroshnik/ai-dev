@@ -1872,6 +1872,16 @@ function npmVersion(tag: string): string | null {
   return m ? `${Number(m[1])}.${Number(m[2]) * 100 + Number(m[3])}.${Number(m[4] ?? 0)}` : null;
 }
 
+/**
+ * A CommonJS module that names its own file (`__filename`: the knip reporter's path for `deadCode`) — the bundler would
+ * bake the build machine's path into it, and the package would lead into nowhere. It stays a file of its own
+ * (`--external`), copied next to the chunks that import it: the chunks go to CHUNKS beside it, the import keeps its
+ * `./` path.
+ */
+const OWN_FILE = ["skills/spec/scripts/knip-hints.cjs"];
+/** Where the build's chunks go, from dist/: next to OWN_FILE. */
+const CHUNKS = "spec/scripts";
+
 /** The modules built for Node: each export of package.json whose `default` is the build of its `bun` source. */
 function builtExports(pkg: { exports?: unknown }): { src: string; out: string }[] {
   const entries = pkg.exports && typeof pkg.exports === "object" ? Object.values(pkg.exports) : [];
@@ -1885,8 +1895,9 @@ function builtExports(pkg: { exports?: unknown }): { src: string; out: string }[
  * the JS (`default`), Bun and the type checker — the TypeScript source (`bun`, `types`). One build with shared chunks:
  * the modules share the language module and the TypeScript parser. A built module is a project's import, never the entry
  * point: `import.meta.main` is false — Bun's build for Node turns it into `require.main == require.module`, true under
- * Node's ESM, and `github` would run its command line on import. `npm publish` is the workflow's next step. The build
- * fails — package.json stays as it was.
+ * Node's ESM, and `github` would run its command line on import. The build runs on CI and works at a project: a path of
+ * the build machine in it (OWN_FILE) is a refusal. `npm publish` is the workflow's next step. The build fails —
+ * package.json stays as it was.
  */
 function pack(tag: string | undefined): number {
   const version = tag === undefined ? null : npmVersion(tag);
@@ -1895,13 +1906,18 @@ function pack(tag: string | undefined): number {
   const file = path.join(SRC, "package.json");
   const pkg = JSON.parse(readFileSync(file, "utf8"));
   const entries = builtExports(pkg);
+  const skills = path.join(SRC, "skills");
   const dist = path.join(SRC, "dist");
   rmSync(dist, { recursive: true, force: true });
-  const args = ["--target=node", "--format=esm", "--splitting", "--define", "import.meta.main=false", `--root=${path.join(SRC, "skills")}`, `--outdir=${dist}`];
+  const own = OWN_FILE.map((rel) => ({ from: path.join(SRC, rel), to: path.join(dist, path.relative(skills, path.join(SRC, rel))) }));
+  const args = ["--target=node", "--format=esm", "--splitting", "--define", "import.meta.main=false", `--root=${skills}`, `--outdir=${dist}`, `--chunk-naming=${CHUNKS}/[name]-[hash].[ext]`, ...own.flatMap((o) => ["--external", `*${path.basename(o.from)}`])];
   const r = spawnSync(process.execPath, ["--no-env-file", "build", ...args, ...entries.map((e) => path.join(SRC, e.src))], { encoding: "utf8" });
   if (r.error || r.status !== 0) return warn(`pack: bun build — ${r.error?.message ?? (r.stderr || r.stdout).trim().split("\n").slice(-3).join("; ")}`), 2;
+  for (const o of own) cpSync(o.from, o.to);
   const missing = entries.filter((e) => !existsSync(path.join(SRC, e.out)));
   if (missing.length) return warn(`pack: the build has no ${missing.map((e) => e.out).join(", ")} — exports of package.json lead past it`), 2;
+  const baked = [...walk(dist).entries()].filter(([, file]) => readFileSync(file, "utf8").includes(SRC)).map(([rel]) => `dist/${rel}`);
+  if (baked.length) return warn(`pack: ${baked.join(", ")} — the build machine's path ${SRC} is baked in: the package would lead into nowhere`), 2;
   writeFileSync(file, JSON.stringify({ ...pkg, version }, null, 2) + "\n");
   note(`${PACKAGE}@${version} — release ${tag}: dist/ ← ${entries.map((e) => e.src).join(", ")}; next: npm publish`);
   return 0;
