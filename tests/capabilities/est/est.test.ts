@@ -1586,6 +1586,8 @@ if (fail) {
   process.exit(1);
 }
 const world = JSON.parse(readFileSync(dir + "/world.json", "utf8"));
+// имя репозитория, как его знает GitHub: прежнее имя переименованного (formerly) — его нынешнее, чужое — undefined
+const current = (full) => (world[full] ? full : Object.keys(world).find((k) => (world[k].formerly ?? []).includes(full)));
 const print = (x) => console.log(JSON.stringify(x));
 const num = (name, number) => ({ __typename: "ProjectV2ItemFieldNumberValue", number, field: { name } });
 const factMarker = (i) => "<!-- fact " + JSON.stringify({ v: 1, h: i.fact, cov: i.cov ?? "full", tok: { total: 2000000 }, usd: 1.5, type: i.type ?? "fix", ...(i.models ? { models: i.models } : {}) }) + " -->";
@@ -1595,7 +1597,7 @@ const issueOf = (i) => ({ __typename: "Issue", id: "I_" + i.number, number: i.nu
   comments: { nodes: [...(i.est ? [{ databaseId: 1000 + i.number, body: estMarker(i) }] : []), ...(i.fact ? [{ databaseId: i.number, body: factMarker(i) }] : [])] } });
 if (args[1] === "graphql") {
   const { query, variables: v } = JSON.parse(stdin);
-  const repo = world[v.o + "/" + v.r];
+  const repo = world[current(v.o + "/" + v.r)];
   const byProject = (pred) => Object.values(world).find((r) => pred(r.project));
   if (/^\\s*mutation/.test(query)) print({ data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: v.i } } } });
   else if (query.includes("projectsV2(first:5)")) print({ data: { repository: { projectsV2: { nodes: [{ number: repo.project, title: "p", owner: { login: v.o } }] } } } });
@@ -1621,8 +1623,13 @@ if (args[1] === "graphql") {
   } else { console.error("fake gh: " + query.slice(0, 80)); process.exit(1); }
 } else if (args[0] === "api" && args[1] === "-X") {
   const [, owner, name] = /^repos\\/([^/]+)\\/([^/]+)/.exec(args[3]);
-  if (args[2] === "GET" && args[3] === "repos/" + owner + "/" + name) print({ visibility: world[owner + "/" + name].visibility });
-  else print({});
+  const full = current(owner + "/" + name);
+  // запись по прежнему имени GitHub перенаправляет, а gh не повторяет не-GET по редиректу
+  if (args[2] !== "GET" && full && full !== owner + "/" + name) { console.error("gh: HTTP 307"); process.exit(1); }
+  if (args[2] === "GET" && args[3] === "repos/" + owner + "/" + name) {
+    if (!full) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }
+    print({ full_name: full, visibility: world[full].visibility });
+  } else print({});
 } else { console.error("fake gh: " + args.join(" ")); process.exit(1); }
 `;
 
@@ -1821,6 +1828,27 @@ describe("Оценка — один вызов: est estimate без --analogs", 
     expect(r.writes).toEqual([]);
     const vars = r.calls.filter((c) => c.args[1] === "graphql").map((c) => JSON.parse(c.stdin).variables ?? {});
     expect(vars.filter((v) => v.r === "old" || v.id === "P2")).toEqual([]);
+  });
+});
+
+/**
+ * Репозиторий переименовали (#560): GitHub отвечает на прежнее имя нынешним — чтения по прежнему имени проходят, а запись
+ * (`gh api -X POST|PATCH`) получает редирект 307, который gh для не-GET не повторяет. `est estimate --write` по прежнему
+ * имени падал на записи комментария: задача оставалась без оценки. est берёт нынешнее имя у GitHub и пишет под ним.
+ */
+describe("Переименованный репозиторий — est работает под его нынешним именем", () => {
+  const WORLD = {
+    "o/r": { visibility: "private", project: 1, formerly: ["o/old"], issues: [{ number: 1, title: "Прошлая задача", state: "CLOSED", fact: 0.5 }, { number: 2, title: "Ещё прошлая", state: "CLOSED", fact: 1 }, { number: 10, title: "Новая задача", state: "OPEN" }] },
+  };
+
+  it("est estimate --write по старому имени переименованного репозитория записывает оценку — под нынешним именем", () => {
+    const r = withFakeGh(WORLD, ["estimate", "10", "--repo", "o/old", "--type", "fix", "--analogs", "1,2", "--write"]);
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("== o/r#10: Новая задача");
+    expect(r.comment).toStartWith("Оценка: 0.5 ч");
+    expect(r.writes.filter((c) => c.args[0] === "api" && c.args[1] === "-X").map((c) => c.args.slice(2, 4))).toEqual([["POST", "repos/o/r/issues/10/comments"]]);
+    expect(r.writes).toHaveLength(2); // комментарий и поле «Оценка, ч»
   });
 });
 

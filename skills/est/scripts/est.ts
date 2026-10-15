@@ -441,6 +441,37 @@ export function resolveRepo(arg?: string): string {
   return repo;
 }
 
+/** `repos/<owner>/<repo>` once per run, by any of its names: a GET by a renamed repository's former name follows the rename. */
+const repoInfos = new Map<string, Any>();
+function repoInfo(full: string): Any {
+  const key = full.toLowerCase();
+  if (!repoInfos.has(key)) {
+    const info = ghRest(`repos/${full}`);
+    repoInfos.set(key, info);
+    if (typeof info?.full_name === "string") repoInfos.set(info.full_name.toLowerCase(), info);
+  }
+  return repoInfos.get(key);
+}
+
+/**
+ * The repository's current name (#560): GitHub answers a renamed repository's former name with it. Reads by the former
+ * name work, but a write (`gh api -X POST|PATCH`) gets HTTP 307, which gh doesn't repeat for a non-GET, and the registry
+ * knows the repository by its current name. No such repository or no access — the name as given: the reads after it say
+ * so; the network — an error, as for any other call.
+ */
+function canonicalRepo(full: string): string {
+  try {
+    const name = repoInfo(full)?.full_name;
+    return typeof name === "string" && name ? name : full;
+  } catch (e) {
+    if (e instanceof NetworkError || !(e instanceof EstError)) throw e;
+    return full;
+  }
+}
+
+/** The repository of a command: `--repo` or the checkout's origin, under its current name. */
+const repoOf = (arg?: string): string => canonicalRepo(resolveRepo(arg));
+
 // ----------------------------------------------------------------------------
 // Cache data types (compatible with est.py)
 // ----------------------------------------------------------------------------
@@ -3518,7 +3549,7 @@ interface HistoryArgs {
 function cmdHistory(args: HistoryArgs): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
   const registry = loadRegistry();
-  const repos = args.allRepos ? Object.keys(registry) : [resolveRepo(args.repo)];
+  const repos = args.allRepos ? Object.keys(registry) : [repoOf(args.repo)];
   const now = nowTs();
   const summary: [string, number, number | null, Calib][] = [];
   for (const full of repos) {
@@ -3852,7 +3883,7 @@ function cmdFact(args: FactArgs): number {
     );
     return 0;
   }
-  const repo = new Repo(resolveRepo(args.repo), registry);
+  const repo = new Repo(repoOf(args.repo), registry);
   const meta = repo.projectMeta();
   if (args.sweep) {
     const since = parseSince(args.since);
@@ -4006,7 +4037,7 @@ export function forecast(facts: number[], toks: number[], usds: number[], mult: 
   return { raw, h: roundScale(raw), tok: toks.length ? median(toks) * tokMult : null, usd: usds.length ? median(usds) * tokMult : null };
 }
 
-const isPublic = (full: string): boolean => ghRest(`repos/${full}`)?.visibility === "public";
+const isPublic = (full: string): boolean => repoInfo(full)?.visibility === "public";
 
 /**
  * Analogs from non-public repos that the estimate would name in a public one: the "Estimate" comment writes them as
@@ -4154,7 +4185,7 @@ function cmdEstimate(args: EstimateArgs): void {
   if (args.tokMult !== undefined && !TOK_MULTS.includes(args.tokMult)) throw new EstError("--tok-mult allows only 0.5, 1, 1.5, 2 or 3");
   const tokMult = args.tokMult ?? args.mult;
   const auto = !args.analogs.trim() && args.hours === undefined; // neither --analogs nor --hours — the script picks analogs
-  const repo = new Repo(resolveRepo(args.repo), registry);
+  const repo = new Repo(repoOf(args.repo), registry);
   // analogs: an issue number of this repo (254) or a task of another registry repo (owner/repo#254)
   const analogs: (number | string)[] = []; // number — this repo; "owner/repo#N" — another one
   for (let a of args.analogs.split(",")) {
@@ -4399,7 +4430,7 @@ export function backtest(rows: Row[]): Backtest {
 function cmdBacktest(args: { repo?: string; allRepos: boolean }): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
   const registry = loadRegistry();
-  const repos = args.allRepos ? Object.keys(registry) : [resolveRepo(args.repo)];
+  const repos = args.allRepos ? Object.keys(registry) : [repoOf(args.repo)];
   const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)} %`);
   const line = (name: string, l: BacktestLine) => `  ${pad(name, 30)} within tolerance ${pct(l.share)}, k=${l.k ?? "—"}`;
   for (const full of repos) {
@@ -4632,7 +4663,7 @@ interface PeriodArgs {
 
 function cmdPeriod(args: PeriodArgs): void {
   if (isCloud()) throw new EstError(CLOUD_ERR);
-  const repo = new Repo(resolveRepo(args.repo), loadRegistry());
+  const repo = new Repo(repoOf(args.repo), loadRegistry());
   const sessions = repo.periodSessions();
   const prs = [...repo.prs().values()];
   console.log(`== ${repo.full}: all of the repository's sessions over the period, without linking to tasks`);
