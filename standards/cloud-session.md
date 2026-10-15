@@ -10,7 +10,7 @@
 
 <details><summary>✅ 1 тест</summary>
 
-- ✅ скрипты скиллов ai-dev, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md
+- ✅ скрипты скиллов Elves, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md
 
 </details>
 

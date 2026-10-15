@@ -19,7 +19,7 @@ preload действует только на первый файл прогон�
 
 <details><summary>✅ 43 теста</summary>
 
-- ✅ реестр «тесты ai-dev, которые запускают процессы» не пуст
+- ✅ реестр «тесты Elves, которые запускают процессы» не пуст
 - ✅ нарушитель не проходит: файл с node:child_process без таймаута
 - ✅ tests/capabilities/agent-shell/agent-shell.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
 - ✅ tests/capabilities/ci-wait/ci-wait.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)
