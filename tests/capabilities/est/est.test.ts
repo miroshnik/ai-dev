@@ -1672,7 +1672,7 @@ function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeF
   const log = path.join(bin, "calls.jsonl");
   writeFileSync(log, "");
   writeFileSync(path.join(bin, "fails.json"), JSON.stringify(fails));
-  const env = { ...process.env, HOME: dir, ELVES_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, AI_DEV_GH_RETRY_MS: "0,0,0" };
+  const env = { ...process.env, HOME: dir, ELVES_CONFIG_DIR: cfg, CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, ELVES_GH_RETRY_MS: "0,0,0" };
   const r = spawnSync("bun", [EST, ...args], { encoding: "utf8", env, cwd });
   const calls: { args: string[]; stdin: string }[] = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const writes = calls.filter((c) => c.args.includes("POST") || c.args.includes("PATCH") || /^\s*mutation/.test(c.args[1] === "graphql" ? JSON.parse(c.stdin).query : ""));

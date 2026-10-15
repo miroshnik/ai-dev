@@ -113,7 +113,7 @@ describe("Команда dashboard сервит страницу сама и о�
     cleanup();
   });
 
-  const env = (extra: Record<string, string> = {}) => ({ ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, BROWSER: path.join(bin, "browser"), AI_DEV_PROXY: PROXY_NAME, AI_DEV_PROXY_PORT: String(proxyApi.port), ...extra });
+  const env = (extra: Record<string, string> = {}) => ({ ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "", PATH: `${bin}:${process.env.PATH}`, FAKE_GH: bin, BROWSER: path.join(bin, "browser"), ELVES_PROXY: PROXY_NAME, ELVES_PROXY_PORT: String(proxyApi.port), ...extra });
   const itemsReads = () => readFileSync(path.join(bin, "calls.jsonl"), "utf8").split("\n").filter((l) => l.includes("node(id:$id)")).length;
   const opened = () => (existsSync(path.join(bin, "opened")) ? readFileSync(path.join(bin, "opened"), "utf8").trim() : null);
   const sync = (args: string[], extra: Record<string, string> = {}) => spawnSync("bun", [DASHBOARD, ...args], { encoding: "utf8", env: env(extra) });
@@ -202,7 +202,7 @@ describe("Команда dashboard сервит страницу сама и о�
     const bad = await fetch(new URL("/est", d.url));
     expect(bad.status).toBe(502);
     expect(await bad.text()).toContain("HTTP 502: Bad Gateway");
-    // сбой сети повторяется без настоящих пауз: прогон задаёт AI_DEV_GH_RETRY_MS (tests/standards/fast-tests)
+    // сбой сети повторяется без настоящих пауз: прогон задаёт ELVES_GH_RETRY_MS (tests/standards/fast-tests)
     expect(d.stderr()).toContain("network failure, retry in 0 s");
     // неверный период в адресе — ошибка запроса, а не GitHub
     const period = await fetch(new URL("/est?since=вчера", d.url));

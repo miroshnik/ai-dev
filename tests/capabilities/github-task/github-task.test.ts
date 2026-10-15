@@ -35,7 +35,7 @@ afterAll(outsideGit);
 function task(f: FakeGitHub, args: string[], repo = REPO, io: Partial<Io> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), sleep: () => void pauses++, run: silentEst, ...io, env: { AI_DEV_EST: OUTSIDE_EST, ...io.env } });
+  const code = main(["task", ...args, "--repo", repo], { gh: f.gh, out: (l) => out.push(l), err: (l) => err.push(l), sleep: () => void pauses++, run: silentEst, ...io, env: { ELVES_EST: OUTSIDE_EST, ...io.env } });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const byOp = (f: FakeGitHub, op: string) => f.mutations.filter((m) => m.op === op).map((m) => m.input);
@@ -264,7 +264,7 @@ describe("task new ставит оценку сам — по аналогам, �
   it("est не установлен рядом — задача заведена, «○ no estimate: est is not installed», код 0", () => {
     const f = new FakeGitHub(REC);
     const calls: string[][] = [];
-    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est(calls), env: { AI_DEV_EST: "/nowhere/est.ts" } });
+    const r = task(f, ["new", "--title", "Экспорт", "--branch-type", "feat"], REPO, { run: est(calls), env: { ELVES_EST: "/nowhere/est.ts" } });
     expect(r.code).toBe(0);
     expect(calls).toEqual([]);
     expect(r.out).toContain("○ no estimate: est is not installed (/nowhere/est.ts)");
@@ -827,7 +827,7 @@ describe("task status берёт в работу одну задачу на се
     expect(existsSync(pinFile(former, "other-session"))).toBe(false);
   });
 
-  // каталог конфигурации бывает симлинком на личный чекаут (AI_DEV_PRIVATE при install -g)
+  // каталог конфигурации бывает симлинком на личный чекаут (ELVES_PRIVATE при install -g)
   it("каталог конфигурации — чекаут git: закрепления в него не коммитятся — sessions/ закрыт своим .gitignore", () => {
     const f = new FakeGitHub(REC);
     const config = scratch();
@@ -1579,7 +1579,7 @@ describe("task close закрывает задачу одной командой
     const f = new FakeGitHub(REC);
     mergedPr(f, 49);
     const calls: string[][] = [];
-    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls), env: { AI_DEV_EST: "/nowhere/est.ts" } });
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run: est(calls), env: { ELVES_EST: "/nowhere/est.ts" } });
     expect(r.code).toBe(0);
     expect(calls).toEqual([]);
     expect(r.out).toContain("○ actual unavailable: est is not installed");
@@ -1909,7 +1909,7 @@ describe("task close снимает стеки задачи", () => {
   });
 
   it("task-env не установлен рядом — строка ○, остальное сделано", () => {
-    const r = close([], { status: 0, stdout: DOWN }, { AI_DEV_TASK_ENV: "/nowhere/task-env.ts" });
+    const r = close([], { status: 0, stdout: DOWN }, { ELVES_TASK_ENV: "/nowhere/task-env.ts" });
     expect(r.code).toBe(0);
     expect(r.calls).toEqual([]);
     expect(r.out).toContain("○ task stacks: task-env is not installed (/nowhere/task-env.ts)");
@@ -1954,7 +1954,7 @@ describe("task close подтягивает клон скриптов до вл�
     });
     const f = new FakeGitHub(REC);
     f.prs[77] = { files: [], closes: [49], head: "fix/49-x", base: "main", model: null, merged: true };
-    const r = task(f, ["close", "49", "--no-git"], REPO, { run, env: { AI_DEV_EST: path.join(clone, EST) } });
+    const r = task(f, ["close", "49", "--no-git"], REPO, { run, env: { ELVES_EST: path.join(clone, EST) } });
     return { ...r, codes, f };
   }
 

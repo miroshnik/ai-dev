@@ -133,9 +133,9 @@ describe("Локальный test — быстрый уровень: тесты 
   });
 
   /** Паузы — 2, 5 и 15 с на каждый сбой: тест ошибки GitHub в dashboard ждал их 44 с из 45. */
-  it("скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт AI_DEV_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют", () => {
-    expect(process.env.AI_DEV_GH_RETRY_MS).toBe("0,0,0");
-    const child = spawnSync(process.execPath, ["-e", "console.log(process.env.AI_DEV_GH_RETRY_MS)"], { encoding: "utf8" });
+  it("скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт ELVES_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют", () => {
+    expect(process.env.ELVES_GH_RETRY_MS).toBe("0,0,0");
+    const child = spawnSync(process.execPath, ["-e", "console.log(process.env.ELVES_GH_RETRY_MS)"], { encoding: "utf8" });
     expect(exitOf(child)).toBe(0);
     expect(child.stdout.trim()).toBe("0,0,0");
   });
