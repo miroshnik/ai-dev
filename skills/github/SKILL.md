@@ -32,7 +32,8 @@ bun --no-env-file <skill dir>/scripts/github.ts project check [--repo owner/repo
 bun --no-env-file <skill dir>/scripts/github.ts project fix [--repo owner/repo] [--confirm] [--template owner/N | none]
 ```
 
-The repository — from `git remote get-url origin` or `--repo`. Needs `gh` with
+The repository — from `git remote get-url origin` or `--repo`, under its
+current name: a renamed repository's former name resolves to it. Needs `gh` with
 the `project` scope (`gh auth refresh -s project`); the organization's issue
 types — `admin:org`.
 

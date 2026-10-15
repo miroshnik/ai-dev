@@ -74,6 +74,11 @@ export class FakeGitHub {
     merged: Array.from({ length: 12 }, (_, i) => ({ number: 120 + i, checks: { tests: "SUCCESS", "spec-publish": "SKIPPED" } as Record<string, string> })),
     open: [] as { number: number; checks: Record<string, string> }[],
   };
+  /**
+   * Прежние имена репозитория (`owner/name`) — его переименовали: GitHub отвечает на прежнее имя нынешним (RepoName), и
+   * чтения GraphQL по прежнему имени проходят, как по нынешнему.
+   */
+  formerNames: string[] = [];
   private seq = 0;
 
   constructor(recording: Recording) {
@@ -94,6 +99,14 @@ export class FakeGitHub {
     if (args[0] !== "api" || args[1] !== "graphql") throw new Error(`fake gh: неожиданный вызов gh ${args.join(" ")}`);
     const { query, variables } = JSON.parse(stdin ?? "{}");
     const { kind, op } = opOf(query);
+    // прежнее имя переименованного репозитория GitHub разрешает в нынешнее
+    const asked = `${variables?.owner}/${variables?.name}`;
+    if (this.formerNames.some((n) => n.toLowerCase() === asked.toLowerCase())) [variables.owner, variables.name] = this.repo.nameWithOwner.split("/");
+    if (op === "RepoName") {
+      const full = `${variables.owner}/${variables.name}`;
+      if (full.toLowerCase() !== this.repo.nameWithOwner.toLowerCase()) return JSON.stringify({ data: { repository: null }, errors: [{ type: "NOT_FOUND", message: `Could not resolve to a Repository with the name '${full}'.` }] });
+      return JSON.stringify({ data: { repository: { nameWithOwner: this.repo.nameWithOwner } } });
+    }
     if (kind === "mutation") {
       this.mutations.push({ op, input: variables.input });
       if (this.failing[op]) return JSON.stringify({ data: null, errors: [{ message: this.failing[op] }] });
