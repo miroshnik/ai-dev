@@ -714,12 +714,35 @@ describe("Закреплённая сессия целиком — задаче 
 
   it("сессия с файлом закрепления целиком относится к задаче из файла, даже если в её выводах хеши и ветки чужих задач", () => {
     const f42 = fact(session(), 42, pinTo("o/r#42"));
-    expect(f42.h).toBe(0.33); // 10:00–10:20, с субагентом
-    expect(f42.details[0]!.rules).toEqual({ pin: 7 });
-    expect(f42.agents).toBe(1);
+    expect(f42.h).toBe(0.33); // 10:00–10:20
+    expect(f42.details[0]!.rules).toEqual({ pin: 5 });
+    expect(f42.agents).toBe(0);
+    // название, первый промпт, коммит, PR и ветка #7 время сессии у #42 не забирают — только исполнитель #7 (ниже)
     const f7 = fact(session(), 7, pinTo("o/r#42"));
-    expect(f7.h).toBeNull();
-    expect(f7.cov).toBe("none");
+    expect(f7.details.map((d) => d.rules)).toEqual([{ subagent: 2 }]);
+  });
+
+  /**
+   * Сессия с задачей на «да» владельца ставит другую задачу в очередь — запускает исполнителя фоновым субагентом (#546).
+   * Субагент делит id сессии, а значит, и её закрепление: целиком — задаче сессии, он отдал бы свою работу ей. Его
+   * задание начинается с «Задача #N» — по нему его записи идут задаче N, а у закреплённой задачи их нет.
+   */
+  it("субагент закреплённой сессии с заданием «Задача #N» — исполнитель задачи N: его записи — ей, а не задаче закрепления", () => {
+    const file = path.join(dir, SID + ".jsonl");
+    writeFileSync(file, jsonl([prompt("10:00", "feat/42-export", "#42"), work("10:10", "feat/42-export"), work("10:40", "feat/42-export")]));
+    mkdirSync(path.join(dir, SID, "subagents"), { recursive: true });
+    const executor = (hhmm: string, text: string) => ({ ...prompt(hhmm, "feat/51-import", text), origin: undefined });
+    writeFileSync(path.join(dir, SID, "subagents", "agent-1.jsonl"), jsonl([executor("10:05", "Задача #51 в o/r: ты исполнитель сессии-диспетчера."), work("10:15", "feat/51-import"), work("10:25", "feat/51-import")]));
+    const s = parseSessionFile(file);
+    const f42 = computeFact(stubRepo([s], [], {}, new Map(), pinTo("o/r#42")), 42, [], []);
+    expect(f42.h).toBe(0.67); // 10:00–10:40 — без исполнителя
+    expect(f42.agents).toBe(0);
+    const f51 = computeFact(stubRepo([s], [], {}, new Map(), pinTo("o/r#42")), 51, [], []);
+    expect(f51.h).toBe(0.33); // 10:05–10:25
+    expect(f51.agents).toBe(1);
+    expect(f51.details[0]!.rules).toEqual({ subagent: 3 });
+    // задача, которой в сессии нет ни исполнителя, ни закрепления, — не её
+    expect(computeFact(stubRepo([s], [], {}, new Map(), pinTo("o/r#42")), 60, [], []).cov).toBe("none");
   });
 
   it("закреплённая сессия не достаётся другой задаче по `#N` в названии или в первом промпте", () => {

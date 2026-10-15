@@ -95,7 +95,10 @@ The script finds the task's sessions. First — by pinning: the session in which
 `~/.config/ai-dev/sessions/<session id>` with the line `owner/repo#N`), all of it
 — with its subagents (they have the same id) and the time before In progress; the
 transcript is looked up by id in any folder of `~/.claude/projects`. A session
-pinned to another task doesn't go to this one, whatever features it has. Sessions
+pinned to another task doesn't go to this one, whatever features it has — but
+a subagent whose assignment names a task («Task #N») does: an executor the
+session queued on the owner's "yes" (#546), its records go to task N, not to
+the pin. Sessions
 without pinning (before it, cloud, Codex, an epic's session, the file deleted) —
 by features: the PR's commit hashes in tool outputs, `pr-link` records of its
 repository, a branch with the task number, `#N` in the session's name and first

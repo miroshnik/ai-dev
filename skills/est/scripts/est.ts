@@ -2671,9 +2671,13 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     // A pinned session (github task status) goes whole to the task from the pin, with subagents (they have the same id)
     // and with the time before "In progress": it doesn't need the features below, foreign hashes, branches and numbers
     // in its outputs don't take the time away. Pinned to another task — not ours, whatever features of this one it
-    // has. Without a pin — features.
+    // has. Without a pin — features. Except a subagent whose assignment names a task (the hint): an executor the
+    // session queued (#546) — its records go to that task, not to the pin.
     const pin = pins.get(s.sid);
-    if (pin !== undefined && pin.toLowerCase() !== ourKey.toLowerCase()) continue;
+    const ourHint = (h: string) => h === String(number) || h === ourKey;
+    const hintOf = (e: Any[]): string => (e.length > 3 ? e[3] : "");
+    const pinnedElsewhere = pin !== undefined && pin.toLowerCase() !== ourKey.toLowerCase();
+    if (pinnedElsewhere && !ev.some((e) => ourHint(hintOf(e)))) continue;
     const pinned = pin !== undefined;
     // A guest is a transcript from another repository's directory: task numbers and branches there are its own. Its
     // branch is ours only if it's exactly our PR's branch; foreign — only if it's the branch of a foreign PR of our
@@ -2800,14 +2804,17 @@ export function computeFact(repo: FactRepo, number: number, prObjs: PR[], closer
     const weak: string[] = []; // weak link rule ("title" / "prompt") or ""
     const rules: Record<string, number> = {};
     for (const e of ev) {
+      const hint = hintOf(e);
       if (pinned) {
-        attributed.push(1.0);
+        // pinned here — all but an executor of another task; pinned elsewhere — only an executor of ours
+        const ours = pinnedElsewhere ? ourHint(hint) : !hint || ourHint(hint);
+        attributed.push(ours ? 1.0 : 0.0);
         weak.push("");
-        rules["pin"] = (rules["pin"] ?? 0) + 1;
+        const rule = pinnedElsewhere ? "subagent" : "pin";
+        if (ours) rules[rule] = (rules[rule] ?? 0) + 1;
         continue;
       }
       const [ts, b] = [e[0] as number, e[1] as string];
-      const hint: string = e.length > 3 ? e[3] : "";
       let w = 0.0;
       let weakRule = "";
       if (hint) {
