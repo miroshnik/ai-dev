@@ -33,7 +33,7 @@ The skill dir is the one this file is in (in Claude Code —
 with the `project` scope, as for `est`. A task's session is found by the pin
 file written by `github task status <N> "In progress"` (in the project
 language — `locales/<language>.json` of the `github` skill)
-(`~/.config/ai-dev/sessions/<session id>` or in `$AI_DEV_CONFIG_DIR`), its
+(`~/.config/elves/sessions/<session id>` or in `$ELVES_CONFIG_DIR`), its
 state — by the transcript `~/.claude/projects/<dir>/<id>.jsonl`, the addresses
 of its services — by the routes of the `task-env` proxy (its script next to
 it, `../task-env/scripts/task-env.ts`). The dashboard
@@ -63,7 +63,7 @@ call: a regular one won't return until the timeout.
 | Parameter | What it does |
 |---|---|
 | `--repo o/r` | repository; by default — from the directory's `git remote origin` |
-| `--all-repos` | all repositories in the personal `est` registry (`~/.config/ai-dev/repos.json`); each task names its repository |
+| `--all-repos` | all repositories in the personal `est` registry (`~/.config/elves/repos.json`); each task names its repository |
 | `--since 90d` | default period of «Estimate and actual» (`d`, `w`, `m`); without it — all time. On the page — «30 days», «90 days», «all time» |
 | `--port N` | port; by default — a free one, a busy one is an error; none can be opened (an agent's sandbox) — an error too, see the pitfalls below |
 | `--no-open` | don't open the browser |

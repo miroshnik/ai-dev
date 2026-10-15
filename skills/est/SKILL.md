@@ -155,7 +155,7 @@ in a claude.ai tab — it saves `<session>.json` to downloads (the download — 
 the user's permission: file name, source, size); then
 
 ```bash
-est cloud-import ~/Downloads/session_….json   # → ~/.config/ai-dev/cloud/<owner>/<repo>/
+est cloud-import ~/Downloads/session_….json   # → ~/.config/elves/cloud/<owner>/<repo>/
 est fact <N> --write
 ```
 

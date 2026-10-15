@@ -9,8 +9,9 @@ linking details. What to run and when — `SKILL.md`; syntax and flags —
 ## Repository registry
 
 The repository registry (which ones exist, where they live locally, the project
-number) is a personal file `~/.config/ai-dev/repos.json` (or
-`$AI_DEV_CONFIG_DIR/repos.json`; the old `~/.claude/est` moves by itself), not
+number) is a personal file `~/.config/elves/repos.json` (or
+`$ELVES_CONFIG_DIR/repos.json`; the old `~/.claude/est` moves by itself; until
+`update -g` moves it, the former `~/.config/ai-dev`), not
 part of the skill; the format is described at the top of `est.ts`. Without a
 registry entry the script determines the repo from `git remote origin`, and the
 project from its link to the repository.
@@ -92,7 +93,7 @@ mechanics lands within tolerance as often as manual picking.
 
 The script finds the task's sessions. First — by pinning: the session in which
 `github task status` set the task to In progress (the file
-`~/.config/ai-dev/sessions/<session id>` with the line `owner/repo#N`), all of it
+`~/.config/elves/sessions/<session id>` with the line `owner/repo#N`), all of it
 — with its subagents (they have the same id) and the time before In progress; the
 transcript is looked up by id in any folder of `~/.claude/projects`. A session
 pinned to another task doesn't go to this one, whatever features it has — but
@@ -198,7 +199,7 @@ models. The price key is the model id without the date: a date in the id
 different continuation of the name is a different version (`claude-opus-5-5`
 with the key `claude-opus-5`), and the previous version's rate doesn't carry
 over to it. A new model or your own prices — in the personal
-`~/.config/ai-dev/prices.json`: `{"<model id>": [input, output, cache_read]}`; a
+`~/.config/elves/prices.json`: `{"<model id>": [input, output, cache_read]}`; a
 model outside the price list gives tokens without a price, and the comment marks
 that. Actuals recorded before a rate was fixed are recomputed by
 `est fact --sweep --model <id> --write`: closed tasks in the `--since` window
