@@ -163,7 +163,7 @@ export interface Io {
   /** A subprocess (`est`, `git` of `task close`) — an external edge: replaced in tests. */
   run?: (cmd: string, args: string[], cwd?: string) => RunResult;
   /**
-   * The project checkout: its language (`.agents/ai-dev.json`) is the language of names, `task close` runs its git
+   * The project checkout: its language (`.agents/elves.json`) is the language of names, `task close` runs its git
    * steps in it; the current directory by default.
    */
   cwd?: string;
@@ -881,7 +881,7 @@ export function labelKinds(description: string | null | undefined): DecisionKind
 /**
  * A slice label is marked by its description `<slice marker> <slice>[ — note]` (the marker is `labelMarkers.slice` of
  * any dictionary language): a slice of the project's tasks (apps, teams), not a decision, though its name may match a
- * model module. The slice lives with the label, not in `.agents/ai-dev.json`: `install` and `update` rewrite the
+ * model module. The slice lives with the label, not in `.agents/elves.json`: `install` and `update` rewrite the
  * install manifest, and `check` reads everything through the API.
  */
 function labelDimension(description: string | null | undefined): string | null {
@@ -3555,7 +3555,7 @@ Examples:
   "task status": `github task status <N> <Backlog|In progress|Done> [--branch <type>/<N>-<slug>] [--repo owner/repo]
 
 Status in the project (and the epic's In progress once its first subtask is taken). In progress pins the task to the
-session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): another task in the same session — a refusal
+session (file sessions/<CLAUDE_CODE_SESSION_ID> in ~/.config/elves): another task in the same session — a refusal
 (code 2) with the question to the owner whether to queue it and its executor's prompt; a task handed out to an
 executor of this session (task queue --assignment) isn't pinned; a human removes the pin. --branch — the worktree
 tool's branch becomes the task branch (git branch -m with its .git/config section); a .git/config locked by another
@@ -3598,7 +3598,7 @@ The dispatcher session's queue: ready tasks (open, not an epic, not in work, no 
 too —, no external blocker label) by Priority, then number, each with its executor's prompt; the rest — in work (=: In
 progress, an open PR with its link, handed out to an executor of this session) and ○ lines with the reason (the
 label's — from the latest «External blocker: …» comment). Marks the session as a dispatcher
-(dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/ai-dev): task status in it doesn't pin — the executors are subagents
+(dispatchers/<CLAUDE_CODE_SESSION_ID> in ~/.config/elves): task status in it doesn't pin — the executors are subagents
 with the session's id; a session with a pinned task keeps it. Before the queue, in the repository's checkout —
 finished agents' worktrees (.claude/worktrees/agent-*, detached or on worktree-agent-*, not locked by a live process,
 not an executor's whose handed-out task is open): clean and merged (git cherry) — removed with the branch (+),

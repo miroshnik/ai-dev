@@ -272,7 +272,7 @@ task (epic planning, an investigation) ends the same way — by what it was
 assigned.
 
 **In auto mode the session archives itself at the end.** A project with
-`"auto": true` in `.agents/ai-dev.json` runs the task entirely without asking,
+`"auto": true` in `.agents/elves.json` runs the task entirely without asking,
 and closing the session is the last step left to a human: after the line
 `All done. The session can be closed.` the session archives itself — as its
 last action, after which the conversation ends. After the other two lines and
@@ -298,9 +298,10 @@ board.
 Names of views, `Status` options, fields, issue types and label markers here
 and below are the `en` ones (in the project language — `locales/<language>.json`
 of the `github` skill). The project language — `language` in
-`.agents/ai-dev.json` of the checkout the script runs from (module
-`scripts/locale.ts`). Views, `Status` options, fields and issue types named in
-another language of the dictionary — ❌, `fix` renames them keeping the ids
+`.agents/elves.json` of the checkout the script runs from (until `update` moves
+it — the former `.agents/ai-dev.json`; module `scripts/locale.ts`). Views,
+`Status` options, fields and issue types named in another language of the
+dictionary — ❌, `fix` renames them keeping the ids
 (task values and the «Item closed» target survive; with tasks in the project —
 after `--confirm`); a decision label with a marker in another language — its
 description is rewritten.
@@ -539,8 +540,8 @@ subtask going In progress moves its epic from Backlog to In progress too.
 Hints: the epic is closed but a subtask is in work again — reopen the epic and
 its milestone; all subtasks are closed — close the epic and set it to Done.
 In progress pins the task to the session: the file
-`~/.config/ai-dev/sessions/<CLAUDE_CODE_SESSION_ID>` (or in
-`$AI_DEV_CONFIG_DIR`) with the line `owner/repo#N`. Another task In progress in
+`~/.config/elves/sessions/<CLAUDE_CODE_SESSION_ID>` (or in
+`$ELVES_CONFIG_DIR`) with the line `owner/repo#N`. Another task In progress in
 the same session — a refusal (code 2) before any changes, in one line: the
 pinned task, the question to the owner «queue #M?» with its executor's prompt
 (as `task new` above) and the file path. The same task again, an epic, Backlog
