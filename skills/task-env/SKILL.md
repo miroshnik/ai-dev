@@ -29,7 +29,7 @@ bun --no-env-file <skill dir>/scripts/task-env.ts check [<dir>]  # the compose f
 Each command's details and examples — `--help` after it; the details behind this file — `reference.md` next to it.
 Run the script outside the sandbox — section "Docker and the sandbox".
 
-The skill's `check -g` line: `proxy *.localhost: running (ai-dev-proxy)`,
+The skill's `check -g` line: `proxy *.localhost: running (elves-proxy)`,
 `not running — start: …` or `Docker unavailable — <reason>`; no Docker on the
 machine — no line. It doesn't change the code of `check`: the proxy isn't the
 flow falling behind.
@@ -47,8 +47,9 @@ task's own Compose project, and nothing of it is shared with other tasks.
 | profiles | `--profile <name>` (repeated) goes to Compose: a heavy service in `profiles` runs only in a task that asks for it |
 | addresses | HTTP services of `env.http` — `http://<service>.<N>.<project>.localhost` (the proxy's port when it isn't 80); a published port — `127.0.0.1:<host port> → <port>` |
 
-The settings — `env.http` in the project's `.agents/ai-dev.json`, a service → its HTTP port inside the container
-(`install` and `update` keep the field): in a compose file a database's port doesn't differ from an app's.
+The settings — `env.http` in the project's `.agents/elves.json` (an install from before the rename — in
+`.agents/ai-dev.json` until `update` moves it), a service → its HTTP port inside the container (`install` and `update`
+keep the field): in a compose file a database's port doesn't differ from an app's.
 
 ```json
 { "env": { "http": { "web": 3000, "admin": 5173 } } }
@@ -118,11 +119,15 @@ owner's step: Docker Desktop → Settings → Docker Engine,
 
 ## The proxy
 
-`proxy/compose.yaml` next to this file — the Compose project `ai-dev-proxy`: Traefik publishes only containers with
+`proxy/compose.yaml` next to this file — the Compose project `elves-proxy`: Traefik publishes only containers with
 `traefik.enable=true` on `127.0.0.1:80` — not on the local network — and comes back with Docker (`proxy down`
 removes it for good). Routes follow Docker events — no reload; an unknown host — `404`. `proxy up` again after a
 skill update brings the container to the new compose file. Its network, health and the API the dashboard reads
 addresses from — reference.md, "The proxy".
+
+**Before the rename** the proxy was `ai-dev-proxy`. For one release `proxy up` (and `up`, which starts the proxy)
+takes its place: removes its container, which holds the port, and joins its network, so stacks brought up before the
+rename keep their addresses; the network isn't removed or created — reference.md, "The proxy before the rename".
 
 ## Compose file isolation rules
 
@@ -156,14 +161,15 @@ daemon — reference.md, "What the compose file check reads".
 
 ## Settings
 
-- `AI_DEV_PROXY` — the proxy's name: its Compose project and network
-  (default `ai-dev-proxy`); `AI_DEV_PROXY_PORT` — its port on `127.0.0.1`
-  (default 80). Tests run their own proxy with them next to the machine's
-  one. Port 80 busy — another port, and the addresses carry it:
+- `ELVES_PROXY` — the proxy's name: its Compose project and network
+  (default `elves-proxy`); `ELVES_PROXY_PORT` — its port on `127.0.0.1`
+  (default 80; unset — `AI_DEV_PROXY_PORT`, its name before the rename, if a
+  profile still sets it). Tests run their own proxy with them next to the
+  machine's one. Port 80 busy — another port, and the addresses carry it:
   `http://web.42.shop.localhost:8080`. The defaults live only in the script
-  (`proxyName`, `proxyPort`): it passes both to the compose file explicitly,
+  (`proxyName`, `proxyPort`): it passes them to the compose file explicitly,
   the file has `${…:?}` — `docker compose -f proxy/compose.yaml` by hand needs
-  both set; `check -g` of the installer imports `proxyName`.
+  them set (`composeEnv`); `check -g` of the installer imports `proxyName`.
 
 ## Checked on the machine (2026-10-13)
 
