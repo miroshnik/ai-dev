@@ -117,7 +117,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 174 теста</summary>
+<details><summary>✅ 179 тестов</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -178,7 +178,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Sessions» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Task #N (epic #M)» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «Task #N …» из skills/github/reference.md печатает или пишет скрипт
-- ✅ цитату «Task #N» из skills/est/reference.md печатает или пишет скрипт
+- ✅ цитату «Task #N» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Task» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Tests beyond scenarios» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Tokens, M» из skills/est/SKILL.md печатает или пишет скрипт
@@ -277,11 +277,16 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «perimeter» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «proxy …: routes not read» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «questions» из skills/dashboard/SKILL.md печатает или пишет скрипт
+- ✅ цитату «queue #263?» из AGENTS.md печатает или пишет скрипт
+- ✅ цитату «queue #M?» из claude/CLAUDE.md печатает или пишет скрипт
+- ✅ цитату «queue #N?» из skills/github/SKILL.md печатает или пишет скрипт
+- ✅ цитату «queue it?» из AGENTS.md печатает или пишет скрипт
 - ✅ цитату «remove from scope» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «remove the exception: delete \<file>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «remove the exception» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «remove the mark in \<file>:\<line>» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «repo» из skills/est/reference.md печатает или пишет скрипт
+- ✅ цитату «run the dispatcher on epic #M?» из AGENTS.md печатает или пишет скрипт
 - ✅ цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «unsplit: N h» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт
