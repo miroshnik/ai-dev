@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
@@ -1356,7 +1356,8 @@ describe("task actualize делает механику актуализации 
     for (const i of [0, 2, 4]) expect(r.out).toContain(CHECKS[i]!);
     for (const i of [1, 3]) expect(r.out).not.toContain(CHECKS[i]!);
     expect(r.out).toContain("#46, эпик #45 и их milestone не закрывать — это сделает task close после тебя");
-    expect(r.out).toContain("Что поправил — одной строкой в комментарии к эпику #45");
+    // итог — всегда, и «блок актуален» тоже: по нему task close видит, что актуализация закончена (#571)
+    expect(r.out).toContain("Итог — всегда, последним шагом: комментарий к эпику #45 (`gh issue comment 45 --repo miroshnik/elves`) одной строкой «Актуализация после #46, итог: …»");
     // задание печатается, ничего не меняя
     expect(f.mutations.length).toBe(before);
   });
@@ -1536,15 +1537,40 @@ describe("task close закрывает задачу одной командой
     expect(r.out.split("\n").at(-1)).toStartWith("Next: the last line of the answer is one of three");
   });
 
+  /** Итог актуализации эпика #45 после задачи — комментарий субагента к эпику. */
+  const reported = (f: FakeGitHub, number: number, body = `Актуализация после #${number}, итог: блок актуален`) =>
+    (f.comments[45] = [...(f.comments[45] ?? []), { body, url: `https://github.com/miroshnik/elves/issues/45#issuecomment-${number}` }]);
+
   /**
-   * Актуализация блока идёт до `task close`, параллельно с деплоем: close о ней только напоминает — и только там, где
-   * в эпике есть открытые задачи, с командой, которая печатает задание субагенту.
+   * Актуализация блока идёт до `task close`, параллельно с деплоем, субагентом. Исполнитель диспетчера запустил её фоном,
+   * не дождался, закрыл задачу и ответил (#571): следующий `task queue` убрал его worktree, а субагент работал в нём —
+   * без каталога он не применил ни одной правки. Конец актуализации виден по её итогу — комментарию к эпику
+   * «Актуализация после #N, итог: …»; комментарий механики скрипта пишется до субагента и итогом не считается.
    */
-  it("в эпике есть открытые задачи — последняя строка напоминает об актуализации командой task actualize", () => {
+  it("актуализация эпика ещё не отчиталась — отказ с подсказкой дождаться", () => {
     const f = new FakeGitHub(REC);
     mergedPr(f, 46);
-    const last = task(f, ["close", "46", "--no-git"], REPO, { run: est([]) }).out.split("\n").at(-1)!;
-    expect(last).toStartWith("Next: the epic refresh, if it didn't happen before close — a subagent with the task actualize 46 assignment; then the last line of the answer is one of three");
+    reported(f, 46, "Актуализация после #46, скрипт: у #47 снят blocked by на выполненных #46.");
+    // итог актуализации после другой задачи
+    reported(f, 4);
+    const calls: string[][] = [];
+    const r = task(f, ["close", "46", "--no-git"], REPO, { run: est(calls) });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("#46 is too early to close: the epic refresh hasn't reported — epic #45 has open tasks besides #46 (1), and no comment «Актуализация после #46, итог: …» on it.");
+    expect(r.err).toContain("The refresh subagent is at work — wait for its answer, then task close 46 again;");
+    expect(f.mutations).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  // без перегиба: итог на любом языке словаря и в разметке; «не нужна» — без эпика или без других открытых задач в нём
+  it("итог актуализации в комментарии к эпику — задача закрыта, последняя строка — конец сессии", () => {
+    const f = new FakeGitHub(REC);
+    mergedPr(f, 46);
+    reported(f, 46, "**Refresh after #46, result:** the block is current");
+    const r = task(f, ["close", "46", "--no-git"], REPO, { run: est([]) });
+    expect(r.code).toBe(0);
+    expect(statusSet(f)).toEqual([[46, "Готово"]]);
+    expect(r.out.split("\n").at(-1)).toStartWith("Next: the last line of the answer is one of three");
   });
 
   /**
@@ -1710,6 +1736,7 @@ describe("task close закрывает задачу одной командой
   it("есть открытые подзадачи — эпик не трогается", () => {
     const f = new FakeGitHub(REC);
     mergedPr(f, 46);
+    reported(f, 46);
     const r = task(f, ["close", "46", "--no-git"], REPO, { run: est([]) });
     expect(byOp(f, "CloseIssue")).toEqual([]);
     expect(statusSet(f)).toEqual([[46, "Готово"]]);
@@ -2774,8 +2801,9 @@ describe("task queue убирает worktree исполнителей закры
       git(work, ...AUTHOR, "cherry-pick", sha);
       git(work, "push", "-q", "origin", "main");
     };
-    /** Очередь диспетчера; его выдачи исполнителям — в каталоге конфигурации `config`, задачи — в `f`. */
-    const queue = (f = new FakeGitHub(REC), config = scratch()) => task(f, ["queue", "--epic", "45"], REPO, { ...inSession(config), run: noEst, cwd: work }).out.split("\n");
+    /** Очередь диспетчера; его выдачи исполнителям — в каталоге конфигурации `config`, задачи — в `f`, его субагенты — в `claude`. */
+    const queue = (f = new FakeGitHub(REC), config = scratch(), claude = scratch()) =>
+      task(f, ["queue", "--epic", "45"], REPO, { env: { ...inSession(config).env, CLAUDE_CONFIG_DIR: claude }, run: noEst, cwd: work }).out.split("\n");
     /** Строки о worktree и ветках агентов — до заголовка очереди. */
     const cleanupLines = (out: string[]) => out.slice(0, out.findIndex((l) => l.startsWith("Queue ")));
     const worktrees = () =>
@@ -2889,6 +2917,56 @@ describe("task queue убирает worktree исполнителей закры
     expect(d.cleanupLines(d.queue())).toEqual(["+ branch worktree-agent-a1 deleted: nothing outside origin/main", "○ branch worktree-agent-a2 left: 1 commit not in origin/main"]);
     expect(d.branches()).toEqual(["worktree-agent-a2"]);
   });
+
+  /**
+   * Субагент без своего worktree работает в каталоге того, кто его запустил (#571): исполнитель закрыл задачу и ответил,
+   * а его актуализация эпика ещё шла в его worktree — блокировки нет, HEAD на origin/main, правок нет, и очередь убрала
+   * worktree: субагент остался без каталога, Bash отказывал в любой команде. Такого субагента называют метаданные
+   * субагентов сессии — `parentAgentId` без своего `worktreePath`, на любую глубину, — а работает он, пока пишется его
+   * транскрипт.
+   */
+  function executorWithSubagents(d: ReturnType<typeof dispatcher>) {
+    // исполнитель закрыл задачу: task close поставил его worktree на origin/main
+    const executor = d.add("agent-a1");
+    const claude = scratch();
+    const subagents = `projects/-work/${SESSION}/subagents`;
+    const meta = (fields: Record<string, unknown>) => JSON.stringify({ agentType: "general-purpose", ...fields });
+    /** Субагент сессии: метаданные и транскрипт, записанный `minutes` минут назад. */
+    const subagent = (id: string, fields: Record<string, unknown>, minutes: number) => {
+      writeTree(claude, { [`${subagents}/agent-${id}.meta.json`]: meta(fields), [`${subagents}/agent-${id}.jsonl`]: "{}\n" });
+      const at = new Date(Date.now() - minutes * 60_000);
+      utimesSync(path.join(claude, subagents, `agent-${id}.jsonl`), at, at);
+    };
+    subagent("a1", { worktreePath: executor, spawnDepth: 1 }, 0);
+    return { executor, claude, subagent };
+  }
+
+  it("worktree исполнителя, в котором работает его субагент, не удаляется", () => {
+    const d = dispatcher();
+    const { executor, claude, subagent } = executorWithSubagents(d);
+    // актуализация эпика — без своего worktree, её транскрипт пишется
+    subagent("a7", { parentAgentId: "a1", spawnDepth: 2 }, 2);
+    expect(d.cleanupLines(d.queue(undefined, undefined, claude))).toEqual([
+      `○ worktree ${executor} left: subagent agent-a7 works in it without a worktree of its own — its transcript written 2 min ago, quiet after 15`,
+    ]);
+    expect(d.worktrees()).toEqual([d.work, executor].sort());
+    // субагент актуализации затих, а работает его субагент — тоже без своего worktree, в том же каталоге
+    subagent("a7", { parentAgentId: "a1", spawnDepth: 2 }, 30);
+    subagent("a8", { parentAgentId: "a7", spawnDepth: 3 }, 0);
+    expect(d.cleanupLines(d.queue(undefined, undefined, claude))).toEqual([
+      `○ worktree ${executor} left: subagent agent-a8 works in it without a worktree of its own — its transcript written 0 min ago, quiet after 15`,
+    ]);
+  });
+
+  // без перегиба: затихший субагент и субагент в своём worktree каталог исполнителя не держат
+  it("субагент исполнителя затих или работает в своём worktree — worktree исполнителя убирается, как прежде", () => {
+    const d = dispatcher();
+    const { executor, claude, subagent } = executorWithSubagents(d);
+    subagent("a7", { parentAgentId: "a1", spawnDepth: 2 }, 15);
+    subagent("a9", { parentAgentId: "a1", worktreePath: path.join(d.work, ".claude/worktrees/agent-a9"), spawnDepth: 2 }, 0);
+    expect(d.cleanupLines(d.queue(undefined, undefined, claude))).toEqual([`+ worktree ${executor} removed: clean, nothing outside origin/main`]);
+    expect(d.worktrees()).toEqual([d.work]);
+  });
 });
 
 /**
@@ -2941,7 +3019,7 @@ describe("task queue не выдаёт задачу второму исполн�
     });
     const next = add("agent-a3", "worktree-agent-a3");
     const handOuts = () => readFileSync(path.join(config, "dispatchers", `${SESSION}.tasks`), "utf8").trim().split("\n");
-    return { work, add, previous, sub, deeper, next, again: () => assignment(next), handOuts };
+    return { work, add, previous, sub, deeper, next, claude, again: () => assignment(next), handOuts };
   }
 
   it("task queue не выдаёт задачу повторно, пока жив worktree её прежнего исполнителя или его субагентов", () => {
@@ -2975,6 +3053,19 @@ describe("task queue не выдаёт задачу второму исполн�
     git(r.work, "worktree", "unlock", r.deeper);
     git(r.previous, "-c", "user.email=spec@example.test", "-c", "user.name=spec", "commit", "-q", "--allow-empty", "-m", "work");
     refused((l) => l === `! worktree ${r.previous} (the previous executor): HEAD moved 0 min ago (a commit or a switch), quiet after 15`);
+  });
+
+  // субагент без своего worktree работает в каталоге прежнего исполнителя (#571): ни блокировки, ни коммитов — пишется его транскрипт
+  it("прежний исполнитель затих, а его субагент без своего worktree работает в его каталоге — задание не выдаётся", () => {
+    const r = restart();
+    const subagents = path.join(r.claude, `projects/-work/${SESSION}/subagents`);
+    writeTree(subagents, { "agent-a6.meta.json": JSON.stringify({ agentType: "general-purpose", parentAgentId: "a1", spawnDepth: 2 }), "agent-a6.jsonl": "{}\n" });
+    const a = r.again();
+    expect(a.code).toBe(1);
+    expect(a.out.split("\n").filter((l) => l.startsWith("! "))).toEqual([
+      `! worktree ${r.previous} (the previous executor): subagent agent-a6 works in it without a worktree of its own — its transcript written 0 min ago, quiet after 15`,
+    ]);
+    expect(r.handOuts()).toEqual([`miroshnik/elves#47 ${r.previous}`]);
   });
 
   // без перегиба: перезапуск, ради которого задание его и печатает, — прежний исполнитель затих; живые агенты других задач не держат

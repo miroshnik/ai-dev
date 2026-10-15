@@ -129,7 +129,8 @@ What the agent gets wrong without the details (all of them — `reference.md`,
   for the `archive_session` schema if it isn't loaded yet.
 - **`task close`** — only after the PR is merged (or a close without a PR):
   an open PR is refused before any changes, a merged PR GitHub didn't link is
-  found by itself — no manual `gh issue close`. A wait with a code other than
+  found by itself — no manual `gh issue close`. Refused until the refresh
+  subagent reports on the epic. A wait with a code other than
   0 — the `RESULT:` line in its output file. It doesn't delete the session's worktree; `--no-git`
   — without the git step. Its last output line — the end-of-session steps;
   then the last line of the answer, one of three (wording in the project
