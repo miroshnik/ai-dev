@@ -1404,7 +1404,7 @@ describe("В облачной сессии est считает свою част�
   function cloudFact(language: string) {
     const cwd = path.join(dir, "repo");
     mkdirSync(path.join(cwd, ".agents"), { recursive: true });
-    writeFileSync(path.join(cwd, ".agents/ai-dev.json"), JSON.stringify({ language }));
+    writeFileSync(path.join(cwd, ".agents/elves.json"), JSON.stringify({ language }));
     const proj = path.join(dir, ".claude", "projects", realpathSync(cwd).replace(/[^A-Za-z0-9]/g, "-"));
     mkdirSync(proj, { recursive: true });
     const usage = { input_tokens: 1, output_tokens: 1000, cache_read_input_tokens: 100000, cache_creation_input_tokens: 0 };
@@ -1658,7 +1658,7 @@ type FakeFail = { match: string; times: number; stderr: string };
  * `est <args>` с фейковым gh в мире `world` (все его репо — в реестре, `paths` репо — его каталоги) и сбоями `fails`:
  * исход, все вызовы gh, записи в GitHub, тело нового комментария. Повтор gh при сбое сети — без пауз.
  */
-/** `cwd` — каталог проекта: язык комментариев — его `.agents/ai-dev.json`; без него — клон Elves (ru). */
+/** `cwd` — каталог проекта: язык комментариев — его `.agents/elves.json`; без него — клон Elves (ru). */
 function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeFail[] = [], cwd?: string) {
   const bin = path.join(dir, "bin");
   const cfg = path.join(dir, "elves");
@@ -1822,7 +1822,7 @@ describe("Оценка — один вызов: est estimate без --analogs", 
   it("в проекте на en комментарий «Оценка» — по-английски: «Estimate: …», аналоги и их сходство, маркер тот же", () => {
     const en = path.join(dir, "en-project");
     mkdirSync(path.join(en, ".agents"), { recursive: true });
-    writeFileSync(path.join(en, ".agents/ai-dev.json"), '{ "language": "en" }\n');
+    writeFileSync(path.join(en, ".agents/elves.json"), '{ "language": "en" }\n');
     const r = withFakeGh(WORLD, ["estimate", "10", "--repo", "o/r", "--type", "feat", "--write"], [], en);
     expect(r.code).toBe(0);
     expect(r.comment).toStartWith("Estimate: 1 h");
