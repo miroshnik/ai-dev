@@ -2503,7 +2503,7 @@ export function cmdTaskAssignment(io: Io, slug: string, number: number): number 
     repo: slug,
     epic: issue.parent ? locale.fill(N.queue.epic, { epicWord: N.subagentPrompt.epic, epic: issue.parent.number }) : "",
     script: `bun --no-env-file ${import.meta.path}`,
-    waitCi: `bash ${WAIT_CI}`,
+    waitCi: `bash ${waitCi()}`,
     inProgress: N.status.inProgress,
     done: N.lastLine.done,
     questions: N.sections.questions,
@@ -2852,11 +2852,11 @@ export function cmdTaskResume(io: Io): number {
   const prs = live(issue.prs).length ? live(issue.prs) : live(unlinkedPrs(io, slug, number).prs);
   const open = prs.filter((p) => p.state === "OPEN");
   // the task isn't done while a PR of it is open: a follow-up fix after a merge waits for its own checks
-  for (const p of open) io.out(`Session task ${slug}#${number}: PR #${p.number} is open — a background wait dies with the app's process; restart it as a background command: bash ${WAIT_CI} pr ${p.number}`);
+  for (const p of open) io.out(`Session task ${slug}#${number}: PR #${p.number} is open — a background wait dies with the app's process; restart it as a background command: bash ${waitCi()} pr ${p.number}`);
   const merged = prs.filter((p) => p.merged).sort((a, b) => b.number - a.number)[0];
   if (!open.length && merged)
     io.out(
-      `Session task ${slug}#${number}: PR #${merged.number} is merged, the task is open — where the merge deploys, the deploy wait as a background command: bash ${WAIT_CI} merged ${merged.number}; ` +
+      `Session task ${slug}#${number}: PR #${merged.number} is merged, the task is open — where the merge deploys, the deploy wait as a background command: bash ${waitCi()} merged ${merged.number}; ` +
         `then close the task: bun --no-env-file ${import.meta.path} task close ${number}`,
     );
   if (!prs.length) io.out(`○ ${task}: no PR — no wait to restart`);
@@ -3357,9 +3357,10 @@ const failure = (l: string) => l.trim().replace(/\s*\[[\d.]+\s*m?s\]$/, "").repl
 
 /**
  * Waiting for the bug to close — the ci-wait script next to it (`../ci-wait`: the project copy, `~/.agents/skills` and
- * the clone are laid out this way).
+ * the clone are laid out this way). A function, not a value at load: `import.meta.dir` is Bun's, and a project's test
+ * loads this module from the package under Node and Vitest too (`exports` of the Elves package.json).
  */
-const WAIT_CI = path.resolve(import.meta.dir, "../../ci-wait/scripts/wait-ci.sh");
+const waitCi = () => path.resolve(import.meta.dir, "../../ci-wait/scripts/wait-ci.sh");
 // a red check outcome: cancelled (a rerun, a new commit) and waiting for a human's decision aren't red
 const RED_RUN = new Set(["failure", "timed_out", "startup_failure"]);
 const RED_STATUS = new Set(["failure", "error"]);
@@ -3460,7 +3461,7 @@ export function cmdPrPremerge(io: Io, slug: string, number: number): number {
     // main green
     const named = (b: { title: string }) => red.some((n) => bugNames(base, b.title, n));
     for (const b of bugs.filter((b) => !named(b))) io.out(`○ #${b.number} «${b.title}» — about another check: don't wait`);
-    const wait = (n: string) => `wait for it to close — bash ${WAIT_CI} issue ${n} as a background command, then pr premerge ${number} again`;
+    const wait = (n: string) => `wait for it to close — bash ${waitCi()} issue ${n} as a background command, then pr premerge ${number} again`;
     const bug = bugs.find(named);
     if (bug) io.out(`bug on red ${base} — #${bug.number} «${bug.title}»: ${wait(String(bug.number))}`);
     const unnamed = red.filter((n) => !bugs.some((b) => bugNames(base, b.title, n)));
