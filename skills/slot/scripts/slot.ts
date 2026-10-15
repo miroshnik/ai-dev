@@ -6,16 +6,21 @@
  *
  * A slot is a ticket file `<time>-<pid>` in `slots/` of the personal configuration directory: the name sets the order, the
  * PID tells whether the owner is alive. A dead process, even one killed without cleanup, has its ticket ignored and removed
- * by the first one to see it: there are no locks to remove by hand. The command gets AI_DEV_SLOT_CPUS: all slots together
+ * by the first one to see it: there are no locks to remove by hand. The command gets ELVES_SLOT_CPUS: all slots together
  * take half of the cores.
  *
- * An agent's sandbox doesn't let the configuration be written: the ticket goes to `ai-dev/slots` of the temp directory
+ * An agent's sandbox doesn't let the configuration be written: the ticket goes to `elves/slots` of the temp directory
  * (Claude Code's sandbox gives all sessions of the user one TMPDIR), and the queue is read from all places at once — runs
  * inside and outside the sandbox wait for each other. No place takes the ticket — one warning line and the command runs
  * without the queue.
  *
- * No queue in CI (the machine is given to the run) and inside a slot (AI_DEV_SLOT): a script that calls another script
+ * No queue in CI (the machine is given to the run) and inside a slot (ELVES_SLOT): a script that calls another script
  * through the queue would otherwise wait for itself.
+ *
+ * The flow's former name (`ai-dev`, #545): a project whose copy `update` hasn't brought yet runs the slot of an earlier
+ * release — it queues in `ai-dev/slots` of the temp directory, exports only AI_DEV_SLOT and AI_DEV_SLOT_CPUS, and its
+ * runner configs and `turbo.json` pass those. So the queue is read from the former temp place too, the queue variables
+ * go under both names, and either name marks a nested call (FORMER_ENV).
  *
  * A package.json script takes its slot with `--for <shell PID>` (slot.sh next to this file): the ticket carries the
  * script's shell, not this process, and the queue variables are printed for the shell to export — the command runs
@@ -24,7 +29,7 @@
  * Runs under Bun (`bun slot.ts`), only node: APIs.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -33,8 +38,8 @@ const USAGE = `slot '<command>' [arguments…]
 slot --for <PID>
 
 Runs the command through sh, the arguments appended to its end, as with npm run; waits while two heavy runs are going on
-the machine, then runs with AI_DEV_SLOT_CPUS — a quarter of the cores. --for — takes a slot for the shell <PID> of a
-package.json script, held until the shell exits, and prints the export of AI_DEV_SLOT, AI_DEV_SLOT_CPUS for it —
+the machine, then runs with ELVES_SLOT_CPUS — a quarter of the cores. --for — takes a slot for the shell <PID> of a
+package.json script, held until the shell exits, and prints the export of ELVES_SLOT, ELVES_SLOT_CPUS for it —
 slot.sh sources this: ". .agents/skills/slot/scripts/slot.sh && <command>". No queue in CI and inside a slot. The exit
 code is the command's; with --for — 0, nothing printed without the queue.
 
@@ -57,6 +62,14 @@ const SETTLE = 50;
 /** A waiting process reminds whom it waits for once per this many ms, even if the queue hasn't moved. */
 const REMIND = 60_000;
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+/**
+ * The queue variables under the flow's former name, exported next to ours for one transition: runner configs and
+ * `turbo.json` of projects read and pass `AI_DEV_SLOT_CPUS` and `AI_DEV_SLOT` until they are renamed, and the slot of an
+ * earlier release marks a nested call with `AI_DEV_SLOT` only.
+ */
+const FORMER_ENV = { ELVES_SLOT: "AI_DEV_SLOT", ELVES_SLOT_CPUS: "AI_DEV_SLOT_CPUS" } as const;
+/** The temp directory's place of the slot of an earlier release (FORMER_ENV): its tickets are read, ours aren't written there. */
+const FORMER_TEMP = "ai-dev";
 
 interface Ticket {
   name: string;
@@ -82,11 +95,18 @@ function alive(pid: number) {
  * Where tickets live, in the order a ticket is written: the personal configuration, then the temp directory — an agent's
  * sandbox doesn't let the configuration be written, while its TMPDIR is shared by the sandbox's sessions; Claude Code
  * passes its sandbox's temp directory as CLAUDE_TMPDIR outside the sandbox too, so runs outside wait for runs inside.
+ * The personal configuration directory — the same expression in all scripts (tests/standards/config-dir).
  */
 function places() {
-  const config = process.env.AI_DEV_CONFIG_DIR || path.join(os.homedir(), ".config", "ai-dev");
-  const temps = [os.tmpdir(), process.env.CLAUDE_TMPDIR].filter((d): d is string => !!d).map((d) => path.join(d, "ai-dev"));
-  return [...new Set([config, ...temps].map((d) => path.join(path.resolve(d), "slots")))];
+  const config = process.env.ELVES_CONFIG_DIR || process.env.AI_DEV_CONFIG_DIR || [path.join(os.homedir(), ".config", "elves"), path.join(os.homedir(), ".config", "ai-dev")].find((d) => existsSync(d)) || path.join(os.homedir(), ".config", "elves");
+  const temps = [os.tmpdir(), process.env.CLAUDE_TMPDIR].filter((d): d is string => !!d);
+  return [...new Set([config, ...temps.map((d) => path.join(d, "elves"))].map((d) => path.join(path.resolve(d), "slots")))];
+}
+
+/** Places the queue is read from: ours and the temp places of the slot of an earlier release (FORMER_TEMP). */
+function readPlaces(dirs: string[]) {
+  const former = [os.tmpdir(), process.env.CLAUDE_TMPDIR].filter((d): d is string => !!d).map((d) => path.join(path.resolve(d), FORMER_TEMP, "slots"));
+  return [...new Set([...dirs, ...former])];
 }
 
 /** Live tickets of all places in arrival order; tickets of dead processes are removed where the directory can be written. */
@@ -172,9 +192,10 @@ async function main(argv: string[]): Promise<number> {
   // without the queue the command goes at once; a script's shell has nothing to export
   const free = () => (shell ? 0 : run(command, {}));
   const ci = process.env.CI && !/^(0|false)$/i.test(process.env.CI);
-  if (ci || process.env.AI_DEV_SLOT) return free();
+  if (ci || process.env.ELVES_SLOT || process.env[FORMER_ENV.ELVES_SLOT]) return free();
 
   const dirs = places();
+  const read = readPlaces(dirs);
   const name = `${String(Date.now()).padStart(15, "0")}-${shell || process.pid}`;
   let file = "";
   const enqueue = () => {
@@ -213,11 +234,11 @@ async function main(argv: string[]): Promise<number> {
   for (;;) {
     // the shell is gone while waiting (killed) — its ticket would be put back forever
     if (shell && !alive(shell)) return 1;
-    let q = queue(dirs);
+    let q = queue(read);
     let i = q.findIndex((t) => t.name === name);
     if (i < 0) {
       enqueue(); // the ticket was removed from outside (the directory cleaned by hand) — the same place in the queue
-      q = queue(dirs);
+      q = queue(read);
       i = q.findIndex((t) => t.name === name);
     }
     if (i >= 0 && i < SLOTS) {
@@ -238,7 +259,8 @@ async function main(argv: string[]): Promise<number> {
   }
   for (const s of SIGNALS) process.off(s, quit);
   if (told) process.stderr.write(`slot: waited ${duration(Date.now() - t0)}\n`);
-  const env = { AI_DEV_SLOT: name, AI_DEV_SLOT_CPUS: String(CPUS) };
+  const own = { ELVES_SLOT: name, ELVES_SLOT_CPUS: String(CPUS) };
+  const env = { ...own, ...Object.fromEntries(Object.entries(own).map(([k, v]) => [FORMER_ENV[k as keyof typeof own], v])) };
   if (shell) {
     held = true;
     process.stdout.write(`export ${Object.entries(env).map(([k, v]) => `${k}=${v}`).join(" ")}\n`);

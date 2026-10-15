@@ -7,6 +7,6 @@
 # that read package.json scripts (knip) see its binary and arguments, which a command passed to slot.ts as a string
 # hid. slot.ts failed — the script fails with its code, the command doesn't run. Paths are from the project root: npm
 # and bun run a script there.
-AI_DEV_SLOT_EXPORT=$(bun --no-env-file .agents/skills/slot/scripts/slot.ts --for $$) || exit
-eval "$AI_DEV_SLOT_EXPORT"
-unset AI_DEV_SLOT_EXPORT
+ELVES_SLOT_EXPORT=$(bun --no-env-file .agents/skills/slot/scripts/slot.ts --for $$) || exit
+eval "$ELVES_SLOT_EXPORT"
+unset ELVES_SLOT_EXPORT

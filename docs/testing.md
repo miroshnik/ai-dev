@@ -19,15 +19,15 @@ against the Playwright, Next.js, Vite, SvelteKit and Nuxt documentation.
   and print whom they wait for (the `slot` skill). Without the queue,
   neighboring sessions, the linter and another worktree's e2e share the cores —
   timeouts and flakes that aren't about the code. Runner workers come from
-  `AI_DEV_SLOT_CPUS` (a quarter of the cores); CI has its own:
+  `ELVES_SLOT_CPUS` (a quarter of the cores); CI has its own:
 
   ```ts
-  maxWorkers: Number(process.env.AI_DEV_SLOT_CPUS) || undefined,                      // vitest.config.ts
-  workers: Number(process.env.AI_DEV_SLOT_CPUS) || (process.env.CI ? 2 : undefined), // playwright.config.ts
+  maxWorkers: Number(process.env.ELVES_SLOT_CPUS) || undefined,                      // vitest.config.ts
+  workers: Number(process.env.ELVES_SLOT_CPUS) || (process.env.CI ? 2 : undefined), // playwright.config.ts
   ```
 
-  A monorepo on turbo 2 — `"globalPassThroughEnv": ["AI_DEV_SLOT",
-  "AI_DEV_SLOT_CPUS"]` in `turbo.json`: otherwise strict env mode won't pass
+  A monorepo on turbo 2 — `"globalPassThroughEnv": ["ELVES_SLOT",
+  "ELVES_SLOT_CPUS"]` in `turbo.json`: otherwise strict env mode won't pass
   them to tasks, and `env`/`globalEnv` would add them to the cache hash.
 
   Compare time by CI or by CPU (`user` from `time`), not by wall clock: that
