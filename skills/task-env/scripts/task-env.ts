@@ -33,10 +33,10 @@
  * another. The defaults live only here: the script passes both to the compose file explicitly (`composeEnv`), the file
  * has none (`${…:?}`); `check -g` of the installer imports `proxyName`.
  *
- * The rename of the flow (ai-dev → Elves) renamed the proxy: `ai-dev-proxy` → `elves-proxy`. For one release `proxy
- * up` takes the former proxy's place (`FORMER_PROXY`): removes its container — it holds the port — and joins its
- * network, where stacks brought up before the rename stay, so their addresses keep working; `check` names the former
- * network in a project's compose file. Which network the proxy reaches a container through is deterministic: a task
+ * The rename of the flow to Elves renamed the proxy: `FORMER_PROXY` → `PROXY`. For one release `proxy up` takes the
+ * former proxy's place: removes its container — it holds the port — and joins its network, where stacks brought up
+ * before the rename stay, so their addresses keep working; `check` names the former network in a project's compose
+ * file. Which network the proxy reaches a container through is deterministic: a task
  * stack's service names it by a label, the provider's default is the former network while the proxy is in it
  * (`proxyLabels`, `up`).
  *
@@ -168,7 +168,7 @@ export const FORMER_PROXY = "ai-dev-proxy";
 export const proxyName = (env: NodeJS.ProcessEnv = process.env) => env.ELVES_PROXY || PROXY;
 
 /**
- * The former proxy `proxy up` replaces: of the default proxy — `ai-dev-proxy`, of a proxy with another name (a test's
+ * The former proxy `proxy up` replaces: of the default proxy — `FORMER_PROXY`, of a proxy with another name (a test's
  * one) — `<name>-former`, so a test's proxy never touches the machine's former proxy.
  */
 export const formerProxyName = (env: NodeJS.ProcessEnv = process.env) => {

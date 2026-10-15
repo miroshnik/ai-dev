@@ -4,9 +4,9 @@
  * doesn't depend on them; the installer in `bin/` imports it from its own package.
  *
  * The language is `language` in `.agents/elves.json` of the project root (the nearest directory up with `.git`,
- * otherwise the directory itself), until `update` moves it — in the former `.agents/ai-dev.json`: a manifest without
- * the field (an install of a previous version) — `ru`, no manifest — `en`. Names are `locales/<language>.json`, the same keys for each language; no dictionary for the
- * language — `en`. Scripts write in the project language and parse the names of any dictionary language (`everyNames`):
+ * otherwise the directory itself), until `update` moves it — in the former manifest (`FORMER_MANIFEST`): a manifest
+ * without the field (an install of a previous version) — `ru`, no manifest — `en`. Names are `locales/<language>.json`,
+ * the same keys for each language; no dictionary for the language — `en`. Scripts write in the project language and parse the names of any dictionary language (`everyNames`):
  * a project that changed its language and tasks of other repositories are read without knowing their language.
  *
  * The dictionaries are static JSON imports, not a read of the `locales/` directory: the module is imported by the `spec`
