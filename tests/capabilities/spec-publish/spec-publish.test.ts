@@ -357,7 +357,7 @@ function findRun(github: { artifacts: GhArtifact[]; runs?: Record<number, GhRun[
  * ветку `spec` — в ней не стало бы страниц PR, влитого раньше, — поэтому она пропускается, а не падает.
  */
 describe("Без CI на main публикуется только дерево, которое целиком проверил зелёный прогон", () => {
-  const ARTIFACTS = `api repos/{owner}/{repo}/actions/artifacts?name=docs-spec-${TREE}`;
+  const ARTIFACTS = `api repos/{owner}/{repo}/actions/artifacts?name=docs-spec-${TREE}&per_page=100`;
   const SKIPPED = `spec-run: main tree ${TREE.slice(0, 12)} not fully checked — publishing skipped: `;
 
   it("артефакт дерева мержа выложил зелёный прогон этого репозитория — id прогона в stdout", () => {

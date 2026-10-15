@@ -64,8 +64,9 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - uses: oven-sh/setup-bun@v2
       - run: pnpm install --frozen-lockfile
+      # one source for all shards: the run green by this run's start; no continue-on-error — a shard split by count
+      # next to shards split by durations would lose files, a failure is a red shard to re-run
       - name: the last green run's reports — durations for the shard
-        continue-on-error: true # without them the shards split by count
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --artifact spec-reports)
@@ -99,7 +100,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps
       - name: the last green run's reports — durations for the shard
-        continue-on-error: true
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --artifact spec-reports)
@@ -219,8 +219,19 @@ the runner gets them as positional arguments. Merging the blob reports and the
   finds the newest green run with it, `gh run download` fetches it — hence
   `actions: read`. It is uploaded on PRs and lives a day: no artifact (the
   first run, a day without PRs) — the files split equally by count, a new
-  file gets the mean. The step is `continue-on-error`: durations are an
-  optimization, not a check.
+  file gets the mean.
+- One source for all shards of a run. "The newest green run" changes while
+  the shards reach the step: a run that finished between two shards'
+  requests gave them different layouts — files ran in two shards or in
+  none, and CI stayed green without them. In Actions `spec-run` takes the
+  newest run green by the start of the current run's first attempt
+  (`GITHUB_RUN_ID`): one answer whenever a shard asks; a re-run of failed
+  jobs gets the source of the passed shards it keeps; a re-run of the source
+  itself counts by its attempt started by then. Hence no
+  `continue-on-error` on the step: a shard split by count next to shards
+  split by durations loses files the same way — a `gh` failure is a red
+  shard, re-run it. Re-running failed jobs a day later, when the reports
+  have expired, — re-run all jobs.
 - `vitest list` doesn't run the `test` script: its `--exclude` is repeated in
   the listing — keep them equal, otherwise standards land in the unit shards'
   layout and `test` drops them.

@@ -260,20 +260,41 @@ describe("Фильтры шарда — ровно его файлы", () => {
 // id репозитория проекта; у прогона PR из форка head_repository_id — id форка
 const REPO_ID = 1001;
 const FORK = 2002;
-const reports = (run: number, over: { expired?: boolean; from?: number } = {}): GhArtifact => ({
+/** Время дня прогонов: минута `m` после 13:00 UTC, как его пишет GitHub. */
+const at = (m: number) => `2026-10-15T13:${String(m).padStart(2, "0")}:00Z`;
+/** Отчёты прогона `run`, выложенные на минуте `uploaded`. */
+const reports = (run: number, over: { expired?: boolean; from?: number; uploaded?: number } = {}): GhArtifact => ({
   id: 9000 + run,
   name: "spec-reports",
   expired: over.expired ?? false,
+  created_at: at(over.uploaded ?? 9),
   workflow_run: { id: run, repository_id: REPO_ID, head_repository_id: over.from ?? REPO_ID },
 });
-const done = (id: number, conclusion = "success") => ghRun(id, "completed", conclusion);
+/** Попытка `n` прогона: начата на минуте `started`, обновлена последний раз (завершённая — закончена) на `updated`. */
+const attempt = (id: number, status: string, conclusion: string | null, started: number, updated = started, n = 1) =>
+  ghRun(id, status, conclusion, { run_attempt: n, run_started_at: at(started), updated_at: at(updated) });
+/** Завершённый прогон: начат на минуте 5, закончен на `finished`. */
+const done = (id: number, conclusion = "success", finished = 10) => attempt(id, "completed", conclusion, 5, finished);
 
-/** Шаг шарда: последний зелёный прогон с отчётами по ответам `gh api`. */
-function lastGreen(github: { artifacts: GhArtifact[]; runs?: Record<number, GhRun[]> }, ...args: string[]) {
-  const gh = fakeGh(path.join(dir, "bin"), github);
-  const r = runScript("spec-run", ["--artifact", "spec-reports", ...args], dir, gh.env);
+// текущий прогон, чьи шарды спрашивают источник: его первая попытка начата на минуте 20
+const RUN = 50;
+const STARTED = at(20);
+const FIRST = { [`${RUN}/1`]: attempt(RUN, "in_progress", null, 20) };
+const IN_ACTIONS = { GITHUB_RUN_ID: String(RUN), GITHUB_RUN_ATTEMPT: "1" };
+
+type Github = { artifacts: GhArtifact[]; runs?: Record<number, GhRun[]>; attempts?: Record<string, GhRun> };
+
+/** Шаг шарда: последний зелёный прогон с отчётами по ответам `gh api`; `env` — переменные Actions (по умолчанию — шаг прогона RUN). */
+function lastGreen(github: Github, env: Record<string, string> = IN_ACTIONS, ...args: string[]) {
+  const gh = fakeGh(path.join(dir, "bin"), { attempts: FIRST, ...github });
+  // переменные Actions самого прогона тестов до скрипта не доходят: их задаёт тест
+  const r = runScript("spec-run", ["--artifact", "spec-reports", ...args], dir, { ...gh.env, GITHUB_RUN_ID: "", GITHUB_RUN_ATTEMPT: "", ...env });
   return { ...r, calls: gh.calls() };
 }
+
+const ARTIFACTS = "api repos/{owner}/{repo}/actions/artifacts?name=spec-reports&per_page=100";
+const START = `api repos/{owner}/{repo}/actions/runs/${RUN}/attempts/1`;
+const runCalls = (...ids: number[]) => ids.map((id) => `api repos/{owner}/{repo}/actions/runs/${id}`);
 
 /**
  * Отчёты прошлого прогона — артефакт `spec-reports` джоба `spec`: слитые отчёты раннеров. Он выкладывается, только
@@ -281,40 +302,96 @@ function lastGreen(github: { artifacts: GhArtifact[]; runs?: Record<number, GhRu
  * репозитория с исходом `success` и не ждёт идущий — до его исхода берётся прошлый зелёный.
  */
 describe("Длительности — из отчётов последнего зелёного прогона", () => {
-  const ARTIFACTS = "api repos/{owner}/{repo}/actions/artifacts?name=spec-reports";
-
   it("последний зелёный прогон с отчётами — id в stdout: идущий и красный пропускаются, прогоны старше не спрашиваются", () => {
-    const runs = { 43: [ghRun(43, "in_progress")], 42: [done(42, "failure")], 41: [done(41)], 40: [done(40)] };
+    const runs = { 43: [attempt(43, "in_progress", null, 8)], 42: [done(42, "failure")], 41: [done(41)], 40: [done(40)] };
     const r = lastGreen({ artifacts: [reports(43), reports(42), reports(41), reports(40)], runs });
     expect([r.code, r.stdout]).toEqual([0, "41\n"]);
-    expect(r.calls).toEqual([ARTIFACTS, ...[43, 42, 41].map((id) => `api repos/{owner}/{repo}/actions/runs/${id}`)]);
-    expect(r.stderr).toBe("spec-run: artifact spec-reports: run 41 succeeded — https://github.test/runs/41\n");
+    expect(r.calls).toEqual([START, ARTIFACTS, ...runCalls(43, 42, 41)]);
+    expect(r.stderr).toBe(`spec-run: artifact spec-reports: run 41 succeeded before run ${RUN} started (${STARTED}) — https://github.test/runs/41\n`);
   });
 
   it("зелёного прогона с отчётами нет — код 0, stdout пуст, причина в stderr: шарды делятся по числу", () => {
+    const why = `spec-run: artifact spec-reports: no green run before run ${RUN} started (${STARTED}) — `;
     const none = lastGreen({ artifacts: [] });
-    expect([none.code, none.stdout, none.stderr]).toEqual([0, "", "spec-run: artifact spec-reports: no green run — no artifact spec-reports\n"]);
+    expect([none.code, none.stdout, none.stderr]).toEqual([0, "", `${why}no artifact spec-reports\n`]);
     const red = lastGreen({ artifacts: [reports(42)], runs: { 42: [done(42, "failure")] } });
-    expect([red.code, red.stdout, red.stderr]).toEqual([0, "", "spec-run: artifact spec-reports: no green run — 42 failure https://github.test/runs/42\n"]);
+    expect([red.code, red.stdout, red.stderr]).toEqual([0, "", `${why}42 failure https://github.test/runs/42\n`]);
+    const late = lastGreen({ artifacts: [reports(43, { uploaded: 19 })], runs: { 43: [attempt(43, "completed", "success", 12, 31)] } });
+    expect([late.code, late.stdout, late.stderr]).toEqual([0, "", `${why}43 success (finished later) https://github.test/runs/43\n`]);
   });
 
   // артефакт с любым именем может выложить и прогон PR из форка
   it("отчёты прогона из форка и истёкшие не берутся", () => {
     const r = lastGreen({ artifacts: [reports(42, { from: FORK }), reports(41, { expired: true })], runs: { 41: [done(41)], 42: [done(42)] } });
-    expect([r.code, r.stdout, r.calls]).toEqual([0, "", [ARTIFACTS]]);
+    expect([r.code, r.stdout, r.calls]).toEqual([0, "", [START, ARTIFACTS]]);
+  });
+
+  it("вне Actions (без GITHUB_RUN_ID) — новейший прогон, зелёный на момент вызова", () => {
+    const runs = { 42: [attempt(42, "completed", "success", 45, 55)], 41: [done(41)] };
+    const r = lastGreen({ artifacts: [reports(42, { uploaded: 50 }), reports(41)], runs }, {});
+    expect([r.code, r.stdout, r.calls]).toEqual([0, "42\n", [ARTIFACTS, ...runCalls(42)]]);
+    expect(r.stderr).toBe("spec-run: artifact spec-reports: run 42 succeeded — https://github.test/runs/42\n");
   });
 
   it("--tree и --artifact вместе — ошибка вызова, код 2", () => {
-    const r = lastGreen({ artifacts: [] }, "--tree", "7b3e9a1c5d2f4068b1a2c3d4e5f60718293a4b5c");
+    const r = lastGreen({ artifacts: [] }, IN_ACTIONS, "--tree", "7b3e9a1c5d2f4068b1a2c3d4e5f60718293a4b5c");
     expect([r.code, r.stdout, r.calls]).toEqual([2, "", []]);
   });
 });
 
+/**
+ * «Новейший зелёный прогон» — не постоянная: между запросами шардов одного прогона может завершиться зелёным прогон
+ * другого PR. Шарды тогда раскладывают файлы по разным отчётам, раскладки расходятся: одни файлы идут в двух шардах,
+ * другие — ни в одном, и CI зелёный без них — в проекте с тремя шардами e2e так пропало 22 файла из 101. Поэтому в
+ * Actions источник — новейший прогон, зелёный к началу первой попытки текущего (`GITHUB_RUN_ID`): ответ один, когда бы
+ * шард ни дошёл до шага. Сбой запроса — красный шаг: шард, разложенный по числу рядом с шардами по длительностям,
+ * терял бы файлы так же.
+ */
+describe("Шарды одного прогона берут длительности из одного прогона", () => {
+  it("прогон, завершившийся после старта текущего, не берётся: два шарда, между запросами которых он позеленел, получают один источник", () => {
+    // 44 выложил отчёты после старта; 43 — до старта, а завершился между запросами шардов
+    const artifacts = [reports(44, { uploaded: 28 }), reports(43, { uploaded: 19 }), reports(41)];
+    const runs = (r43: GhRun) => ({ 44: [attempt(44, "completed", "success", 21, 29)], 43: [r43], 41: [done(41)] });
+    const early = lastGreen({ artifacts, runs: runs(attempt(43, "in_progress", null, 12)) });
+    const late = lastGreen({ artifacts, runs: runs(attempt(43, "completed", "success", 12, 31)) });
+    expect([early.stdout, late.stdout]).toEqual(["41\n", "41\n"]);
+    // отчёты, выложенные после старта, не спрашиваются: их прогон не мог завершиться раньше
+    expect(late.calls).toEqual([START, ARTIFACTS, ...runCalls(43, 41)]);
+  });
+
+  it("повтор упавших шардов (попытка 2) берёт источник первой попытки: прошедшие шарды первой попытки не перекладываются", () => {
+    const attempts = { [`${RUN}/1`]: attempt(RUN, "completed", "failure", 20, 40), [`${RUN}/2`]: attempt(RUN, "in_progress", null, 60, 60, 2) };
+    const runs = { 45: [attempt(45, "completed", "success", 42, 55)], 41: [done(41)] };
+    const r = lastGreen({ artifacts: [reports(45, { uploaded: 50 }), reports(41)], runs, attempts }, { ...IN_ACTIONS, GITHUB_RUN_ATTEMPT: "2" });
+    expect([r.code, r.stdout, r.calls]).toEqual([0, "41\n", [START, ARTIFACTS, ...runCalls(41)]]);
+  });
+
+  it("перезапуск прогона-источника не меняет ответ: прогон берётся по попытке, начатой до старта текущего", () => {
+    // перезапуск начат посреди раскладки — в счёт идёт первая попытка, зелёная к старту
+    const rerun = { 41: [attempt(41, "in_progress", null, 32, 32, 2)] };
+    const later = lastGreen({ artifacts: [reports(41)], runs: rerun, attempts: { ...FIRST, "41/1": done(41) } });
+    expect([later.stdout, later.calls]).toEqual(["41\n", [START, ARTIFACTS, ...runCalls(41), "api repos/{owner}/{repo}/actions/runs/41/attempts/1"]]);
+    // перезапуск начат до старта — к старту прогон шёл, берётся прошлый зелёный
+    const before = lastGreen({ artifacts: [reports(41), reports(40)], runs: { 41: [attempt(41, "in_progress", null, 15, 15, 2)], 40: [done(40)] } });
+    expect(before.stdout).toBe("40\n");
+  });
+
+  it("сбой запроса старта прогона — код 2, stdout пуст: шаг шарда падает, а не делит файлы по числу", () => {
+    const r = lastGreen({ artifacts: [reports(41)], runs: { 41: [done(41)] }, attempts: {} });
+    expect([r.code, r.stdout, r.calls]).toEqual([2, "", [START]]);
+  });
+});
+
+/** Шаги джоба с матрицей шардов из шаблона CI (`ci.md`). */
+function templateSteps(job: "unit" | "e2e") {
+  const [doc] = documentsOf("skills/spec/ci.md", readFragmentFile("skills/spec/ci.md"));
+  const workflow = Bun.YAML.parse(doc!.text) as { jobs: Record<string, { steps: { run?: string; "continue-on-error"?: unknown }[] }> };
+  return workflow.jobs[job]!.steps;
+}
+
 /** Шаг `run` шарда из шаблона CI (`ci.md`): джоб с матрицей шардов, шаг, который зовёт spec-shard. */
 function shardStep(job: "unit" | "e2e"): string {
-  const [doc] = documentsOf("skills/spec/ci.md", readFragmentFile("skills/spec/ci.md"));
-  const workflow = Bun.YAML.parse(doc!.text) as { jobs: Record<string, { steps: { run?: string }[] }> };
-  const runs = workflow.jobs[job]!.steps.map((s) => s.run ?? "");
+  const runs = templateSteps(job).map((s) => s.run ?? "");
   expect(runs.filter((r) => /--shard[= ]\$\{\{ matrix\.shard/.test(r) && !r.includes("spec-shard.ts"))).toEqual([]);
   return runs.find((r) => r.includes("spec-shard.ts"))!;
 }
@@ -366,5 +443,11 @@ describe("Шаблон CI передаёт раннеру файлы шарда,
     const got = [1, 2].map((k) => runStep("e2e", k, 2, listing));
     const run = (filter: string) => ["exec", "playwright", "test", filter, "--reporter=dot,blob"];
     expect(got).toEqual([run("/(^|\\/)e2e\\/a\\.spec\\.ts$/"), run("/(^|\\/)e2e\\/b\\.spec\\.ts$/")]);
+  });
+
+  // шард, разложенный по числу рядом с шардами по длительностям, теряет файлы так же, как шарды с разными источниками
+  it("сбой шага длительностей — красный шард: шаг без continue-on-error", () => {
+    const steps = (["unit", "e2e"] as const).map((job) => templateSteps(job).filter((s) => s.run?.includes("spec-run.ts --artifact")));
+    expect(steps.map((found) => found.map((s) => s["continue-on-error"] ?? "none"))).toEqual([["none"], ["none"]]);
   });
 });

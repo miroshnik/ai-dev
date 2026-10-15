@@ -354,7 +354,15 @@ repository with an unexpired artifact of that name (`spec-reports` — the
 merged reports of the `spec` job). Runs are asked newest first, up to the
 first `success`; one in progress isn't waited for — its outcome is unknown,
 the previous green one does. None — code 0, stdout empty, in stderr «no green
-run» with the runs asked: the shards split by count.
+run» with the runs asked: the shards split by count. In Actions
+(`GITHUB_RUN_ID`) — green by the start of the current run's first attempt:
+every shard of the run gets one answer whenever it reaches the step, a re-run
+of failed jobs — the source of the shards it keeps (`ci.md`, "Shards by
+durations"). Artifacts uploaded after that start aren't asked; a run counts
+by its attempt started by then and only if it finished by then, so a re-run
+of the source started later doesn't change the answer. Outside Actions — the
+newest green run now. A `gh` error — exit code 2: the shard step fails
+instead of splitting by count next to shards split by durations.
 
 ## spec-shard — CI shards by durations
 
