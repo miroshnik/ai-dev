@@ -1510,16 +1510,18 @@ function ensureItem(io: Io, ctx: TaskCtx, i: Pick<Issue, "id" | "number" | "item
 }
 
 /**
- * The personal configuration directory — `AI_DEV_CONFIG_DIR`, otherwise `~/.config/ai-dev`: one expression for all
+ * The personal configuration directory — `ELVES_CONFIG_DIR`, otherwise `~/.config/elves`: one expression for all
  * scripts (the Elves `config-dir` standard) rather than a shared module — github imports no other skill
- * (tests/standards/skill-imports). est
+ * (tests/standards/skill-imports). The flow's former names are read for the transition: `AI_DEV_CONFIG_DIR` — a
+ * variable the owner may have set in the profile; `~/.config/ai-dev` — the directory of a machine before `update -g`
+ * moved it, while the new one doesn't exist; a clean machine gets the new one. est
  * moves the old `~/.claude/est` into the directory only while the directory doesn't exist (est.ts, `ensureConfigDir`):
  * creating it here first would leave est without its registry and prices. Before the move the configuration is the
  * old directory: the pins move along with it.
  */
 function configDir(env: Io["env"]): string {
   const home = env.HOME || os.homedir();
-  const dir = env.AI_DEV_CONFIG_DIR || path.join(home, ".config", "ai-dev");
+  const dir = env.ELVES_CONFIG_DIR || env.AI_DEV_CONFIG_DIR || [path.join(home, ".config", "elves"), path.join(home, ".config", "ai-dev")].find((d) => existsSync(d)) || path.join(home, ".config", "elves");
   if (existsSync(dir)) return dir;
   const legacy = path.join(home, ".claude", "est");
   // lstat: a symlink in place of the old directory — the move has already happened

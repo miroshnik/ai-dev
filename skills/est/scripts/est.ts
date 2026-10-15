@@ -11,7 +11,7 @@
  * Runs on Bun (`bun est.ts …`), only `node:` APIs + the `gh` CLI. The source of truth is GitHub (the project fields
  * "Estimate, h", "Actual, h" and comments with HTML markers <!-- est {...} --> /
  * <!-- fact {...} -->). Without --write nothing is written to GitHub. Cache formats in
- * ~/.config/ai-dev/cache are compatible with the former est.py.
+ * ~/.config/elves/cache are compatible with the former est.py.
  */
 
 import { spawnSync } from "node:child_process";
@@ -28,10 +28,12 @@ type Any = any;
 
 const HOME = os.homedir();
 // The skill's personal state (repository registry, prices, cache) lives in an agent-neutral directory:
-// $AI_DEV_CONFIG_DIR, otherwise ~/.config/ai-dev — one expression in all scripts (the Elves config-dir standard):
-// github pins a task to a session in the same directory. The old ~/.claude/est moves automatically
-// (see ensureConfigDir), leaving a symlink in its place.
-export const EST_DIR = process.env.AI_DEV_CONFIG_DIR || path.join(HOME, ".config", "ai-dev");
+// $ELVES_CONFIG_DIR, otherwise ~/.config/elves — one expression in all scripts (the Elves config-dir standard):
+// github pins a task to a session in the same directory. The flow's former names are read for the transition:
+// AI_DEV_CONFIG_DIR — a variable the owner may have set in the profile; ~/.config/ai-dev — the directory of a machine
+// before `update -g` moved it, while the new one doesn't exist; a clean machine gets the new one. The old
+// ~/.claude/est moves automatically (see ensureConfigDir), leaving a symlink in its place.
+export const EST_DIR = process.env.ELVES_CONFIG_DIR || process.env.AI_DEV_CONFIG_DIR || [path.join(HOME, ".config", "elves"), path.join(HOME, ".config", "ai-dev")].find((d) => existsSync(d)) || path.join(HOME, ".config", "elves");
 const LEGACY_EST_DIR = path.join(HOME, ".claude", "est");
 export const REGISTRY_PATH = path.join(EST_DIR, "repos.json");
 const CACHE_DIR = path.join(EST_DIR, "cache");
