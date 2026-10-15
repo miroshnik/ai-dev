@@ -135,7 +135,7 @@ describe("Окружение Bash агента не настроено — об 
   it("`check -g` называет, если окружение Bash агента не настроено", () => {
     const bare = aiDev(sb, ["check", "-g"], { env: { CLAUDECODE: "1" } });
     expect(bare.code).toBe(0);
-    expect(bare.stdout).toContain(`  ${NOT_SET_UP} — this session got no environment from the ai-dev SessionStart hook`);
+    expect(bare.stdout).toContain(`  ${NOT_SET_UP} — this session got no environment from the Elves SessionStart hook`);
     expect(bare.stdout).toContain("quote globs");
     expect(aiDev(sb, ["check", "-g"], { env: { CLAUDECODE: "1", AI_DEV_AGENT_SHELL: "1" } }).stdout).not.toContain(NOT_SET_UP);
   });

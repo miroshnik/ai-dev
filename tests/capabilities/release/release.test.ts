@@ -151,6 +151,6 @@ describe("Релиз — тег по дате на origin/main и список �
     const bin = bunxPackage(path.join(sb.tmp, "bunx"), base.dir, base.sha);
     const r = aiDev(sb, ["release", "--dry-run"], { bin });
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("only from an ai-dev clone");
+    expect(r.stderr).toContain("only from an Elves clone");
   });
 });

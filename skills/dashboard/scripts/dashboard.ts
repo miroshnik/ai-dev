@@ -722,7 +722,7 @@ Examples:
 
 // GitHub Projects are unreachable from a Claude Code cloud session, and its localhost isn't visible to the user's
 // browser.
-const CLOUD_ERR = "Claude Code cloud session: GitHub projects aren't reachable from here, and a page on its localhost can't be opened — the dashboard runs only in a local session (docs/cloud-sessions.md in ai-dev)";
+const CLOUD_ERR = "Claude Code cloud session: GitHub projects aren't reachable from here, and a page on its localhost can't be opened — the dashboard runs only in a local session (docs/cloud-sessions.md in Elves)";
 const isCloud = () => process.env.CLAUDE_CODE_REMOTE === "true";
 // An agent's sandbox (Claude Code with allowLocalBinding off) denies listen, and Bun reports that as EADDRINUSE on any
 // port: picking another port won't help, running outside the sandbox will.

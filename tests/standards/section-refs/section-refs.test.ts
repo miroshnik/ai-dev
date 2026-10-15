@@ -169,7 +169,7 @@ describe("Ссылка на раздел документа флоу по наз
     const check = (src: Source) => refsIn(src).map((r) => broken(r, file));
 
     it("ссылка скрипта на раздел AGENTS.md по названию ведёт на существующий заголовок", () => {
-      const src = { file: "bin/ai-dev.ts", text: 'note("ai-dev flow (AGENTS.md, «First step of a session»):");\n' };
+      const src = { file: "bin/ai-dev.ts", text: 'note("Elves flow (AGENTS.md, «First step of a session»):");\n' };
       expect(refsIn(src)).toEqual([{ file: "bin/ai-dev.ts", line: 1, target: "AGENTS.md", name: "First step of a session" }]);
       expect(check(src)).toEqual([null]);
     });
