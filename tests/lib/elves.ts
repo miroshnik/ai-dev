@@ -3,7 +3,7 @@
  * правками, снимок дерева. Не спека — в документацию не попадает.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,18 +103,60 @@ export function bunxPackage(dir: string, src: string, sha: string | null, name =
 }
 
 /**
- * bunx песочницы отдаёт пакеты из dir (bunxPackage): `github:miroshnik/elves#<sha>` — `<dir>/<sha>`, без `#` —
- * `<dir>/main`; флаги bunx до пакета пропускает, аргументы после пакета — установщику, под bun прогона.
+ * Пакет Elves из npm, как его кладут `npm i -g` и bunx по `@miroshnik/elves@<версия>`: файлы src без `.git` — в
+ * `<dir>/node_modules/@miroshnik/elves`, в его package.json — версия релиза и коммит релиза (`gitHead`), как их пишет
+ * `elves pack`; package.json над node_modules нет — так ставит `npm i -g`. Возвращает его bin.
+ */
+export function npmPackage(dir: string, src: string, version: string, sha: string): string {
+  const pkg = path.join(dir, "node_modules/@miroshnik/elves");
+  cpSync(src, pkg, { recursive: true, filter: (p) => path.basename(p) !== ".git" });
+  const json = path.join(pkg, "package.json");
+  writeFileSync(json, JSON.stringify({ ...JSON.parse(readFileSync(json, "utf8")), version, gitHead: sha }, null, 2) + "\n");
+  return path.join(pkg, "bin/elves.ts");
+}
+
+/**
+ * bunx песочницы отдаёт пакеты из dir: `github:miroshnik/elves#<sha>` — `<dir>/<sha>` (bunxPackage), без `#` —
+ * `<dir>/main`, `@miroshnik/elves@<версия>` из npm — `<dir>/npm@<версия>` (npmPackage); флаги bunx до пакета
+ * пропускает, аргументы после пакета — установщику, под bun прогона.
  */
 export function bunxServesPackages(sb: Sandbox, dir: string) {
   rmSync(path.join(sb.bin, "bunx"), { force: true });
   const script = [
     "#!/bin/sh",
-    'while [ "$#" -gt 0 ]; do case "$1" in github:*) spec="$1"; shift; break ;; *) shift ;; esac; done',
-    'case "$spec" in *#*) pkg="${spec#*#}" ;; *) pkg=main ;; esac',
-    `exec "${process.execPath}" "${dir}/$pkg/node_modules/elves/bin/elves.ts" "$@"`,
+    'while [ "$#" -gt 0 ]; do case "$1" in github:*|@miroshnik/elves@*) spec="$1"; shift; break ;; *) shift ;; esac; done',
+    'case "$spec" in @*) bin="npm@${spec##*@}/node_modules/@miroshnik/elves" ;; *#*) bin="${spec#*#}/node_modules/elves" ;; *) bin=main/node_modules/elves ;; esac',
+    `exec "${process.execPath}" "${dir}/$bin/bin/elves.ts" "$@"`,
   ].join("\n");
   writeFileSync(path.join(sb.bin, "bunx"), script + "\n", { mode: 0o755 });
+}
+
+/**
+ * Что Claude Code грузит в контекст на старте сессии в корне проекта dir (code.claude.com/docs, memory): CLAUDE.md,
+ * .claude/CLAUDE.md и CLAUDE.local.md в dir и выше (до top), а без них — AGENTS.md в dir; правила
+ * `.claude/rules/*.md` проекта и `~/.claude/rules/*.md` пользователя. Пути — настоящие, через симлинки: один файл
+ * дважды — канон в контексте дважды; симлинк в никуда не грузится.
+ */
+export function loadedAtStart(home: string, dir: string, top: string): string[] {
+  // the file's real path, if it loads: [] — no file or a dangling symlink
+  const real = (p: string): string[] => {
+    try {
+      return statSync(p).isFile() ? [realpathSync(p)] : [];
+    } catch {
+      return [];
+    }
+  };
+  const memory: string[] = [];
+  for (let d = dir; ; d = path.dirname(d)) {
+    for (const f of ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"]) memory.push(...real(path.join(d, f)));
+    if (d === top || d === path.dirname(d)) break;
+  }
+  if (!memory.length) memory.push(...real(path.join(dir, "AGENTS.md")));
+  const rules = (root: string) => {
+    const at = path.join(root, ".claude/rules");
+    return (lstatSync(at, { throwIfNoEntry: false }) ? readdirSync(at) : []).filter((f) => f.endsWith(".md")).flatMap((f) => real(path.join(at, f)));
+  };
+  return [...memory, ...rules(home), ...rules(dir)];
 }
 
 /**

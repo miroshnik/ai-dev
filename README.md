@@ -158,7 +158,8 @@ You need `git` and [Bun](https://bun.sh) ≥ 1.2 — the installer (`bunx`) and 
 # into a project — from the root of a git repository; the copy is committed with the project
 bunx github:miroshnik/elves install
 
-# onto the machine — skills and the hook for every agent it has; the rules come from the project
+# onto the machine — the canon, skills and the hook for every agent it has; or from npm:
+# bun add -g @miroshnik/elves && elves install -g
 bunx github:miroshnik/elves install -g
 ```
 
@@ -188,7 +189,7 @@ An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun
 - Updating — `update` and a commit of the copy, `chore(agents): Elves flow <tag>`, in a task of its own: a task session doesn't update the project (the copy is thousands of lines in its branch) — it recommends the update and asks whether to queue that task, one per project, `check` prints its `task new`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
 - Flow files that the project's git ignores (a `CLAUDE.md` pattern, the `.claude/` directory, `vendor/`) are un-ignored by `install` and `update` with exceptions — an Elves block at the end of `.gitignore`, committed with the copy; what an exception can't un-ignore (a directory excluded by a personal rule), and anything ignored until `update` runs — `❌` in the output of the install and of `check`.
 
-**Onto the machine** (`-g`) — only the skills and the hook, no rules on the machine: the project loads them, and a second copy would be read on every turn of every agent (~20k tokens). `~/.agents/skills` — for all agents; Claude Code also gets `~/.claude/skills` and the `SessionStart` hook in `~/.claude/settings.json`. `install -g` removes the rules a previous install put on the machine (the canon in `~/.agents`, the symlinks in `~/.claude/rules` and the global files of Codex, Gemini CLI, Copilot CLI, OpenCode, Amp); it doesn't touch a file that isn't its own.
+**Onto the machine** (`-g`) — the canon, the skills and the hook: a thin project keeps no copy of the canon, its agents get it from the machine. `~/.agents/elves/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; Claude Code — symlinks `~/.claude/rules/elves.md` and `elves-claude.md` (loaded in every project without the external-imports dialog), `~/.claude/skills` and the `SessionStart` hook in `~/.claude/settings.json`; the other agents — their global rule file linking to the canon (`~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.copilot/copilot-instructions.md`, `~/.config/opencode/AGENTS.md`, `~/.config/amp/AGENTS.md`; a file of your own stays) and `~/.agents/skills`. A project that still has a copy loads the canon twice until it moves — the hook names it. A Claude Code cloud environment gets the same from its setup script — `npm i -g @miroshnik/elves && elves install -g`, before Claude Code starts; there is no hook there (the cloud doesn't read `~/.claude/settings.json`). In an Elves clone with `--link` the machine's canon is the clone; its `.claude/CLAUDE.md` keeps the root `AGENTS.md` from loading a second time.
 
 **Personal configuration** — everything that depends on specific repositories (the registry for `est`, your own model prices, notes) — lives outside the flow, in `~/.config/elves`; another directory — the `ELVES_CONFIG_DIR` variable, read by all skill scripts. `ELVES_PRIVATE=<path>` with `install -g` makes `~/.config/elves` a symlink to a private checkout; with `ELVES_CONFIG_DIR` the symlink isn't needed — the variable points at the checkout itself.
 
@@ -199,7 +200,7 @@ An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun
 <details>
 <summary><b>Releases and the up-to-date check</b></summary>
 
-Projects and machines with a copy get the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands are the same — bunx installs the package from `main` once and then runs it from its cache, so that package is only a launcher: it finds the latest tag and restarts from it by its SHA.
+Projects and machines with a copy get the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands are the same — bunx installs the package from `main` once and then runs it from its cache, so that package is only a launcher: it finds the latest tag and restarts from it by its SHA. The npm package is a release itself: `install` from it installs its own version without the network, `check` and `update` restart from the latest release's npm package.
 
 - `check` changes nothing: it compares a copy with the latest release (the same install as a dry run, a list of differences), a `--link` clone — with `origin/main` after `git fetch`.
 - `update`: a copy — reinstalled from the latest release; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason). It says what changed, and the agent tells the user: a copy — every release after the installed one, newest first, with the list of its GitHub Release; a clone — the flow commits it pulled.

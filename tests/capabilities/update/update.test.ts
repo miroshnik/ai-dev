@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import locale from "../../../skills/github/scripts/locale.ts";
-import { elves, elvesPackage, bunxPackage, bunxServesPackages, copyPackage, REPO, sandbox, snapshot, toFormer, type ElvesPackage, type Sandbox } from "../../lib/elves.ts";
+import { elves, elvesPackage, bunxPackage, bunxServesPackages, copyPackage, loadedAtStart, npmPackage, REPO, sandbox, snapshot, toFormer, type ElvesPackage, type Sandbox } from "../../lib/elves.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
 
@@ -539,22 +539,40 @@ describe("Копия на машине (-g) сверяется и обновля
     expect(r.stdout).toContain("on the machine: up to date");
   });
 
-  it("Elves ушёл вперёд (новый скилл) — отстаёт, код 1, check ничего не меняет; update -g доводит до актуального, правил на машине по-прежнему нет", () => {
+  it("Elves ушёл вперёд (новое правило, новый скилл) — check -g называет отставание канона и скиллов, код 1, ничего не меняет; update -g доводит канон, скиллы и хук машины до актуального", () => {
     elves(sb, ["install", "-g"]);
     const before = snapshot(sb.home);
     const r = elves(sb, ["check", "-g"], { bin: newer.bin });
     expect(r.code).toBe(1);
+    expect(r.stdout).toContain(`on the machine: behind — installed ${short(git(REPO, "rev-parse", "HEAD"))}, latest ${short(newer.sha)}`);
+    expect(r.stdout).toContain("~ ~/.agents/elves/AGENTS.md");
     expect(r.stdout).toContain("+ ~/.agents/skills/fresh/");
     expect(r.stdout).toContain("bunx github:miroshnik/elves update -g");
     expect(snapshot(sb.home)).toEqual(before);
     expect(elves(sb, ["update", "-g"], { bin: newer.bin }).code).toBe(0);
+    expect(read(path.join(sb.home, ".claude/rules/elves.md"))).toContain("Новое правило.");
     expect(existsSync(path.join(sb.home, ".agents/skills/fresh"))).toBe(true);
-    expect(existsSync(path.join(sb.home, ".agents/ai-dev"))).toBe(false);
+    expect(existsSync(path.join(sb.home, ".agents/skills/ci-wait"))).toBe(false);
+    expect(read(path.join(sb.home, ".claude/settings.json"))).toContain("check --hook");
     expect(JSON.parse(read(manifest(sb.home))).sha).toBe(newer.sha);
     expect(elves(sb, ["check", "-g"], { bin: newer.bin }).code).toBe(0);
   });
 
-  it("поставлено прошлой версией с правилами на машине — отстаёт: в списке «- ~/.agents/ai-dev/» и «- ~/.claude/rules/ai-dev.md»; update -g убирает их, после него check — актуально", () => {
+  /** Машина прошлого релиза: скиллы и хук, канона нет (#180) — канон на машине теперь часть установки (#557). */
+  it("поставлено релизом без канона на машине — отстаёт: в списке канон и правила Claude Code; update -g их ставит", () => {
+    elves(sb, ["install", "-g"]);
+    for (const rel of [".agents/elves", ".claude/rules"]) rmSync(path.join(sb.home, rel), { recursive: true });
+    const r = elves(sb, ["check", "-g"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("+ ~/.agents/elves/\n");
+    expect(r.stdout).toContain("+ ~/.claude/rules/elves.md\n");
+    expect(r.stdout).toContain("+ ~/.claude/rules/elves-claude.md\n");
+    expect(elves(sb, ["update", "-g"]).code).toBe(0);
+    expect(read(path.join(sb.home, ".claude/rules/elves.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
+    expect(elves(sb, ["check", "-g"]).code).toBe(0);
+  });
+
+  it("поставлено прошлой версией с правилами на машине под прежним именем — отстаёт: в списке «- ~/.agents/ai-dev/» и «- ~/.claude/rules/ai-dev.md»; update -g переносит их на новые имена, после него check — актуально", () => {
     elves(sb, ["install", "-g"]);
     mkdirSync(path.join(sb.home, ".agents/ai-dev"), { recursive: true });
     writeFileSync(path.join(sb.home, ".agents/ai-dev/AGENTS.md"), "старый канон\n");
@@ -567,6 +585,7 @@ describe("Копия на машине (-g) сверяется и обновля
     expect(elves(sb, ["update", "-g"]).code).toBe(0);
     expect(existsSync(path.join(sb.home, ".agents/ai-dev"))).toBe(false);
     expect(lstatSync(path.join(sb.home, ".claude/rules/ai-dev.md"), { throwIfNoEntry: false })).toBeUndefined();
+    expect(read(path.join(sb.home, ".claude/rules/elves.md"))).toBe(read(path.join(REPO, "AGENTS.md")));
     expect(elves(sb, ["check", "-g"]).code).toBe(0);
   });
 
@@ -832,6 +851,72 @@ describe("Копия следует за релизами Elves, а не за ma
 });
 
 /**
+ * Пакет из npm — `npm i -g`, `bun add -g` — сам релиз (#557): его версия — тег релиза (`ГГГГ.ММДД.N` ↔
+ * `vГГГГ.ММ.ДД.N`), коммит — `gitHead`, который пишет `elves pack`. SHA в спецификаторе у него нет, и без этого
+ * установщик счёл бы себя пускателем из main и перезапустился бы через `bunx github:` — в облачной сессии это 403, а в
+ * setup script установка шла бы из архива GitHub, а не из npm. `check` и `update` сверяют с последним релизом и
+ * перезапускаются пакетом его версии из npm.
+ */
+describe("Пакет из npm — сам релиз: install -g ставит его версию, check -g и update -g — по последнему релизу пакета", () => {
+  const rule = (up: ElvesPackage, text: string) => ({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + `\n${text}\n` });
+  beforeEach(() => mkdirSync(path.join(sb.home, ".claude")));
+
+  // ни GitHub, ни bunx: релиз установщик узнаёт только по самому пакету
+  it("install -g из пакета npm ставит релиз своей версии, без перезапуска через bunx github:", () => {
+    const r = withReleases();
+    const sha = r.release("v2026.10.05");
+    const bin = npmPackage(path.join(sb.tmp, "global"), r.up.dir, "2026.1005.0", sha);
+    r.commit(rule(r.up, "Правило релиза."));
+    r.release("v2026.10.12");
+    rmSync(path.join(sb.bin, "bunx"));
+    const u = elves(sb, ["install", "-g"], { bin, env: { ELVES_REPO: path.join(sb.tmp, "nowhere") } });
+    expect(u).toMatchObject({ code: 0, stderr: "" });
+    expect(JSON.parse(read(manifest(sb.home)))).toMatchObject({ tag: "v2026.10.05", sha });
+    expect(read(path.join(sb.home, ".claude/rules/elves.md"))).not.toContain("Правило релиза.");
+  });
+
+  // машина поставлена глобальным пакетом v2026.10.05, вышел v2026.10.12 с новым правилом и скиллом — его пакет есть в npm
+  function behindLatest() {
+    const r = withReleases();
+    const from = r.release("v2026.10.05");
+    const bin = npmPackage(path.join(sb.tmp, "global"), r.up.dir, "2026.1005.0", from);
+    const run = (args: string[]) => elves(sb, args, { bin, env: { ELVES_REPO: r.up.dir } });
+    expect(run(["install", "-g"]).code).toBe(0);
+    r.commit({ ...rule(r.up, "Правило релиза."), "skills/fresh/SKILL.md": "---\nname: fresh\ndescription: новый скилл\n---\n" }, "feat(agents): правило релиза\n\nRefs #7");
+    const to = r.release("v2026.10.12");
+    npmPackage(path.join(sb.tmp, "bunx", "npm@2026.1012.0"), r.up.dir, "2026.1012.0", to);
+    return { run, to };
+  }
+
+  it("check -g называет отставание машины от последнего релиза пакета", () => {
+    const { run } = behindLatest();
+    const before = snapshot(sb.home);
+    const c = run(["check", "-g"]);
+    expect(c.code).toBe(1);
+    expect(c.stdout).toContain("Elves on the machine: behind — installed v2026.10.05, latest v2026.10.12\n");
+    expect(c.stdout).toContain("  ~ ~/.agents/elves/AGENTS.md\n");
+    expect(c.stdout).toContain("  + ~/.agents/skills/fresh/\n");
+    expect(snapshot(sb.home)).toEqual(before);
+  });
+
+  it("update -g доводит канон, скиллы и хук машины до последнего релиза пакета", () => {
+    const { run, to } = behindLatest();
+    rmSync(path.join(sb.home, ".claude/settings.json"));
+    const u = run(["update", "-g"]);
+    expect(u.code).toBe(0);
+    expect(u.stdout).toContain("Elves v2026.10.05 → v2026.10.12, new releases: 1 — tell the user what changed:\n");
+    expect(u.stdout).toContain("  - feat(agents): правило релиза (#7)\n");
+    expect(read(path.join(sb.home, ".claude/rules/elves.md"))).toContain("Правило релиза.");
+    expect(existsSync(path.join(sb.home, ".claude/skills/fresh/SKILL.md"))).toBe(true);
+    expect(read(path.join(sb.home, ".claude/settings.json"))).toContain("check --hook");
+    expect(JSON.parse(read(manifest(sb.home)))).toMatchObject({ tag: "v2026.10.12", sha: to });
+    const again = run(["check", "-g"]);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain("Elves on the machine: up to date (v2026.10.12)");
+  });
+});
+
+/**
  * update говорит, что поменялось: агент передаёт это пользователю. Список релиза собирает та же функция, что заметки
  * GitHub Release, — из истории git того же репозитория, где теги.
  */
@@ -937,14 +1022,14 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.stdout).toContain("up to date");
   });
 
-  it("в main новое правило и новый скилл — отстаёт по скиллу, код 1; правило машину не задевает; клон и ~/.agents не тронуты", () => {
+  it("в main новое правило и новый скилл — отстаёт, код 1: в списке и правило — канон машины ведёт в клон, — и скилл; клон и ~/.agents не тронуты", () => {
     const { up, clone } = linkedClone();
     up.repo.commit({ "AGENTS.md": read(path.join(up.dir, "AGENTS.md")) + RULE, "skills/fresh/SKILL.md": "---\nname: fresh\n---\n" });
     const head = git(clone, "rev-parse", "HEAD");
     const before = snapshot(sb.home);
     const r = elves(sb, ["check", "-g"]);
     expect(r.code).toBe(1);
-    expect(r.stdout).not.toContain("AGENTS.md");
+    expect(r.stdout).toContain("~ AGENTS.md");
     expect(r.stdout).toContain("+ skills/fresh/SKILL.md");
     expect(r.stdout).toContain("bunx github:miroshnik/elves update -g");
     expect(git(clone, "rev-parse", "HEAD")).toBe(head);
@@ -1045,7 +1130,7 @@ describe("Клон --link сверяется с origin/main, update подтяг
     const r = elves(sb, ["check", "-g"]);
     expect(r.code).toBe(1);
     expect(r.stdout).toContain(`clone ${clone}`);
-    expect(r.stdout).toContain("- ~/.agents/ai-dev/");
+    expect(r.stdout).toContain("- ~/.agents/ai-dev — the flow's former name (ai-dev) — update moves it\n");
     expect(elves(sb, ["update", "-g"]).code).toBe(0);
     expect(lstatSync(path.join(sb.home, ".agents/ai-dev"), { throwIfNoEntry: false })).toBeUndefined();
     expect(realpathSync(JSON.parse(read(manifest(sb.home))).clone)).toBe(realpathSync(clone));
@@ -1148,6 +1233,13 @@ describe("В начале сессии Claude Code проверка идёт с�
     return { code: r.status, stdout: r.stdout };
   }
 
+  // двойная загрузка канона: строка хука, хвост и задача переезда — задача обновления проекта на его языке
+  const TWICE = "  canon loaded twice: the machine's rules ~/.claude/rules/elves.md, ~/.claude/rules/elves-claude.md and the project's copy .claude/rules/elves.md, .claude/rules/elves-claude.md — Claude Code reads both on every turn until the project moves to the thin project: its update, in a task of its own\n";
+  const TWICE_TAIL = "The canon loads twice — the machine's rules and the project's copy: recommend the project's move to the thin project and ask whether to queue its update task (task new above); work by the current flow.";
+  const MOVE_TASK = /\nThe task — one per project, an open one is named by the refusal: bun --no-env-file \S+ task new --title "Обновить флоу Elves" --branch-type chore\n/g;
+  // файлы с текстом канона, которые Claude Code грузит на старте сессии в проекте
+  const loadedCanon = () => loadedAtStart(sb.home, sb.proj, sb.tmp).filter((p) => read(p) === read(path.join(REPO, "AGENTS.md")));
+
   // bunx песочницы отдаёт пакет bin: `bunx … github:miroshnik/elves <команда>` → `bun <bin> <команда>`
   function bunxServes(bin: string) {
     rmSync(path.join(sb.bin, "bunx"), { force: true });
@@ -1193,6 +1285,43 @@ describe("В начале сессии Claude Code проверка идёт с�
     const machine = runHook().stdout;
     expect(machine).toContain(`${MACHINE_BEHIND}, tell the user what changed (update lists it), re-read what was updated.`);
     expect(machine).not.toContain(PROJECT_UPDATE);
+  });
+
+  /**
+   * Переезд на тонкий проект (#557): машина грузит канон из `~/.claude/rules`, а проект ещё держит копию в
+   * `.claude/rules` — Claude Code читает обе, на каждом ходу. На время переезда это допустимо (ответ на вопрос задачи):
+   * хук называет двойную загрузку и задачу проекта, чей `update` переводит его на тонкий проект, — одной строкой и тогда,
+   * когда задачу уже назвал отставший флоу проекта.
+   */
+  it("хук в проекте с копией флоу называет двойную загрузку канона и задачу переезда", () => {
+    elves(sb, ["install", "-g"]);
+    elves(sb, ["install", "--lang", "ru"]);
+    bunxServes(base.bin);
+    expect(loadedCanon()).toHaveLength(2);
+    const r = runHook();
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`\n${TWICE}`);
+    expect(r.stdout.match(MOVE_TASK)).toHaveLength(1);
+    expect(r.stdout).toContain(TWICE_TAIL);
+    bunxServes(newer.bin);
+    const behind = runHook().stdout;
+    expect(behind).toContain(TWICE);
+    expect(behind).toContain(PROJECT_UPDATE);
+    expect(behind.match(MOVE_TASK)).toHaveLength(1);
+  });
+
+  // страховка от перегиба: канон в контексте один раз — строки нет
+  it("машина без канона или проект без копии — хук двойной загрузки не называет", () => {
+    elves(sb, ["install", "-g"]);
+    elves(sb, ["install"]);
+    bunxServes(base.bin);
+    rmSync(path.join(sb.home, ".claude/rules"), { recursive: true });
+    expect(loadedCanon()).toHaveLength(1);
+    expect(runHook().stdout).not.toMatch(/canon loaded twice|canon loads twice/);
+    elves(sb, ["install", "-g"]);
+    rmSync(path.join(sb.proj, ".claude/rules"), { recursive: true });
+    expect(loadedCanon()).toHaveLength(1);
+    expect(runHook().stdout).not.toMatch(/canon loaded twice|canon loads twice/);
   });
 
   it("в git-репозитории без флоу вывод хука зовёт поставить его в проект; вне git-репозитория строки про проект нет", () => {
