@@ -6976,6 +6976,118 @@
   "name": "пуш прошёл, а до сверки поверх легла следующая публикация — код 0, наш коммит в истории ветки"
  },
  {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Длительности — из отчётов последнего зелёного прогона"
+  ],
+  "name": "--tree и --artifact вместе — ошибка вызова, код 2"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Длительности — из отчётов последнего зелёного прогона"
+  ],
+  "name": "зелёного прогона с отчётами нет — код 0, stdout пуст, причина в stderr: шарды делятся по числу"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Длительности — из отчётов последнего зелёного прогона"
+  ],
+  "name": "отчёты прогона из форка и истёкшие не берутся"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Длительности — из отчётов последнего зелёного прогона"
+  ],
+  "name": "последний зелёный прогон с отчётами — id в stdout: идущий и красный пропускаются, прогоны старше не спрашиваются"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Фильтры шарда — ровно его файлы"
+  ],
+  "name": "проект-зависимость Playwright (вход перед тестами) идёт в каждом шарде"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Фильтры шарда — ровно его файлы"
+  ],
+  "name": "фильтр шарда не захватывает файлы чужого шарда: путь, который входит в другой путь, экранирован"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шаблон CI передаёт раннеру файлы шарда, а не --shard"
+  ],
+  "name": "шаг шарда Playwright передаёт раннеру фильтры spec-shard"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шаблон CI передаёт раннеру файлы шарда, а не --shard"
+  ],
+  "name": "шаг шарда Vitest передаёт раннеру файлы spec-shard; шард без файлов раннер не запускает"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "без отчёта прошлого прогона файлы делятся поровну по числу"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "длительности файлов читаются из отчётов Vitest, Playwright и bun test"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "каждый тестовый файл попадает ровно в один шард"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "одни и те же входные данные дают одни и те же шарды"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "список файлов — из vitest list --filesOnly --json, абсолютные пути — от корня"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "файл без замера получает среднюю длительность и попадает в шард"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "шард вне 1…n, неизвестный раннер или нет списка — ошибка вызова, код 2"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "шард получает файлы по длительностям прошлого прогона, а не подряд по пути"
+ },
+ {
   "path": "tests/capabilities/task-env/task-env.slow.test.ts",
   "describes": [
    "Прокси на машине раздаёт адреса *.localhost контейнерам по их меткам"
@@ -8853,6 +8965,13 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
+  "name": "spec-shard --help и -h — синтаксис с примером, код 0, без сети и изменений"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
   "name": "task-env --help и -h — обзор команд, код 0, без сети и изменений"
  },
  {
@@ -9510,6 +9629,13 @@
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
   "name": "в skills/spec/scripts/spec-run.ts нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
+  ],
+  "name": "в skills/spec/scripts/spec-shard.ts нет кириллицы"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -12757,6 +12883,13 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «no green run» из skills/spec/reference.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «no imports of unlisted packages» из skills/spec/checks.md печатает или пишет скрипт"
  },
  {
@@ -13367,6 +13500,13 @@
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
   "name": "skills/spec/scripts/spec-run.ts печатает и запускает скрипты флоу с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "skills/spec/scripts/spec-shard.ts печатает и запускает скрипты флоу с --no-env-file"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14227,6 +14367,13 @@
   "describes": [
    "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
   ],
+  "name": "README: скрипт spec-shard скилла spec назван"
+ },
+ {
+  "path": "tests/standards/readme/readme.test.ts",
+  "describes": [
+   "README называет всё, что ставит флоу, и не ссылается на то, чего нет"
+  ],
   "name": "README: скрипт task-env скилла task-env назван"
  },
  {
@@ -15020,6 +15167,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/spec/SKILL.md: skills/spec/ci.md, «Shards by durations» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/spec/SKILL.md: skills/spec/reference.md, «Limitations to know about» — есть такой раздел"
  },
  {
@@ -15132,6 +15286,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/spec/ci.md: skills/spec/ci.md, «Shards by durations» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/spec/migration.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел"
  },
  {
@@ -15147,6 +15308,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/spec/reference.md: skills/spec/canon.md, «A decision is the unit of the spec, a folder is its home» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/reference.md: skills/spec/ci.md, «Shards by durations» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
@@ -15175,6 +15343,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/spec/reference.md: skills/spec/reference.md, «spec-doc output» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/reference.md: skills/spec/reference.md, «spec-shard — CI shards by durations» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
@@ -15784,6 +15959,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/spec-publish/spec-publish.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/spec-shard/spec-shard.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",

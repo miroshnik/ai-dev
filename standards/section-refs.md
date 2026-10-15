@@ -36,7 +36,7 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 135 тестов</summary>
+<details><summary>✅ 139 тестов</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/ai-dev.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
@@ -129,6 +129,7 @@
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «spec-doc» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/SKILL.md, «spec-exceptions» — есть такой раздел
+- ✅ skills/spec/SKILL.md: skills/spec/ci.md, «Shards by durations» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Limitations to know about» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Report formats» — есть такой раздел
 - ✅ skills/spec/SKILL.md: skills/spec/reference.md, «Wiring into a repository» — есть такой раздел
@@ -145,13 +146,16 @@
 - ✅ skills/spec/checks.md: skills/spec/SKILL.md, «Checks» — есть такой раздел
 - ✅ skills/spec/checks.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/ci.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
+- ✅ skills/spec/ci.md: skills/spec/ci.md, «Shards by durations» — есть такой раздел
 - ✅ skills/spec/migration.md: skills/spec/SKILL.md, «Wiring into a repository» — есть такой раздел
 - ✅ skills/spec/reference.md: skills/spec/SKILL.md, «Reports for spec-doc» — есть такой раздел
 - ✅ skills/spec/reference.md: skills/spec/canon.md, «A decision is the unit of the spec, a folder is its home» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/ci.md, «Shards by durations» — есть такой раздел
 - ✅ skills/spec/reference.md: skills/spec/reference.md, «Report formats» — есть такой раздел
 - ✅ skills/spec/reference.md: skills/spec/reference.md, «Wiring into the project's CI» — есть такой раздел
 - ✅ skills/spec/reference.md: skills/spec/reference.md, «spec-diff: static parsing, not two reports» — есть такой раздел
 - ✅ skills/spec/reference.md: skills/spec/reference.md, «spec-doc output» — есть такой раздел
+- ✅ skills/spec/reference.md: skills/spec/reference.md, «spec-shard — CI shards by durations» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Checked on the machine» — есть такой раздел
 - ✅ skills/task-env/SKILL.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел

@@ -40,7 +40,7 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 ## Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file
 
-<details><summary>✅ 56 тестов</summary>
+<details><summary>✅ 57 тестов</summary>
 
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (документы)
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит skills/slot/SKILL.md, skills/github/SKILL.md, skills/task-env/SKILL.md, skills/spec/SKILL.md, docs/parallel-checkouts.md, package.json (документы)
@@ -96,6 +96,7 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 - ✅ skills/spec/scripts/spec-exceptions.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/spec/scripts/spec-publish.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/spec/scripts/spec-run.ts печатает и запускает скрипты флоу с --no-env-file
+- ✅ skills/spec/scripts/spec-shard.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/spec/scripts/speclib.ts печатает и запускает скрипты флоу с --no-env-file
 - ✅ skills/task-env/scripts/task-env.ts печатает и запускает скрипты флоу с --no-env-file
 

@@ -77,7 +77,7 @@
 (`skills/github/locales`), а комментарии — по-английски, как документы флоу, поэтому кириллицы в коде скриптов нет
 вовсе: файл сверяется целиком, с комментариями.
 
-<details><summary>✅ 28 тестов</summary>
+<details><summary>✅ 29 тестов</summary>
 
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» не пуст
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/ai-dev.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts
@@ -102,6 +102,7 @@
 - ✅ в skills/spec/scripts/spec-exceptions.ts нет кириллицы
 - ✅ в skills/spec/scripts/spec-publish.ts нет кириллицы
 - ✅ в skills/spec/scripts/spec-run.ts нет кириллицы
+- ✅ в skills/spec/scripts/spec-shard.ts нет кириллицы
 - ✅ в skills/spec/scripts/speclib.ts нет кириллицы
 - ✅ в skills/spec/scripts/vendor/babel-parser.cjs нет кириллицы
 - ✅ в skills/spec/scripts/vendor/babel-parser.d.cts нет кириллицы
@@ -116,7 +117,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 173 теста</summary>
+<details><summary>✅ 174 теста</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -251,6 +252,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «no enum members without a consumer» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no exports without a consumer» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no files without a consumer» из skills/spec/checks.md печатает или пишет скрипт
+- ✅ цитату «no green run» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «no imports of unlisted packages» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no knip configuration hints» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «no namespace members without a consumer» из skills/spec/checks.md печатает или пишет скрипт
