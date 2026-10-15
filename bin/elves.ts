@@ -178,10 +178,10 @@ docker compose; the task-env skill), names a test that runs standards and archit
 ready test without them) and warns (!) if a script in slot calls turbo and turbo.json doesn't pass the queue variables
 to tasks (the exit code stays the same); a project that
 needs update — the update in a task of its own, not in a task session: the task new command of the github skill, one
-task per project. For the machine names the task-env proxy of *.localhost addresses — running or not, with the start
-command (with Docker on the machine; the exit code stays the same), run from the agent's Bash in Claude Code — a
-session without the agent's Bash environment, for a --link clone run from an Elves clone — flow commits not in a
-release yet.
+task per project. For the machine names the task-env proxy of *.localhost addresses — running, not running or running
+under the flow's former name, with the command (with Docker on the machine; the exit code stays the same), the user's
+variables under the former name (AI_DEV_*) with the new one, run from the agent's Bash in Claude Code — a session
+without the agent's Bash environment, for a --link clone run from an Elves clone — flow commits not in a release yet.
 --hook — the machine and the project at once for the Claude Code SessionStart hook: the exit code is always 0, errors
 go to the output; writes the agent's Bash environment to $CLAUDE_ENV_FILE — zsh without errors on a glob without matches
 and on =word, timeout from bin/shims.
@@ -196,7 +196,9 @@ and language are kept; an install of a previous version without a language gets 
 Russian); in a project install and update un-ignore flow files from .gitignore patterns with exceptions at its end and
 wrap the package.json checks (lint, typecheck, test, test:*) in the machine queue slot; prints what changed: every
 release after the installed one, newest first, with the list of changes of its GitHub Release (a --link clone — the
-flow commits it pulled).
+flow commits it pulled). An install from before the rename to Elves — the ai-dev names (.agents/ai-dev.json,
+.agents/ai-dev/, .claude/rules/ai-dev*.md, the blocks in AGENTS.md and .gitignore, ~/.config/ai-dev) move to the new
+ones with the same contents.
 
 Examples:
   elves update
