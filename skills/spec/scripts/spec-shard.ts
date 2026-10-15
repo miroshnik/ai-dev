@@ -34,8 +34,8 @@ import { loadDurations } from "./speclib.ts";
 const posix = path.posix;
 
 const USAGE = "spec-shard --shard <k>/<n> --runner vitest|playwright --list <file|-> [--report <file>]… [--root DIR]";
-/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
-const HELP = `${USAGE}
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples; `elves` prints it under its name. */
+export const HELP = `${USAGE}
 
 A CI shard's test files by the durations of the last green run, not by the count of tests: greedily — the longest file
 into the lightest shard; the shard's filters for the runner go to stdout, one per line (an empty shard — nothing).

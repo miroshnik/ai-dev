@@ -26,15 +26,19 @@
  * script's shell, not this process, and the queue variables are printed for the shell to export — the command runs
  * as a plain command of the script, visible to tools that read package.json (knip).
  *
- * Runs under Bun (`bun slot.ts`), only node: APIs.
+ * Runs under Bun (`bun slot.ts`), only node: APIs. A project without a copy of the flow runs it from its package as
+ * `elves slot` (bin/elves.ts imports `main` and `HELP`): the queue starts only when this file is the entry point.
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-/** `--help`, `-h` as the first argument — the rest go to the command (tests/standards/cli-help): synopsis, what, examples. */
-const USAGE = `slot '<command>' [arguments…]
+/**
+ * `--help`, `-h` as the first argument — the rest go to the command (tests/standards/cli-help): synopsis, what, examples;
+ * `elves slot` prints it under its name.
+ */
+export const HELP = `slot '<command>' [arguments…]
 slot --for <PID>
 
 Runs the command through sh, the arguments appended to its end, as with npm run; waits while two heavy runs are going on
@@ -179,14 +183,14 @@ function run(command: string, env: Record<string, string>) {
   });
 }
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[]): Promise<number> {
   const [first, ...rest] = argv;
-  if (first === "-h" || first === "--help") return process.stdout.write(USAGE), 0;
-  if (!first) return process.stderr.write(USAGE), 2;
+  if (first === "-h" || first === "--help") return process.stdout.write(HELP), 0;
+  if (!first) return process.stderr.write(HELP), 2;
   // --for: the slot is the shell's — it holds the ticket, gets the variables and runs the command itself
   const shell = first === "--for" ? Number(rest[0]) : 0;
   if (first === "--for" && !(rest.length === 1 && Number.isInteger(shell) && shell > 0 && alive(shell))) {
-    return process.stderr.write(`slot: --for takes the PID of a running shell, got ${rest.join(" ") || "nothing"}\n${USAGE}`), 2;
+    return process.stderr.write(`slot: --for takes the PID of a running shell, got ${rest.join(" ") || "nothing"}\n${HELP}`), 2;
   }
   const command = [first, ...rest.map(quote)].join(" ");
   // without the queue the command goes at once; a script's shell has nothing to export
@@ -271,4 +275,4 @@ async function main(argv: string[]): Promise<number> {
   return code;
 }
 
-process.exit(await main(process.argv.slice(2)));
+if (import.meta.main) process.exit(await main(process.argv.slice(2)));

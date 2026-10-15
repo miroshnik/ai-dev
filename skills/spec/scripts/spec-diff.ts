@@ -880,8 +880,8 @@ function scenarioLines(scenarios: string[] | null, match: { found: Found[]; extr
 
 const USAGE =
   "spec-diff [--base origin/main] [--head HEAD | --worktree] [--root DIR] [--no-merge-base] [--json] [--scenarios issue.md | -] [--report report … --spec-branch origin/spec] [--limit 100 | --full]";
-/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
-const HELP = `${USAGE}
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples; `elves` prints it under its name. */
+export const HELP = `${USAGE}
 
 Removed, changed and added test names between the base and the head — the PR body: the diff of checks is the diff of the
 spec; --scenarios — the task's scenarios against the added tests.

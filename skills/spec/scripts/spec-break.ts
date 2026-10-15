@@ -30,8 +30,8 @@ const USAGE = [
   "spec-break --plan breaks.json [--no-baseline] [-- <test command…>]",
   "spec-break --restore",
 ].join("\n");
-/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
-const HELP = `${USAGE}
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples; `elves` prints it under its name. */
+export const HELP = `${USAGE}
 
 Can the check fail: applies the break, runs the test command, expects red and always rolls the break back; ✅ — failed,
 ❌ — didn't. Code 0 — failed on every break, 1 — there is a ❌, 2 — a call error, a red baseline run, the journal not

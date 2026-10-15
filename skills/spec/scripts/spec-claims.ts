@@ -29,8 +29,8 @@ import type { Exception } from "./harness.ts";
 
 const USAGE =
   "spec-claims --entries <entries.json | entries.ts> [--journal .spec-journal] [--exceptions tests/standards/entry-points/exceptions] [--standard tests/standards/entry-points] [--report .spec-claims.xml]";
-/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples. */
-const HELP = `${USAGE}
+/** `--help`, `-h` (tests/standards/cli-help): the synopsis, what it does and examples; `elves` prints it under its name. */
+export const HELP = `${USAGE}
 
 Every entry point of the registry is called by at least one capability test (the harness's journal). Code 0 — everything
 is claimed, 1 — there are unclaimed ones or exception errors, 2 — a call error.
