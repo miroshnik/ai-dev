@@ -2834,14 +2834,14 @@
   "describes": [
    "task close закрывает задачу одной командой"
   ],
-  "name": "в milestone остались открытые задачи — не закрыт"
+  "name": "актуализация эпика ещё не отчиталась — отказ с подсказкой дождаться"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
    "task close закрывает задачу одной командой"
   ],
-  "name": "в эпике есть открытые задачи — последняя строка напоминает об актуализации командой task actualize"
+  "name": "в milestone остались открытые задачи — не закрыт"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -2856,6 +2856,13 @@
    "task close закрывает задачу одной командой"
   ],
   "name": "задача закрыта без PR — факт и «Готово», задачу повторно не закрывает"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task close закрывает задачу одной командой"
+  ],
+  "name": "итог актуализации в комментарии к эпику — задача закрыта, последняя строка — конец сессии"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -3374,6 +3381,13 @@
   "describes": [
    "task queue не выдаёт задачу второму исполнителю при живом прежнем"
   ],
+  "name": "прежний исполнитель затих, а его субагент без своего worktree работает в его каталоге — задание не выдаётся"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue не выдаёт задачу второму исполнителю при живом прежнем"
+  ],
   "name": "прежний исполнитель и его субагенты затихли — задание выдаётся снова, живые агенты других задач его не держат"
  },
  {
@@ -3556,6 +3570,13 @@
   "describes": [
    "task queue убирает worktree исполнителей закрытых задач"
   ],
+  "name": "worktree исполнителя, в котором работает его субагент, не удаляется"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
   "name": "worktree работающего агента, сессии и агента на ветке задачи не трогаются; блокировка процесса, которого нет, не держит"
  },
  {
@@ -3571,6 +3592,13 @@
    "task queue убирает worktree исполнителей закрытых задач"
   ],
   "name": "ветка worktree-agent-* без worktree: без невлитых коммитов удаляется, с невлитыми — остаётся строкой ○"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue убирает worktree исполнителей закрытых задач"
+  ],
+  "name": "субагент исполнителя затих или работает в своём worktree — worktree исполнителя убирается, как прежде"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
@@ -10246,6 +10274,13 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название actualize.report скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название actualize.scope скрипты читают из словаря"
  },
  {
@@ -12731,6 +12766,27 @@
   "describes": [
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
+  "name": "цитату «Refresh after #N, result: …» из skills/github/reference.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Refresh after #N, result:» из skills/github/reference.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «Refresh after #N, script: …» из skills/github/reference.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
   "name": "цитату «Refresh» из skills/dashboard/SKILL.md печатает или пишет скрипт"
  },
  {
@@ -13537,6 +13593,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «the block is current» из skills/github/reference.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",

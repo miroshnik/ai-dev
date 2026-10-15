@@ -118,7 +118,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 180 тестов</summary>
+<details><summary>✅ 184 теста</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -173,6 +173,9 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Of them, from the harness» из skills/spec/reference.md печатает или пишет скрипт
 - ✅ цитату «Outside the tree» из skills/spec/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Overlap with the actual of #M … — recompute #M» из skills/est/SKILL.md печатает или пишет скрипт
+- ✅ цитату «Refresh after #N, result: …» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «Refresh after #N, result:» из skills/github/reference.md печатает или пишет скрипт
+- ✅ цитату «Refresh after #N, script: …» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «Refresh» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Remaining: …» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Removed» из skills/spec/SKILL.md печатает или пишет скрипт
@@ -289,6 +292,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «repo» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «run the dispatcher on epic #M?» из AGENTS.md печатает или пишет скрипт
 - ✅ цитату «silence» из skills/dashboard/SKILL.md печатает или пишет скрипт
+- ✅ цитату «the block is current» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «unsplit: N h» из skills/est/reference.md печатает или пишет скрипт
 - ✅ цитату «violator does not pass: …» из skills/spec/checks.md печатает или пишет скрипт
 - ✅ цитату «waits for the previous executor» из skills/github/reference.md печатает или пишет скрипт
@@ -309,7 +313,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 
 ## Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи
 
-<details><summary>✅ 320 тестов</summary>
+<details><summary>✅ 321 тест</summary>
 
 - ✅ у каждого языка те же ключи, что у en, и ни одного пустого названия
 - ✅ в en.json нет кириллицы
@@ -339,6 +343,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ название actualize.openTask скрипты читают из словаря
 - ✅ название actualize.openTasks скрипты читают из словаря
 - ✅ название actualize.prs скрипты читают из словаря
+- ✅ название actualize.report скрипты читают из словаря
 - ✅ название actualize.scope скрипты читают из словаря
 - ✅ название actualize.shipped скрипты читают из словаря
 - ✅ название actualize.unblocked скрипты читают из словаря
