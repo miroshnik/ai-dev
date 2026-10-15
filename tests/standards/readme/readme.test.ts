@@ -128,6 +128,14 @@ function repoFile(rel: string): string | null {
 
 const README = read("README.md");
 
+describe("README представляет флоу по имени", () => {
+  it("README начинается с заголовка Elves и слогана Elves at work", () => {
+    const lines = prose(README).map((l) => l.trim()).filter((l) => l && !/^<[^>]*>$/.test(l));
+    expect(lines[0]).toBe("# Elves");
+    expect(lines[1]?.replace(/^[*_]+|[*_]+$/g, "")).toBe("Elves at work");
+  });
+});
+
 describe("README называет всё, что ставит флоу, и не ссылается на то, чего нет", () => {
   invariant(it, {
     registry: "скиллы, команды установщика и скиллов, справочники docs/",
