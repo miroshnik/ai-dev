@@ -32,7 +32,7 @@ function skillScripts(): { path: string; text: string }[] {
 }
 
 describe("Скрипт с Projects v2 проверяет облачную сессию и объясняет, куда смотреть", () => {
-  it("скрипты скиллов ai-dev, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md", () => {
+  it("скрипты скиллов Elves, которые ходят в Projects v2, проверяют облачную сессию и ссылаются на docs/cloud-sessions.md", () => {
     const scripts = skillScripts();
     // правило не пустое: под него попадают est и github
     expect(scripts.filter((f) => PROJECTS.test(f.text)).map((f) => f.path)).toEqual(expect.arrayContaining(["skills/est/scripts/est.ts", "skills/github/scripts/github.ts"]));

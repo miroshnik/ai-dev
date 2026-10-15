@@ -59,7 +59,7 @@ exit $fail
  * origin в `headRef` — по умолчанию `refs/pull/<N>/head`, как на GitHub; null — её на origin нет; `mainAfter` —
  * коммит, влитый в main после CI PR.
  */
-// проект на русском, как ai-dev, чей проект GitHub записан: названия — из ru.json (язык — .agents/ai-dev.json чекаута)
+// проект на русском, как Elves, чей проект GitHub записан: названия — из ru.json (язык — .agents/ai-dev.json чекаута)
 const RU = { ".agents/ai-dev.json": '{ "language": "ru" }\n' };
 
 function project({ pr, mainAfter, files = {}, headRef = `refs/pull/${PR}/head` }: { pr: Record<string, string | null>; mainAfter?: Record<string, string | null>; files?: Record<string, string | null>; headRef?: string | null }) {

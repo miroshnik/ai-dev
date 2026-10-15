@@ -1610,7 +1610,7 @@ type FakeFail = { match: string; times: number; stderr: string };
  * `est <args>` с фейковым gh в мире `world` (все его репо — в реестре, `paths` репо — его каталоги) и сбоями `fails`:
  * исход, все вызовы gh, записи в GitHub, тело нового комментария. Повтор gh при сбое сети — без пауз.
  */
-/** `cwd` — каталог проекта: язык комментариев — его `.agents/ai-dev.json`; без него — клон ai-dev (ru). */
+/** `cwd` — каталог проекта: язык комментариев — его `.agents/ai-dev.json`; без него — клон Elves (ru). */
 function withFakeGh(world: Record<string, unknown>, args: string[], fails: FakeFail[] = [], cwd?: string) {
   const bin = path.join(dir, "bin");
   const cfg = path.join(dir, "ai-dev");

@@ -11,7 +11,7 @@ import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-// типы проверяет `bun check`; типы Node — из devDependencies ai-dev: во временном каталоге фикстуры своего node_modules нет
+// типы проверяет `bun check`; типы Node — из devDependencies Elves: во временном каталоге фикстуры своего node_modules нет
 const TYPES = path.join(path.dirname(createRequire(import.meta.url).resolve("@types/node/package.json")), "..");
 
 // `it` раннера подменяется сборщиком: харнесс только регистрирует тесты, запускать их — дело раннера

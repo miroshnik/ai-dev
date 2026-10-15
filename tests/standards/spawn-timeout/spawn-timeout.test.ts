@@ -58,7 +58,7 @@ const lib = read("lib", (n) => n.endsWith(".ts"));
 
 describe("Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT", () => {
   invariant(it, {
-    registry: "тесты ai-dev, которые запускают процессы",
+    registry: "тесты Elves, которые запускают процессы",
     items: spawning(tests, lib),
     name: (f) => `${f.path} задаёт setDefaultTimeout(SPAWN_TIMEOUT)`,
     check: (f) => {

@@ -10,7 +10,7 @@ import { SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-// Playwright — из devDependencies ai-dev: во временном проекте своего node_modules нет, он — ссылка на node_modules ai-dev
+// Playwright — из devDependencies Elves: во временном проекте своего node_modules нет, он — ссылка на node_modules Elves
 const PLAYWRIGHT = path.join(path.dirname(createRequire(import.meta.url).resolve("@playwright/test/package.json")), "cli.js");
 
 let dir: string;
