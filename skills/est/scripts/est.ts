@@ -28,7 +28,7 @@ type Any = any;
 
 const HOME = os.homedir();
 // The skill's personal state (repository registry, prices, cache) lives in an agent-neutral directory:
-// $AI_DEV_CONFIG_DIR, otherwise ~/.config/ai-dev — one expression in all scripts (the ai-dev config-dir standard):
+// $AI_DEV_CONFIG_DIR, otherwise ~/.config/ai-dev — one expression in all scripts (the Elves config-dir standard):
 // github pins a task to a session in the same directory. The old ~/.claude/est moves automatically
 // (see ensureConfigDir), leaving a symlink in its place.
 export const EST_DIR = process.env.AI_DEV_CONFIG_DIR || path.join(HOME, ".config", "ai-dev");

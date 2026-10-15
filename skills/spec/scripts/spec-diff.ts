@@ -56,7 +56,7 @@ function findRoot(root?: string): { top: string; root: string; prefix: string } 
 const wanted = (rel: string) => L.isTestFile(rel) && L.classify(rel)[0] !== "lib";
 
 /**
- * A copy of the ai-dev flow (`.agents/`, `.claude/` from the root) isn't project code: `install` puts it there, nobody
+ * A copy of the Elves flow (`.agents/`, `.claude/` from the root) isn't project code: `install` puts it there, nobody
  * edits it by hand, the project's linters don't see it. Its tests and lint disables aren't project decisions and don't
  * go into the spec diff.
  */
