@@ -3,12 +3,13 @@
  * elves — installs the flow: the shared rules, references and all Elves skills into a project or onto the machine;
  * checks whether an install has fallen behind the latest Elves release, updates it and cuts a release.
  *
- *   bunx github:miroshnik/elves install                — into the project: the git root (or the current directory)
- *   bunx github:miroshnik/elves install -g             — machine-wide: the canon, skills and hook
+ *   bunx @miroshnik/elves install                      — into the project: the git root (or the current directory)
+ *   bunx @miroshnik/elves install -g                   — machine-wide: the canon, skills and hook
  *   elves install -g                                   — the same from the npm package (npm i -g @miroshnik/elves)
  *   bun <Elves clone>/bin/elves.ts install -g --link   — from a clone: symlinks to the clone, edits show at once
- *   bunx github:miroshnik/elves check [-g]             — is the install behind: 0 — no, 1 — yes, 2 — can't tell
- *   bunx github:miroshnik/elves update [-g]            — bring the install up to date
+ *   bunx @miroshnik/elves check [-g]                   — is the install behind: 0 — no, 1 — yes, 2 — can't tell
+ *   bunx @miroshnik/elves update [-g]                  — bring the install up to date
+ *   bunx github:miroshnik/elves <command>              — the fallback: the launcher from main (`toRelease`)
  *   bun <Elves clone>/bin/elves.ts release             — cut a release: a tag and the list of flow changes
  *   bun <Elves checkout>/bin/elves.ts pack <tag>       — CI on the release tag: the npm package @miroshnik/elves
  *   elves spec-doc … · elves slot --for <PID>          — a project with the package: the skills' scripts at its version
@@ -88,8 +89,13 @@ const PACKAGE = "@miroshnik/elves";
  * (`cloneOrigin`), a clone with this package name is a clone (`isElvesClone`).
  */
 const LEGACY_SOURCE = "miroshnik/ai-dev";
-/** The command the output names: the installer from GitHub through bunx, then the subcommand. */
-const RUN = `bunx github:${SOURCE}`;
+/**
+ * The command the output names — and the canon, the AGENTS.md block, the shim and the `.gitignore` block with it: the
+ * npm package through bunx, then the subcommand (#559). npm is reachable both on the machine and in a cloud session,
+ * where `github:` is 403 (#555); the package is a release itself (`npmRelease`), `check` and `update` from it go by
+ * the latest release. `bunx github:${SOURCE}` — the launcher from main (`toRelease`) — is the fallback.
+ */
+const RUN = `bunx ${PACKAGE}`;
 
 /** The install's manifest: `.agents/elves.json`. */
 const MANIFEST = ".agents/elves.json";

@@ -46,7 +46,7 @@ function codeOf(md: string): string[] {
 
 /**
  * Команды скриптов, названные в документах флоу: `…/scripts/github.ts task new`, `github task close <N>`,
- * `bunx github:miroshnik/elves check -g` — имя скрипта в начале кода или после пути и слова после него до первого
+ * `bunx @miroshnik/elves check -g` — имя скрипта в начале кода или после пути и слова после него до первого
  * аргумента; имя посреди кода — комментарий или текст («# тесты elves standards»), не вызов.
  */
 function namedInDocs(all: Cli[]): { cli: Cli; words: string; file: string }[] {

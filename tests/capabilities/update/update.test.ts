@@ -72,8 +72,8 @@ const PROJECT_COPY = "The project keeps a copy of the flow — moving it to a th
 const PROJECT_BEHIND = "The project's flow is behind — update in the session's task";
 const MACHINE_BEHIND = "The machine is behind — update -g";
 // строки check: тонкий проект отстал — обновление в задаче сессии; копия — переезд своей задачей
-const UPDATE_HERE = "Update in this session's task — @miroshnik/elves in package.json and the lockfile, a few lines: bunx github:miroshnik/elves update";
-const MOVE_TASK = "Move in a task of its own, not in this session's task: bunx github:miroshnik/elves update";
+const UPDATE_HERE = "Update in this session's task — @miroshnik/elves in package.json and the lockfile, a few lines: bunx @miroshnik/elves update";
+const MOVE_TASK = "Move in a task of its own, not in this session's task: bunx @miroshnik/elves update";
 
 const writePkg = (fields: Record<string, unknown>) => writeFileSync(path.join(sb.proj, "package.json"), JSON.stringify({ name: "x", private: true, ...fields }, null, 2) + "\n");
 // шим очереди убран — тонкий проект отстал без смены версии
@@ -128,6 +128,16 @@ describe("Тонкий проект сверяется с версией пак�
     expect(r.stdout).toContain(`\n${UPDATE_HERE}\n`);
     expect(r.stdout).not.toContain("task new");
     expect(snapshot(sb.proj)).toEqual(before);
+  });
+
+  /** Строку агент запускает как есть, и в облаке тоже: npm там есть, `github:` — 403 (#555, #559). */
+  it("check называет команду обновления из npm — bunx @miroshnik/elves update: в облачной сессии github: — 403", () => {
+    writePkg({});
+    elves(sb, ["install"], { bin: v1.bin });
+    const r = elves(sb, ["check"], { bin: v2.bin });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain(": bunx @miroshnik/elves update\n");
+    expect(r.stdout).not.toContain("github:");
   });
 
   /** Подъём версии — три строки: версия в package.json и две строки bun.lock — версия workspace и запись пакета. */
@@ -237,8 +247,8 @@ describe("Тонкий проект сверяется с версией пак�
     const files = [path.join(sb.proj, "AGENTS.md"), path.join(sb.proj, ".gitignore")];
     for (const f of files) {
       const text = read(f);
-      expect(text).toContain("`bunx github:miroshnik/elves install`");
-      writeFileSync(f, text.replace("`bunx github:miroshnik/elves install`", "`npx -y github:miroshnik/ai-dev install`"));
+      expect(text).toContain("`bunx @miroshnik/elves install`");
+      writeFileSync(f, text.replace("`bunx @miroshnik/elves install`", "`npx -y github:miroshnik/ai-dev install`"));
     }
     const c = elves(sb, ["check"]);
     expect(c.code).toBe(1);
@@ -399,7 +409,7 @@ describe("Файл флоу, который игнорирует git проек�
     expect(r.stdout).toContain("in the project: up to date");
     expect(r.stdout).toContain("git ignores flow files");
     expect(r.stdout).toContain("  ❌ .agents/ — .gitignore:1 «.agents/»\n");
-    expect(r.stdout).toContain("Fix in this session's task: bunx github:miroshnik/elves update — adds exceptions to .gitignore\n");
+    expect(r.stdout).toContain("Fix in this session's task: bunx @miroshnik/elves update — adds exceptions to .gitignore\n");
     expect(r.stdout).not.toContain("task new");
     expect(r.stdout).toEndWith(MODE_ASK);
     expect(snapshot(sb.proj)).toEqual(before);
@@ -687,7 +697,7 @@ describe("Копия на машине (-g) сверяется и обновля
     expect(r.stdout).toContain(`on the machine: behind — installed ${short(git(REPO, "rev-parse", "HEAD"))}, latest ${short(newer.sha)}`);
     expect(r.stdout).toContain("~ ~/.agents/elves/AGENTS.md");
     expect(r.stdout).toContain("+ ~/.agents/skills/fresh/");
-    expect(r.stdout).toContain("bunx github:miroshnik/elves update -g");
+    expect(r.stdout).toContain("bunx @miroshnik/elves update -g");
     expect(snapshot(sb.home)).toEqual(before);
     expect(elves(sb, ["update", "-g"], { bin: newer.bin }).code).toBe(0);
     expect(read(path.join(sb.home, ".claude/rules/elves.md"))).toContain("Новое правило.");
@@ -1189,7 +1199,7 @@ describe("Клон --link сверяется с origin/main, update подтяг
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("~ AGENTS.md");
     expect(r.stdout).toContain("+ skills/fresh/SKILL.md");
-    expect(r.stdout).toContain("bunx github:miroshnik/elves update -g");
+    expect(r.stdout).toContain("bunx @miroshnik/elves update -g");
     expect(git(clone, "rev-parse", "HEAD")).toBe(head);
     expect(git(clone, "status", "--porcelain")).toBe("");
     expect(snapshot(sb.home)).toEqual(before);
@@ -1416,7 +1426,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     expect(r.stdout).toContain("Elves in the project: behind");
   });
 
-  /** Имя флоу — Elves, и в адресе и команде тоже (`bunx github:miroshnik/elves …`): прежнего имени в выводе нет. */
+  /** Имя флоу — Elves, и в адресе и команде тоже (`bunx @miroshnik/elves …`): прежнего имени в выводе нет. */
   it("check называет флоу Elves", () => {
     elves(sb, ["install", "-g"]);
     elves(sb, ["install"]);
@@ -1499,7 +1509,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     bunxServes(base.bin);
     const r = runHook();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("Elves in the project: not installed — install it: bunx github:miroshnik/elves install --lang <project language>");
+    expect(r.stdout).toContain("Elves in the project: not installed — install it: bunx @miroshnik/elves install --lang <project language>");
     expect(elves(sb, ["check", "--hook"], { cwd: sb.tmp }).stdout).not.toContain("in the project");
   });
 
@@ -1536,7 +1546,7 @@ describe("В начале сессии Claude Code проверка идёт с�
     const r = runHook();
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("❌ .agents/ — .gitignore:1 «.agents/»");
-    expect(r.stdout).toContain("Fix in this session's task: bunx github:miroshnik/elves update — adds exceptions to .gitignore");
+    expect(r.stdout).toContain("Fix in this session's task: bunx @miroshnik/elves update — adds exceptions to .gitignore");
     expect(r.stdout).toContain("Git ignores flow files — update adds exceptions to .gitignore, committed with the update");
     expect(r.stdout).not.toContain(PROJECT_COPY);
     expect(r.stdout).not.toContain(MACHINE_BEHIND);
@@ -1731,7 +1741,7 @@ describe("Прежние имена флоу (ai-dev): update переносит
     expect(c.code).toBe(1);
     expect(c.stdout).toContain(`  ~ ~/.config/ai-dev/ — ${FORMER} to ~/.config/elves\n`);
     expect(c.stdout).toContain(`  - ~/.agents/ai-dev.json — ${FORMER}\n`);
-    expect(c.stdout).toContain("Update: bunx github:miroshnik/elves update -g\n");
+    expect(c.stdout).toContain("Update: bunx @miroshnik/elves update -g\n");
     expect(elves(sb, ["update", "-g"]).code).toBe(0);
     expect(snapshot(to)).toEqual(config);
     // скрипты прошлых релизов — копии ещё не обновлённых проектов — смотрят в тот же каталог
