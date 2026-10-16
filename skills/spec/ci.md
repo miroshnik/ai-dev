@@ -267,7 +267,7 @@ and Node; `test` — the project's script over `bun test`):
       - run: |
           git ls-files -- '*.test.ts' ':!:tests/standards/**' ':!:tests/architecture/**' > .spec-files.txt
           reports=(); for r in .spec-last/.spec-report-*.xml; do reports+=(--report "$r"); done
-          files=$(bun --no-env-file .agents/skills/spec/scripts/spec-shard.ts --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner bun --list .spec-files.txt "${reports[@]}")
+          files=$(bun --no-env-file node_modules/.bin/elves spec-shard --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner bun --list .spec-files.txt "${reports[@]}")
           [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no files"; exit 0; } # without filters the runner would run everything
           list=(); while IFS= read -r f; do list+=("$f"); done <<< "$files"
           bun run test "${list[@]}" --reporter=junit --reporter-outfile=.spec-report-${{ matrix.shard }}.xml
