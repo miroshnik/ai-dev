@@ -1,10 +1,11 @@
 import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { elves, sandbox } from "../../lib/elves.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
@@ -13,18 +14,34 @@ setDefaultTimeout(SPAWN_TIMEOUT);
 const SLOT = fileURLToPath(new URL("../../../skills/slot/scripts/slot.ts", import.meta.url));
 /** Установщик Elves — бинарь `elves` пакета. */
 const ELVES = fileURLToPath(new URL("../../../bin/elves.ts", import.meta.url));
-/** Начало скрипта package.json после установки флоу: его shell подключает slot.sh, затем идёт команда. */
-const SCRIPT = ". .agents/skills/slot/scripts/slot.sh && ";
+/** Шим очереди тонкого проекта: скрипт package.json подключает его перед командой. */
+const SHIM = ".agents/slot.sh";
+/** Начало скрипта package.json после установки флоу: его shell подключает шим, затем идёт команда. */
+const SCRIPT = `. ${SHIM} && `;
 /** Ждать события дольше этого — ошибка с объяснением, а не таймаут теста без него. */
 const PATIENCE = 30_000;
 
 let dir: string;
 let cleanup: () => void;
+/** `node_modules/.bin` проекта: там `elves` пакета, `npm run` и `bun run` дают его скрипту на PATH. */
+let bin: string;
 let config: string;
 let tmp: string;
 let running: ChildProcess[];
 /** Каталоги, закрытые тестом на запись: открываются до уборки, иначе её не удалить. */
 let locked: string[];
+/** Текст шима — какой ставит установщик в тонкий проект: один раз на файл. */
+let shim: string;
+
+beforeAll(() => {
+  const sb = sandbox();
+  try {
+    expect(elves(sb, ["install"]).code).toBe(0);
+    shim = readFileSync(path.join(sb.proj, SHIM), "utf8");
+  } finally {
+    sb.cleanup();
+  }
+});
 
 beforeEach(() => {
   ({ dir, cleanup } = tmpDir());
@@ -33,9 +50,12 @@ beforeEach(() => {
   mkdirSync(tmp);
   running = [];
   locked = [];
-  // копия скилла в проекте: slot.sh зовёт slot.ts по пути от корня проекта, как после установки
-  mkdirSync(path.join(dir, ".agents/skills/slot"), { recursive: true });
-  symlinkSync(path.dirname(SLOT), path.join(dir, ".agents/skills/slot/scripts"));
+  // тонкий проект: шим установщика и elves пакета из devDependencies — slot.ts этого клона
+  bin = path.join(dir, "node_modules/.bin");
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(ELVES, path.join(bin, "elves"));
+  mkdirSync(path.join(dir, ".agents"));
+  writeFileSync(path.join(dir, SHIM), shim);
 });
 afterEach(() => {
   for (const d of locked) chmodSync(d, 0o755);
@@ -78,12 +98,16 @@ interface Queued {
   err: () => string;
   proc: ChildProcess;
   done: Promise<number | string>;
+  /** Процесс вышел, и его stdout и stderr закрыты — их не держит и никто из его потомков. */
+  closed: () => boolean;
 }
 
 /** `slot` фоном: своя группа процессов — тест убивает её целиком. */
 const start = (args: string[], extra: Record<string, string> = {}) => track(spawn("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), detached: true }));
-/** Скрипт package.json фоном: shell, как у `npm run`, подключает slot.sh и идёт командой. */
-const startScript = (cmd: string, extra: Record<string, string> = {}) => track(spawn("sh", ["-c", SCRIPT + cmd], { cwd: dir, env: envOf(extra), detached: true }));
+/** Окружение скрипта package.json: `node_modules/.bin` проекта первым на PATH, как у `npm run`. */
+const scriptEnv = (extra: Record<string, string> = {}) => envOf({ PATH: `${bin}${path.delimiter}${process.env.PATH}`, ...extra });
+/** Скрипт package.json фоном: shell, как у `npm run`, подключает шим и идёт командой. */
+const startScript = (cmd: string, extra: Record<string, string> = {}) => track(spawn("sh", ["-c", SCRIPT + cmd], { cwd: dir, env: scriptEnv(extra), detached: true }));
 
 function track(proc: ChildProcess): Queued {
   running.push(proc);
@@ -92,7 +116,9 @@ function track(proc: ChildProcess): Queued {
   proc.stdout!.on("data", (d) => (out += d));
   proc.stderr!.on("data", (d) => (err += d));
   const done = new Promise<number | string>((resolve) => proc.on("exit", (code, signal) => resolve(code ?? `сигнал ${signal}`)));
-  return { out: () => out, err: () => err, proc, done };
+  let closed = false;
+  proc.on("close", () => (closed = true));
+  return { out: () => out, err: () => err, proc, done, closed: () => closed };
 }
 
 /** Команда, которая идёт, пока тест её не отпустит: `started-<имя>` — началась, `release-<имя>` — закончить. */
@@ -116,9 +142,9 @@ function run(args: string[], extra: Record<string, string> = {}) {
   return spawnSync("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
 }
 
-/** Синхронный скрипт package.json: `sh -c` с slot.sh перед командой. */
+/** Синхронный скрипт package.json: `sh -c` с шимом перед командой. */
 function runScript(cmd: string, extra: Record<string, string> = {}) {
-  return spawnSync("sh", ["-c", SCRIPT + cmd], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
+  return spawnSync("sh", ["-c", SCRIPT + cmd], { cwd: dir, env: scriptEnv(extra), encoding: "utf8", timeout: PATIENCE });
 }
 
 describe("Тяжёлые прогоны машины идут очередью: два одновременно, остальные — по порядку прихода", () => {
@@ -202,12 +228,13 @@ describe("Команда в слоте — как без него, с долей
 });
 
 /**
- * Скрипт package.json не отдаёт команду slot.ts строкой: его shell подключает slot.sh, тот берёт слот на этот shell и
- * экспортирует переменные очереди, а команда остаётся обычной командой скрипта — её видят инструменты, читающие
- * package.json (knip, tests/capabilities/install).
+ * Скрипт package.json не отдаёт команду slot строкой: его shell подключает шим `.agents/slot.sh`, тот зовёт `elves slot
+ * --for $$` пакета проекта — слот на этот shell — и экспортирует переменные очереди, а команда остаётся обычной командой
+ * скрипта — её видят инструменты, читающие package.json (knip, tests/capabilities/install). Шим и `elves` на PATH — как
+ * в тонком проекте (#585).
  */
 describe("Скрипт package.json берёт слот своим shell, команда остаётся командой скрипта", () => {
-  it("скрипты стоят в общей очереди: слот держит shell скрипта, пока тот не вышел", async () => {
+  it("скрипты стоят в общей очереди: слот держит shell скрипта, подключившего шим, пока тот не вышел", async () => {
     const [a, b] = [holdScript("a"), holdScript("b")];
     await until(() => started("a") && started("b"), "два скрипта стартовали");
     const c = hold("c");
@@ -248,7 +275,7 @@ describe("Скрипт package.json берёт слот своим shell, ком
     release("a");
   });
 
-  it("ожидающий видит команду скрипта, а не slot.sh", async () => {
+  it("ожидающий видит команду скрипта, а не шим", async () => {
     holdScript("a", { npm_lifecycle_script: SCRIPT + holding("a") });
     hold("b");
     await until(() => started("a") && started("b"), "оба слота заняты");
@@ -270,9 +297,10 @@ describe("Скрипт package.json берёт слот своим shell, ком
     for (const n of ["a", "b"]) release(n);
   });
 
-  it("slot не запустился — скрипт падает с его кодом, команда не идёт", () => {
+  // elves пакета на PATH, а bun его шебанга — нет: elves падает с кодом 127
+  it("elves не запустился — скрипт падает с его кодом, команда не идёт", () => {
     const sh = execFileSync("sh", ["-c", "command -v sh"], { encoding: "utf8" }).trim();
-    const r = spawnSync(sh, ["-c", `${SCRIPT}echo ran`], { cwd: dir, env: envOf({ PATH: path.join(dir, "no-bun") }), encoding: "utf8", timeout: PATIENCE });
+    const r = spawnSync(sh, ["-c", `${SCRIPT}echo ran`], { cwd: dir, env: envOf({ PATH: bin }), encoding: "utf8", timeout: PATIENCE });
     expect(exitOf(r)).toBe(127);
     expect(r.stdout).toBe("");
   });
@@ -281,13 +309,13 @@ describe("Скрипт package.json берёт слот своим shell, ком
     hold("a");
     hold("b");
     await until(() => started("a") && started("b"), "оба слота заняты");
-    const shell = spawn("sleep", ["60"], { detached: true });
-    running.push(shell);
-    const w = start(["--for", String(shell.pid)]);
-    await waiting(w, "слот за shell");
-    process.kill(shell.pid!, "SIGKILL");
-    await until(() => w.proc.exitCode !== null, "slot вышел после убитого shell");
-    expect(w.proc.exitCode).toBe(1);
+    const w = holdScript("c");
+    await waiting(w, "скрипт");
+    // убит только shell: elves шима, который ждёт слот, остаётся сиротой; stderr скрипта держит и он — поток закрыт,
+    // когда вышел и elves
+    process.kill(w.proc.pid!, "SIGKILL");
+    await until(w.closed, "elves шима вышел после убитого shell");
+    expect(started("c")).toBe(false);
     expect(w.out()).toBe("");
     for (const n of ["a", "b"]) release(n);
   });
