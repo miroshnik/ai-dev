@@ -24,12 +24,15 @@ Which check for what:
 A mechanical check is runner tests: they are in the report, and so in
 `docs/spec` and in `spec-diff`. The harness doesn't depend on the runner — you
 pass it the runner's `it` (Vitest, Jest, bun test, `node:test`). Import it from
-the skill's copy in the project: `.agents/skills/spec/scripts/harness.ts` (from
-`tests/standards/<name>/` — `../../../.agents/skills/spec/scripts/harness.ts`).
+the project's package: `@miroshnik/elves/spec/harness` (the model —
+`@miroshnik/elves/spec/architecture`, the ESLint fragment —
+`@miroshnik/elves/spec/eslint-config`); a runner on Node takes the package's
+build, Bun and the type checker — its TypeScript source.
 
-- Importing with the `.ts` extension (the harness imports `speclib.ts` and
-  `architecture.ts` the same way) needs `allowImportingTsExtensions` (together
-  with `noEmit`) in *every* tsconfig that checks the importing file: the root
+- The type checker reads that source, and the harness imports `speclib.ts`
+  and `architecture.ts` with the `.ts` extension: `allowImportingTsExtensions`
+  (together with `noEmit`) is needed in *every* tsconfig that checks the
+  importing file: the root
   one, `tsconfig.spec.json`, the e2e package's config; otherwise `tsc` gives
   TS5097. A build config with emit (`tsconfig.build.json` for `nest build`)
   doesn't accept the flag: tests are excluded from it, and when it extends the
@@ -60,7 +63,7 @@ element of a registry taken from the code, not on a single example:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { invariant } from "../../../.agents/skills/spec/scripts/harness.ts";
+import { invariant } from "@miroshnik/elves/spec/harness";
 
 const mutations = await listMutations(); // from the code: router, schema, files — not a handwritten list
 
@@ -114,7 +117,7 @@ file at that path.
 
 ```ts
 import { describe, it } from "vitest";
-import { eslintLinter, examples } from "../../../.agents/skills/spec/scripts/harness.ts";
+import { eslintLinter, examples } from "@miroshnik/elves/spec/harness";
 
 describe("the domain doesn't write to the console", () => {
   examples(it, {
@@ -145,7 +148,7 @@ only collects the tree's fragments — `lint` and the editor see the rule as
 usual:
 
 ```js
-import { collectEslint } from "./.agents/skills/spec/scripts/eslint-config.ts";
+import { collectEslint } from "@miroshnik/elves/spec/eslint-config";
 export default [...base, ...(await collectEslint(import.meta.dirname))];
 ```
 
@@ -159,7 +162,7 @@ restriction is `restrict`: its own rule `spec/<id>` in the shared `spec`
 plugin, so the restrictions of different standards on the same files all apply:
 
 ```ts
-import { restrict } from "../../../.agents/skills/spec/scripts/eslint-config.ts";
+import { restrict } from "@miroshnik/elves/spec/eslint-config";
 export default restrict({ id: "no-alert", selectors: ["CallExpression[callee.name='alert']"], message: "alert — use notifications instead", files: ["src/**"] });
 ```
 
@@ -198,7 +201,7 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
   (an exception from a subfolder isn't read). A leftover `exceptions.ts` in the
   decision folder or its subfolder — a red test
   «exceptions are one file per element in exceptions/, not exceptions.ts» with a migration hint:
-  `bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts` spreads
+  `bun --no-env-file node_modules/.bin/elves spec-exceptions` spreads
   each file into the decision folder's directory, changes the import in the folder's tests to
   `exceptionsIn()`, and the path in `package.json` and the CI workflow to the
   directory; whatever it didn't rewrite — as a `!` line, exit code 1.
@@ -246,7 +249,7 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
 
   ```ts
   import { it } from "vitest";
-  import { lintExceptions } from "../../../.agents/skills/spec/scripts/harness.ts";
+  import { lintExceptions } from "@miroshnik/elves/spec/harness";
 
   lintExceptions(it, { root: process.cwd(), dirs: ["src"] });
   ```
@@ -263,7 +266,7 @@ A fragment is `eslint.ts`, `eslint.mts` (ESM even in a project without
 external packages each one depends on.
 
 ```ts
-import type { Model } from "../../.agents/skills/spec/scripts/architecture.ts";
+import type { Model } from "@miroshnik/elves/spec/architecture";
 
 export default {
   name: "Invoices", // the system on the documentation diagrams
@@ -351,7 +354,7 @@ claimed behavior").
   export default defineConfig({ test: { globalSetup: ["tests/setup/journal.ts"] } });
 
   // tests/setup/journal.ts — once per run, before the tests
-  import { resetJournal } from "../../.agents/skills/spec/scripts/harness.ts";
+  import { resetJournal } from "@miroshnik/elves/spec/harness";
   export default () => resetJournal();
   ```
 - *Log in Next.js:* the entry points are `page.tsx` exports, `route.ts` methods
@@ -440,7 +443,7 @@ claimed behavior").
   directory as artifacts):
 
   ```bash
-  bun --no-env-file .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions]
+  bun --no-env-file node_modules/.bin/elves spec-claims --entries tests/standards/entry-points/entries.ts [--exceptions tests/standards/entry-points/exceptions]
   ```
 
   Tests «<entry> is called by a capability test»
@@ -486,7 +489,7 @@ that no entry point reaches is dead code: knip finds it by the import graph
 
 ```ts
 import { describe, it } from "vitest";
-import { deadCode, exceptionsIn } from "../../../.agents/skills/spec/scripts/harness.ts";
+import { deadCode, exceptionsIn } from "@miroshnik/elves/spec/harness";
 
 const exceptions = exceptionsIn(); // the folder's exceptions/<finding>.json: { "item": "export:src/math.ts#factorial", … }
 describe("no code without a consumer", () => deadCode(it, { root: process.cwd(), exceptions }));
@@ -530,7 +533,7 @@ monorepo knip takes longer than a test timeout (5 s in Vitest). Without
 `report`, the project's
 `node_modules/.bin/knip --reporter json --reporter <skill>/knip-hints.cjs` is
 run (plus `args`); `report` is ready output of the same command (`knip --reporter
-json --reporter .agents/skills/spec/scripts/knip-hints.cjs > .knip.json`);
+json --reporter node_modules/@miroshnik/elves/skills/spec/scripts/knip-hints.cjs > .knip.json`);
 without the hints line — a failed test with that command. An exit code other
 than 0/1 or output that isn't JSON — all the kind tests fail with the reason: a
 knip crash isn't "no dead code".

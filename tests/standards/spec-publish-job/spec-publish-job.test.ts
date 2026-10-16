@@ -142,8 +142,9 @@ interface Job {
   key: string;
 }
 
-// шаг публикации: скрипт скилла или скрипт проекта, который его зовёт (CI Elves)
-const PUBLISH_STEP = /spec-publish\.ts|\bspec:publish\b/;
+// шаг публикации: скрипт скилла, он же из пакета проекта (`elves spec-publish`, #559) или скрипт проекта, который его
+// зовёт (CI Elves)
+const PUBLISH_STEP = /spec-publish\.ts|\bspec:publish\b|\belves\b.*\sspec-publish\b/;
 
 /** Имя check-run job: `name`, без него — ключ; с матрицей GitHub дописывает в скобках значения сочетания — здесь первого. */
 function checkRunOf(id: string, job: Record<string, unknown>): string {
@@ -249,6 +250,13 @@ describe("job публикации во фрагментах CI скилла spe
       expect(job("    strategy: { matrix: { node: [24] } }\n").checkRun).toBe("spec-publish (24)");
       expect(violation(job(""))).toBeNull();
       expect(violation(job("    strategy: { matrix: { node: [24] } }\n"))).toContain("check-run «spec-publish (24)»");
+    });
+
+    it("шаг со скриптом пакета — elves spec-publish из node_modules или пакет версии проекта через bunx — тоже публикация", () => {
+      const job = (run: string) => one("a.yml", `jobs:\n  spec-publish:\n    steps:\n      - run: ${run}\n`);
+      expect(job("bun --no-env-file node_modules/.bin/elves spec-publish").checkRun).toBe("spec-publish");
+      expect(job(`bunx @miroshnik/elves@"$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)" spec-publish`).checkRun).toBe("spec-publish");
+      expect(jobsOf("a.yml", "jobs:\n  unit:\n    steps:\n      - run: bun --no-env-file node_modules/.bin/elves spec-run --artifact spec-reports\n")).toEqual([]);
     });
 
     it("публикация в тексте и job без шага публикации — не элементы; неразборный фрагмент с публикацией — ошибка", () => {

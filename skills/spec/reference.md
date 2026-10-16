@@ -255,10 +255,9 @@ main file's capability section looks like); a dissimilar name with a
 different body is honestly removed and added. An empty list prints as «none»,
 so it's visible that the check ran. Tests inside `tests/` but
 outside capabilities/standards are marked `⚠️ outside the tree`;
-changed test files outside `tests/` are listed by name. The flow copy
-(`.agents/`, `.claude/` from the root) is not project code: `install` puts it
-there, the project's linters don't see it — neither its tests nor its lint
-disables are in the spec diff. After the lists — the number of the PR's new
+changed test files outside `tests/` are listed by name. The flow copy of an
+earlier release (`.agents/`, `.claude/` from the root) is not project code —
+neither its tests nor its lint disables are in the spec diff. After the lists — the number of the PR's new
 names that aren't statements in the project language: `it` and `describe`
 names of added and changed tests that the same file didn't have at the base
 (`⚠️ **Names that aren't statements: N** — new in this PR…`); none — no line;
@@ -478,36 +477,39 @@ How to sort out an old spec's requirements (OpenSpec, a requirements
 document) when switching — an outcome for each, check by breaking, what is
 removed without a test — `migration.md` next to this file.
 
-The scripts are taken from the skill's copy in the project itself and run
+The scripts and modules come from the project's package — `@miroshnik/elves`
+in `devDependencies`, its version committed with the project. The scripts run
 under Bun — the flow's only runtime, a Node project included (in CI — the
 `oven-sh/setup-bun@v2` step, `ci.md`). The modules the project's tests and
-config import — `harness.ts`, `architecture.ts`, `eslint-config.ts` — load
-under the project's own runner (Vitest, Jest, Playwright, ESLint on Node), not
-Bun: only `node:` APIs and erasable TypeScript, no `import.meta` and no
-top-level `await` (Playwright and Jest load them as CommonJS). The Elves flow
-install puts the copy there, and it is committed: the agent before a PR and CI call the same
-project `spec:doc` / `spec:diff` over the same files, so what the agent sees
-locally matches CI. Why a copy and not a submodule, a checkout in the workflow or a package —
-section "Wiring into the project's CI" below.
+config import — `@miroshnik/elves/spec/harness`, `…/spec/architecture`,
+`…/spec/eslint-config` — load under the project's own runner (Vitest, Jest,
+Playwright, ESLint on Node) from the package's build, Bun and the type checker
+take the TypeScript source: only `node:` APIs and erasable TypeScript, no
+`import.meta` and no top-level `await` (tests/standards/harness-load). The
+agent before a PR and CI call the same project `spec:doc` / `spec:diff` at
+the same version, so what the agent sees locally matches CI. Why a package and
+not a copy, a submodule or a checkout in the workflow — section "Wiring into
+the project's CI" below.
 
-1. **Install** at the project root, the result (`.agents/`, `.claude/`, the
-   block in `AGENTS.md`) goes into a commit:
+1. **Install** at the project root, the result (the package version in
+   `package.json` and the lockfile, `.agents/elves.json`, `.agents/slot.sh`,
+   the block in `AGENTS.md`) goes into a commit:
    ```bash
-   bunx github:miroshnik/elves install
+   bunx @miroshnik/elves install
    ```
-   - Exclude `.agents/` and `.claude/` from the project's linters and
-     formatters (`ignores` in ESLint, `.prettierignore`, `include` in
-     tsconfig): they hold Elves code and Markdown.
-   - Update — the same command in a separate PR, then the reports and
-     `spec:doc --strict`; if the format changed — CI publishes the new one
-     after the merge.
-2. **Scripts** in `package.json` — via `bun`: Bun runs TypeScript itself,
-   for any project `type`. Reports — those the project has:
+   Update — `update` in the current task's branch: the package version, a few
+   lines; then the reports and `spec:doc --strict`; if the format changed — CI
+   publishes the new one after the merge.
+2. **Scripts** in `package.json` — the package's `elves` (Bun runs
+   TypeScript itself, for any project `type`), in CI —
+   `bun --no-env-file node_modules/.bin/elves spec-…`, a job without the
+   project's dependencies — `bunx @miroshnik/elves@<version> spec-…`
+   (`ci.md`). Reports — those the project has:
    ```json
-   "spec:doc": "bun --no-env-file .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
-   "spec:diff": "bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts",
-   "spec:publish": "bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts",
-   "spec:claims": "bun --no-env-file .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
+   "spec:doc": "elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
+   "spec:diff": "elves spec-diff",
+   "spec:publish": "elves spec-publish",
+   "spec:claims": "elves spec-claims --entries tests/standards/entry-points/entries.ts"
    ```
    Standards and architecture run once — the `test:spec` script, a fast CI job
    of its own; `test` excludes them, e2e doesn't run them (`checks.md`):
@@ -763,31 +765,34 @@ section "Wiring into the project's CI" below.
 
 ## Wiring into the project's CI
 
-- **The scripts' source is the skill's copy in the project.** The agent
+- **The scripts' source is the project's package version** (#552). The agent
   before a PR and CI need one version: the `docs/spec` format changes (as it
   did in #32), and documentation built by the skill from a fresh Elves
-  wouldn't match CI on another version. Installing the flow
-  (`bunx github:miroshnik/elves install`) puts the skill into
-  `.agents/skills/spec`, and it is committed with the project: the project's
-  `spec:doc` / `spec:diff` call these files for the agent, in CI and in a
-  cloud session; an update is an ordinary PR. The same mechanism installs the
-  rules and the other skills — there is no separate path for CI.
+  wouldn't match CI on another version. `@miroshnik/elves` in the project's
+  `devDependencies` pins it: `bun install` brings the same package to the
+  agent, CI, a colleague and a cloud session (npm works there, `github:` is
+  403); an update raises the version — a few lines in the current task's
+  branch. The same package is the flow of the project — there is no separate
+  path for CI.
+- Node doesn't strip types in `node_modules`
+  (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), and Playwright and Jest
+  don't transpile it: the package carries a build for Node — `elves pack`
+  builds the modules of `exports` into `dist/` on publishing (#556); the
+  `default` condition leads a runner on Node there, `types` and `bun` — to
+  the TypeScript source (tests/standards/harness-load).
 - Rejected:
+  - a copy of the skill in the project (`.agents/skills/spec`, the install of
+    earlier releases): every update is a PR of thousands of lines and a task of
+    its own, plus exceptions in `.gitignore`, linters and formatters (#552);
   - an Elves submodule: an extra step in every clone and worktree
     (`git submodule update --init`), and its tests and code arrive in the
     project, where the project's Vitest and ESLint pick them up;
   - an Elves checkout in the workflow (`repository` + `ref: <SHA>`) pins only
-    CI: the agent locally calls the skill of another version;
-  - a package (`github:miroshnik/elves#<SHA>` in devDependencies): the
-    project's runner imports the harness from it, and Node doesn't strip types
-    in `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`) — a build
-    would be needed.
-- The copy sits under the project's `package.json`, which may lack
-  `"type": "module"` (Node loads an ESM `.ts` file with a warning) or have
-  `"type": "commonjs"` (doesn't load it at all). So the skill has its own
-  `scripts/package.json` with `"type": "module"`: Node's own loader (the
-  project's `eslint.config.*`, `node --test`) takes `eslint-config.ts` and the
-  harness as ESM whatever the project's `type`.
+    CI: the agent locally calls the skill of another version.
+- The skill's own directory (the machine, a clone) has
+  `scripts/package.json` with `"type": "module"`: in a project with
+  `"type": "commonjs"` Node's own loader (the project's `eslint.config.*`,
+  `node --test`) would take its ESM `.ts` files for CommonJS.
 - **The runner merges shards.** `spec-doc` merges several reports but takes
   the order of tests in a file by first appearance. Playwright with
   `fullyParallel` splits a file between shards, and the line order would

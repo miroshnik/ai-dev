@@ -17,10 +17,16 @@ wrapped in `slot` under Bun (the `slot` skill; no queue in CI) — hence
 `spec` job merges them with the runners' own tools and builds `docs/spec` with
 `--strict`; on `main` it hands it as an artifact to the `spec-publish` job —
 the only one with a write token (no CI on `main` — publishing on PR merge,
-section at the end). The skill's scripts run under Bun: `oven-sh/setup-bun@v2`
+section at the end). The skill's scripts are the project's package
+(`@miroshnik/elves` in `devDependencies`) under Bun: `oven-sh/setup-bun@v2`
 next to the project's Node in `spec`, instead of it in `spec-publish` and
-`spec-diff`. `spec-diff` is its own light job after `spec`: git
-history, Bun and the merged reports (harness tests are visible only in the
+`spec-diff`. A job with the project's dependencies calls them
+`bun --no-env-file node_modules/.bin/elves <script>` — a step doesn't see
+`node_modules/.bin`; `spec-publish` and `spec-diff` don't install the
+project's dependencies — they take the package alone at the project's version,
+`bunx @miroshnik/elves@<version>`: the job with the write token runs no
+install of the project's packages. `spec-diff` is its own light job after
+`spec`: git history, Bun and the merged reports (harness tests are visible only in the
 report; their base is the `tests.json` of the `spec` branch). The
 `.spec-claims.xml` claims report goes there too: its tests are in `tests.json`,
 and without the report they show up as "deleted" in every PR.
@@ -69,12 +75,12 @@ jobs:
       - name: the last green run's reports — durations for the shard
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
-          run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --artifact spec-reports)
+          run=$(bun --no-env-file node_modules/.bin/elves spec-run --artifact spec-reports)
           [ -z "$run" ] || gh run download "$run" --name spec-reports --dir .spec-last
       # the files of test (the same --exclude: standards and architecture — test-spec) by the durations, not --shard
       - run: |
           pnpm exec vitest list --filesOnly --json=.spec-files.json --exclude 'tests/standards/**' --exclude 'tests/architecture/**'
-          files=$(bun --no-env-file .agents/skills/spec/scripts/spec-shard.ts --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner vitest --list .spec-files.json --report .spec-last/.spec-report.json)
+          files=$(bun --no-env-file node_modules/.bin/elves spec-shard --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner vitest --list .spec-files.json --report .spec-last/.spec-report.json)
           [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no files"; exit 0; } # without filters the runner would run everything
           list=(); while IFS= read -r f; do list+=("$f"); done <<< "$files"
           pnpm test "${list[@]}" --reporter=default --reporter=blob --outputFile.blob=vitest-blob/${{ matrix.shard }}.json
@@ -102,12 +108,12 @@ jobs:
       - name: the last green run's reports — durations for the shard
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
-          run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --artifact spec-reports)
+          run=$(bun --no-env-file node_modules/.bin/elves spec-run --artifact spec-reports)
           [ -z "$run" ] || gh run download "$run" --name spec-reports --dir .spec-last
       # only the browser tests: no test or test:spec step here; the login project (dependencies) runs in every shard by itself
       - run: |
           PLAYWRIGHT_JSON_OUTPUT_NAME=.spec-files.json pnpm exec playwright test --list --reporter=json
-          files=$(bun --no-env-file .agents/skills/spec/scripts/spec-shard.ts --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner playwright --list .spec-files.json --report .spec-last/.spec-playwright.json)
+          files=$(bun --no-env-file node_modules/.bin/elves spec-shard --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner playwright --list .spec-files.json --report .spec-last/.spec-playwright.json)
           [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no files"; exit 0; }
           list=(); while IFS= read -r f; do list+=("$f"); done <<< "$files"
           pnpm exec playwright test "${list[@]}" --reporter=dot,blob
@@ -164,7 +170,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: docs-spec, path: docs/spec }
-      - run: bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts
+      - run: bunx @miroshnik/elves@"$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)" spec-publish # the project's version, without its dependencies
 
   spec-diff:
     if: github.event_name == 'pull_request'
@@ -176,7 +182,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v8
         with: { name: spec-reports }
-      - run: bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
+      - run: | # the project's version of the package, without its dependencies
+          elves="bunx @miroshnik/elves@$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)"
+          $elves spec-diff --base "origin/${{ github.base_ref }}" --report .spec-report.json --report .spec-playwright.json --report .spec-claims.xml --full >> "$GITHUB_STEP_SUMMARY"
 ```
 
 The publish job is named `spec-publish` (in a reusable workflow — `<job> /
@@ -322,11 +330,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: docs/spec from the run that checked the merge tree
         run: |
+          elves="bunx @miroshnik/elves@$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)" # without the project's dependencies
           tree=$(git rev-parse 'HEAD^{tree}')
-          run=$(bun --no-env-file .agents/skills/spec/scripts/spec-run.ts --tree "$tree")
+          run=$($elves spec-run --tree "$tree")
           [ -n "$run" ] || exit 0 # skip: the reason is in spec-run's line above
           gh run download "$run" --name "docs-spec-$tree" --dir docs/spec
-          bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"
+          $elves spec-publish --source "$MERGE_SHA"
 ```
 
 - Only a tree checked in full is published: the artifact is named after the

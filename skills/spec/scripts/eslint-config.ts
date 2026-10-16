@@ -3,7 +3,7 @@
  * (default — a flat config object or array) in its folder, next to the examples and the reason, and the project's
  * `eslint.config.*` only collects the fragments — `lint` and the editor see the rule as usual:
  *
- *   import { collectEslint } from "./.agents/skills/spec/scripts/eslint-config.ts";
+ *   import { collectEslint } from "@miroshnik/elves/spec/eslint-config";
  *   export default [...base, ...(await collectEslint(import.meta.dirname))];
  *
  * `files` paths in a fragment are from the project root. Fragments go in path order: the config is the same on any
