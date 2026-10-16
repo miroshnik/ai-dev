@@ -22,28 +22,33 @@ The command runs through `sh`, the arguments are appended to its end, as with
 `npm run`; the exit code is the command's. No queue in CI (`CI`) and inside a
 slot (`ELVES_SLOT`): a script that calls another queued script would
 otherwise wait for itself. A `package.json` script doesn't pass its command to
-`slot.ts` — it sources `scripts/slot.sh` (below).
+`slot.ts` — it sources the project's shim `.agents/slot.sh` (below).
 
 ## How it is enabled
 
-Installing the flow (`install`, `update`) wraps the project's `package.json`
-scripts `lint`, `typecheck`, `test` and `test:*` in `slot`:
-`"test": ". .agents/skills/slot/scripts/slot.sh && vitest run"`. The script's
-shell sources `slot.sh`: `slot.ts --for <shell PID>` takes a slot for that
-shell — held until it exits — and the shell exports `ELVES_SLOT` and
-`ELVES_SLOT_CPUS` to the command. The command stays a plain command of the
-script: knip sees its binary as a used dependency, and `bun test` gives knip
-the test files and the `preload` of `bunfig.toml` as entries; passed to
-`slot.ts` as a string, it was hidden, and the project's dead code went red from
-the flow install. Yarn 2+ runs scripts in its own shell, without `.`: there
-the command stays a string of `slot.ts`
-(`"test": "bun --no-env-file .agents/skills/slot/scripts/slot.ts 'vitest run'"`),
-hidden from knip. Everyone calls the scripts — the agent, a human in a
-terminal, `github pr premerge` — and everyone joins one queue. `build` isn't
-wrapped — the host and Docker run it, where a copy of the skill may be missing;
-watch isn't either: it's long and would hold a slot for a long time. Removed
-the wrapper by hand, or it's a previous install's (the command a string of
-`slot.ts`) — `check` names the script, `update` puts the wrapper back.
+Installing the flow (`install`, `update`) puts the shim `.agents/slot.sh` into
+the project and wraps its `package.json` scripts `lint`, `typecheck`, `test`
+and `test:*` in it: `"test": ". .agents/slot.sh && vitest run"`. The script's
+shell sources the shim: `elves slot --for $$` — the package
+`@miroshnik/elves` of the project's `devDependencies`, from `node_modules/.bin`
+that `npm run` and `bun run` put on the script's `PATH` — takes a slot for that
+shell, held until it exits, and the shell exports `ELVES_SLOT` and
+`ELVES_SLOT_CPUS` to the command. Without `elves` on `PATH` (CI before the
+dependencies are installed, a checkout without the package) the command runs
+as is; `elves` failed — the script fails with its code. The command stays a
+plain command of the script: knip sees its binary as a used dependency, and
+`bun test` gives knip the test files and the `preload` of `bunfig.toml` as
+entries; passed to `slot` as a string, it was hidden, and the project's dead
+code went red from the flow install. Yarn 2+ runs scripts in its own shell,
+without `.`: there the command stays a string of `elves slot`
+(`"test": "elves slot 'vitest run'"`), hidden from knip. Everyone calls the
+scripts — the agent, a human in a terminal, `github pr premerge` — and
+everyone joins one queue. `build` isn't wrapped — the host and Docker run it,
+where the shim or the package may be missing; watch isn't either: it's long and
+would hold a slot for a long time. Removed the wrapper by hand, or it's a
+previous install's (a copy's `.agents/skills/slot/scripts/slot.sh`, the command
+a string of `slot.ts`) — `check` names the script, `update` puts the wrapper
+back.
 
 ## The project's env files are off
 
@@ -57,8 +62,8 @@ production key. With the flag the command gets exactly the environment it
 would get without the wrapper: `npm run` and `bun run` don't load env files
 for a `package.json` script, and a runner that loads them itself (`bun test`
 — `.env.test`) still does. A script's command doesn't go through `slot.ts`
-at all — it gets the script's environment and the two queue variables;
-`slot.sh` calls `slot.ts` with the flag too. Not `env = false` in the
+at all — it gets the script's environment and the two queue variables:
+`elves slot --for` only prints them. Not `env = false` in the
 project's `bunfig.toml`:
 it would turn env files off for every `bun` of a Bun project, its own
 `bun test` and `bun run dev` included. The same flag is on every call of a

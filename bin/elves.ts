@@ -742,9 +742,10 @@ function installSkills(src: string, root: string, linkMode: boolean, claude: boo
  */
 const SLOT_SHIM = ".agents/slot.sh";
 /**
- * The shim: slot.sh of the slot skill around `elves slot --for $$` of the project's package, in `if command -v elves` —
- * without elves on PATH (no node_modules yet, a checkout without the package) the command runs as is; elves failed —
- * the script fails with its code, the command doesn't run (#552).
+ * The shim: `elves slot --for $$` of the project's package, in `if command -v elves` — without elves on PATH (no
+ * node_modules yet, a checkout without the package) the command runs as is; elves failed — the script fails with its
+ * code, the command doesn't run (#552). The slot skill has no wrapper of its own: its spec runs scripts through this
+ * shim (#585).
  */
 const SLOT_SHIM_TEXT = [
   `# Elves: the machine queue for a package.json check (the slot skill); set by \`${RUN} install\`, don't edit by hand.`,
@@ -758,7 +759,7 @@ const SLOT_SHIM_TEXT = [
   "fi",
   "",
 ].join("\n");
-/** A package.json script wrapped in slot: `. SLOT_SHIM && <command>`; a project with a copy — its slot.sh. */
+/** A package.json script wrapped in slot: `. SLOT_SHIM && <command>`; an earlier release's copy — its slot.sh. */
 const SLOT_WRAPPED = /^\. \.agents\/(?:skills\/slot\/scripts\/)?slot\.sh && ([^]*)$/;
 /**
  * A script wrapped with the command a string argument — the copy's slot.ts by any runtime (node too; with Bun's env

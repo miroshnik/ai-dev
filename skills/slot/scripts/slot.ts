@@ -22,9 +22,9 @@
  * (FORMER_ENV), and its runner configs and `turbo.json` pass those. So the queue is read from the former temp place too,
  * the queue variables go under both names, and either name marks a nested call.
  *
- * A package.json script takes its slot with `--for <shell PID>` (slot.sh next to this file): the ticket carries the
- * script's shell, not this process, and the queue variables are printed for the shell to export — the command runs
- * as a plain command of the script, visible to tools that read package.json (knip).
+ * A package.json script takes its slot with `--for <shell PID>` (the project's shim `.agents/slot.sh` runs `elves slot
+ * --for $$`): the ticket carries the script's shell, not this process, and the queue variables are printed for the shell
+ * to export — the command runs as a plain command of the script, visible to tools that read package.json (knip).
  *
  * Runs under Bun (`bun slot.ts`), only node: APIs. A project without a copy of the flow runs it from its package as
  * `elves slot` (bin/elves.ts imports `main` and `HELP`): the queue starts only when this file is the entry point.
@@ -43,9 +43,9 @@ slot --for <PID>
 
 Runs the command through sh, the arguments appended to its end, as with npm run; waits while two heavy runs are going on
 the machine, then runs with ELVES_SLOT_CPUS — a quarter of the cores. --for — takes a slot for the shell <PID> of a
-package.json script, held until the shell exits, and prints the export of ELVES_SLOT, ELVES_SLOT_CPUS for it —
-slot.sh sources this: ". .agents/skills/slot/scripts/slot.sh && <command>". No queue in CI and inside a slot. The exit
-code is the command's; with --for — 0, nothing printed without the queue.
+package.json script, held until the shell exits, and prints the export of ELVES_SLOT, ELVES_SLOT_CPUS for it — the
+project's shim runs it: ". .agents/slot.sh && <command>". No queue in CI and inside a slot. The exit code is the
+command's; with --for — 0, nothing printed without the queue.
 
 Examples:
   slot 'vitest run'
@@ -162,8 +162,9 @@ function holder(t: Ticket) {
 }
 
 /**
- * The command of the package.json script that sourced slot.sh, for whoever waits for its slot: npm and bun give the
- * script's text in npm_lifecycle_script — without the slot.sh prefix it is the command; otherwise the script's name.
+ * The command of the package.json script that sourced the shim, for whoever waits for its slot: npm and bun give the
+ * script's text in npm_lifecycle_script — without the shim's prefix (`. .agents/slot.sh &&`, a copy's slot.sh of an
+ * earlier install) it is the command; otherwise the script's name.
  */
 function scriptCommand() {
   const text = process.env.npm_lifecycle_script;
