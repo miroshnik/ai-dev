@@ -9,5 +9,4 @@
 тесты импортируют `@miroshnik/elves/spec/harness` (и модель архитектуры, фрагмент ESLint, `github`), скрипты
 `package.json` и CI зовут `elves spec-doc`, `elves spec-diff` и остальные `spec-*` из `node_modules/.bin`. Версия у
 агента и у CI одна — версия пакета в lockfile проекта; пути — от каталога проекта, как у скрипта копии. Тест проекта
-идёт под bun test и под Vitest одинаково: Bun берёт исходник TypeScript, Vitest — сборку для Node (стандарт
-`harness-load`).
+идёт под bun test: Bun берёт исходник TypeScript, раннер под Node — сборку для Node (стандарт `harness-load`).

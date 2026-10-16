@@ -749,11 +749,11 @@ section "Wiring into the project's CI" below.
   `await` — Playwright and Jest in a project without `"type": "module"` load
   them as CommonJS. The guard is `tests/standards/harness-load`: a real
   Playwright in a temporary project, CommonJS and ESM.
-- The skill's tests — `bun test` (imports from `bun:test`; it also understands
-  imports from `vitest`): runner overhead of 0.01 s versus 0.3 s for Vitest per
-  file. Scripts in the tests are run via `bun` — what the user runs. Node in
-  the CI of Elves is set to 24 (`actions/setup-node`): `harness-load` runs
-  Playwright on it, the package tests — Vitest too.
+- The skill's tests — `bun test` (imports from `bun:test`): runner overhead of
+  0.01 s versus 0.3 s for Vitest per file. Scripts in the tests are run via
+  `bun` — what the user runs. Node in the CI of Elves is set to 24
+  (`actions/setup-node`): `harness-load` and the harness tests run a project's
+  Node on it — Playwright, Node's own loader, `node:test`.
 
 ## Wiring into the project's CI
 

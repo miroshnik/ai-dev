@@ -21,7 +21,8 @@ jobs:
         with:
           fetch-depth: 0 # spec-diff: merge-base с origin/main
       - uses: oven-sh/setup-bun@v2
-      # Node проекта в тестах пакета (harness-load, spec-harness): Playwright, Vitest — ему нужен Node ≥ 22.12
+      # Node проекта в тестах под Node (harness-load, spec-harness): Playwright, загрузчик Node для ESLint, node:test;
+      # `.ts` без флагов Node грузит с 22.18, а версия Node в образе раннера не задана
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
       # tests/capabilities/agent-shell запускает Bash-вызов агента в настоящем zsh — оболочке Claude Code на macOS

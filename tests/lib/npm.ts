@@ -47,7 +47,7 @@ export function npmTarball(): string {
 
 /**
  * Проект без копии флоу: package.json с пакетом в devDependencies и файлы, затем `bun install` — пакет из tarball, как
- * из реестра; `vitest` — ссылкой на Vitest Elves (своего node_modules у временного проекта нет). Возвращает каталог.
+ * из реестра; Playwright — ссылкой на Playwright Elves (своего node_modules у временного проекта нет). Возвращает каталог.
  */
 export function packageProject(name: string, files: Record<string, string> = {}, pkg: Record<string, unknown> = {}): string {
   const from = npmTarball();
@@ -55,7 +55,7 @@ export function packageProject(name: string, files: Record<string, string> = {},
   rmSync(dir, { recursive: true, force: true });
   writeTree(dir, { "package.json": JSON.stringify({ name, private: true, ...pkg, devDependencies: { "@miroshnik/elves": `file:${from}` } }, null, 2) + "\n", ...files });
   run(process.execPath, ["install"], dir, { BUN_INSTALL_CACHE_DIR: path.join(root(), "bun-cache") });
-  for (const dep of ["vitest", "@playwright/test", "playwright", "playwright-core"]) {
+  for (const dep of ["@playwright/test", "playwright", "playwright-core"]) {
     const at = path.join(dir, "node_modules", dep);
     mkdirSync(path.dirname(at), { recursive: true });
     symlinkSync(path.join(REPO, "node_modules", dep), at);

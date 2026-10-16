@@ -3,19 +3,15 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { REPO } from "../../lib/elves.ts";
 import { packageProject } from "../../lib/npm.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
-/** Vitest Elves: во временном проекте он — ссылка на node_modules Elves. */
-const VITEST = path.join(REPO, "node_modules/vitest/vitest.mjs");
-
-/** Стандарт проекта на харнессе из пакета: импорт из `vitest` понимает и bun test. */
+/** Стандарт проекта на харнессе из пакета. */
 const STANDARD = [
-  'import { describe, it } from "vitest";',
+  'import { describe, it } from "bun:test";',
   'import { invariant } from "@miroshnik/elves/spec/harness";',
   "",
   'const handlers = ["createInvoice", "listInvoices"];',
@@ -47,18 +43,14 @@ function run(cwd: string, cmd: string, args: string[]) {
  * проекта (#556).
  */
 describe("Харнесс и spec-скрипты — из пакета @miroshnik/elves, без копии флоу в проекте", () => {
-  it("тест проекта импортирует harness из пакета и проходит под bun test и под Vitest", () => {
+  it("тест проекта импортирует харнесс из пакета и проходит под bun test", () => {
     const proj = packageProject("harness-runners", { "tests/standards/handlers/handlers.test.ts": STANDARD });
     expect(existsSync(path.join(proj, ".agents"))).toBe(false);
-    const bun = run(proj, process.execPath, ["test"]);
-    expect({ code: exitOf(bun), output: bun.stderr }).toMatchObject({ code: 0, output: expect.stringContaining(" 0 fail") });
-    const vitest = run(proj, "node", [VITEST, "run", "--reporter=verbose"]);
-    const output = vitest.stdout + vitest.stderr;
-    expect({ code: exitOf(vitest), output }).toMatchObject({ code: 0, output: expect.stringContaining("createInvoice is in camelCase") });
-    // одни и те же тесты харнесса: элементы реестра, нарушитель, непустой реестр, includes
-    const passed = [/ (\d+) pass\n/.exec(bun.stderr)?.[1], /Tests\s+(\d+) passed/.exec(output)?.[1]];
-    expect(passed[0]).toBeDefined();
-    expect(passed[1]).toBe(passed[0]);
+    const bun = run(proj, process.execPath, ["test", "--reporter=junit", "--reporter-outfile=report.xml"]);
+    expect({ code: exitOf(bun), output: bun.stderr }).toMatchObject({ code: 0, output: expect.stringContaining(" 5 pass\n 0 fail") });
+    // пять тестов харнесса — непустой реестр, includes, нарушитель и по тесту на элемент реестра; элементы — в отчёте
+    const report = readFileSync(path.join(proj, "report.xml"), "utf8");
+    for (const name of ["createInvoice is in camelCase", "listInvoices is in camelCase"]) expect(report).toContain(`name="${name}"`);
   });
 
   it("elves spec-doc и elves spec-diff из node_modules/.bin работают в проекте без копии флоу", () => {
