@@ -47,11 +47,10 @@ without a build and without dependencies. Syntax, flags and exit codes — each
 script's `--help`; what a script does in detail and why — `reference.md` next
 to this file. The skill directory is the one holding this file
 (`${CLAUDE_SKILL_DIR}` in Claude Code, `~/.claude/skills/spec`,
-`~/.agents/skills/spec`, the project's `.agents/skills/spec` or an Elves
-clone). The repository root is `git toplevel` (or `--root DIR`); the tree is
-`tests/` at the root. In a repository wired up per the "Wiring into a
+`~/.agents/skills/spec` or an Elves clone). The repository root is `git
+toplevel` (or `--root DIR`); the tree is `tests/` at the root. In a repository wired up per the "Wiring into a
 repository" section — its `spec:doc` and `spec:diff`, not the scripts from the
-skill directory: that is the version pinned for CI.
+skill directory: the project's package version is pinned for CI.
 
 ## What to run when
 
@@ -174,8 +173,8 @@ nothing. Details — `reference.md`, "spec-exceptions".
 
 A mechanical check is runner tests (or a report in the runner's format): they
 are in the report, and so in `docs/spec` and in `spec-diff`. Import — from the
-skill's copy in the project (`.agents/skills/spec/scripts/…`), the runner
-doesn't matter — `it` passes the test in. Which check for what and how to wire
+project's package (`@miroshnik/elves/spec/harness`, `…/spec/architecture`,
+`…/spec/eslint-config`), the runner doesn't matter — `it` passes the test in. Which check for what and how to wire
 each one — `checks.md` next to this file:
 
 - a convention on every item of a registry from the code — `invariant`
@@ -195,23 +194,27 @@ each one — `checks.md` next to this file:
 
 ## Wiring into a repository
 
-The scripts are taken from the skill's copy in the project itself
-(`.agents/skills/spec`, committed) and run under Bun, a Node project included
-(in CI — `oven-sh/setup-bun@v2`); the modules the project's tests and config
-import (`harness.ts`, `architecture.ts`, `eslint-config.ts`) load under the
-project's own runner on Node. Each step with its details — `reference.md`,
+The scripts and modules come from the project's package — `@miroshnik/elves`
+in `devDependencies`, committed with its version: the scripts run as
+`elves spec-…` under Bun, a Node project included (in CI —
+`oven-sh/setup-bun@v2`); the modules the project's tests and config import
+(`@miroshnik/elves/spec/harness`, `…/spec/architecture`,
+`…/spec/eslint-config`) load under the project's own runner on Node — from
+the package's build. Each step with its details — `reference.md`,
 "Wiring into a repository"; an old spec's requirements — `migration.md`.
 
 1. **Install** at the project root, the result into a commit:
-   `bunx github:miroshnik/elves install`; exclude `.agents/` and `.claude/`
-   from the project's linters and formatters; update — the same command in a
-   separate PR.
-2. **Scripts** in `package.json` — via `bun`, reports — those the project has:
+   `bunx @miroshnik/elves install` — the package version, the manifest, the
+   shim and the `AGENTS.md` block; update — `update` in the current task's
+   branch, a few lines.
+2. **Scripts** in `package.json` — the package's `elves`, in CI —
+   `bun --no-env-file node_modules/.bin/elves spec-…`; reports — those the
+   project has:
    ```json
-   "spec:doc": "bun --no-env-file .agents/skills/spec/scripts/spec-doc.ts .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
-   "spec:diff": "bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts",
-   "spec:publish": "bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts",
-   "spec:claims": "bun --no-env-file .agents/skills/spec/scripts/spec-claims.ts --entries tests/standards/entry-points/entries.ts"
+   "spec:doc": "elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
+   "spec:diff": "elves spec-diff",
+   "spec:publish": "elves spec-publish",
+   "spec:claims": "elves spec-claims --entries tests/standards/entry-points/entries.ts"
    ```
    Standards and architecture run once — the `test:spec` script, a fast CI job
    of its own; `test` excludes them, e2e doesn't run them (`checks.md`):

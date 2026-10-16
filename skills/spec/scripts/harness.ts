@@ -7,7 +7,7 @@
  * fire, stay silent and not apply; the linter goes through an adapter (ESLint — `eslintLinter`).
  *
  * The runner doesn't matter: `it` passes the test (Vitest, Jest, bun test, node:test — all have `it(name, fn)`).
- * Import from the skill's copy in the project (`.agents/skills/spec/scripts/harness.ts`); the project's test loads it
+ * Import from the project's package (`@miroshnik/elves/spec/harness`); the project's test loads it
  * under the project's runner — Bun, Node, Vitest, Playwright or Jest, as ESM or as CommonJS — so only erasable
  * TypeScript syntax and `node:` APIs, with no dependencies (tests/standards/harness-load).
  */
@@ -201,7 +201,7 @@ export function marksIn(file: string, text: string): Mark[] {
   return out;
 }
 
-const MIGRATE = "migrate with spec-exceptions: bun --no-env-file .agents/skills/spec/scripts/spec-exceptions.ts";
+const MIGRATE = "migrate with spec-exceptions: bun --no-env-file node_modules/.bin/elves spec-exceptions";
 
 /**
  * Exceptions of a decision folder — the `exceptions/` directory, a file per exception (`<element>.json`:
