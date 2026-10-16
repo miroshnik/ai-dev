@@ -7345,6 +7345,13 @@
   "describes": [
    "Фильтры шарда — ровно его файлы"
   ],
+  "name": "bun test берёт по фильтрам шарда ровно его файлы: фильтр — путь с `./`, а не подстрока пути"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Фильтры шарда — ровно его файлы"
+  ],
   "name": "проект-зависимость Playwright (вход перед тестами) идёт в каждом шарде"
  },
  {
@@ -7374,6 +7381,20 @@
    "Шаблон CI передаёт раннеру файлы шарда, а не --shard"
   ],
   "name": "шаг шарда Vitest передаёт раннеру файлы spec-shard; шард без файлов раннер не запускает"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шаблон CI передаёт раннеру файлы шарда, а не --shard"
+  ],
+  "name": "шаг шарда bun test передаёт раннеру пути spec-shard из списка git"
+ },
+ {
+  "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
+  "describes": [
+   "Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов"
+  ],
+  "name": "`--runner bun` отдаёт файлы шарда путями по длительностям из JUnit bun test"
  },
  {
   "path": "tests/capabilities/spec-shard/spec-shard.test.ts",
@@ -8637,6 +8658,13 @@
    "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
   ],
   "name": "skills/spec/ci.md artifact «spec-journal-unit-${{ matrix.shard }}» не теряет скрытые файлы"
+ },
+ {
+  "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
+  "describes": [
+   "Каждая загрузка артефакта со скрытым путём — с include-hidden-files: true"
+  ],
+  "name": "skills/spec/ci.md artifact «spec-junit-${{ matrix.shard }}» не теряет скрытые файлы"
  },
  {
   "path": "tests/standards/artifact-hidden-files/artifact-hidden-files.test.ts",
@@ -16584,6 +16612,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/spec/reference.md: skills/spec/canon.md, «A decision is the unit of the spec, a folder is its home» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/spec/reference.md: skills/spec/ci.md, «A project on bun test» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
