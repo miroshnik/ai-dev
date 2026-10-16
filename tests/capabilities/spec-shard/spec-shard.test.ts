@@ -1,12 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { REPO } from "../../lib/elves.ts";
 import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
-import { fakeGh, type GhArtifact, ghRun, type GhRun, runScript, SCRIPTS, tmpDir, writeTree } from "../../lib/spec.ts";
+import { fakeGh, type GhArtifact, ghRun, type GhRun, runScript, tmpDir, writeTree } from "../../lib/spec.ts";
 import { documentsOf, readFragmentFile } from "../../lib/yaml-fragments.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -437,11 +437,14 @@ function templateSteps(job: "unit" | "e2e") {
   return workflow.jobs[job]!.steps;
 }
 
+/** Вызов spec-shard в шаге шаблона — скрипт пакета проекта (`node_modules/.bin/elves spec-shard`, #559). */
+const SHARD_CALL = /\belves spec-shard\b/;
+
 /** Шаг `run` шарда из шаблона CI (`ci.md`): джоб с матрицей шардов, шаг, который зовёт spec-shard. */
 function shardStep(job: "unit" | "e2e"): string {
   const runs = templateSteps(job).map((s) => s.run ?? "");
-  expect(runs.filter((r) => /--shard[= ]\$\{\{ matrix\.shard/.test(r) && !r.includes("spec-shard.ts"))).toEqual([]);
-  return runs.find((r) => r.includes("spec-shard.ts"))!;
+  expect(runs.filter((r) => /--shard[= ]\$\{\{ matrix\.shard/.test(r) && !SHARD_CALL.test(r))).toEqual([]);
+  return runs.find((r) => SHARD_CALL.test(r))!;
 }
 
 // pnpm — заглушка: листинг раннера отдаёт готовый список, запуск раннера пишет в runs аргументы, по строке на каждый
@@ -455,13 +458,15 @@ printf '%s\\n' "$@" > "$FAKE_PNPM/runs"
 `;
 
 /**
- * Шаг шарда k из n шаблона в проекте с копией скилла spec: аргументы раннера — строки файла `runs`, который пишет его
- * запуск (null — раннер не запускался); `bin` — первым в PATH.
+ * Шаг шарда k из n шаблона в проекте с пакетом Elves: `node_modules/.bin/elves` — bin этого клона, как его кладёт
+ * `bun install`; аргументы раннера — строки файла `runs`, который пишет его запуск (null — раннер не запускался);
+ * `bin` — первым в PATH.
  */
 function runStep(step: string, k: number, n: number, runs: string, bin = path.join(dir, "bin")): string[] | null {
-  if (!existsSync(path.join(dir, ".agents/skills/spec"))) {
-    cpSync(path.join(SCRIPTS, ".."), path.join(dir, ".agents/skills/spec"), { recursive: true });
-    cpSync(path.join(SCRIPTS, "../../github"), path.join(dir, ".agents/skills/github"), { recursive: true });
+  const elves = path.join(dir, "node_modules/.bin/elves");
+  if (!existsSync(elves)) {
+    mkdirSync(path.dirname(elves), { recursive: true });
+    symlinkSync(path.join(REPO, "bin/elves.ts"), elves);
   }
   const script = step.replaceAll("${{ matrix.shard }}", String(k)).replaceAll("${{ strategy.job-total }}", String(n));
   const env = { ...process.env, PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`, FAKE_PNPM: bin };
@@ -487,8 +492,8 @@ function pnpmStep(job: "unit" | "e2e", k: number, n: number, listing: unknown): 
 function bunShardStep(): string {
   const doc = documentsOf("skills/spec/ci.md", readFragmentFile("skills/spec/ci.md")).find((d) => d.text.includes("--runner bun"))!;
   const runs = (Bun.YAML.parse(doc.text) as { run?: string }[]).map((s) => s.run ?? "");
-  expect(runs.filter((r) => /--shard[= ]\$\{\{ matrix\.shard/.test(r) && !r.includes("spec-shard.ts"))).toEqual([]);
-  return runs.find((r) => r.includes("spec-shard.ts"))!;
+  expect(runs.filter((r) => /--shard[= ]\$\{\{ matrix\.shard/.test(r) && !SHARD_CALL.test(r))).toEqual([]);
+  return runs.find((r) => SHARD_CALL.test(r))!;
 }
 
 describe("Шаблон CI передаёт раннеру файлы шарда, а не --shard", () => {
@@ -525,7 +530,7 @@ describe("Шаблон CI передаёт раннеру файлы шарда,
 
   // шард, разложенный по числу рядом с шардами по длительностям, теряет файлы так же, как шарды с разными источниками
   it("сбой шага длительностей — красный шард: шаг без continue-on-error", () => {
-    const steps = (["unit", "e2e"] as const).map((job) => templateSteps(job).filter((s) => s.run?.includes("spec-run.ts --artifact")));
+    const steps = (["unit", "e2e"] as const).map((job) => templateSteps(job).filter((s) => s.run?.includes("elves spec-run --artifact")));
     expect(steps.map((found) => found.map((s) => s["continue-on-error"] ?? "none"))).toEqual([["none"], ["none"]]);
   });
 });
