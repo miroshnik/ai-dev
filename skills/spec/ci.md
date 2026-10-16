@@ -238,7 +238,8 @@ the runner gets them as positional arguments. Merging the blob reports and the
 - An empty shard (more shards than files) doesn't start the runner: without
   filters it would run everything.
 - A filter is what the runner understands: Vitest — the path (a substring),
-  Playwright — an escaped regular expression anchored at the end of the path.
+  Playwright — an escaped regular expression anchored at the end of the path,
+  bun test — `./<path>` (below).
   A filter that also takes another file (`tests/a.test.ts` in
   `packages/web/tests/a.test.ts`) — both go into one shard, a stderr line
   says so.
@@ -246,6 +247,37 @@ the runner gets them as positional arguments. Merging the blob reports and the
   shard: the runner adds dependencies without the filters.
 - The unit is a file: a file longer than a shard's share stays the bound —
   split the file.
+
+### A project on bun test
+
+bun test lists nothing without a run and writes no blob report — the
+`unit` job's shard step differs (the job is otherwise the same, without pnpm
+and Node; `test` — the project's script over `bun test`):
+
+```yaml
+      # the test script's files from git: bun test's name patterns and the script's --path-ignore-patterns
+      - run: |
+          git ls-files -- '*.test.ts' ':!:tests/standards/**' ':!:tests/architecture/**' > .spec-files.txt
+          reports=(); for r in .spec-last/.spec-report-*.xml; do reports+=(--report "$r"); done
+          files=$(bun --no-env-file .agents/skills/spec/scripts/spec-shard.ts --shard ${{ matrix.shard }}/${{ strategy.job-total }} --runner bun --list .spec-files.txt "${reports[@]}")
+          [ -n "$files" ] || { echo "shard ${{ matrix.shard }}: no files"; exit 0; } # without filters the runner would run everything
+          list=(); while IFS= read -r f; do list+=("$f"); done <<< "$files"
+          bun run test "${list[@]}" --reporter=junit --reporter-outfile=.spec-report-${{ matrix.shard }}.xml
+      - uses: actions/upload-artifact@v7
+        with: { name: 'spec-junit-${{ matrix.shard }}', path: '.spec-report-*.xml', retention-days: 1, include-hidden-files: true }
+```
+
+- The list is git's: keep its patterns and exclusions equal to the `test`
+  script's — `--path-ignore-patterns` drops an excluded file even by its
+  exact path, and the shard's share of time goes with it.
+- A filter is `./<path>`: bun test takes a filter with `./` as the file's
+  path — only that file; without `./` it is a substring of the path
+  (`tests/a.test.ts` takes `packages/web/tests/a.test.ts`), case-sensitive.
+- A JUnit report per shard: `spec-shard` doesn't split a file, so the `spec`
+  job passes the shards' reports to `spec-doc` as they are (`spec-doc` puts
+  files by path, a file's tests — in the report's order), and `spec-reports`
+  takes them (`.spec-report-*.xml` in its `path`): the next run's durations
+  are every shard's report.
 
 ## No CI on `main` — publishing on PR merge
 
