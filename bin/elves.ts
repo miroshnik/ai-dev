@@ -245,7 +245,8 @@ Examples:
   release: `elves release [--dry-run]
 
 From an Elves clone: a vYYYY.MM.DD tag on origin/main and a GitHub Release listing the flow changes since the previous
-release; --dry-run — only show them.
+release; --dry-run — only show them. CI publishes the tag to npm (.github/workflows/npm.yml, pack --help) by trusted
+publishing, without a token; the owner's step once — README, "Installation".
 
 Examples:
   elves release --dry-run`,
@@ -254,8 +255,8 @@ Examples:
 From an Elves checkout, in CI on a release tag: the npm package ${PACKAGE} of that release — the version
 from the tag into package.json (vYYYY.MM.DD.N → YYYY.MMDD.N: semver without leading zeros, versions sort as tags), the
 release commit into its gitHead and the modules a project imports (exports of package.json: the harness, the
-architecture model, the ESLint fragment, github) built for Node into dist/; then npm publish. Not a release tag — code
-2, nothing changes.
+architecture model, the ESLint fragment, github) built for Node into dist/; then npm publish by trusted publishing (OIDC,
+no token). Not a release tag — code 2, nothing changes.
 
 Examples:
   elves pack v2026.10.15.1`,

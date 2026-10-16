@@ -1,6 +1,8 @@
 # Релиз в npm: тег релиза (elves release) — пакет @miroshnik/elves этой версии с provenance (tests/capabilities/release).
 # Версия и сборка модулей для Node — elves pack по тегу, публикация — npm publish (publishConfig в package.json).
-# Публикация тега не отменяется и не вытесняется (docs/ci-concurrency.md). Токен npm — секрет NPM_TOKEN, шаг владельца.
+# Публикация тега не отменяется и не вытесняется (docs/ci-concurrency.md). Без токена — trusted publishing npm по OIDC
+# (docs.npmjs.com/trusted-publishers); шаг владельца — trusted publisher в настройках пакета на npmjs.com
+# (README, «Installation»).
 name: npm
 
 on:
@@ -14,12 +16,12 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions: { contents: read, id-token: write } # id-token — provenance: npm подписывает, из какого прогона пакет
+    permissions: { contents: read, id-token: write } # id-token — OIDC: вход в npm и подпись provenance
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+      # Trusted publishing — npm CLI ≥ 11.5.1: Node 22 несёт npm 10, линия 24 — npm 11; кэш в релизной сборке не нужен.
       - uses: actions/setup-node@v7
-        with: { registry-url: "https://registry.npmjs.org" }
+        with: { node-version: "24", registry-url: "https://registry.npmjs.org", package-manager-cache: false }
       - run: bun --no-env-file bin/elves.ts pack "$GITHUB_REF_NAME"
       - run: npm publish
-        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }
