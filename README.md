@@ -25,7 +25,7 @@ Elves is how an agent carries a task from issue to production, written down once
 
 - **The canon** [`AGENTS.md`](AGENTS.md) — the rules: tasks and estimates, branches and PRs, merging and CI, the specification, production.
 - **Skills** following the open [Agent Skills](https://agentskills.io) standard — a prompt plus a script for everything deterministic: the GitHub project, estimates from actuals, the spec from tests, waiting for CI.
-- **The installer** — puts the flow into a project as a copy (the cloud session, colleagues and CI see it) or onto the machine — only the skills and the hook, for all agents at once; after that, projects get it through releases.
+- **The installer** — puts the canon, the skills and the hook onto the machine, for all agents at once; a project keeps only the package version in `devDependencies` — CI, colleagues and the cloud session get it from npm — and gets the flow through releases.
 
 One task — from issue to actual:
 
@@ -107,7 +107,7 @@ The full canon is [`AGENTS.md`](AGENTS.md); here is what it stands on.
 8. **A script instead of memory.** Everything deterministic is in the skills' scripts (TypeScript under Bun, no dependencies): the agent decides, the script does — the same way in every project. → [This file and skills](AGENTS.md#this-file-and-skills)
 9. **Irreversible — on an explicit "yes".** Reading, tests, local edits and task tracking — without asking; commit, push, merge, deploy and writes to live databases — with permission for that action and for this time. A project can let the agent run a task entirely by itself — up to merging its own PR on green checks — with the `auto` setting at install; the same install sets the project language the agent talks and writes in. → [What I do without asking and what needs a yes](AGENTS.md#what-i-do-without-asking-and-what-needs-a-yes)
 10. **Into `main` — each green on its own.** Merge as soon as the PR's own checks are green, without a queue or an up-to-date-branch requirement; before merging, if `main` moved after the PR's CI — fast checks on the merge with a fresh `main`; after a deploy — waiting for its statuses; a test failed — the root cause is fixed, not a retry added. → [Git, PRs and merging](AGENTS.md#git-prs-and-merging)
-11. **One canon, versions by releases.** A project pins a copy of the flow with a commit and updates by release; a session starts by checking whether the flow is behind. → [First step of a session](AGENTS.md#first-step-of-a-session--an-up-to-date-flow)
+11. **One canon, versions by releases.** A project pins the package version, not a copy of the flow, and updates by release — a few lines in the current task; a session starts by checking whether the flow is behind. → [First step of a session](AGENTS.md#first-step-of-a-session--an-up-to-date-flow)
 
 ## Elves and OpenSpec
 
@@ -155,19 +155,21 @@ No exaggeration: the spec format isn't the main token cost; what costs more is h
 You need `git` and [Bun](https://bun.sh) ≥ 1.2 — the installer (`bunx`) and the skill scripts run under it; a project's CI on Node adds the `oven-sh/setup-bun` step; the `github`, `est` and `dashboard` skills need [`gh`](https://cli.github.com) with the `project` scope (`gh auth refresh -s project`); `task-env` needs Docker with Compose (Docker Desktop on macOS).
 
 ```bash
-# into a project — from the root of a git repository; the copy is committed with the project
-bunx github:miroshnik/elves install
-
-# onto the machine — the canon, skills and the hook for every agent it has; or from npm:
+# onto the machine — the canon, skills and the hook for every agent it has; or a global package:
 # bun add -g @miroshnik/elves && elves install -g
-bunx github:miroshnik/elves install -g
+bunx @miroshnik/elves install -g
+
+# into a project — from the root of a git repository; the package version, the manifest, the shim and the AGENTS.md block are committed with the project
+bunx @miroshnik/elves install
+
+# the fallback — straight from GitHub, any command: bunx github:miroshnik/elves <command>
 ```
 
 Keeping the flow up to date:
 
 ```bash
-bunx github:miroshnik/elves check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation, standards or architecture without a test:spec script), 2 — can't check; changes nothing
-bunx github:miroshnik/elves update -g   # bring it to the latest release
+bunx @miroshnik/elves check -g    # 0 — up to date, 1 — behind (in a project also: git ignores flow files, the compose file breaks task isolation, standards or architecture without a test:spec script), 2 — can't check; changes nothing
+bunx @miroshnik/elves update -g   # bring it to the latest release
 ```
 
 Without `-g` — the same for the project. Claude Code checks the machine and the project by itself: `install -g` sets up the `SessionStart` hook, and the `check` output lands at the start of every session; a session resumed after the app restarted also gets the wait of its task to restart — background waits die with the app's process. The same hook sets up the agent's Bash: in zsh a glob without matches and `====` go to the command as is, as in bash, and `timeout` works on macOS without coreutils (`bin/shims`); `check -g` run from the agent's Bash names it if the session didn't get that. With Docker on the machine `check -g` also names the `task-env` proxy of task addresses — running or not, with the command to start it; it doesn't change the exit code.
@@ -181,15 +183,16 @@ An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun
 <details>
 <summary><b>What goes where</b></summary>
 
-**Into a project** — everything as a copy in `.agents/`, committed with the project: the cloud session (claude.ai/code sees only the repository), colleagues and CI get exactly this version.
+**Into a project** — thin: no copy of the flow, its agents get the canon and the skills from the machine. Committed with the project:
 
-- `.agents/elves/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; `.agents/skills/<name>/` — all skills; `.agents/elves.json` — the SHA and release tag it was installed from, the list of skills (a reinstall removes skills that Elves no longer has), `auto` — whether the agent runs a task entirely by itself, without a "yes" for commit, push and merge, and `language` — the project language.
-- Claude Code — symlinks `.claude/rules/elves.md`, `.claude/rules/elves-claude.md` (loaded automatically, whatever the project's `CLAUDE.md`) and `.claude/skills/<name>`.
-- Other agents — a block at the top of the project's `AGENTS.md` linking to `.agents/elves/AGENTS.md` (the whole canon won't fit Codex's budget — 32 KiB for all of a project's `AGENTS.md` files) and `.agents/skills/` — the shared skills location of Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp.
-- Updating — `update` and a commit of the copy, `chore(agents): Elves flow <tag>`, in a task of its own: a task session doesn't update the project (the copy is thousands of lines in its branch) — it recommends the update and asks whether to queue that task, one per project, `check` prints its `task new`; exclude `.agents/` and `.claude/` from the project's linters and formatters.
-- Flow files that the project's git ignores (a `CLAUDE.md` pattern, the `.claude/` directory, `vendor/`) are un-ignored by `install` and `update` with exceptions — an Elves block at the end of `.gitignore`, committed with the copy; what an exception can't un-ignore (a directory excluded by a personal rule), and anything ignored until `update` runs — `❌` in the output of the install and of `check`.
+- `@miroshnik/elves` in `devDependencies` of `package.json` — the exact version of the release, the project's package manager updates its lockfile: the harness and the skills' scripts at the project's version for its tests and CI, colleagues and the cloud session ("The package in a project" below); a project without `package.json` has nothing to pin.
+- `.agents/elves.json` — `auto` — whether the agent runs a task entirely by itself, without a "yes" for commit, push and merge, `language` — the project language, and `env` — the task stack settings of `task-env`.
+- `.agents/slot.sh` — the machine queue's shim the `package.json` checks source (`slot` below).
+- A block at the top of the project's `AGENTS.md` linking to the canon on the machine, `~/.agents/elves/AGENTS.md` — for the agents that read the project's file.
+- Updating — `update` bumps the package version: `package.json` and the lockfile, a few lines in the branch of the current task, committed with it. A project with a copy of the flow of an earlier release moves to a thin one in a task of its own, one per project — `check` prints its `task new`, the hook names the canon loaded twice until then: `update` removes the copy, its symlinks and `.gitignore` exceptions, leads imports and CI paths into the copy to the package and lists what else names `.agents`.
+- The manifest, the shim and `AGENTS.md`, if the project's git ignores them (`.agents/` in `.gitignore`), are un-ignored by `install` and `update` with exceptions — an Elves block at the end of `.gitignore`, committed with them; what an exception can't un-ignore (a directory excluded by a personal rule), and anything ignored until `update` runs — `❌` in the output of the install and of `check`.
 
-**Onto the machine** (`-g`) — the canon, the skills and the hook: a thin project keeps no copy of the canon, its agents get it from the machine. `~/.agents/elves/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; Claude Code — symlinks `~/.claude/rules/elves.md` and `elves-claude.md` (loaded in every project without the external-imports dialog), `~/.claude/skills` and the `SessionStart` hook in `~/.claude/settings.json`; the other agents — their global rule file linking to the canon (`~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.copilot/copilot-instructions.md`, `~/.config/opencode/AGENTS.md`, `~/.config/amp/AGENTS.md`; a file of your own stays) and `~/.agents/skills`. A project that still has a copy loads the canon twice until it moves — the hook names it. A Claude Code cloud environment gets the same from its setup script — `npm i -g @miroshnik/elves && elves install -g`, before Claude Code starts; there is no hook there (the cloud doesn't read `~/.claude/settings.json`). In an Elves clone with `--link` the machine's canon is the clone; its `.claude/CLAUDE.md` keeps the root `AGENTS.md` from loading a second time.
+**Onto the machine** (`-g`) — the canon, the skills and the hook: a thin project keeps no copy of the canon, its agents get it from the machine. `~/.agents/elves/` — `AGENTS.md`, `claude/CLAUDE.md`, `docs/*.md`; Claude Code — symlinks `~/.claude/rules/elves.md` and `elves-claude.md` (loaded in every project without the external-imports dialog), `~/.claude/skills` and the `SessionStart` hook in `~/.claude/settings.json`; the other agents — their global rule file linking to the canon (`~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.copilot/copilot-instructions.md`, `~/.config/opencode/AGENTS.md`, `~/.config/amp/AGENTS.md`; a file of your own stays) and `~/.agents/skills`. A project that still has a copy loads the canon twice until it moves — the hook names it. A Claude Code cloud environment gets the same from its setup script — `npm i -g bun@latest @miroshnik/elves && elves install -g` (the image's Bun lags behind), before Claude Code starts; there is no hook there (the cloud doesn't read `~/.claude/settings.json`). In an Elves clone with `--link` the machine's canon is the clone; its `.claude/CLAUDE.md` keeps the root `AGENTS.md` from loading a second time.
 
 **Personal configuration** — everything that depends on specific repositories (the registry for `est`, your own model prices, notes) — lives outside the flow, in `~/.config/elves`; another directory — the `ELVES_CONFIG_DIR` variable, read by all skill scripts. `ELVES_PRIVATE=<path>` with `install -g` makes `~/.config/elves` a symlink to a private checkout; with `ELVES_CONFIG_DIR` the symlink isn't needed — the variable points at the checkout itself.
 
@@ -200,10 +203,10 @@ An agent's sandbox (Claude Code's Bash) doesn't let bunx write its cache `~/.bun
 <details>
 <summary><b>Releases and the up-to-date check</b></summary>
 
-Projects and machines with a copy get the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands are the same — bunx installs the package from `main` once and then runs it from its cache, so that package is only a launcher: it finds the latest tag and restarts from it by its SHA. The npm package is a release itself: `install` from it installs its own version without the network, `check` and `update` restart from the latest release's npm package.
+The machine's copy and a project's package version follow the flow **by releases** — tags `vYYYY.MM.DD` (a same-day patch is `.N`), not the head of `main`: a commit to the rules without a release doesn't make anyone "behind". The commands go through the npm package, and it is a release itself: `install` from it installs its own version without the network, `check` and `update` restart from the latest release's npm package. The fallback `bunx github:miroshnik/elves` installs the package from `main` once and then runs it from its cache, so that package is only a launcher: it finds the latest tag and restarts from it by its SHA; in a cloud session `github:` gives 403.
 
-- `check` changes nothing: it compares a copy with the latest release (the same install as a dry run, a list of differences), a `--link` clone — with `origin/main` after `git fetch`.
-- `update`: a copy — reinstalled from the latest release; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason). It says what changed, and the agent tells the user: a copy — every release after the installed one, newest first, with the list of its GitHub Release; a clone — the flow commits it pulled.
+- `check` changes nothing: it compares the machine's copy and a project's package version with the latest release (the same install as a dry run, a list of differences), a `--link` clone — with `origin/main` after `git fetch`.
+- `update`: the machine's copy — reinstalled from the latest release; a project — the package version raised to it, a copy of the flow moved to a thin project; a clone — `git pull --ff-only` and links to new skills (a clone not on `main` or with edits — refused with a reason). It says what changed, and the agent tells the user: the machine's copy and a project — every release after the installed one (a project — after its package version), newest first, with the list of its GitHub Release; a clone — the flow commits it pulled.
 - `release` — the owner's step: a date tag (UTC) on `origin/main` and a GitHub Release listing the flow and installer changes since the previous release (the same list `update` prints); nothing to release — refused.
 - The npm package `@miroshnik/elves` — CI publishes every release tag (`.github/workflows/npm.yml`): `elves pack <tag>` sets the version (`vYYYY.MM.DD.N` → `YYYY.MMDD.N`, versions sort as tags) and builds for Node the modules a project imports, then `npm publish` by npm [trusted publishing](https://docs.npmjs.com/trusted-publishers) — OIDC, no token or secret, provenance included. The owner's step, once: a trusted publisher is set in the package settings on npmjs.com, so first a `0.0.0` stub published from the owner's machine; then the trusted publisher — GitHub Actions, `miroshnik/elves`, workflow `npm.yml` — no earlier than 2 days before the first release from CI (a new one expires without a successful publish within 2 days: delete it and create it again); after that release the stub may be `npm deprecate`d.
 
@@ -212,7 +215,7 @@ Projects and machines with a copy get the flow **by releases** — tags `vYYYY.M
 <details>
 <summary><b>The package in a project — the harness and the scripts at the project's version</b></summary>
 
-With `@miroshnik/elves` in a project's `devDependencies`, `bun install` brings the flow at the project's version — for CI, colleagues and a cloud session too (npm works there, `github:` gives 403). Tests import `@miroshnik/elves/spec/harness`, `@miroshnik/elves/spec/architecture`, `@miroshnik/elves/spec/eslint-config` and `@miroshnik/elves/github`: Bun and the type checker take the TypeScript source, any runner on Node (Jest, Playwright, `node:test`, the project's `eslint.config.js`) — the build. The skills' scripts run from `node_modules/.bin` with the same arguments as the scripts themselves: `elves spec-doc`, `elves spec-diff`, `elves spec-publish`, `elves spec-run`, `elves spec-shard`, `elves spec-claims`, `elves spec-break`, `elves spec-exceptions`, and the machine queue — `elves slot --for <PID>`.
+With `@miroshnik/elves` in a project's `devDependencies`, `bun install` brings the flow at the project's version — for CI, colleagues and a cloud session too (npm works there, `github:` gives 403). Tests import `@miroshnik/elves/spec/harness`, `@miroshnik/elves/spec/architecture`, `@miroshnik/elves/spec/eslint-config` and `@miroshnik/elves/github`: Bun and the type checker take the TypeScript source, any runner on Node (Jest, Playwright, `node:test`, the project's `eslint.config.js`) — the build. The skills' scripts run from `node_modules/.bin` with the same arguments as the scripts themselves: `elves spec-doc`, `elves spec-diff`, `elves spec-publish`, `elves spec-run`, `elves spec-shard`, `elves spec-claims`, `elves spec-break`, `elves spec-exceptions`, and the machine queue — `elves slot --for <PID>`. In `package.json` — `elves <script>`, in CI — `bun --no-env-file node_modules/.bin/elves <script>`: a GitHub Actions step doesn't see `node_modules/.bin`, and `bunx elves` without the package in `node_modules` would fetch someone else's `elves` from npm; a job that doesn't install the project's dependencies — `bunx @miroshnik/elves@<version> <script>` (the `spec` skill's `ci.md`).
 
 </details>
 
@@ -229,7 +232,7 @@ bun bin/elves.ts release --dry-run   # what goes into the release; without --dry
 
 ## Skills
 
-Skills are installed with the flow; the agent picks them up by itself — from the description in `SKILL.md`, there's no need to invoke them by hand.
+Skills are installed onto the machine with the flow (`install -g`); the agent picks them up by itself — from the description in `SKILL.md`, there's no need to invoke them by hand.
 
 ### [`github`](skills/github/SKILL.md) — project and tasks by the canon
 
