@@ -6,17 +6,39 @@ temporary container into which only the project repository is cloned.
 
 ## What it sees
 
-Only the project repository. Skills from the user's machine
-(`~/.claude/skills`) and the agent's memory aren't there. A cloud session has
-the canon and skills only if the flow is installed in the project:
-`bunx github:miroshnik/elves install` puts a copy into `.agents/`, and the
-symlinks in `.claude/rules` and `.claude/skills` come with the clone (the
-Elves README, "Installation"). It works in the project language, just like a
-local session: `language` in `.agents/elves.json`, which comes with the
-clone too. The version is the committed one: a cloud session doesn't update
-the flow even if `check` says it is behind — a local session of the update
-task updates it (`update` and committing the copy into its branch). There is
-no `SessionStart` hook in the cloud: it is installed on the machine.
+Only the project repository. The canon, the skills and the agent's memory of
+the user's machine (`~/.agents`, `~/.claude`) aren't there: the flow comes
+from the **setup script** of the claude.ai environment, before Claude Code
+starts (checked in #555):
+
+```bash
+npm i -g bun@latest @miroshnik/elves && elves install -g
+```
+
+`bun@latest` — the image's Bun lags behind a project's `packageManager` (1.4.2
+on 2026-10-16, without the `bun check` of 1.4.3): npm's global directory comes
+before `~/.bun/bin` in the image's `PATH`, while `bun upgrade` in the session
+gets 403 from GitHub. Network access — Trusted; about 7 s, the environment's
+cache keeps the result for about 7 days. `install -g` with
+`CLAUDE_CODE_REMOTE=true` puts the canon (`~/.agents/elves`, rules
+`~/.claude/rules/elves*.md`) and the skills (`~/.claude/skills`) without the
+hook. The canon and skills are visible from the first turn, but only in
+sessions of an environment with this script: the owner sets the environment up
+on their account.
+
+- **The project's version** — `@miroshnik/elves` in its `devDependencies`,
+  only from npm: bun installs it through the session's proxy, `github:` in
+  the session is 403. It works in the project language, just like a local
+  session: `language` in `.agents/elves.json`, which comes with the clone.
+- **A thin project behind** — updated in the session's task, as locally:
+  `bunx @miroshnik/elves update` raises the package version, a few lines into
+  the task's branch.
+- **No hook:** the machine's hook isn't there (the cloud doesn't read
+  `~/.claude/settings.json`), and a project hook isn't needed — the setup
+  script replaces it; `check` — by hand.
+- **A project with a copy of the flow** loads the canon twice in the cloud —
+  the copy's `.claude/rules` and the setup script's — until its move to the
+  thin project; without a hook nothing names it.
 
 Check: in a cloud session of the project, ask the agent to quote a rule from
 `AGENTS.md` and list the skills — `est`, `spec`, `ci-wait` must be there.

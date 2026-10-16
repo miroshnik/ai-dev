@@ -4,11 +4,12 @@
 
 The Elves canon for any agent (Claude Code, Codex, Gemini CLI, Cursor,
 Copilot, OpenCode, Amp). It lives in **miroshnik/elves** with the skills
-(`skills/*`) and references (`docs/`, next to this file); install and update —
-README, "Installation". A rule or skill change from another project's session
-is a task in Elves (project #6) without that project's names, for a separate
-session; I don't edit an Elves clone from someone else's session. A Claude
-Code **cloud session** sees only the repository — `docs/cloud-sessions.md`.
+(`skills/*`) and references (`docs/`, next to this file), installed
+onto the machine — README, "Installation". A rule or skill change from
+another project's session is a task in Elves (project #6) without that
+project's names, for a separate session; I don't edit an Elves clone from
+someone else's session. A Claude Code **cloud session** sees only the
+repository and its setup script's flow — `docs/cloud-sessions.md`.
 
 **The repository is public:** no names, owners, paths or numbers of other
 repositories, no colleagues or clients — in files, git history or issues;
@@ -22,23 +23,22 @@ Here — what always applies and where to go; reference — a skill's
 ## First step of a session — an up-to-date flow
 
 Rules load at the session start, so first, before the task: `bunx
-github:miroshnik/elves check -g` (machine) and `check` (project, with its
-mode and language) — in Claude Code the `SessionStart` hook runs them into
-the start of the context. A copy follows
-Elves releases (tags `vYYYY.MM.DD`), a `--link` clone — `origin/main`; a
-release is the owner's step (`elves release`), I cut one only when asked.
+@miroshnik/elves check -g` (machine) and `check` (project, with its mode
+and language) — in Claude Code the `SessionStart` hook runs them into the
+start of the context. The machine's copy and a project's package version
+follow Elves releases (tags `vYYYY.MM.DD`), a `--link` clone — `origin/main`;
+a release is the owner's step (`elves release`), I cut one only when asked.
 
 - **The machine is behind** — `update -g`. After an `update` I tell the user
   briefly what changed (it lists the skipped releases) and re-read what was
   updated: it applies, not what loaded at the start.
-- **The project is behind** (or git ignores flow files) — not in a task
-  session: the copy is thousands of lines in its branch. I recommend the
-  update and ask whether to queue its task, one per project (`check` prints
-  its `github task new`); that task runs `update` and commits the copy
-  (`update` prints the command) without asking.
+- **The project is behind** (or git ignores flow files) — `update` in the
+  task's branch: the package version, a few lines.
+- **The project keeps a copy of the flow** — the move is a task of its own,
+  one per project (`check` prints its `github task new`): I recommend it and
+  ask whether to queue it.
 - **`update` refused or the check unavailable** — I don't fix the clone; I
-  work by the current flow and say so. A cloud session works by the project's
-  copy.
+  work by the current flow and say so.
 
 ## Language
 
@@ -60,7 +60,7 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
   edits in my checkout, local infrastructure (Docker, dev database), logs and
   read-only requests to external systems; task tracking; re-running my own CI
   run, closing my own duplicate PR, deleting my own merged branch; updating
-  the flow and committing its copy.
+  the flow and committing it.
 - **Only on an explicit "yes"** — anything irreversible or external: `git
   commit`, `git push`, merge, deploy, tag, migrations and writes to live
   databases, external service settings, deleting others' or unmerged remote

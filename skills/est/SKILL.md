@@ -36,8 +36,8 @@ never touch them by hand.
 
 Run: `bun --no-env-file <skill folder>/scripts/est.ts <subcommand> …` (Bun, no
 dependencies) — the skill folder is the one holding this file (`~/.claude/skills/est`,
-`~/.agents/skills/est`, the project's `.agents/skills/est` or an Elves clone; in
-Claude Code — `${CLAUDE_SKILL_DIR}`); below abbreviated to `est`. `--repo
+`~/.agents/skills/est` or an Elves clone; in Claude Code —
+`${CLAUDE_SKILL_DIR}`); below abbreviated to `est`. `--repo
 owner/repo` can be omitted when you work in the repository's folder (the
 registry — reference.md, "Repository registry"). Without `--write` everything is
 only printed — check what the script found before writing to GitHub; reruns
