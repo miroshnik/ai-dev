@@ -4053,6 +4053,13 @@
   "describes": [
    "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
+  "name": "блок AGENTS.md, шим очереди и блок .gitignore подписаны командой из npm — bunx @miroshnik/elves install, а не bunx github:"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
+  ],
   "name": "блок прошлой версии по-русски в AGENTS.md проекта установка заменяет английским, а не ставит второй"
  },
  {
@@ -8486,6 +8493,13 @@
    "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
   ],
   "name": "`install` и `update` сохраняют `env` в `.agents/elves.json`"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
+  ],
+  "name": "check называет команду обновления из npm — bunx @miroshnik/elves update: в облачной сессии github: — 403"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -15932,13 +15946,6 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
-  "name": "docs/cloud-sessions.md: README.md, «Installation» — есть такой раздел"
- },
- {
-  "path": "tests/standards/section-refs/section-refs.test.ts",
-  "describes": [
-   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
-  ],
   "name": "docs/cloud-sessions.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел"
  },
  {
@@ -17476,6 +17483,14 @@
    "примеры"
   ],
   "name": "публикация в тексте и job без шага публикации — не элементы; неразборный фрагмент с публикацией — ошибка"
+ },
+ {
+  "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",
+  "describes": [
+   "job публикации во фрагментах CI скилла spec и в CI Elves назван так, что оба скрипта узнают его публикацией",
+   "примеры"
+  ],
+  "name": "шаг со скриптом пакета — elves spec-publish из node_modules или пакет версии проекта через bunx — тоже публикация"
  },
  {
   "path": "tests/standards/spec-publish-job/spec-publish-job.test.ts",

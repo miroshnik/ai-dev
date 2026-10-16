@@ -28,7 +28,7 @@ TypeScript у него нет. Без проверки
 `wait-ci.sh`: одна запись регулярки в двух движках может значить разное.
 
 Реестр job — job в `.github/workflows/*.yml` и в YAML-фрагментах `skills/**/*.md` и `docs/*.md` (`tests/lib/yaml-fragments`),
-шаг которых запускает `spec-publish.ts` или скрипт `spec:publish`. Имя его check-run — `name` job, без него — ключ job,
+шаг которых запускает `spec-publish.ts`, его же из пакета проекта (`elves spec-publish`) или скрипт `spec:publish`. Имя его check-run — `name` job, без него — ключ job,
 с матрицей — с дописанными значениями; его узнаёт публикацией каждая копия.
 
 ## github и ci-wait одинаково узнают публикацию спеки по имени check-run: `spec-publish` и `<job> / spec-publish` — публикация, другое имя — чек
@@ -60,10 +60,11 @@ TypeScript у него нет. Без проверки
 
 ### примеры
 
-<details><summary>✅ 3 теста</summary>
+<details><summary>✅ 4 теста</summary>
 
 - ✅ переименованный job — ошибка с файлом, строкой и копиями, которые его не узнают
 - ✅ имя check-run — name job, без него — ключ, с матрицей — с её значениями
+- ✅ шаг со скриптом пакета — elves spec-publish из node_modules или пакет версии проекта через bunx — тоже публикация
 - ✅ публикация в тексте и job без шага публикации — не элементы; неразборный фрагмент с публикацией — ошибка
 
 </details>
