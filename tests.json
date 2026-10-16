@@ -4557,7 +4557,7 @@
   "describes": [
    "Релиз публикуется в npm пакетом @miroshnik/elves: версия — тег релиза, публикует CI по тегу"
   ],
-  "name": "релиз публикует пакет в npm из CI по тегу"
+  "name": "релиз публикует пакет в npm из CI по тегу без токена — через trusted publishing"
  },
  {
   "path": "tests/capabilities/release/release.test.ts",
@@ -15856,6 +15856,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "bin/elves.ts: AGENTS.md, «What I do without asking and what needs a yes» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "bin/elves.ts: README.md, «Installation» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
