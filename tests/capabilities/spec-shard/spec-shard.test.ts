@@ -37,6 +37,15 @@ function vitestReport(seconds: Record<string, number>, name = "report.json"): st
   return name;
 }
 
+/** JUnit bun test прошлого прогона: файл → длительность, с; пути — от корня проекта, как их пишет bun test. */
+function bunReport(seconds: Record<string, number>, name = "report.xml"): string {
+  const suites = Object.entries(seconds).map(
+    ([file, s]) => `  <testsuite name="${file}" file="${file}" tests="1" time="${s}">\n    <testcase name="работает" time="${s}" file="${file}" line="3" />\n  </testsuite>\n`,
+  );
+  writeTree(dir, { [name]: `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="bun test">\n${suites.join("")}</testsuites>\n` });
+  return name;
+}
+
 /** Шард k из n: код, фильтры из stdout, stderr. */
 function shard(k: number, n: number, ...args: string[]) {
   const r = runScript("spec-shard", ["--shard", `${k}/${n}`, ...args], dir);
@@ -47,6 +56,16 @@ const shards = (n: number, ...args: string[]) => Array.from({ length: n }, (_, i
 const HEAVY = "tests/capabilities/video";
 const LIGHT = "tests/capabilities/login";
 
+// подряд по пути: первый шард — a, b, c (60 с), второй — d и оба тяжёлых (210 с)
+const SECONDS = {
+  [`${HEAVY}/encode.test.ts`]: 100,
+  [`${HEAVY}/transcode.test.ts`]: 90,
+  [`${LIGHT}/a.test.ts`]: 20,
+  [`${LIGHT}/b.test.ts`]: 20,
+  [`${LIGHT}/c.test.ts`]: 20,
+  [`${LIGHT}/d.test.ts`]: 20,
+};
+
 /**
  * Флаг раннера `--shard` на время не смотрит: Playwright делит сьют подряд по числу тестов, Vitest — по хешу пути, и
  * тяжёлые тесты одной папки достаются одному шарду. Раскладка `spec-shard` жадная: файлы от самого долгого — в самый
@@ -54,16 +73,7 @@ const LIGHT = "tests/capabilities/login";
  */
 describe("Шард CI получает файлы по длительностям прошлого прогона, а не по числу тестов", () => {
   it("шард получает файлы по длительностям прошлого прогона, а не подряд по пути", () => {
-    // подряд по пути: первый шард — a, b, c (60 с), второй — d и оба тяжёлых (210 с)
-    const seconds = {
-      [`${HEAVY}/encode.test.ts`]: 100,
-      [`${HEAVY}/transcode.test.ts`]: 90,
-      [`${LIGHT}/a.test.ts`]: 20,
-      [`${LIGHT}/b.test.ts`]: 20,
-      [`${LIGHT}/c.test.ts`]: 20,
-      [`${LIGHT}/d.test.ts`]: 20,
-    };
-    const [one, two] = shards(2, "--runner", "vitest", "--list", list(Object.keys(seconds)), "--report", vitestReport(seconds));
+    const [one, two] = shards(2, "--runner", "vitest", "--list", list(Object.keys(SECONDS)), "--report", vitestReport(SECONDS));
     expect(one!.filters).toEqual([`${LIGHT}/b.test.ts`, `${LIGHT}/d.test.ts`, `${HEAVY}/encode.test.ts`]);
     expect(two!.filters).toEqual([`${LIGHT}/a.test.ts`, `${LIGHT}/c.test.ts`, `${HEAVY}/transcode.test.ts`]);
     expect(one!.stderr).toContain("shard 1/2 — 3 of 6 files, 140 s of 270 s by the last green run");
@@ -142,6 +152,19 @@ describe("Шард CI получает файлы по длительностя�
     }
   });
 
+  it("`--runner bun` отдаёт файлы шарда путями по длительностям из JUnit bun test", () => {
+    const files = list(Object.keys(SECONDS));
+    const bun = shards(2, "--runner", "bun", "--list", files, "--report", bunReport(SECONDS));
+    expect(bun[0]!.filters).toEqual([`./${LIGHT}/b.test.ts`, `./${LIGHT}/d.test.ts`, `./${HEAVY}/encode.test.ts`]);
+    expect(bun.map((s) => [s.code, s.stderr])).toEqual([
+      [0, "spec-shard: shard 1/2 — 3 of 6 files, 140 s of 270 s by the last green run\n"],
+      [0, "spec-shard: shard 2/2 — 3 of 6 files, 130 s of 270 s by the last green run\n"],
+    ]);
+    // раскладка — та же, что у vitest по тем же длительностям; фильтр — тот же путь от корня, с ./
+    const vitest = shards(2, "--runner", "vitest", "--list", files, "--report", vitestReport(SECONDS));
+    expect(bun.map((s) => s.filters)).toEqual(vitest.map((s) => s.filters.map((f) => `./${f}`)));
+  });
+
   it("одни и те же входные данные дают одни и те же шарды", () => {
     const files = Array.from({ length: 12 }, (_, i) => `tests/capabilities/c${i % 4}/f${i}.test.ts`);
     // равные длительности — ничьи решает путь, а не порядок списка
@@ -212,6 +235,16 @@ function playwrightShards(n: number): Record<string, string[]>[] {
   return Array.from({ length: n }, (_, i) => playwrightList(`shard-${i + 1}.json`, shard(i + 1, n, "--runner", "playwright", "--list", ".spec-files.json").filters));
 }
 
+/** Файлы, которые прогнал настоящий `bun test` во временном проекте по фильтрам, — по его JUnit. */
+function bunRan(filters: string[]): string[] {
+  const out = path.join(dir, ".bun-ran.xml");
+  const r = spawnSync(process.execPath, ["test", ...filters, "--reporter=junit", `--reporter-outfile=${out}`], { cwd: dir, encoding: "utf8" });
+  expect([filters.join(" "), exitOf(r)]).toEqual([filters.join(" "), 0]);
+  const xml = readFileSync(out, "utf8");
+  rmSync(out);
+  return [...new Set([...xml.matchAll(/<testcase [^>]*\bfile="([^"]+)"/g)].map((m) => m[1]!))].sort();
+}
+
 describe("Фильтры шарда — ровно его файлы", () => {
   /**
    * Файлы шарда раннер получает фильтрами: Vitest берёт файл, путь которого содержит фильтр, Playwright проверяет
@@ -247,6 +280,21 @@ describe("Фильтры шарда — ровно его файлы", () => {
       expect([a, shardOf(b)]).toEqual([a, shardOf(a)]);
     for (const [i, own] of vitest.entries())
       for (const other of vitest.filter((_, j) => j !== i).flat()) expect(own.filter((f) => other.toLowerCase().includes(f.toLowerCase()))).toEqual([]);
+  });
+
+  /**
+   * bun test берёт файл, путь которого от текущего каталога содержит фильтр, с учётом регистра, — а фильтр с `./` берёт
+   * как путь файла: ровно его. Поэтому фильтр bun — путь с `./`, и склеивать файлы в один шард не нужно.
+   */
+  it("bun test берёт по фильтрам шарда ровно его файлы: фильтр — путь с `./`, а не подстрока пути", () => {
+    // без ./ фильтр tests/a.test.ts взял бы и packages/web/tests/a.test.ts, а tests/d.test.ts — и tests/d.test.tsx
+    const files = ["tests/a.test.ts", "packages/web/tests/a.test.ts", "tests/d.test.ts", "tests/d.test.tsx", "tests/b.test.ts"];
+    writeTree(dir, Object.fromEntries(files.map((f) => [f, `import { test } from "bun:test";\n\ntest("${f}", () => {});\n`])));
+    // шардов столько же, сколько файлов: у каждого шарда — один файл
+    const got = shards(files.length, "--runner", "bun", "--list", list(files));
+    expect(got.map((s) => s.filters.length)).toEqual(files.map(() => 1));
+    expect(got.filter((s) => s.stderr.includes("one shard for"))).toEqual([]);
+    expect(got.map((s) => bunRan(s.filters))).toEqual(got.map((s) => s.filters.map((f) => f.replace(/^\.\//, ""))));
   });
 
   /** Вход перед тестами — проект-зависимость: раннер добавляет его в шард без фильтров, его файл в фильтрах не нужен. */
@@ -406,33 +454,48 @@ fi
 printf '%s\\n' "$@" > "$FAKE_PNPM/runs"
 `;
 
-/** Шаг шарда k из n шаблона в проекте с копией скилла spec: аргументы раннера (null — раннер не запускался). */
-function runStep(job: "unit" | "e2e", k: number, n: number, listing: unknown): string[] | null {
+/**
+ * Шаг шарда k из n шаблона в проекте с копией скилла spec: аргументы раннера — строки файла `runs`, который пишет его
+ * запуск (null — раннер не запускался); `bin` — первым в PATH.
+ */
+function runStep(step: string, k: number, n: number, runs: string, bin = path.join(dir, "bin")): string[] | null {
   if (!existsSync(path.join(dir, ".agents/skills/spec"))) {
     cpSync(path.join(SCRIPTS, ".."), path.join(dir, ".agents/skills/spec"), { recursive: true });
     cpSync(path.join(SCRIPTS, "../../github"), path.join(dir, ".agents/skills/github"), { recursive: true });
   }
-  const bin = path.join(dir, "bin");
-  mkdirSync(bin, { recursive: true });
-  writeTree(bin, { pnpm: FAKE_PNPM, "list.json": JSON.stringify(listing) });
-  chmodSync(path.join(bin, "pnpm"), 0o755);
-  const script = shardStep(job).replaceAll("${{ matrix.shard }}", String(k)).replaceAll("${{ strategy.job-total }}", String(n));
+  const script = step.replaceAll("${{ matrix.shard }}", String(k)).replaceAll("${{ strategy.job-total }}", String(n));
   const env = { ...process.env, PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`, FAKE_PNPM: bin };
   // bash -e — оболочка шага run в GitHub Actions
   const r = spawnSync("bash", ["-e", "-c", script], { cwd: dir, encoding: "utf8", env });
   expect([exitOf(r), r.stderr.includes("spec-shard: ")]).toEqual([0, true]);
-  const runs = path.join(bin, "runs");
   if (!existsSync(runs)) return null;
   const args = readFileSync(runs, "utf8").split("\n").slice(0, -1);
   rmSync(runs);
   return args;
 }
 
+/** Шаг шарда джоба шаблона с заглушкой pnpm: её листинг — `listing`. */
+function pnpmStep(job: "unit" | "e2e", k: number, n: number, listing: unknown): string[] | null {
+  const bin = path.join(dir, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeTree(bin, { pnpm: FAKE_PNPM, "list.json": JSON.stringify(listing) });
+  chmodSync(path.join(bin, "pnpm"), 0o755);
+  return runStep(shardStep(job), k, n, path.join(bin, "runs"), bin);
+}
+
+/** Шаг шарда из фрагмента шаблона для проекта на bun test (`ci.md`, «A project on bun test»): шаг, который зовёт spec-shard. */
+function bunShardStep(): string {
+  const doc = documentsOf("skills/spec/ci.md", readFragmentFile("skills/spec/ci.md")).find((d) => d.text.includes("--runner bun"))!;
+  const runs = (Bun.YAML.parse(doc.text) as { run?: string }[]).map((s) => s.run ?? "");
+  expect(runs.filter((r) => /--shard[= ]\$\{\{ matrix\.shard/.test(r) && !r.includes("spec-shard.ts"))).toEqual([]);
+  return runs.find((r) => r.includes("spec-shard.ts"))!;
+}
+
 describe("Шаблон CI передаёт раннеру файлы шарда, а не --shard", () => {
   it("шаг шарда Vitest передаёт раннеру файлы spec-shard; шард без файлов раннер не запускает", () => {
     const root = realpathSync(dir);
     const files = [`${root}/${LIGHT}/a b.test.ts`, `${root}/${LIGHT}/c.test.ts`];
-    const got = [1, 2, 3].map((k) => runStep("unit", k, 3, files.map((file) => ({ file }))));
+    const got = [1, 2, 3].map((k) => pnpmStep("unit", k, 3, files.map((file) => ({ file }))));
     const flags = (k: number) => ["--reporter=default", "--reporter=blob", `--outputFile.blob=vitest-blob/${k}.json`];
     // путь с пробелом — один аргумент
     expect(got).toEqual([["test", `${LIGHT}/a b.test.ts`, ...flags(1)], ["test", `${LIGHT}/c.test.ts`, ...flags(2)], null]);
@@ -440,9 +503,24 @@ describe("Шаблон CI передаёт раннеру файлы шарда,
 
   it("шаг шарда Playwright передаёт раннеру фильтры spec-shard", () => {
     const listing = { config: { rootDir: `${realpathSync(dir)}/e2e` }, suites: [{ file: "a.spec.ts", specs: [] }, { file: "b.spec.ts", specs: [] }] };
-    const got = [1, 2].map((k) => runStep("e2e", k, 2, listing));
+    const got = [1, 2].map((k) => pnpmStep("e2e", k, 2, listing));
     const run = (filter: string) => ["exec", "playwright", "test", filter, "--reporter=dot,blob"];
     expect(got).toEqual([run("/(^|\\/)e2e\\/a\\.spec\\.ts$/"), run("/(^|\\/)e2e\\/b\\.spec\\.ts$/")]);
+  });
+
+  it("шаг шарда bun test передаёт раннеру пути spec-shard из списка git", () => {
+    // проект на bun test: скрипт test пишет свои аргументы; список — файлы теста в git, стандарты и не тесты — мимо
+    const files = [`${LIGHT}/a b.test.ts`, `${LIGHT}/c.test.ts`, "tests/standards/naming/naming.test.ts", `${LIGHT}/fixtures.ts`];
+    writeTree(dir, {
+      "package.json": JSON.stringify({ scripts: { test: "bun record.ts" } }),
+      "record.ts": 'await Bun.write("runs", process.argv.slice(2).map((a) => a + "\\n").join(""));\n',
+      ...Object.fromEntries(files.map((f) => [f, ""])),
+    });
+    for (const args of [["init", "-q"], ["add", "-A"]]) expect([args[0], exitOf(spawnSync("git", args, { cwd: dir, encoding: "utf8" }))]).toEqual([args[0], 0]);
+    const got = [1, 2, 3].map((k) => runStep(bunShardStep(), k, 3, path.join(dir, "runs")));
+    const flags = (k: number) => ["--reporter=junit", `--reporter-outfile=.spec-report-${k}.xml`];
+    // путь с пробелом — один аргумент
+    expect(got).toEqual([[`./${LIGHT}/a b.test.ts`, ...flags(1)], [`./${LIGHT}/c.test.ts`, ...flags(2)], null]);
   });
 
   // шард, разложенный по числу рядом с шардами по длительностям, теряет файлы так же, как шарды с разными источниками

@@ -369,16 +369,18 @@ instead of splitting by count next to shards split by durations.
 A runner's `--shard` doesn't look at time: Playwright cuts the suite in a row
 by the count of tests in path order, Vitest — files by the hash of the path.
 The heavy tests of one folder land in one shard, the PR waits for it, the
-others stand idle. `spec-shard --shard k/n --runner vitest|playwright --list
-<file> --report <file>…` prints shard k's filters, one per line; the CI step
-(`ci.md`, "Shards by durations") passes them to the runner instead of
+others stand idle. `spec-shard --shard k/n --runner vitest|playwright|bun
+--list <file> --report <file>…` prints shard k's filters, one per line; the
+CI step (`ci.md`, "Shards by durations") passes them to the runner instead of
 `--shard`.
 
 - **The list** — the runner's own: `vitest list --filesOnly --json=<file>`
   (`[{ file }]`, absolute paths), `playwright test --list --reporter=json`
-  (file suites relative to `config.rootDir`) or one path per line. Absolute
-  paths become relative to the root (`--root`, default — the current
-  directory: the runner reads the filters from it).
+  (file suites relative to `config.rootDir`) or one path per line — bun test
+  lists nothing without a run, its list is `git ls-files` (`ci.md`, "A
+  project on bun test"). Absolute paths become relative to the root
+  (`--root`, default — the current directory: the runner reads the filters
+  from it).
 - **Durations** — the reports `spec-doc` reads: Vitest/Jest — the file's
   `endTime - startTime` (hooks between tests count), without them — the sum
   of its tests; Playwright — the sum of all results of the file's tests (each
@@ -398,7 +400,10 @@ others stand idle. `spec-shard --shard k/n --runner vitest|playwright --list
   case-insensitively (`filterFiles` in `vitest/node`) — the filter is the
   path. Playwright tests a regular expression against the absolute path —
   the filter is `/(^|\/)<escaped path>$/`: a dot stays a dot, and the path
-  ends where the file does. A filter that still takes another file
+  ends where the file does. bun test takes a file whose path from the
+  current directory contains the filter, case-sensitively, but a filter
+  with `./` — as the file's path, only that file: the filter is
+  `./<path>`. A filter that still takes another file
   (`tests/a.test.ts` in `packages/web/tests/a.test.ts`; for Vitest — inside
   any directory common to both paths: the project root isn't known) — both
   go into one shard, a stderr line names them: the shard's filters take
@@ -416,7 +421,8 @@ others stand idle. `spec-shard --shard k/n --runner vitest|playwright --list
 - Rejected: a durations file in the repository — it goes stale and needs
   commits; Vitest's `sequencer.shard` hook — a module in the project's
   config, and Playwright has no such hook; Playwright's `--test-list` (an
-  exact list) — one mechanism for both runners instead of two.
+  exact list) and bun test's `--shard` with `--timings` (its own durations
+  file) — one mechanism and one source of durations for all runners.
 - Codes: 0 — the shard is printed, 2 — a call error (arguments, the list or
   a report unreadable).
 
