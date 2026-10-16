@@ -12,8 +12,7 @@
 тесты импортируют `@miroshnik/elves/spec/harness` (и модель архитектуры, фрагмент ESLint, `github`), скрипты
 `package.json` и CI зовут `elves spec-doc`, `elves spec-diff` и остальные `spec-*` из `node_modules/.bin`. Версия у
 агента и у CI одна — версия пакета в lockfile проекта; пути — от каталога проекта, как у скрипта копии. Тест проекта
-идёт под bun test и под Vitest одинаково: Bun берёт исходник TypeScript, Vitest — сборку для Node (стандарт
-`harness-load`).
+идёт под bun test: Bun берёт исходник TypeScript, раннер под Node — сборку для Node (стандарт `harness-load`).
 
 ## Соглашение проверяется на каждом элементе реестра из кода, а не на одном примере
 
@@ -362,7 +361,7 @@ C2 — развёртываемые единицы и связи между ни
 
 <details><summary>✅ 2 теста</summary>
 
-- ✅ тест проекта импортирует harness из пакета и проходит под bun test и под Vitest
+- ✅ тест проекта импортирует харнесс из пакета и проходит под bun test
 - ✅ elves spec-doc и elves spec-diff из node_modules/.bin работают в проекте без копии флоу
 
 </details>
