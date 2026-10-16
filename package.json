@@ -2,7 +2,7 @@
   "name": "@miroshnik/elves",
   "version": "0.0.0",
   "type": "module",
-  "description": "Elves — a development flow with AI agents: shared rules and skills for any agent; install — bunx github:miroshnik/elves install; the installer and skill scripts — TypeScript under Bun, tests — bun test in tests/",
+  "description": "Elves — a development flow with AI agents: shared rules and skills for any agent; install — bunx @miroshnik/elves install -g; the installer and skill scripts — TypeScript under Bun, tests — bun test in tests/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/miroshnik/elves.git"

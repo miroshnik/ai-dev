@@ -132,6 +132,20 @@ describe("В проект — тонкий флоу: версия пакета, 
     expect(text).toContain("# Проект\n\nСвои правила.\n");
   });
 
+  /**
+   * Подпись файлов установки — команда из npm (#559): npm есть и локально, и в облачной сессии, а `github:` там — 403
+   * (#555); `bunx github:miroshnik/elves` — запасной путь в README.
+   */
+  it("блок AGENTS.md, шим очереди и блок .gitignore подписаны командой из npm — bunx @miroshnik/elves install, а не bunx github:", () => {
+    writeFileSync(path.join(proj, ".gitignore"), ".agents/\n");
+    expect(install().code).toBe(0);
+    for (const file of ["AGENTS.md", ".agents/slot.sh", ".gitignore"]) {
+      const text = read(path.join(proj, file));
+      expect(text).toContain("`bunx @miroshnik/elves install`");
+      expect(text).not.toContain("github:");
+    }
+  });
+
   /** Блок прошлой версии — по-русски; маркеры begin и end у него те же: по ним установка его находит и заменяет. */
   it("блок прошлой версии по-русски в AGENTS.md проекта установка заменяет английским, а не ставит второй", () => {
     const old = [
@@ -202,7 +216,7 @@ describe("Отказ в записи посреди установки — по�
     const r = install(["-g"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("~/.claude/skills/ci-wait");
-    expect(r.stderr).toContain("bunx github:miroshnik/elves install -g");
+    expect(r.stderr).toContain("bunx @miroshnik/elves install -g");
     expect(r.stderr).not.toMatch(/\n\s+at /);
   });
 
@@ -224,7 +238,7 @@ describe("Отказ в записи посреди установки — по�
     const r = elves(sb, ["update", "-g"]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("~/.claude/skills/spec");
-    expect(r.stderr).toContain("bunx github:miroshnik/elves update -g");
+    expect(r.stderr).toContain("bunx @miroshnik/elves update -g");
   });
 
   it("симлинк, который уже ведёт куда надо, установка не пересоздаёт: ~/.claude/skills без права записи не мешает повтору без нового скилла", () => {

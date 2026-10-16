@@ -25,7 +25,7 @@ const skill = (name: string): Part => ({
   name: `скилл ${name} — со ссылкой на skills/${name}/SKILL.md`,
   mention: new RegExp(`\\]\\(skills/${escape(name)}/SKILL\\.md\\)`),
 });
-// в README команда — строкой запуска: `bunx github:miroshnik/elves check -g` или `bun …/bin/elves.ts release`
+// в README команда — строкой запуска: `bunx @miroshnik/elves check -g` или `bun …/bin/elves.ts release`
 const command = (name: string): Part => ({
   key: `elves ${name}`,
   name: `команда установщика ${name} названа`,
