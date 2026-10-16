@@ -222,20 +222,28 @@ describe("Релиз публикуется в npm пакетом @miroshnik/elv
   });
 
   /**
-   * CI по тегу: `elves pack` ставит версию и собирает модули для Node, `npm publish` публикует с provenance — npm
-   * подписывает, из какого прогона пакет. Публикация тега не отменяется: очередь `npm-publish` (стандарт ci-concurrency).
+   * CI по тегу: `elves pack` ставит версию и собирает модули для Node, `npm publish` публикует через trusted publishing
+   * (docs.npmjs.com/trusted-publishers): npm доверяет workflow `npm.yml` этого репозитория по OIDC — `id-token: write`,
+   * секрета и токена в workflow нет, provenance npm ставит сам. Нужен npm CLI ≥ 11.5.1: Node 22 несёт npm 10, поэтому
+   * Node — линия 24 (npm 11), как в примере документации, без кэша менеджера пакетов в релизной сборке. `repository.url`
+   * пакета должен совпадать с репозиторием. Публикация тега не отменяется: очередь `npm-publish` (стандарт ci-concurrency).
    */
-  it("релиз публикует пакет в npm из CI по тегу", () => {
-    const wf = Bun.YAML.parse(read(path.join(REPO, ".github/workflows/npm.yml"))) as {
+  it("релиз публикует пакет в npm из CI по тегу без токена — через trusted publishing", () => {
+    const text = read(path.join(REPO, ".github/workflows/npm.yml"));
+    const wf = Bun.YAML.parse(text) as {
       on: Record<string, unknown>;
-      jobs: Record<string, { permissions?: Record<string, string>; steps: { run?: string; env?: Record<string, string> }[] }>;
+      jobs: Record<string, { permissions?: Record<string, string>; steps: { uses?: string; with?: Record<string, unknown>; run?: string; env?: Record<string, string> }[] }>;
     };
     expect(wf.on).toEqual({ push: { tags: ["v*"] } });
     const [job, ...others] = Object.values(wf.jobs);
     expect(others).toEqual([]);
     expect(job!.permissions?.["id-token"]).toBe("write");
+    expect(text).not.toMatch(/secrets\.|NODE_AUTH_TOKEN|NPM_TOKEN/);
+    expect(job!.steps.flatMap((s) => (s.env ? [s.env] : []))).toEqual([]);
+    const node = job!.steps.find((s) => s.uses?.startsWith("actions/setup-node@"));
+    expect(node?.with).toMatchObject({ "registry-url": "https://registry.npmjs.org", "package-manager-cache": false });
+    expect(Number(String(node?.with?.["node-version"]).split(".")[0])).toBeGreaterThanOrEqual(24);
     expect(job!.steps.flatMap((s) => (s.run ? [s.run] : []))).toEqual(['bun --no-env-file bin/elves.ts pack "$GITHUB_REF_NAME"', "npm publish"]);
-    expect(job!.steps.at(-1)!.env).toEqual({ NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" });
     const pkg = JSON.parse(read(path.join(REPO, "package.json")));
     expect(pkg).toMatchObject({ name: "@miroshnik/elves", publishConfig: { access: "public", provenance: true }, repository: { url: "git+https://github.com/miroshnik/elves.git" } });
     expect(pkg.private).toBeUndefined();
