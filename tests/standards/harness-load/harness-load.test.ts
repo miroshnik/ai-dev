@@ -13,8 +13,6 @@ setDefaultTimeout(SPAWN_TIMEOUT);
 
 // Playwright — из devDependencies Elves: во временном проекте своего node_modules нет, он — ссылка на node_modules Elves
 const PLAYWRIGHT = path.join(path.dirname(createRequire(import.meta.url).resolve("@playwright/test/package.json")), "cli.js");
-/** Vitest Elves — тоже ссылкой. */
-const VITEST = path.join(REPO, "node_modules/vitest/vitest.mjs");
 
 /** e2e-тест проекта: импортирует харнесс и модель из копии скилла и разбирает исходник. */
 const PROJECT_SPEC =
@@ -112,16 +110,16 @@ describe("Тест проекта импортирует харнесс и мо�
 
   /**
    * Сборка идёт на машине CI, а работает у проекта: путь, запечённый в модуль при сборке, вёл бы в никуда. Так было с
-   * репортёром knip — `__filename` CommonJS-модуля сборщик заменял путём машины сборки, и `deadCode` под Vitest, Jest и
-   * Playwright звал knip с несуществующим файлом.
+   * репортёром knip — `__filename` CommonJS-модуля сборщик заменял путём машины сборки, и `deadCode` под Node (Jest,
+   * Playwright, node:test) звал knip с несуществующим файлом.
    */
-  it("deadCode харнесса из пакета под Vitest зовёт knip с репортёром из самого пакета, а не с машины сборки", () => {
+  it("deadCode харнесса из пакета под Node зовёт knip с репортёром из самого пакета, а не с машины сборки", () => {
     const proj = packageProject("harness-load-knip", {
-      "tests/standards/dead-code/dead-code.test.ts": 'import { describe, it } from "vitest";\nimport { deadCode } from "@miroshnik/elves/spec/harness";\n\ndescribe("No dead code", () => {\n  deadCode(it, { root: process.cwd() });\n});\n',
+      "tests/standards/dead-code/dead-code.test.ts": 'import { describe, it } from "node:test";\nimport { deadCode } from "@miroshnik/elves/spec/harness";\n\ndescribe("No dead code", () => {\n  deadCode(it, { root: process.cwd() });\n});\n',
     });
     // knip проекта — заглушка: записывает аргументы, отчёт — чистый
     writeFileSync(path.join(proj, "node_modules/.bin/knip"), `#!/bin/sh\necho "$@" > knip-args.txt\necho '{"issues":[]}'\necho '{"configurationHints":[]}'\n`, { mode: 0o755 });
-    const r = spawnSync("node", [VITEST, "run"], { cwd: proj, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+    const r = spawnSync("node", ["--test", "tests/standards/dead-code/dead-code.test.ts"], { cwd: proj, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
     expect({ code: exitOf(r), output: r.stdout + r.stderr }).toMatchObject({ code: 0 });
     const reporter = readFileSync(path.join(proj, "knip-args.txt"), "utf8").trim().split(" ")[3] ?? "";
     expect(reporter).toStartWith(path.join(realpathSync(proj), "node_modules/@miroshnik/elves/"));
