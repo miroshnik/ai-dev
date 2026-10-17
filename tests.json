@@ -4037,6 +4037,13 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "Предел исполнителей диспетчера — по месту исполнителя"
+  ],
+  "name": "канон и справочник github называют предел облачных исполнителей диспетчера — пять, локальных — три"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "Статус ставится, даже если проект ещё не показал задачу"
   ],
   "name": "createIssue ещё не показывает элемент, добавление — «уже есть»: task new всё равно ставит Бэклог"
@@ -16493,6 +16500,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "docs/ci-concurrency.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/cloud-sessions.md: AGENTS.md, «Session and branch — one task» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
