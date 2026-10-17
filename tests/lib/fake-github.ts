@@ -79,6 +79,13 @@ export class FakeGitHub {
    * чтения GraphQL по прежнему имени проходят, как по нынешнему.
    */
   formerNames: string[] = [];
+  /**
+   * Облачная сессия Claude Code: её прокси закрывает GraphQL и пути вне `repos/<репозиторий>/…` (403), остальное — REST
+   * поверх тех же записей. Записи REST — в журнал `rest`; описание задачи при записи прокси кончает своей подписью
+   * (`CLOUD_SIGNATURE`), если её там ещё нет — проверено вживую в #603.
+   */
+  cloud = false;
+  rest: { method: string; route: string; payload: Any }[] = [];
   private seq = 0;
 
   constructor(recording: Recording) {
@@ -86,6 +93,7 @@ export class FakeGitHub {
   }
 
   gh = (args: string[], stdin?: string): string => {
+    if (this.cloud) return JSON.stringify(this.cloudGh(args, stdin));
     // realGh отдаёт тело ответа и при коде ≠ 0, если это JSON
     if (args[0] === "api" && args[1] === `repos/${this.repo.nameWithOwner}/rulesets`) {
       return JSON.stringify(this.merge.upgrade ? { message: "Upgrade to GitHub Pro or make this repository public to enable this feature.", status: "403" } : this.merge.rulesets.filter((r) => !r.org).map((r) => ({ id: r.id, name: r.name })));
@@ -382,6 +390,145 @@ export class FakeGitHub {
     this.merge.methods = next;
     return JSON.stringify({ id: 1, full_name: this.repo.nameWithOwner, allow_merge_commit: next.merge, allow_squash_merge: next.squash, allow_rebase_merge: next.rebase });
   }
+  // --- облачная сессия: REST репозитория поверх записей ---
+
+  private cloudGh(args: string[], stdin?: string): Any {
+    if (args[0] !== "api") throw new Error(`fake gh: неожиданный вызов gh ${args.join(" ")}`);
+    const method = args[1] === "-X" ? args[2]! : "GET";
+    const route = args[1] === "-X" ? args[3]! : args[1]!;
+    const proxy = (message: string) => ({ message, documentation_url: "https://docs.anthropic.com/en/docs/claude-code/github-actions" });
+    if (route === "graphql") return proxy("GitHub GraphQL is not available from Claude Code sessions; use the REST API (gh api repos/{owner}/{repo}/...).");
+    const base = `repos/${this.repo.nameWithOwner}`;
+    if (route !== base && !route.startsWith(`${base}/`) && !route.startsWith(`${base}?`)) return proxy("This GitHub API path is not available: sessions are bound to their configured repositories. Use repository-scoped endpoints (repos/{owner}/{repo}/...).");
+    const payload = args.includes("--input") ? JSON.parse(stdin ?? "null") : undefined;
+    if (method !== "GET") this.rest.push({ method, route, payload });
+    const [path, query] = route.slice(base.length).split("?") as [string, string | undefined];
+    const params = new URLSearchParams(query ?? "");
+    const page = (rows: Any[]) => {
+      const per = Number(params.get("per_page") ?? 30);
+      const n = Number(params.get("page") ?? 1);
+      return rows.slice((n - 1) * per, n * per);
+    };
+    const missing = (message = "Not Found") => ({ message, documentation_url: "https://docs.github.com/rest", status: "404" });
+    const issueOf = (n: string | undefined) => this.issue(Number(n));
+    let m: RegExpExecArray | null;
+    if (path === "" && method === "GET") return { id: 1, full_name: this.repo.nameWithOwner, default_branch: "main", owner: { login: this.repo.owner.login, type: this.repo.owner.__typename === "Organization" ? "Organization" : "User" } };
+    if (path === "/issues" && method === "GET") {
+      // в листинге issues GitHub отдаёт и PR — со свойством pull_request
+      const prs = Object.entries(this.prs).filter(([, p]) => (p.state ?? (p.merged ? "MERGED" : "OPEN")) === "OPEN").map(([n]) => ({ id: 5000 + Number(n), node_id: `PR_${n}`, number: Number(n), title: `PR ${n}`, state: "open", pull_request: {} }));
+      return page([...this.allIssues().filter((i) => params.get("state") !== "open" || i.state === "OPEN").map((i) => this.restIssue(i)), ...prs]);
+    }
+    if (path === "/issues" && method === "POST") return this.restCreate(payload);
+    if ((m = /^\/issues\/(\d+)$/.exec(path))) {
+      const i = issueOf(m[1]);
+      if (!i) return missing();
+      if (method === "PATCH") i.body = this.signed(payload.body);
+      return this.restIssue(i);
+    }
+    if ((m = /^\/issues\/(\d+)\/parent$/.exec(path))) {
+      const parent = issueOf(m[1])?.parent;
+      return parent ? this.restIssue(this.issue(parent.number)) : missing("No parent issue found");
+    }
+    if ((m = /^\/issues\/(\d+)\/sub_issues$/.exec(path))) {
+      const i = issueOf(m[1]);
+      if (method === "POST") {
+        const sub = this.allIssues().find((x) => this.dbId(x.number) === payload.sub_issue_id);
+        sub.parent = { id: i.id, number: i.number };
+        i.subIssues.nodes.push({ number: sub.number, state: sub.state });
+        return this.restIssue(i);
+      }
+      return page(i.subIssues.nodes.map((s: Any) => this.restIssue(this.issue(s.number) ?? { id: `I_${s.number}`, number: s.number, title: s.title ?? "", state: s.state, url: "", labels: { nodes: [] } })));
+    }
+    if ((m = /^\/issues\/(\d+)\/dependencies\/blocked_by$/.exec(path))) {
+      const n = Number(m[1]);
+      if (method === "POST") {
+        (this.blockedBy[n] ??= []).push(this.allIssues().find((x) => this.dbId(x.number) === payload.issue_id).number);
+        return this.restIssue(this.issue(n));
+      }
+      return page((this.blockedBy[n] ?? []).map((b) => {
+        const x = this.blocker(b);
+        return { id: typeof b === "number" ? this.dbId(b) : 9000 + x.number, node_id: x.id, number: x.number, title: x.title, state: x.state.toLowerCase(), repository_url: `https://api.github.com/repos/${x.repository.nameWithOwner}` };
+      }));
+    }
+    if ((m = /^\/issues\/(\d+)\/labels$/.exec(path)) && method === "POST") {
+      const i = issueOf(m[1]);
+      for (const name of payload.labels) if (!i.labels.nodes.some((l: Any) => l.name === name)) i.labels.nodes.push({ name });
+      return i.labels.nodes.map((l: Any) => ({ node_id: this.labelId(l.name), name: l.name }));
+    }
+    if ((m = /^\/issues\/(\d+)\/labels\/(.+)$/.exec(path)) && method === "DELETE") {
+      const i = issueOf(m[1]);
+      const name = decodeURIComponent(m[2]!);
+      i.labels.nodes = i.labels.nodes.filter((l: Any) => l.name !== name);
+      return i.labels.nodes.map((l: Any) => ({ node_id: this.labelId(l.name), name: l.name }));
+    }
+    if (path === "/labels" && method === "GET") return page(this.labels.map((l) => ({ id: 1, node_id: l.id, name: l.name, color: l.color, description: l.description })));
+    if (path === "/labels" && method === "POST") {
+      const label = this.handlers.CreateLabel(payload).createLabel.label;
+      return { id: 1, node_id: label.id, name: label.name, color: payload.color, description: payload.description };
+    }
+    if ((m = /^\/labels\/(.+)$/.exec(path))) {
+      const name = decodeURIComponent(m[1]!);
+      const l = this.labels.find((x) => x.name === name) ?? (name === "epic" && this.taskContext.label ? { id: this.taskContext.label.id, name, color: "8250DF", description: "" } : null);
+      return l ? { id: 1, node_id: l.id, name: l.name, color: l.color, description: l.description } : missing();
+    }
+    if (path === "/milestones") return page(this.taskContext.milestones.nodes.filter((x: Any) => !this.closedMilestones.includes(x.number)).map((x: Any) => ({ id: 1, node_id: x.id, number: x.number, title: x.title, open_issues: 0 })));
+    if (path === "/pulls") {
+      const rows = Object.entries(this.prs).map(([n, p]) => {
+        const state = p.state ?? (p.merged ? "MERGED" : "OPEN");
+        return { id: 5000 + Number(n), number: Number(n), state: state === "OPEN" ? "open" : "closed", merged_at: state === "MERGED" ? "2026-10-17T12:00:00Z" : null, draft: Boolean(p.draft), body: p.body ?? (p.closes.length ? p.closes.map((c) => `Closes #${c}`).join("\n") : ""), head: { ref: p.head, sha: `sha${n}` }, base: { ref: p.base ?? "main", repo: { default_branch: "main" } } };
+      });
+      return page(rows.sort((a, b) => b.number - a.number));
+    }
+    if ((m = /^\/commits\/sha(\d+)\/check-runs$/.exec(path))) {
+      const nodes = this.rollup(this.prs[Number(m[1])]?.checks ?? {})?.contexts.nodes ?? [];
+      return { total_count: nodes.length, check_runs: nodes.map((c: Any) => ({ id: c.databaseId, name: c.name, status: c.status.toLowerCase(), conclusion: c.conclusion?.toLowerCase() ?? null, app: { id: c.checkSuite.app.databaseId } })) };
+    }
+    if (/^\/commits\/sha\d+\/status$/.test(path)) return { state: "pending", statuses: [] };
+    if ((m = /^\/contents\/tests\/(capabilities|standards|architecture)$/.exec(path))) {
+      const t = this.specTree()[m[1]!];
+      return t ? t.entries.map((e: Any) => ({ name: e.name, type: e.type === "tree" ? "dir" : "file" })) : missing();
+    }
+    if (path === "/contents/tests/architecture/model.ts") return this.tree.model === null ? missing() : { encoding: "base64", content: Buffer.from(this.tree.model).toString("base64") };
+    throw new Error(`fake gh: REST ${method} ${route} не поддержан`);
+  }
+  /** REST id задачи — как у GitHub, другое число, чем её номер. */
+  private dbId(number: number): number {
+    return 100000 + number;
+  }
+  /** Задача из записи, как её отдаёт REST. */
+  private restIssue(i: Any): Any {
+    const m = this.milestoneOf(i.number);
+    return {
+      id: this.dbId(i.number),
+      node_id: i.id,
+      number: i.number,
+      title: i.title,
+      state: String(i.state).toLowerCase(),
+      state_reason: i.stateReason ? String(i.stateReason).toLowerCase() : null,
+      html_url: i.url,
+      body: i.body ?? "",
+      labels: i.labels.nodes.map((l: Any) => ({ node_id: this.labelId(l.name), name: l.name })),
+      milestone: m && { node_id: m.id, number: m.number, title: m.title, open_issues: m.issues.totalCount },
+      type: i.issueType ?? null,
+      repository_url: `https://api.github.com/repos/${this.repo.nameWithOwner}`,
+    };
+  }
+  /** Описание с подписью облачного прокси в конце: её нет — прокси её дописывает. */
+  private signed(body: string): string {
+    return body.endsWith(CLOUD_SIGNATURE) ? body : `${body.replace(/\s+$/, "")}\n\n${CLOUD_SIGNATURE}`;
+  }
+  /** REST «Create an issue»: метки — по именам, milestone — по номеру, тип организации — по имени; без проекта. */
+  private restCreate(p: Any): Any {
+    const type = this.repo.owner.issueTypes?.nodes.find((t: Any) => t.name === p.type);
+    if (p.type && !type) return { message: "Validation Failed", errors: [{ resource: "Issue", field: "type", code: "invalid" }], status: "422" };
+    const { number } = this.handlers.CreateIssue({ title: p.title, body: this.signed(p.body ?? ""), issueTypeId: type?.id }).createIssue.issue;
+    const i = this.issue(number);
+    i.labels.nodes = (p.labels ?? []).map((name: string) => ({ name }));
+    const m = p.milestone ? this.taskContext.milestones.nodes.find((x: Any) => x.number === p.milestone) : null;
+    if (m) this.issueMilestones[number] = m.id;
+    return this.restIssue(i);
+  }
+
   // папка без решений в GitHub — не пустое дерево, а null
   private specTree(): Any {
     const t = this.tree;
@@ -783,6 +930,8 @@ function rulesetOf(input: Any) {
 /** Ошибка GitHub на мутацию: поле мутации в data — null, текст — в errors. */
 /** Предел меток на issue у GitHub. */
 const ISSUE_LABELS = 100;
+/** Подпись, которой облачный прокси кончает описание задачи при записи (#603). */
+export const CLOUD_SIGNATURE = "---\n_Generated by [Claude Code](https://claude.ai/code)_";
 
 class GitHubError extends Error {
   field: string;
