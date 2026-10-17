@@ -457,9 +457,9 @@ describe("Проверки проекта идут очередью машины
   });
 
   /**
-   * bin пакета — `bin/elves.ts` с шебангом `#!/usr/bin/env bun`: голый `elves <скрипт>` Bun запускает с env-файлами
-   * рабочего каталога, и скрипт отдаёт их ключи дальше — `spec-break` проверяемой команде, `spec-run` и `spec-publish`
-   * — `gh` и `git` (tests/standards/no-env-file, #596). Скрипт `package.json` идёт как у npm: `sh -c` в корне проекта,
+   * `bun` читает bin пакета сам, мимо шебанга: без `--no-env-file` Bun подгрузил бы env-файлы рабочего каталога, и
+   * скрипт отдал бы их ключи дальше — `spec-break` проверяемой команде, `spec-run` и `spec-publish` — `gh` и `git`
+   * (tests/standards/no-env-file, #596). Скрипт `package.json` идёт как у npm: `sh -c` в корне проекта,
    * `node_modules/.bin` первым в PATH.
    */
   it("скрипт spec из package.json тонкого проекта не видит ключей env-файлов рабочего каталога", () => {
