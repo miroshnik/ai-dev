@@ -3181,3 +3181,19 @@ describe("Другая задача — вопрос о постановке в 
     expect(canon).toContain("work outside the task — a Backlog task and the question «queue it?»");
   });
 });
+
+/**
+ * Предел «не больше трёх» держит машину (#611): исполнители-субагенты делят её процессор, порты и очередь `slot`, а та
+ * пускает две тяжёлые проверки. Облачный исполнитель идёт в своём контейнере и машину не нагружает — владелец решил:
+ * облачных — до пяти сразу. Число из запроса владельца заменяет любой предел. Фраза одна во всех местах, где диспетчер
+ * её читает: в каноне, в скилле `github` и его справочнике, в справочнике облачной сессии.
+ */
+describe("Предел исполнителей диспетчера — по месту исполнителя", () => {
+  const ROOT = path.resolve(import.meta.dir, "../../..");
+  const LIMIT = "at most 3 subagents and 5 cloud sessions at once, the owner's number replaces either";
+  const PLACES = ["AGENTS.md", "skills/github/SKILL.md", "skills/github/reference.md", "docs/cloud-sessions.md"];
+
+  it("канон и справочник github называют предел облачных исполнителей диспетчера — пять, локальных — три", () => {
+    expect(PLACES.filter((f) => !readFileSync(path.join(ROOT, f), "utf8").replace(/\s+/g, " ").includes(LIMIT))).toEqual([]);
+  });
+});

@@ -22,10 +22,9 @@ Here — what always applies and where to go; reference — a skill's
 
 ## First step of a session — an up-to-date flow
 
-Rules load at the session start, so first, before the task: `bunx
+Rules load at the session start, so before the task: `bunx
 @miroshnik/elves check -g` (machine) and `check` (project, with its mode
-and language) — in Claude Code the `SessionStart` hook runs them into the
-start of the context. The machine's copy and a project's package version
+and language). The machine's copy and a project's package version
 follow Elves releases (tags `vYYYY.MM.DD`), a `--link` clone — `origin/main`;
 a release is the owner's step (`elves release`), I cut one only when asked.
 
@@ -124,8 +123,9 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
   — any session, its task stays; one started for it — in the project folder,
   not a worktree: executors start from `main`. `github task queue` — ready
   ones with executors' prompts; an executor — a background subagent in its
-  worktree, at most 3; its question — to the owner, the answer into the
-  issue and back; failed — a task comment, no restart.
+  worktree or a cloud session: at most 3 subagents and 5 cloud sessions at
+  once, the owner's number replaces either; its question — to the owner,
+  the answer into the issue and back; failed — a task comment, no restart.
 - **The session is named `#<number> <task title>`** (without a task — by
   meaning, no number) as soon as the task is clear (no tool — ask the user):
   `est` links the session to the task by it.
