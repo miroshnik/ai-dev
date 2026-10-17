@@ -101,9 +101,11 @@ writes a cloud session's first prompt — the owner or a dispatcher session —
 names only its task with `#`, in the background too; the epic, other tasks and
 PRs — a number without `#` ("epic 40", "tasks 41 and 43") or a title. The
 executor prompt of `github task queue` has `(epic #M)`: fine for a subagent,
-whose assignment `est` reads by the word "Task", but in a cloud session's
-brief the epic goes without `#`. Two `#N` — `est fact <N>` in the cloud prints
-`Actual unavailable (cloud)` though the transcript is in the container.
+whose assignment `est` reads by the word "Task"; a cloud executor's brief is
+`github task queue --assignment <N> --cloud` — whole (the cloud refuses the
+skill's scripts), the epic and numbers in the title without `#`. Two `#N` —
+`est fact <N>` in the cloud prints `Actual unavailable (cloud)` though the
+transcript is in the container.
 
 ## Closing a task from the cloud
 
@@ -128,21 +130,23 @@ and prints the same steps:
    can't be done from the cloud (project fields, estimates of new tasks via
    `est`) — into a State comment for the local session.
 
-**No channel to a local dispatcher** (checked 2026-10-17, #609): a cloud
-executor can't tell the local session that started it that the task is
-merged. `send_message` to a local session is refused —
-`elevated_session_untrusted_device`, then "target session could not be
-verified" on every retry; `create_trigger` (`persistent_session_id`) and
-`get_session` don't take a local session's id (`local_…`); `ListAgents` in
-the cloud sees no sessions of the owner's machine. The owner's step would be
-an approval on a trusted device (`confirm_repository_trust` with the
-`content_digest` of such a refusal — these carried none), by the tool's
-description for one cloud session, i.e. per executor. A path without a
-channel: the dispatcher waits for the task itself — `ci-wait issue <N>` as
-its own background command (checked from the cloud: PASS on a closed task),
-then the `Actual (cloud)` and State comments of the task and the local close.
-Until #609 settles it — the State comment, and the owner asks a local
-session.
+**A local dispatcher learns of it by the task's closing** (#609): a cloud
+session can't message the local one that started it. `send_message` to a
+local session is refused — `elevated_session_untrusted_device`, then "target
+session could not be verified" on every retry (checked 2026-10-17);
+`create_trigger` (`persistent_session_id`) and `get_session` don't take a
+local session's id (`local_…`); `ListAgents` in the cloud sees no sessions of
+the owner's machine; the owner's approval on a trusted device
+(`confirm_repository_trust` with the `content_digest` of such a refusal —
+these carried none) is, by the tool's description, for one cloud session,
+i.e. per executor. So the brief tells the executor not to message the
+dispatcher and not to archive its session, and the dispatcher waits for the
+merge's `Closes #N`: `ci-wait issue <N>` as its own background command; PASS
+— `github task close <N>` locally (the actual with `--write`, `Status`, the
+merged `claude/<slug>` branch), then archiving the executor's session where
+it has the tool (till then its transcript may be needed for `est`); TIMEOUT —
+the task's questions section and State comment, the executor's session, the
+wait again. After the app restarts the queue's `=` line names the wait.
 
 ## Push failed — a local session finishes
 

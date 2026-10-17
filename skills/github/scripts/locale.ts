@@ -107,6 +107,13 @@ export interface Names {
     answer: string;
     /** The assignment refused: the task's previous executor or its subagent is alive (#565). */
     alive: string;
+    /** A cloud executor's brief (`--assignment N --cloud`, #609): whole, `#` only at its task — the epic without it. */
+    cloudEpic: string;
+    cloud: string;
+    cloudDoc: string;
+    cloudClose: string;
+    cloudDispatcher: string;
+    cloudQuestion: string;
   };
   /** The est skill's "Estimate" and "Actual" comments and the lines a human appends to them. */
   est: {
