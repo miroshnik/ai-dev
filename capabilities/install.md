@@ -24,9 +24,9 @@ lockfile — только `package.json` и строка с командой: lo
 манифесте и её исключения в `.gitignore` уходят; свои скиллы проекта остаются (#558, вопрос 6). Импорты харнесса,
 модели архитектуры, фрагмента ESLint и github из копии в тестах и конфигах ведут в `exports` пакета
 (`@miroshnik/elves/spec/harness` …), скрипты spec копии — в `bun --no-env-file node_modules/.bin/elves <скрипт>`, в
-`package.json` и в CI одинаково (#596): bin пакета — TypeScript с шебангом `#!/usr/bin/env bun`, и голым Bun
+`package.json` и в CI одинаково (#596): `bun` читает bin пакета сам, мимо шебанга, и без флага
 подгрузил бы ему env-файлы проекта, а скрипт отдал бы их ключи `gh`, `git` и проверяемой команде (стандарт
-`no-env-file`); шаг GitHub Actions не видит `node_modules/.bin`, а `bunx elves` без пакета в node_modules скачал бы из
+`no-env-file`; голый bin снимает их шебангом через `sh`, #592); шаг GitHub Actions не видит `node_modules/.bin`, а `bunx elves` без пакета в node_modules скачал бы из
 npm чужой пакет `elves` (#558, вопрос 2). Отвергнуто: bin, который перезапускает себя под `--no-env-file`, — окружение
 родителя уже загружено, ключи файлов пришлось бы вычищать; шебанг `#!/usr/bin/env -S bun --no-env-file` — `env -S` есть
 не везде (busybox). В CI форма — по джобе (#597): джобы `spec-publish` и `spec-diff` из `ci.md` прошлых релизов
@@ -226,9 +226,9 @@ setup script установка шла бы из архива GitHub, а не и
   > харнесса — тоже; в тонком проекте их даёт пакет: `bun --no-env-file node_modules/.bin/elves <скрипт>`, как в CI
   > (#596), репортёр — файлом пакета.
 - ✅ скрипт spec из package.json тонкого проекта не видит ключей env-файлов рабочего каталога
-  > bin пакета — `bin/elves.ts` с шебангом `#!/usr/bin/env bun`: голый `elves <скрипт>` Bun запускает с env-файлами
-  > рабочего каталога, и скрипт отдаёт их ключи дальше — `spec-break` проверяемой команде, `spec-run` и `spec-publish`
-  > — `gh` и `git` (tests/standards/no-env-file, #596). Скрипт `package.json` идёт как у npm: `sh -c` в корне проекта,
+  > `bun` читает bin пакета сам, мимо шебанга: без `--no-env-file` Bun подгрузил бы env-файлы рабочего каталога, и
+  > скрипт отдал бы их ключи дальше — `spec-break` проверяемой команде, `spec-run` и `spec-publish` — `gh` и `git`
+  > (tests/standards/no-env-file, #596). Скрипт `package.json` идёт как у npm: `sh -c` в корне проекта,
   > `node_modules/.bin` первым в PATH.
 - ✅ в проекте на Yarn 2+ команда остаётся строкой у elves slot: shell Yarn не подключает шим
   > Yarn 2+ выполняет скрипты своим shell (`@yarnpkg/shell`): в нём нет `.`, `eval` и `export`, и подключить шим нечем.

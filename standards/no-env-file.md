@@ -20,9 +20,13 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 - в документах флоу — `AGENTS.md`, `claude/CLAUDE.md`, `README.md`, `package.json`, `docs/*.md`, `*.md` скиллов —
   `bun <путь>/scripts/<скрипт>.ts`, которую агент копирует как есть;
-- там же — скрипт пакета: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI одинаково (#596).
-  bin `elves` — TypeScript с шебангом `#!/usr/bin/env bun`: голый `elves`, `node_modules/.bin/elves` или `bunx elves`
-  Bun запускает с env-файлами каталога, а флаг поставить некуда;
+- там же — скрипт пакета под `bun`: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI
+  одинаково (#596). `bun` читает bin сам, мимо его шебанга, и без флага подгрузит env-файлы каталога;
+- шебанг bin пакета — через `sh`: `#!/bin/sh` и вторая строка `':' //; exec bun --no-env-file "$0" "$@"` — для `sh`
+  запуск Bun с флагом, для TypeScript строка-выражение и комментарий. Голый `elves`, `node_modules/.bin/elves`, скрипт
+  `package.json`, `bunx` и обёртка Yarn 2+ `elves slot '<команда>'` идут через него — без env-файлов (#592). Не
+  `#!/usr/bin/env bun` — Bun подгрузил бы их, и `elves slot '<команда>'` отдал бы ключи команде; не
+  `#!/usr/bin/env -S bun --no-env-file` — `env -S` есть не везде (busybox), bin там не запустился бы вовсе;
 - в коде скриптов скиллов и установщика — команда, которую скрипт печатает (`bun ${…}`, `bun .agents/skills/…`), и
   дочерний процесс `bun` (`spawn("bun", […])`, `process.execPath`).
 
@@ -36,20 +40,17 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 ## Вне охвата
 
-Установщик под `bunx` (`bunx @miroshnik/elves …`, запасной путь `bunx github:miroshnik/elves …`, хук
-`SessionStart`): `bunx` подгружает env-файлы и флаг не принимает — ни `bunx --no-env-file`, ни
-`bun --no-env-file x` (Bun 1.4.3). Помог бы только shebang `#!/usr/bin/env -S bun --no-env-file`, а `env -S` есть
-не везде (busybox) — установщик там не запустился бы вовсе. Сам он проверок проекта не запускает. Так же —
-`bunx @miroshnik/elves@<версия> spec-…` в джобах CI без зависимостей проекта (`ci.md` скилла spec, #559): в чекауте
-CI env-файлов с ключами нет — `.env.local` не коммитят.
+`bunx` (`bunx @miroshnik/elves …`, запасной путь `bunx github:miroshnik/elves …`, хук `SessionStart`, джобы CI без
+зависимостей проекта — `bunx @miroshnik/elves@<версия> spec-…`, `ci.md` скилла spec, #559) флаг не принимает — ни
+`bunx --no-env-file`, ни `bun --no-env-file x` (Bun 1.4.3), — но запускает bin его шебангом: env-файлы снимает шебанг
+(#592).
 
 `elves slot --for $$` шима очереди `.agents/slot.sh`: `elves` только печатает переменные очереди, а команда идёт в
-shell скрипта, без env-файлов Bun. Обёртка Yarn 2+ `elves slot '<команда>'` в охвате: там команда идёт в процессе
-`elves`.
+shell скрипта, без env-файлов Bun.
 
 ## Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file
 
-<details><summary>✅ 88 тестов</summary>
+<details><summary>✅ 92 теста</summary>
 
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (документы)
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит skills/slot/SKILL.md, skills/github/SKILL.md, skills/task-env/SKILL.md, skills/spec/SKILL.md, docs/parallel-checkouts.md, package.json (документы)
@@ -81,38 +82,41 @@ shell скрипта, без env-файлов Bun. Обёртка Yarn 2+ `elves
 - ✅ в skills/task-env/SKILL.md скрипты скиллов вызываются с --no-env-file
 - ✅ в skills/task-env/reference.md скрипты скиллов вызываются с --no-env-file
 - ✅ вызов скрипта пакета в документах флоу и package.json, который подгрузит env-файлы проекта, — нарушение no-env-file
-  > bin пакета без флага Bun запускает с env-файлами рабочего каталога, и `elves <скрипт>` из `package.json` отдавал
-  > их ключи `gh`, `git` и проверяемой команде (#596). Форма — как в CI: `bun --no-env-file node_modules/.bin/elves`.
+  > bin пакета Bun без флага читает сам, мимо шебанга, — с env-файлами рабочего каталога, и `elves <скрипт>` отдавал
+  > их ключи `gh`, `git` и проверяемой команде (#596). Голый bin идёт через шебанг — без них (#592).
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (скрипт пакета)
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит README.md, skills/spec/SKILL.md, skills/spec/reference.md, skills/spec/ci.md (скрипт пакета)
-- ✅ нарушитель не проходит (скрипт пакета): скрипт package.json — голый elves
-- ✅ нарушитель не проходит (скрипт пакета): команда скилла — bin из node_modules без bun --no-env-file
-- ✅ в AGENTS.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в README.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в claude/CLAUDE.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в docs/ci-concurrency.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в docs/cloud-sessions.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в docs/judgment.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в docs/parallel-checkouts.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в docs/pr-checks.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в docs/testing.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в package.json скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/ci-wait/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/dashboard/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/est/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/est/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/github/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/github/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/spec/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/spec/canon.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/spec/checks.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/spec/ci.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/spec/migration.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/spec/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/task-env/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ в skills/task-env/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
-- ✅ исключение (скрипт пакета): skills/slot/SKILL.md (#592)
-  > #592 — обёртка Yarn 2+ — elves slot '<команда>' без --no-env-file: команда в слоте получает ключи env-файлов проекта; форму обёртки меняет #592
+- ✅ нарушитель не проходит (скрипт пакета): скрипт package.json — bin под bun без флага
+- ✅ нарушитель не проходит (скрипт пакета): команда скилла — bin под bun без флага
+- ✅ в AGENTS.md bin пакета под bun вызывается с --no-env-file
+- ✅ в README.md bin пакета под bun вызывается с --no-env-file
+- ✅ в claude/CLAUDE.md bin пакета под bun вызывается с --no-env-file
+- ✅ в docs/ci-concurrency.md bin пакета под bun вызывается с --no-env-file
+- ✅ в docs/cloud-sessions.md bin пакета под bun вызывается с --no-env-file
+- ✅ в docs/judgment.md bin пакета под bun вызывается с --no-env-file
+- ✅ в docs/parallel-checkouts.md bin пакета под bun вызывается с --no-env-file
+- ✅ в docs/pr-checks.md bin пакета под bun вызывается с --no-env-file
+- ✅ в docs/testing.md bin пакета под bun вызывается с --no-env-file
+- ✅ в package.json bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/ci-wait/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/dashboard/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/est/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/est/reference.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/github/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/github/reference.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/slot/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/spec/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/spec/canon.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/spec/checks.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/spec/ci.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/spec/migration.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/spec/reference.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/task-env/SKILL.md bin пакета под bun вызывается с --no-env-file
+- ✅ в skills/task-env/reference.md bin пакета под bun вызывается с --no-env-file
+- ✅ реестр «bin из package.json» не пуст (bin пакета)
+- ✅ реестр «bin из package.json» находит bin/elves.ts (bin пакета)
+- ✅ нарушитель не проходит (bin пакета): шебанг env bun
+- ✅ bin/elves.ts запускает Bun с --no-env-file сам — шебанг через sh
 - ✅ реестр «код скриптов скиллов и установщика без комментариев» не пуст (код)
 - ✅ реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/elves.ts (код)
 - ✅ нарушитель не проходит (код): подсказка с командой без флага
