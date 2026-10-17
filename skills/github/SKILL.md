@@ -147,10 +147,11 @@ What the agent gets wrong without the details (all of them — `reference.md`,
 dispatcher on epic #M?» (`AGENTS.md`, "Session and branch — one task"): any
 session, its own task stays pinned; one started for it — in the project
 folder, not a worktree: executors (subagents, cloud sessions) start from
-`main`, the app's worktree gets a `!` line. `task queue` prints ready
+`main`. `task queue` prints ready
 tasks, each with an indented line — its executor's prompt. In Claude Code: an executor — `Agent` with
 `isolation: "worktree"` and `run_in_background: true`, the prompt — the
-indented line as is; at most 3 at once;
+indented line as is; at most 3 subagents and 5 cloud sessions at once, the
+owner's number replaces either;
 `=` — a task in work (In progress, an open PR, handed out to an executor of
 this session), not launched again. Before each launch — `get_usage`: the 5-hour limit at 85% and more —
 no new executors, the running ones finish, then `Remaining: N tasks, the
@@ -164,7 +165,7 @@ task comment with what stopped, no restart (the owner's restart:
 `--assignment` refuses while the previous executor lives); on an external
 blocker — *blocked by* on its issue or
 the `external blocker` label with the reason (`reference.md`,
-"Dependencies"): the queue shows it as `○`. Queue empty and nothing running — the summary, the last
+"Dependencies"). Queue empty and nothing running — the summary, the last
 line (a session with its own task — after it) and, in auto mode, archiving. The executor's side (`--assignment`) — `reference.md`,
 "task queue".
 

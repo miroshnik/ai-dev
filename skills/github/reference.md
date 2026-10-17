@@ -791,9 +791,10 @@ after its answer, and the woken executor of #545 worked unlocked; the wait for C
 is a Bash call of up to 9 minutes without commits.
 
 In Claude Code: an executor — `Agent` with `isolation: "worktree"` and
-`run_in_background: true`, the prompt — the indented line as is; at most 3 at
-once (`slot` runs two heavy checks, a number in the request replaces it); a
-task in work (`=`) isn't launched again.
+`run_in_background: true`, the prompt — the indented line as is; at most 3
+subagents and 5 cloud sessions at once, the owner's number replaces either
+(subagents share the machine, `slot` runs two heavy checks; a cloud session
+has its own container); a task in work (`=`) isn't launched again.
 Before each launch — `get_usage`: the 5-hour limit at 85% and more — no new
 executors, the running ones finish, then `Remaining: N tasks, the limit`. An
 answer arrives as the subagent's notification; after each — `task queue`

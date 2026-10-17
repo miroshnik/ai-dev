@@ -3,6 +3,9 @@
 Reference for the cloud-session line in `AGENTS.md`. A cloud session is
 Claude Code on claude.ai/code, including one started from the phone app: a
 temporary container into which only the project repository is cloned.
+A dispatcher's executor can be one (`AGENTS.md`, "Session and branch — one
+task"): at most 3 subagents and 5 cloud sessions at once, the owner's number
+replaces either — a cloud session's container doesn't load the machine.
 
 ## What it sees
 
