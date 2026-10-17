@@ -1,9 +1,15 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { codeOnly, exceptionsIn, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
+import { PACKAGE_RUN } from "../../../skills/spec/scripts/package-run.ts";
+import { stringSpans } from "../../../skills/spec/scripts/speclib.ts";
+import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+
+setDefaultTimeout(SPAWN_TIMEOUT);
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -22,6 +28,19 @@ function flowDocs(): Source[] {
     return existsSync(path.join(dir, "SKILL.md")) ? readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => `skills/${s}/${f}`) : [];
   });
   return ["AGENTS.md", "claude/CLAUDE.md", "README.md", "package.json", ...docs, ...skills].map((file) => ({ file, text: read(file) }));
+}
+
+/** Код скриптов скиллов и установщика: файл и его текст. */
+const code = () => sources(ROOT, ["skills", "bin"]).filter((f) => !f.file.includes("/vendor/"));
+
+/**
+ * Только строки кода — литералы и шаблоны как написаны, с `${…}`: то, что код печатает; остальное — пробелы, позиции и
+ * строки те же. Регулярное выражение (`SLOT_STRING` установщика узнаёт прежнюю обёртку) и комментарий — не вывод.
+ */
+function stringsOnly(text: string, file: string): string {
+  const keep = new Uint8Array(text.length);
+  for (const [start, end] of stringSpans(text, file)) keep.fill(1, start, end);
+  return text.replace(/[^\n]/g, (c, i: number) => (keep[i] ? c : " "));
 }
 
 /** Флаги между `bun` и скриптом: `--no-env-file` среди них — вызов без env-файлов проекта. */
@@ -101,19 +120,58 @@ describe("Скрипты флоу под bun не подгружают env-фа�
     expect(clean.filter((t) => calls(t) !== 0)).toEqual([]);
   });
 
+  /**
+   * Команду, которую печатает код — подсказка харнесса, справка скрипта под именем `elves`, — агент копирует как есть:
+   * `bun node_modules/.bin/elves …` без флага в ней Bun читает мимо шебанга bin и отдаёт ключи env-файлов проекта
+   * проверяемой команде, как в package.json до #596.
+   */
+  it("команда скрипта пакета, которую печатает код скриптов и установщика и которая подгрузит env-файлы проекта, — нарушение no-env-file", () => {
+    const calls = (text: string) => unflagged(stringsOnly(text, "x.ts"), PACKAGE_CALL).length;
+    const loads = [
+      `const MIGRATE = "migrate with spec-exceptions: bun node_modules/.bin/elves spec-exceptions";`,
+      "const help = (cmd: string) => HELP.replace(/^spec-doc/gm, `bun node_modules/.bin/elves ${cmd}`);",
+      "note(`run: bun --smol ./node_modules/.bin/elves spec-diff --base ${base}`);",
+    ];
+    const clean = [
+      "const MIGRATE = `migrate with spec-exceptions: ${PACKAGE_RUN} spec-exceptions`;",
+      "const help = (cmd: string) => HELP.replace(/^spec-doc/gm, `bun --no-env-file node_modules/.bin/elves ${cmd}`);",
+      "const wrap = (cmd: string) => `elves slot '${cmd}'`;",
+      "const OLD = /^bun node_modules\\/\\.bin\\/elves slot '(.*)'$/;",
+      "// bun node_modules/.bin/elves spec-doc — a comment, not output\nconst x = 1;",
+    ];
+    expect(loads.filter((t) => calls(t) !== 1)).toEqual([]);
+    expect(clean.filter((t) => calls(t) !== 0)).toEqual([]);
+  });
+
   invariant(it, {
     rule: "скрипт пакета",
-    registry: "документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов",
-    items: flowDocs(),
+    registry: "документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов — и строки кода скриптов скиллов и установщика",
+    items: [...flowDocs(), ...code().map((f) => ({ file: f.file, text: stringsOnly(f.text, f.file) }))],
     key: (f) => f.file,
     name: (f) => `в ${f.file} bin пакета под bun вызывается с --no-env-file`,
     check: (f) => noUnflagged(f, unflagged(f.text, PACKAGE_CALL), "вызов скрипта пакета"),
     violator: [
       { name: "скрипт package.json — bin под bun без флага", item: { file: "package.json", text: `{"scripts":{"spec:doc":"bun node_modules/.bin/elves spec-doc .spec-report.xml --strict"}}` } },
       { name: "команда скилла — bin под bun без флага", item: { file: "skills/x/SKILL.md", text: "```bash\nbun ./node_modules/.bin/elves spec-diff\n```\n" } },
+      { name: "подсказка кода — bin под bun без флага", item: { file: "skills/x/scripts/x.ts", text: stringsOnly(`console.log("migrate: bun node_modules/.bin/elves spec-exceptions");\n`, "x.ts") } },
     ],
     exceptions: exceptionsIn(),
-    includes: ["README.md", "skills/spec/SKILL.md", "skills/spec/reference.md", "skills/spec/ci.md"],
+    includes: ["README.md", "skills/spec/SKILL.md", "skills/spec/reference.md", "skills/spec/ci.md", "skills/spec/scripts/harness.ts", "bin/elves.ts"],
+  });
+
+  /** Справка скрипта под именем `elves` — первое, что агент копирует: синтаксис и примеры — со строкой запуска пакета. */
+  it("справка скрипта пакета под именем elves называет вызов без env-файлов проекта", () => {
+    const help = (...args: string[]) => spawnSync(process.execPath, ["--no-env-file", path.join(ROOT, "bin/elves.ts"), ...args, "--help"], { cwd: ROOT, encoding: "utf8" }).stdout;
+    const overview = help();
+    const scripts = [...new Set([...overview.matchAll(/^ {2}(?:bun\S*(?: --?[\w-]+)* (?:\.\/)?node_modules\/\.bin\/)?elves ((?:spec-[\w-]+|slot))(?= |$)/gm)].map((m) => m[1]!))];
+    expect(scripts).toEqual(expect.arrayContaining(["spec-doc", "spec-break", "slot"]));
+    const wrong = [{ file: "elves --help", text: overview }, ...scripts.map((s) => ({ file: `elves ${s} --help`, text: help(s) }))].flatMap((f) => {
+      const bare = unflagged(f.text, PACKAGE_CALL);
+      const name = f.file.split(" ")[1]!;
+      const synopsis = f.file === "elves --help" || f.text.startsWith(`${PACKAGE_RUN} ${name}`) ? [] : [`синтаксис не с «${PACKAGE_RUN} ${name}»: ${f.text.split("\n")[0]}`];
+      return [...synopsis, ...lines(f.text, bare)].map((l) => `${f.file}: ${l}`);
+    });
+    expect(wrong).toEqual([]);
   });
 
   invariant(it, {
@@ -132,9 +190,7 @@ describe("Скрипты флоу под bun не подгружают env-фа�
   invariant(it, {
     rule: "код",
     registry: "код скриптов скиллов и установщика без комментариев",
-    items: sources(ROOT, ["skills", "bin"])
-      .filter((f) => !f.file.includes("/vendor/"))
-      .map((f) => ({ file: f.file, text: codeOnly(f.text, f.file) })),
+    items: code().map((f) => ({ file: f.file, text: codeOnly(f.text, f.file) })),
     key: (f) => f.file,
     name: (f) => `${f.file} печатает и запускает скрипты флоу с --no-env-file`,
     check: (f) => {

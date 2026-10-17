@@ -13,7 +13,8 @@
  *   bunx github:miroshnik/elves <command>              — the fallback: the launcher from main (`toRelease`)
  *   bun <Elves clone>/bin/elves.ts release             — cut a release: a tag and the list of flow changes
  *   bun <Elves checkout>/bin/elves.ts pack <tag>       — CI on the release tag: the npm package @miroshnik/elves
- *   elves spec-doc … · elves slot --for <PID>          — a project with the package: the skills' scripts at its version
+ *   bun --no-env-file node_modules/.bin/elves spec-doc … — a project's package: the skills' scripts at its version
+ *   elves slot --for <PID>                             — the machine queue's shim .agents/slot.sh in a project
  *
  * The shebang goes through `sh`: the second line — `exec bun --no-env-file` for sh, a string and a comment for TypeScript
  * — starts Bun without the project's env files however the bin is called (`elves`, `node_modules/.bin/elves`, a
@@ -80,6 +81,7 @@ import { fileURLToPath } from "node:url";
 
 import { packageManager, specRoots } from "../skills/github/scripts/github.ts";
 import locale from "../skills/github/scripts/locale.ts";
+import { PACKAGE_RUN } from "../skills/spec/scripts/package-run.ts";
 import { COMPOSE_FILES, formerProxyName, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
@@ -193,7 +195,7 @@ The flow of the latest Elves release into the project (the git root or the curre
 ${PACKAGE} of the release in devDependencies of package.json (the project's package manager installs it, the lockfile
 changes too), .agents/elves.json, the machine queue's shim .agents/slot.sh and a block in AGENTS.md linking to the canon
 on the machine; the package.json checks (lint, typecheck, test, test:*) go through the shim, the skills' scripts —
-bun --no-env-file node_modules/.bin/elves <script>, without the project's env files. A project with a copy of the flow
+${PACKAGE_RUN} <script>, without the project's env files. A project with a copy of the flow
 of an earlier release moves to a thin one: the copy, its symlinks and .gitignore exceptions go, imports and CI paths
 into the copy lead to the package, what else names .agents is listed.
 In a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
@@ -297,8 +299,12 @@ interface Script {
 
 const loadScript = (cmd: string): Promise<Script> => import(path.join(SRC, SCRIPTS[cmd]!.file));
 
-/** A script's help under the elves name: its synopsis and example lines start with `elves <command>`. */
-const scriptHelp = async (cmd: string) => (await loadScript(cmd)).HELP.replace(new RegExp(`^( *)${cmd}(?= |$)`, "gm"), `$1elves ${cmd}`).trimEnd();
+/**
+ * A script's help under the elves name: its synopsis and example lines start with `PACKAGE_RUN <command>` — the agent
+ * copies an example as is: the form of package.json and CI and the project's version, while bare `elves` in the agent's
+ * shell is the machine's global package, if it's on PATH at all (tests/standards/no-env-file).
+ */
+const scriptHelp = async (cmd: string) => (await loadScript(cmd)).HELP.replace(new RegExp(`^( *)${cmd}(?= |$)`, "gm"), `$1${PACKAGE_RUN} ${cmd}`).trimEnd();
 
 /** `elves <script> …`: the script's help or its `main` with the arguments; the exit code is the script's. */
 async function runScript(cmd: string, args: string[]): Promise<number> {
@@ -808,7 +814,7 @@ function slotShim(root: string) {
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, SLOT_SHIM_TEXT);
   touch(SLOT_SHIM);
-  note(`${SLOT_SHIM} — the machine queue's shim: elves slot of the project's package`);
+  note(`${SLOT_SHIM} — the machine queue's shim: the slot script of the project's package`);
 }
 
 /**
@@ -820,14 +826,6 @@ const COPY_SCRIPT = /\bbun(?: --no-env-file)? (?:\.\/)?\.agents\/skills\/(?:spec
 const COPY_KNIP_HINTS = /(?:\.\/)?\.agents\/skills\/spec\/scripts\/knip-hints\.cjs\b/g;
 /** The knip reporter in the project's package: `exports` of package.json don't have it, the file does. */
 const PACKAGE_KNIP_HINTS = `node_modules/${PACKAGE}/skills/spec/scripts/knip-hints.cjs`;
-
-/**
- * The package's script as a command, in package.json and CI alike: `bun` reads the bin itself, past its shebang, and
- * without the flag would load the project's env files into it — the script would pass their keys on to `gh`, `git` and
- * the checked command (tests/standards/no-env-file, #596); a step of GitHub Actions doesn't see `node_modules/.bin`, and
- * `bunx elves` without the package in node_modules would fetch someone else's `elves` from npm (#558, question 2).
- */
-const PACKAGE_RUN = "bun --no-env-file node_modules/.bin/elves";
 
 /**
  * The package's script in a CI job that doesn't install the project's dependencies — `node_modules/.bin/elves` isn't

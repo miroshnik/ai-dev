@@ -168,7 +168,7 @@ describe("Релиз публикуется в npm пакетом @miroshnik/elv
     const r = spawnSync(path.join(proj, "node_modules/.bin/elves"), ["--help"], { cwd: proj, encoding: "utf8" });
     expect(exitOf(r)).toBe(0);
     expect(r.stdout).toStartWith("elves — ");
-    expect(r.stdout).toContain("\n  elves spec-doc ");
+    expect(r.stdout).toContain("\n  bun --no-env-file node_modules/.bin/elves spec-doc ");
   });
 
   /**

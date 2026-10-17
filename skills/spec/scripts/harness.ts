@@ -22,6 +22,7 @@ import locale from "../../github/scripts/locale.ts";
 import type { Names } from "../../github/scripts/locale.ts";
 import type { Model } from "./architecture.ts";
 import knipHints from "./knip-hints.cjs";
+import { PACKAGE_RUN } from "./package-run.ts";
 import { commentsOf, decisionFolder, EXCEPTIONS_DIR, exceptionFile, stringsOf } from "./speclib.ts";
 
 /**
@@ -201,7 +202,7 @@ export function marksIn(file: string, text: string): Mark[] {
   return out;
 }
 
-const MIGRATE = "migrate with spec-exceptions: bun --no-env-file node_modules/.bin/elves spec-exceptions";
+const MIGRATE = `migrate with spec-exceptions: ${PACKAGE_RUN} spec-exceptions`;
 
 /**
  * Exceptions of a decision folder — the `exceptions/` directory, a file per exception (`<element>.json`:

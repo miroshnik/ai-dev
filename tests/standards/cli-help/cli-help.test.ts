@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { invariant } from "../../../skills/spec/scripts/harness.ts";
-import { clis, commandsOf, escape, isolated, mapLimit } from "../../lib/cli.ts";
+import { clis, commandsOf, escape, isolated, launchOf, mapLimit } from "../../lib/cli.ts";
 import type { Cli, Run } from "../../lib/cli.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 
@@ -20,6 +20,8 @@ const PARALLEL = 8;
 interface Help {
   cli: Cli;
   command: string;
+  /** Строка запуска: `github task new`, скрипт пакета — `bun --no-env-file node_modules/.bin/elves spec-doc`. */
+  launch: string;
   /** Где команда названа: обзор скрипта или документ флоу. */
   from: string[];
   help: Run;
@@ -61,7 +63,7 @@ const CLIS = clis();
 const run = (cli: Cli, args: string[]) => Promise.all([isolated(cli, [...args, "--help"]), isolated(cli, [...args, "-h"])]);
 const SCRIPTS: Help[] = await mapLimit(CLIS, PARALLEL / 2, async (cli) => {
   const [help, short] = await run(cli, []);
-  return { cli, command: "", from: [], help, short };
+  return { cli, command: "", launch: cli.name, from: [], help, short };
 });
 
 /**
@@ -71,9 +73,10 @@ const SCRIPTS: Help[] = await mapLimit(CLIS, PARALLEL / 2, async (cli) => {
  */
 function commands(): Omit<Help, "help" | "short">[] {
   const found = new Map<string, Omit<Help, "help" | "short">>();
+  const overviews = new Map(SCRIPTS.map((s) => [s.cli.name, s.help.stdout]));
   const add = (cli: Cli, command: string, from: string) => {
     const key = `${cli.name} ${command}`;
-    if (!found.has(key)) found.set(key, { cli, command, from: [] });
+    if (!found.has(key)) found.set(key, { cli, command, launch: launchOf(cli.name, command, overviews.get(cli.name)!), from: [] });
     if (!found.get(key)!.from.includes(from)) found.get(key)!.from.push(from);
   };
   const listed = new Map(SCRIPTS.map((s) => [s.cli.name, commandsOf(s.cli.name, s.help.stdout)]));
@@ -109,18 +112,19 @@ function quiet(h: Help) {
 
 /**
  * Справка команды: первый абзац — синтаксис, его первая строка начинается со строки запуска; затем «Examples:» —
- * один-два примера, каждый со строки запуска и только с флагами из синтаксиса.
+ * один-два примера, каждый со строки запуска и только с флагами из синтаксиса. Строка запуска — как в обзоре скрипта:
+ * у скрипта пакета — `bun --no-env-file node_modules/.bin/elves <скрипт>`, его флаг — из синтаксиса.
  */
 function usage(h: Help) {
   const text = h.help.stdout;
   const [synopsis = ""] = text.split("\n\n");
-  if (!new RegExp(`^${escape(line(h))}(?: |$)`, "m").test(synopsis.split("\n")[0]!)) {
-    throw new Error(`${line(h)} --help: первая строка — не синтаксис «${line(h)} …», а «${synopsis.split("\n")[0]}»${h.from.length ? ` (названа: ${h.from.join(", ")})` : ""}`);
+  if (!new RegExp(`^${escape(h.launch)}(?: |$)`, "m").test(synopsis.split("\n")[0]!)) {
+    throw new Error(`${line(h)} --help: первая строка — не синтаксис «${h.launch} …», а «${synopsis.split("\n")[0]}»${h.from.length ? ` (названа: ${h.from.join(", ")})` : ""}`);
   }
   const examples = /^Examples:\n((?: {2}.*\n?)+)/m.exec(text)?.[1]?.trimEnd().split("\n").map((l) => l.trim()) ?? [];
-  if (!examples.length) throw new Error(`${line(h)} --help: нет примеров — строки «Examples:» и под ней «  ${line(h)} …»`);
+  if (!examples.length) throw new Error(`${line(h)} --help: нет примеров — строки «Examples:» и под ней «  ${h.launch} …»`);
   for (const ex of examples) {
-    if (!new RegExp(`^${escape(line(h))}(?: |$)`).test(ex)) throw new Error(`${line(h)} --help: пример «${ex}» — не вызов «${line(h)} …»`);
+    if (!new RegExp(`^${escape(h.launch)}(?: |$)`).test(ex)) throw new Error(`${line(h)} --help: пример «${ex}» — не вызов «${h.launch} …»`);
     const extra = [...ex.matchAll(/(?<=^|\s)(--?[a-z][\w-]*)/g)].map((m) => m[1]!).filter((f) => !new RegExp(`(?<![\\w-])${escape(f)}(?![\\w-])`).test(synopsis));
     if (extra.length) throw new Error(`${line(h)} --help: в примере «${ex}» флаги не из синтаксиса — ${extra.join(", ")}`);
   }
@@ -137,7 +141,7 @@ function overview(h: Help) {
 const clean = (stdout: string): Run => ({ code: 0, stdout, stderr: "", calls: [], net: [], changed: [] });
 const fake: Cli = { file: "skills/x/scripts/x.ts", name: "x", run: [] };
 const GOOD = "x run <N> [--force]\n\nRuns it.\n\nExamples:\n  x run 42\n";
-const helpOf = (command: string, help: Run, short: Run = help): Help => ({ cli: fake, command, from: [], help, short });
+const helpOf = (command: string, help: Run, short: Run = help, launch = `x ${command}`): Help => ({ cli: fake, command, launch, from: [], help, short });
 
 describe("Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений", () => {
   invariant(it, {
@@ -165,6 +169,7 @@ describe("Скрипты флоу отвечают на --help и -h: синта
       { name: "без примеров", item: helpOf("run", clean("x run <N> [--force]\n\nRuns it.\n")) },
       { name: "пример с флагом не из синтаксиса", item: helpOf("run", clean(GOOD.replace("x run 42", "x run 42 --dry-run"))) },
       { name: "команда без справки — обзор вместо её синтаксиса", item: helpOf("run", clean("x — tools\n\n  x stop <N>\n\nx <command> --help\n")) },
+      { name: "скрипт пакета — справка без его строки запуска", item: helpOf("run", clean(GOOD), clean(GOOD), "bun --no-env-file node_modules/.bin/x run") },
       { name: "обращение к сети", item: helpOf("run", { ...clean(GOOD), net: ["fetch https://api.github.com/user"] }) },
       { name: "внешняя команда", item: helpOf("run", { ...clean(GOOD), calls: ["gh api user"] }) },
       { name: "запись файла", item: helpOf("run", { ...clean(GOOD), changed: [".agents"] }) },
