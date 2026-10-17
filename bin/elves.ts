@@ -824,11 +824,19 @@ const PACKAGE_KNIP_HINTS = `node_modules/${PACKAGE}/skills/spec/scripts/knip-hin
 const PACKAGE_RUN = "bun --no-env-file node_modules/.bin/elves";
 
 /**
- * A command that ran the copy's scripts — through the package: `PACKAGE_RUN <script>`. A script that isn't the
- * package's stays — `copyLeftovers` names it.
+ * The package's script in a CI job that doesn't install the project's dependencies — `node_modules/.bin/elves` isn't
+ * there: the package of the project's version through bunx, as in the spec skill's `ci.md` (#597). It works with the
+ * dependencies installed too, only fetches the package once more.
  */
-function fromCopy(text: string) {
-  return text.replace(COPY_SCRIPT, (all, name: string) => (Object.hasOwn(SCRIPTS, name) ? `${PACKAGE_RUN} ${name}` : all)).replace(COPY_KNIP_HINTS, PACKAGE_KNIP_HINTS);
+const PACKAGE_BUNX = `bunx ${PACKAGE}@"$(jq -r '.devDependencies["${PACKAGE}"]' package.json)"`;
+
+/**
+ * A command that ran the copy's scripts — through the package: `<run> <script>`, `PACKAGE_RUN` by default; a CI job
+ * without the project's dependencies — `PACKAGE_BUNX` (`ciFromCopy`). A script that isn't the package's stays —
+ * `copyLeftovers` names it.
+ */
+function fromCopy(text: string, run = PACKAGE_RUN) {
+  return text.replace(COPY_SCRIPT, (all, name: string) => (Object.hasOwn(SCRIPTS, name) ? `${run} ${name}` : all)).replace(COPY_KNIP_HINTS, PACKAGE_KNIP_HINTS);
 }
 
 /**
@@ -1446,9 +1454,85 @@ const COPY_IMPORT = /(["'`])(?:\.{1,2}\/)*\.agents\/skills\/(spec\/scripts\/(?:h
 const packageImport = (mod: string) => `${PACKAGE}/${mod.startsWith("spec/") ? mod.replace("/scripts/", "/") : "github"}`;
 
 /**
+ * A step that installs the project's dependencies: `bun`, `npm`, `pnpm` or `yarn` with `install`, `ci`, `i`, a bare
+ * `yarn`; a global install (`-g`, `--global`) brings a tool, not them.
+ */
+const INSTALL_STEP = /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)\s+(?:install|ci|i)(?![\w-])(?![^\n;&|]*\s(?:-g|--global)(?![\w-]))|yarn(?=[ \t]*(?:$|[;&|)]|--(?:frozen-lockfile|immutable)\b)))/m;
+
+/**
+ * Whether each job of a workflow installs the project's dependencies (`Bun.YAML`): a `run` step does (`INSTALL_STEP`) —
+ * true; a local action (`uses: ./…`) may — null, unknown; otherwise false. Not a workflow (a composite action) or
+ * not YAML — null: every job unknown.
+ */
+function jobInstalls(text: string): Map<string, boolean | null> | null {
+  let jobs: unknown;
+  try {
+    jobs = (Bun.YAML.parse(text) as { jobs?: unknown } | null)?.jobs;
+  } catch {
+    return null;
+  }
+  if (!jobs || typeof jobs !== "object") return null;
+  return new Map(
+    Object.entries(jobs).map(([id, job]): [string, boolean | null] => {
+      const steps: unknown = (job as { steps?: unknown } | null)?.steps;
+      const all = (Array.isArray(steps) ? steps : []) as ({ run?: unknown; uses?: unknown } | null)[];
+      if (all.some((s) => typeof s?.run === "string" && INSTALL_STEP.test(s.run))) return [id, true];
+      return [id, all.some((s) => typeof s?.uses === "string" && s.uses.startsWith("./")) ? null : false];
+    }),
+  );
+}
+
+/**
+ * The job of each line of a workflow — the key at the first indentation under the top-level `jobs:` and the lines to
+ * the next one; outside the jobs — undefined. Lines of block scalars are deeper than the job's key.
+ */
+function jobOfLines(lines: string[]): (string | undefined)[] {
+  let inJobs = false;
+  let indent = -1;
+  let job: string | undefined;
+  return lines.map((line) => {
+    const [, lead = "", rest = ""] = /^( *)(.*)$/.exec(line) ?? [];
+    if (rest && !rest.startsWith("#")) {
+      if (!lead) {
+        inJobs = /^["']?jobs["']?\s*:\s*(?:#.*)?$/.test(rest);
+        indent = -1;
+        job = undefined;
+      } else if (inJobs) {
+        if (indent < 0) indent = lead.length;
+        if (lead.length === indent) job = /^(["']?)(.+?)\1\s*:(?:\s|$)/.exec(rest)?.[2];
+      }
+    }
+    return job;
+  });
+}
+
+/**
+ * A GitHub Actions file with the copy's scripts — through the package by its job (#597): a job that installs the
+ * project's dependencies — `PACKAGE_RUN`, the form of package.json; one that doesn't (the `spec-publish` and
+ * `spec-diff` jobs of earlier `ci.md`) — `PACKAGE_BUNX`. Unknown — a local action, a composite action, a line outside
+ * the jobs, not YAML — `PACKAGE_BUNX`, which works either way, and the job in `unknown` for a fix by hand (an empty
+ * string — the file itself).
+ */
+function ciFromCopy(text: string) {
+  const installs = jobInstalls(text);
+  const lines = text.split("\n");
+  const jobs = jobOfLines(lines);
+  const unknown = new Set<string>();
+  const out = lines.map((line, i) => {
+    const job = jobs[i];
+    const has = job === undefined ? null : (installs?.get(job) ?? null);
+    const now = fromCopy(line, has ? PACKAGE_RUN : PACKAGE_BUNX);
+    if (has === null && now !== fromCopy(line)) unknown.add(job ?? "");
+    return now;
+  });
+  return { out: out.join("\n"), unknown: [...unknown] };
+}
+
+/**
  * Files of the project that lead into the copy (#558): imports of the copy's modules in tests and configs — to the
  * package's exports (`@miroshnik/elves/spec/harness` …), its scripts and the knip reporter in GitHub Actions — through
- * the package (`fromCopy`); package.json — `packageScripts`. Only tracked files that name `.agents/skills/`.
+ * the package by the job (`ciFromCopy`), a job whether dependencies are installed is unknown — a `!` line;
+ * package.json — `packageScripts`. Only tracked files that name `.agents/skills/`.
  */
 function rewriteCopyRefs(root: string) {
   const done: string[] = [];
@@ -1457,15 +1541,18 @@ function rewriteCopyRefs(root: string) {
     if (!ci && !SOURCE_FILE.test(rel)) continue;
     const file = path.join(root, rel);
     const text = readFileSync(file, "utf8");
-    const out = ci ? fromCopy(text) : text.replace(COPY_IMPORT, (_, q: string, mod: string) => `${q}${packageImport(mod)}${q}`);
+    const { out, unknown } = ci ? ciFromCopy(text) : { out: text.replace(COPY_IMPORT, (_, q: string, mod: string) => `${q}${packageImport(mod)}${q}`), unknown: [] };
     if (out === text) continue;
     if (dry) {
-      change("~", file, { note: ci ? "the flow copy's scripts → node_modules/.bin/elves" : `imports of the flow copy → ${PACKAGE}` });
+      change("~", file, { note: ci ? "the flow copy's scripts → the package: node_modules/.bin/elves, a job without dependencies — bunx" : `imports of the flow copy → ${PACKAGE}` });
       continue;
     }
     writeFileSync(file, out);
     touch(rel);
     done.push(rel);
+    for (const job of unknown) {
+      warn(`${rel}${job ? `, job ${job}` : ""} — whether the job installs the project's dependencies is unknown: the flow copy's scripts → ${PACKAGE_BUNX} <script>, it works without them; it installs them — ${PACKAGE_RUN} <script>, fix by hand`);
+    }
   }
   if (done.length) note(`${done.join(", ")} — imports and scripts of the flow copy → ${PACKAGE}`);
 }
