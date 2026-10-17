@@ -811,7 +811,17 @@ tasks outside the queue), the last line and, in auto mode, archiving; a session
 with its own task — after it. A running executor isn't stopped (`TaskStop`) to
 archive the session: its answer comes first. The app's
 child sessions (`start_session`) aren't given out yet (a server flag); when
-they are, an executor becomes a session.
+they are, an executor becomes a session. A cloud executor (claude.ai/code,
+#609) — `--assignment N --cloud`, called by the dispatcher itself: the brief,
+the cloud session's first prompt as is — whole, the cloud refuses the
+skill's scripts; `#` only at its task (`docs/cloud-sessions.md`, "The
+brief"); after the merge — the cloud's close, without messaging the
+dispatcher or archiving its session. The hand-out — without a worktree
+(`@cloud`). A cloud session can't message a local one, so `Next:` gives the
+dispatcher the wait for the task's closing — `wait-ci.sh issue N` as a
+background command; PASS — `task close N`, then archiving the executor's
+session; TIMEOUT — the task's questions and State comment, the wait again;
+after the app restarts the queue's `=` line names the wait.
 
 ### task drop
 

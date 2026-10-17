@@ -1771,18 +1771,25 @@ const isDispatcher = (io: Io) => {
  * questions, and till then the queue gave the task out as ready. A separate file: executors append to it in parallel,
  * the queue rewrites the marker. It lives for the session: after the app restarts, the stopped executors are continued
  * with `SendMessage` (`task resume`) — dropped, it would make a task not yet In progress ready for a second executor.
- * The worktree — the checkout the executor called its assignment in (#533): the queue keeps it while the task is open.
+ * The worktree — the checkout the executor called its assignment in (#533): the queue keeps it while the task is open. A
+ * cloud executor's (`--assignment N --cloud`, #609) — `CLOUD_HANDOUT` in its place: the dispatcher printed its brief,
+ * there is no worktree, and the queue names the wait for the task's closing.
  */
 const handedOutFile = (io: Io) => {
   const file = dispatcherFile(io);
   return file && `${file}.tasks`;
 };
 
-/** A hand-out: the task and its executor's worktree; the assignment called outside a checkout — null. */
+/** A hand-out: the task and its executor's worktree; the assignment called outside a checkout or a cloud one — null. */
 interface HandOut {
   number: number;
   worktree: string | null;
+  /** A cloud executor's (#609): the dispatcher waits for the task's closing. */
+  cloud: boolean;
 }
+
+/** A cloud executor's mark in place of the worktree: a worktree is an absolute path. */
+const CLOUD_HANDOUT = "@cloud";
 
 /** The repository's tasks handed out to this dispatcher's executors (`handedOutFile`); a line without a worktree — `null`. */
 function handedOut(io: Io, slug: string): HandOut[] {
@@ -1797,8 +1804,9 @@ function handOutsIn(file: string, slug: string): HandOut[] {
   return lines
     .filter((l) => l.startsWith(`${slug}#`))
     .map((l) => {
-      const [number, ...worktree] = l.slice(slug.length + 1).split(" ");
-      return { number: Number(number), worktree: worktree.join(" ").trim() || null };
+      const [number, ...rest] = l.slice(slug.length + 1).split(" ");
+      const worktree = rest.join(" ").trim();
+      return { number: Number(number), worktree: worktree === CLOUD_HANDOUT ? null : worktree || null, cloud: worktree === CLOUD_HANDOUT };
     })
     .filter((h) => Number.isInteger(h.number) && h.number > 0);
 }
@@ -2323,6 +2331,31 @@ function executorPrompt(slug: string, number: number, epic: number | null): stri
 }
 
 /**
+ * A cloud executor's brief and the dispatcher's steps after it (`task queue --assignment N --cloud`, #609). The brief —
+ * without local paths and `#` but at its task: numbers in the title and the epic go without it.
+ */
+function cloudBrief(io: Io, slug: string, issue: Issue): void {
+  const number = issue.number;
+  const vars = {
+    task: N.subagentPrompt.task,
+    number,
+    title: issue.title.replace(/#(\d)/g, "$1"),
+    repo: slug,
+    epic: issue.parent ? locale.fill(N.queue.cloudEpic, { epicWord: N.subagentPrompt.epic, epic: issue.parent.number }) : "",
+    actual: N.est.cloud.actual.replace(/:$/, ""),
+    state: N.comments.state,
+    questions: N.sections.questions,
+  };
+  for (const line of [N.queue.cloud, N.queue.cloudDoc, N.queue.cloudClose, N.queue.cloudDispatcher, N.queue.cloudQuestion]) io.out(locale.fill(line, vars));
+  io.out(
+    `Next: the lines above — the cloud session's first prompt as is, the session started from the project folder (the cloud starts from main); ` +
+      `then as a background command: bash ${waitCi()} issue ${number} — a cloud session can't message a local one (docs/cloud-sessions.md), the task's closing is the signal: ` +
+      `PASS — bun --no-env-file ${import.meta.path} task close ${number} (the actual with --write, ${STATUS}, the merged branch), then archive the executor's session where the agent has the tool; ` +
+      `TIMEOUT — the task's ${q(N.sections.questions)} and its ${q(N.comments.state)} comment, the executor's session, then the same wait again`,
+  );
+}
+
+/**
  * The dispatcher's queue: its ready tasks go to background executors (subagents), K at a time; the queue is re-read
  * after each answer, so tasks that appeared meanwhile are picked up. A session with its own task dispatches too (#546:
  * the owner's "yes" to an epic's dispatcher becomes work at once, without a new session) — its pin stays, its task is
@@ -2381,7 +2414,10 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     // lost it from both lists), or handed out to an executor of this session that hasn't set In progress yet
     const pr = openPr(i);
     const work = [status === N.status.inProgress ? q(N.status.inProgress) : "", pr === undefined ? "" : `open PR #${pr} https://github.com/${slug}/pull/${pr}`].filter(Boolean);
-    if (!work.length && handed.some((h) => h.number === i.number)) work.push("handed out to an executor of this session");
+    const hand = handed.find((h) => h.number === i.number);
+    // a cloud executor's wait for the task's closing dies with the app's process: the line names it, task resume — the queue
+    if (!work.length && hand?.cloud) work.push(`handed out to a cloud executor of this session, its wait — a background command: bash ${waitCi()} issue ${i.number}`);
+    else if (!work.length && hand) work.push("handed out to an executor of this session");
     if (work.length) {
       running.push(`= ${label} — ${work.join(", ")}`);
       continue;
@@ -2754,9 +2790,12 @@ function taskBranchesHere(io: Io, slug: string, number: number): string[] {
  * owner's "yes" — unrecorded, its "In progress" would be refused by the session's pin or would pin the session to it.
  * A session pinned to this very task records nothing: the task is its own. A restart while the previous executor or its
  * subagent is alive (`livePredecessors`, #565) — no assignment and no hand-out: the `!` lines and the answer that
- * makes the dispatcher wait, code 1.
+ * makes the dispatcher wait, code 1. `cloud` — the brief of a cloud executor (#609), printed by the dispatcher: whole, the
+ * cloud refuses the skill's scripts; `#` only at its task (`est` links a cloud session by the only `#N` of its first
+ * prompt — docs/cloud-sessions.md, "The brief"); no restart line — the cloud assigns its own branch. A cloud session
+ * can't message a local one, so `Next:` gives the dispatcher the wait for the task's closing and the local close.
  */
-export function cmdTaskAssignment(io: Io, slug: string, number: number): number {
+export function cmdTaskAssignment(io: Io, slug: string, number: number, o: { cloud: boolean } = { cloud: false }): number {
   const issue = loadIssue(io, slug, number);
   const file = handedOutFile(io);
   const own = pinnedTask(io)?.task;
@@ -2773,8 +2812,10 @@ export function cmdTaskAssignment(io: Io, slug: string, number: number): number 
     mkdirSync(path.dirname(file), { recursive: true });
     // the configuration directory may be a personal git checkout (ELVES_PRIVATE) — hand-outs aren't committed into it
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
-    appendFileSync(file, `${slug}#${number}${worktree ? ` ${worktree}` : ""}\n`);
+    const where = o.cloud ? CLOUD_HANDOUT : worktree;
+    appendFileSync(file, `${slug}#${number}${where ? ` ${where}` : ""}\n`);
   }
+  if (o.cloud) return cloudBrief(io, slug, issue), 0;
   const restart = itemIn(taskContext(io, slug), issue)?.status === N.status.inProgress ? taskBranchesHere(io, slug, number) : [];
   const vars = {
     task: N.subagentPrompt.task,
@@ -4092,7 +4133,7 @@ that can't be continued, in the worktree of its task's branch.
 Examples:
   github task resume`,
   "task queue": `github task queue [--epic N] [--type Task|Bug] [--priority Urgent,High] [--repo owner/repo]
-github task queue --assignment <N> [--repo owner/repo]
+github task queue --assignment <N> [--cloud] [--repo owner/repo]
 
 The dispatcher session's queue: ready tasks (open, not an epic, not in work, no open blockers — other repositories'
 too —, no external blocker label) by Priority, then number, each with its executor's prompt; the rest — in work (=: In
@@ -4108,12 +4149,16 @@ organization. --assignment N (the executor's first call; read-only on GitHub) �
 (not one pinned to N) it records the task as handed out with the executor's worktree (dispatchers/<id>.tasks). A
 restart while the task's previous executor or its subagent is alive — a worktree of it locked by a live process, with
 such a subagent at work or HEAD moved in the last ${QUIET_MINUTES} min — code 1: ! lines and the answer that makes the
-dispatcher wait, no hand-out.
+dispatcher wait, no hand-out. --cloud — printed by the dispatcher: the brief of a cloud executor (claude.ai/code) —
+whole, # only at its task — and the dispatcher's steps: a cloud session can't message a local one, so the dispatcher
+waits for the task's closing (ci-wait issue N, background) and closes it locally; the hand-out has no worktree, and the
+queue's = line names that wait.
 
 Examples:
   github task queue --epic 40
   github task queue --type Bug --priority Urgent,High
-  github task queue --assignment 42`,
+  github task queue --assignment 42
+  github task queue --assignment 42 --cloud`,
   "task close": `github task close <N> [--no-git] [--repo owner/repo]
 
 After the PR merge and the deploy (or a close without a PR) in one call: the actual (est fact --write), Status Done, the
@@ -4283,6 +4328,7 @@ export function main(argv: string[], io: Io): number {
           branch: { type: "string" },
           "no-git": { type: "boolean", default: false },
           assignment: { type: "boolean", default: false },
+          cloud: { type: "boolean", default: false },
           auto: { type: "boolean", default: false },
         },
       });
@@ -4303,9 +4349,10 @@ export function main(argv: string[], io: Io): number {
         return cmdTaskNew(io, slug, { title: values.title, body, type: values.type ?? N.issueTypes.task, epic, milestone: values.milestone, blockedBy, priority: values.priority, labels, branchType: values["branch-type"] });
       }
       if (cmd === "queue") {
+        if (values.cloud && !values.assignment) throw new GhError("--cloud — only with --assignment <N>: the brief of one task's cloud executor");
         if (values.assignment) {
           if (positionals.length !== 1) throw new GhError("task queue --assignment <N>: one task number");
-          return cmdTaskAssignment(io, slug, issueNumber(positionals[0], "task queue --assignment"));
+          return cmdTaskAssignment(io, slug, issueNumber(positionals[0], "task queue --assignment"), { cloud: values.cloud! });
         }
         if (positionals.length) throw new GhError(`extra arguments: ${positionals.join(" ")} — the queue is chosen by --epic, --type and --priority`);
         const priority = values.priority === undefined ? undefined : values.priority.split(",").map((x) => x.trim()).filter(Boolean);

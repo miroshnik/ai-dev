@@ -3304,6 +3304,86 @@ describe("task queue в worktree приложения: облачные испо
 });
 
 /**
+ * Облачный исполнитель (claude.ai/code) не может написать локальной сессии-диспетчеру (#609): `send_message` в локальную
+ * сессию отказывает, а разрешение владельца на доверенном устройстве — на каждую облачную сессию. Сигнал диспетчеру —
+ * закрытие задачи мержем: он ждёт его `ci-wait issue <N>` фоновой командой и закрывает задачу локально — поля проекта,
+ * факт с `--write`, удаление влитой ветки облаку недоступны. Бриф — первый промпт облачной сессии — цельный: скрипты
+ * github там отказывают, задание по `--assignment` исполнитель не напечатает.
+ */
+describe("task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи", () => {
+  const projectDir = () => {
+    const dir = scratch();
+    mkdirSync(path.join(dir, ".agents"));
+    writeFileSync(path.join(dir, ".agents/elves.json"), '{ "language": "ru" }\n');
+    return dir;
+  };
+  /** Бриф облачного исполнителя — строки до `Next:`; `Next:` — шаги диспетчера. */
+  const brief = (f: FakeGitHub, config = scratch()) => {
+    const r = task(f, ["queue", "--assignment", "47", "--cloud"], REPO, { ...inSession(config), cwd: projectDir() });
+    expect(r.code).toBe(0);
+    const lines = r.out.split("\n");
+    return { prompt: lines.filter((l) => !l.startsWith("Next:")), next: lines.filter((l) => l.startsWith("Next:")).join("\n") };
+  };
+
+  it("облачный исполнитель влил PR задачи — диспетчер узнаёт об этом без владельца", () => {
+    const f = new FakeGitHub(REC);
+    f.status(47, "Бэклог");
+    const config = scratch();
+    const { prompt, next } = brief(f, config);
+    expect(prompt).toContain("- диспетчер ждёт закрытия задачи и закрывает её локально — факт, статус, влитая ветка, архив этой сессии: сообщать ему не нужно, сессию не архивируй;");
+    expect(next).toMatch(/; then as a background command: bash \S+\/skills\/ci-wait\/scripts\/wait-ci\.sh issue 47 — a cloud session can't message a local one \(docs\/cloud-sessions\.md\), the task's closing is the signal:/);
+    // фоновое ожидание умирает с процессом приложения: очередь называет его у выданной облаку задачи, task resume — очередь
+    const queued = task(f, ["queue", "--epic", "45"], REPO, { ...inSession(config), cwd: projectDir() }).out.split("\n");
+    expect(queued.find((l) => l.startsWith("= #47 "))).toMatch(/ — handed out to a cloud executor of this session, its wait — a background command: bash \S+\/wait-ci\.sh issue 47$/);
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("по закрытию задачи облачного исполнителя диспетчер закрывает её локально: факт с --write, Status, удаление влитой ветки, архив сессии исполнителя", () => {
+    const { next } = brief(new FakeGitHub(REC));
+    expect(next).toMatch(/: PASS — bun --no-env-file \S+\/skills\/github\/scripts\/github\.ts task close 47 \(the actual with --write, Status, the merged branch\), then archive the executor's session where the agent has the tool;/);
+  });
+
+  // без перегиба: ветку облачной сессии назначает облако (`claude/<slug>`), она не по канону задачи — task close диспетчера убирает и её
+  it("task close в чекауте диспетчера на main удаляет влитую ветку облачного исполнителя claude/<slug>", () => {
+    const { work, origin, cleanup } = checkout("claude/vigilant-x");
+    try {
+      git(work, "switch", "-q", "main");
+      const f = new FakeGitHub(REC);
+      f.prs[77] = { files: [], closes: [49], head: "claude/vigilant-x", base: "main", model: null, merged: true };
+      const r = task(f, ["close", "49"], REPO, { run: noEst, cwd: work });
+      expect(r.code).toBe(0);
+      expect(git(work, "branch", "--list", "claude/vigilant-x")).toBe("");
+      expect(git(origin, "branch", "--list", "claude/vigilant-x")).toBe("");
+      expect(r.out).toContain("+ remote branch claude/vigilant-x deleted");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("облачный исполнитель не влил PR (вопрос, сбой) — диспетчер находит его вопрос или State-комментарий в задаче", () => {
+    const { prompt, next } = brief(new FakeGitHub(REC));
+    expect(prompt).toContain(
+      "- вопрос без ясной рекомендации — в «## Вопросы» задачи и владельцу в этой сессии, код, который от него зависит, не начинай; остановился (вопрос, сбой, лимит) — комментарий «Состояние» в задачу.",
+    );
+    expect(next).toContain("; TIMEOUT — the task's «## Вопросы» and its «Состояние» comment, the executor's session, then the same wait again");
+  });
+
+  it("бриф облачного исполнителя из github task queue называет через решётку только номер своей задачи, эпик — без решётки", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(47).title = "GitHub · доправка к #12 — github task";
+    const { prompt } = brief(f);
+    expect(prompt[0]).toStartWith("Задача #47 «GitHub · доправка к 12 — github task» в miroshnik/elves (эпик 45): ты облачный исполнитель сессии-диспетчера");
+    expect(prompt.join("\n").match(/#\d+/g)).toEqual(["#47"]);
+  });
+
+  it("--cloud — только с --assignment", () => {
+    const r = task(new FakeGitHub(REC), ["queue", "--epic", "45", "--cloud"], REPO, { cwd: projectDir() });
+    expect(r.code).toBe(2);
+    expect(r.err).toBe("error: --cloud — only with --assignment <N>: the brief of one task's cloud executor");
+  });
+});
+
+/**
  * Другую задачу сессия отдавала карточкой новой сессии: её запускал владелец кликом, и сессия о ней больше не знала
  * (#546). Канон, скиллы и их скрипты — источник всего, что агент читает и что печатают команды, — её больше не
  * предлагают: только вопрос владельцу, ставить ли задачу в очередь (на новый эпик — запускать ли диспетчера), а «да» —

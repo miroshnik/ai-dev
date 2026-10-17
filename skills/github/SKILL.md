@@ -159,15 +159,14 @@ limit`. After each executor's answer — `task queue` again: it also removes
 finished executors' worktrees (`+`), not by hand. A question — to the
 owner in text; the answer — ✅ in the task's questions section and to the same
 executor with `SendMessage`. After the app restarts — each stopped executor
-is continued with `SendMessage` by its id from the app's notification, not a
-new one (`task resume`). Waits for subagents — it answers again. Failed — a
+is continued with `SendMessage` by its id, not a new one (`task resume`). Waits for subagents — it answers again. Failed — a
 task comment with what stopped, no restart (the owner's restart:
 `--assignment` refuses while the previous executor lives); on an external
 blocker — *blocked by* on its issue or
 the `external blocker` label with the reason (`reference.md`,
 "Dependencies"). Queue empty and nothing running — the summary, the last
-line (a session with its own task — after it) and, in auto mode, archiving. The executor's side (`--assignment`) — `reference.md`,
-"task queue".
+line (a session with its own task — after it) and, in auto mode, archiving. The executor's side (`--assignment`,
+a cloud one's: `--cloud`) — `reference.md`, "task queue".
 
 ## Git, PRs and merging — mechanics
 

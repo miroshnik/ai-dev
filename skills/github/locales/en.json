@@ -90,7 +90,13 @@
     "found": "- work found outside the task — `{script} task new …` (work of the task's epic — with `--epic`: the dispatcher picks it up) — name it in the answer: whether to queue it is the owner's call;",
     "question": "- a question without a clear recommendation — into «{questions}» of the task; don't start the code that depends on it and answer the dispatcher: the owner's answer comes back here.",
     "answer": "The answer to the dispatcher — one line: `merged #<PR>` · `question: <the question, options, recommendation>` · `waits for subagents: <which and what they do>` · `failed: <what stopped and where>`.",
-    "alive": "{task} #{number} in {repo}: the task's previous executor or its subagent is alive — the `!` lines above. Don't take the task and change nothing: answer the dispatcher in one line `waits for the previous executor: <the worktree and why it is alive>` — the dispatcher restarts the task only when no worktree of the previous executor and its subagents is locked by a live process or gets commits."
+    "alive": "{task} #{number} in {repo}: the task's previous executor or its subagent is alive — the `!` lines above. Don't take the task and change nothing: answer the dispatcher in one line `waits for the previous executor: <the worktree and why it is alive>` — the dispatcher restarts the task only when no worktree of the previous executor and its subagents is locked by a live process or gets commits.",
+    "cloudEpic": " ({epicWord} {epic})",
+    "cloud": "{task} #{number} «{title}» in {repo}{epic}: you are a cloud executor of the dispatcher session — do the task whole by the canon, like a session in auto mode: the task's questions, code and tests, PR, green CI, merge, deploy.",
+    "cloudDoc": "- the cloud — by `docs/cloud-sessions.md` of the canon, read it first: the github skill's scripts refuse there — the task, its questions and scenarios over REST, project fields aren't set from the cloud; the branch is the one the cloud assigned, don't rename it;",
+    "cloudClose": "- after the merge — its section «Closing a task from the cloud»: the «{actual}» comment of `est fact {number}` and a «{state}» comment with what the cloud can't do — both into the task;",
+    "cloudDispatcher": "- the dispatcher waits for the task to close and closes it locally — the actual, the status, the merged branch, archiving this session: don't message it, don't archive the session;",
+    "cloudQuestion": "- a question without a clear recommendation — into «{questions}» of the task and to the owner in this session, don't start the code that depends on it; stopped (a question, a failure, a limit) — a «{state}» comment into the task."
   },
   "est": {
     "answer": "Answer",
