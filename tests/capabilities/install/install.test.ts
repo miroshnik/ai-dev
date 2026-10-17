@@ -431,9 +431,10 @@ describe("Проверки проекта идут очередью машины
 
   /**
    * Скрипты spec копии флоу шли по её пути (`bun .agents/skills/spec/scripts/<скрипт>.ts`), репортёр knip для `report`
-   * харнесса — тоже; в тонком проекте их даёт пакет: `elves <скрипт>` из node_modules/.bin, репортёр — файлом пакета.
+   * харнесса — тоже; в тонком проекте их даёт пакет: `bun --no-env-file node_modules/.bin/elves <скрипт>`, как в CI
+   * (#596), репортёр — файлом пакета.
    */
-  it("скрипты копии флоу — bun .agents/skills/spec/scripts/<скрипт>.ts — переписываются на elves <скрипт>, репортёр knip — на файл пакета", () => {
+  it("скрипты копии флоу — bun .agents/skills/spec/scripts/<скрипт>.ts — переписываются на bun --no-env-file node_modules/.bin/elves <скрипт>, репортёр knip — на файл пакета", () => {
     writeTree(proj, {
       "package.json": JSON.stringify({
         scripts: {
@@ -446,13 +447,37 @@ describe("Проверки проекта идут очередью машины
     });
     const r = install();
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("package.json — the flow copy's scripts through the package (elves <script>): spec:doc, spec:claims, test:spec, knip");
+    expect(r.stdout).toContain("package.json — the flow copy's scripts through the package (bun --no-env-file node_modules/.bin/elves <script>): spec:doc, spec:claims, test:spec, knip");
     expect(scripts()).toEqual({
-      "spec:doc": "elves spec-doc .spec-report.xml --strict",
-      "spec:claims": "elves spec-claims --entries tests/entries.ts",
-      "test:spec": slot("bun test tests/standards && elves spec-diff --base origin/main"),
+      "spec:doc": "bun --no-env-file node_modules/.bin/elves spec-doc .spec-report.xml --strict",
+      "spec:claims": "bun --no-env-file node_modules/.bin/elves spec-claims --entries tests/entries.ts",
+      "test:spec": slot("bun test tests/standards && bun --no-env-file node_modules/.bin/elves spec-diff --base origin/main"),
       knip: "knip --reporter json --reporter node_modules/@miroshnik/elves/skills/spec/scripts/knip-hints.cjs > .knip.json",
     });
+  });
+
+  /**
+   * bin пакета — `bin/elves.ts` с шебангом `#!/usr/bin/env bun`: голый `elves <скрипт>` Bun запускает с env-файлами
+   * рабочего каталога, и скрипт отдаёт их ключи дальше — `spec-break` проверяемой команде, `spec-run` и `spec-publish`
+   * — `gh` и `git` (tests/standards/no-env-file, #596). Скрипт `package.json` идёт как у npm: `sh -c` в корне проекта,
+   * `node_modules/.bin` первым в PATH.
+   */
+  it("скрипт spec из package.json тонкого проекта не видит ключей env-файлов рабочего каталога", () => {
+    const probe = `sh -c 'echo "[$ELVES_DOTENV|$ELVES_DOTENV_LOCAL]" >> probe.txt; read x < f.txt; [ "$x" = ok ]'`;
+    writeTree(proj, {
+      "package.json": JSON.stringify({ scripts: { "spec:break": `bun --no-env-file .agents/skills/spec/scripts/spec-break.ts --file f.txt --find ok --replace no -- ${probe}` } }),
+      "f.txt": "ok\n",
+      ".env": "ELVES_DOTENV=dotenv\n",
+      ".env.local": "ELVES_DOTENV_LOCAL=prod-key\n",
+    });
+    expect(install().code).toBe(0);
+    const bin = path.join(proj, "node_modules/.bin");
+    mkdirSync(bin, { recursive: true });
+    symlinkSync(BIN, path.join(bin, "elves"));
+    const r = spawnSync("sh", ["-c", scripts()["spec:break"]], { cwd: proj, env: { ...env, PATH: `${bin}:${env.PATH}` }, encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    expect(read(path.join(proj, "probe.txt"))).toBe("[|]\n[|]\n");
   });
 
   /**
