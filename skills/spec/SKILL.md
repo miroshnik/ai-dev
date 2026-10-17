@@ -197,7 +197,10 @@ each one — `checks.md` next to this file:
 The scripts and modules come from the project's package — `@miroshnik/elves`
 in `devDependencies`, committed with its version: the scripts run as
 `bun --no-env-file node_modules/.bin/elves spec-…`, a Node project included
-(in CI — `oven-sh/setup-bun@v2`); the modules the project's tests and config import
+(in CI — `oven-sh/setup-bun@v2`); on Yarn 2+, which runs the `.ts` bin by
+Node and has no `node_modules` with PnP, —
+`bunx @miroshnik/elves@"$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)" spec-…`
+(`install` writes this form there); the modules the project's tests and config import
 (`@miroshnik/elves/spec/harness`, `…/spec/architecture`,
 `…/spec/eslint-config`) load under the project's own runner on Node — from
 the package's build. Each step with its details — `reference.md`,
