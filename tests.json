@@ -4179,7 +4179,7 @@
   "describes": [
    "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "install в проект без флоу ставит devDependency пакета, .agents/elves.json, шим slot и блок AGENTS.md — без копии флоу"
+  "name": "install в проект без флоу ставит devDependency пакета, .agents/elves.json, шим slot, блок AGENTS.md и хук облачной сессии — без копии флоу"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4235,7 +4235,7 @@
   "describes": [
    "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
   ],
-  "name": "проект без package.json — без devDependency: манифест, шим и блок AGENTS.md"
+  "name": "проект без package.json — без devDependency: манифест, шим, блок AGENTS.md и хук облачной сессии"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4277,7 +4277,7 @@
   "describes": [
    "Задача целиком без спроса — настройка проекта, по умолчанию «нет»"
   ],
-  "name": "в клоне Elves install флоу не ставит — пишет в .agents/elves.json только auto и language: с флагом — его значение, без флага и терминала — прежнее"
+  "name": "в клоне Elves install флоу не ставит — пишет в .agents/elves.json только auto и language: с флагом — его значение, без флага и терминала — прежнее; в .claude/settings.json — хук облачной сессии"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4333,7 +4333,7 @@
   "describes": [
    "На машину (-g) — канон, скиллы и хук: тонкий проект берёт канон с машины"
   ],
-  "name": "install -g без терминала в пустом HOME ставит канон и скиллы — как setup script облачного окружения"
+  "name": "install -g без терминала в пустом HOME ставит канон и скиллы — как хук проекта и setup script облачной сессии"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4460,6 +4460,62 @@
    "Неверный вызов — код 2 с объяснением"
   ],
   "name": "неизвестная команда — код 2 и справка"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "check тонкого проекта без хука облачной сессии — отставание: update добавит его в .claude/settings.json"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "install кладёт тонкому проекту хук SessionStart облачной сессии в .claude/settings.json — свои настройки и хуки проекта на месте, повторная установка хук не дублирует"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "клон Elves держит в .claude/settings.json хук облачной сессии с zsh — тот же, что пишет установщик"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "хук облачной сессии в клоне Elves без zsh ставит его через apt"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "хук облачной сессии в облаке без setup script ставит Bun и флоу — npm i -g bun@latest @miroshnik/elves и elves install -g — и печатает check --hook"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "хук облачной сессии вне облака выходит сразу — ничего не ставит и не печатает"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "хук облачной сессии после setup script ничего не ставит — только check --hook"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен"
+  ],
+  "name": "хук облачной сессии: установка не удалась — строка с командой в контексте, код 0"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -4613,6 +4669,13 @@
   "describes": [
    "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
+  "name": "исключения .gitignore для симлинков копии в .claude/rules check называет исключениями копии"
+ },
+ {
+  "path": "tests/capabilities/install/install.test.ts",
+  "describes": [
+   "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
+  ],
   "name": "ничего не игнорируется — .gitignore не создаётся и не меняется; ставший ненужным блок убирается"
  },
  {
@@ -4627,7 +4690,7 @@
   "describes": [
    "Файлы флоу не игнорируются git проекта — иначе их нет в коммите, чужом чекауте и CI"
   ],
-  "name": "шаблоны CLAUDE.md и .claude/ тонкому проекту не мешают — исключений нет, .gitignore не меняется"
+  "name": "шаблоны CLAUDE.md и vendor/ тонкому проекту не мешают, .claude/ — исключение только для .claude/settings.json с хуком облачной сессии"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -8045,30 +8108,30 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой"
   ],
   "name": "check вне облачной сессии окружение облака не проверяет: Bun старше packageManager — без строки окружения"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой"
   ],
-  "name": "check облачной сессии в клоне Elves без zsh — строка окружения с командой apt для setup script"
+  "name": "check облачной сессии в клоне Elves без zsh — строка окружения с командой apt"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой"
   ],
   "name": "check облачной сессии с Bun не старше packageManager и zsh на PATH — без строки окружения"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
-   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой"
   ],
-  "name": "check облачной сессии: Bun старше packageManager проекта — строка окружения с версиями и командой для setup script"
+  "name": "check облачной сессии: Bun старше packageManager проекта — строка окружения с версиями и командой"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -8218,6 +8281,14 @@
    "возобновлённая сессия узнаёт из хука, какое ожидание перезапустить"
   ],
   "name": "без id сессии скилл github не зовётся"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "В начале сессии Claude Code проверка идёт сама и старт сессии не срывает",
+   "возобновлённая сессия узнаёт из хука, какое ожидание перезапустить"
+  ],
+  "name": "облачная сессия: скилл github не зовётся — Projects там недоступны"
  },
  {
   "path": "tests/capabilities/update/update.test.ts",
@@ -16689,6 +16760,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "docs/cloud-sessions.md: AGENTS.md, «Session and branch — one task» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "docs/cloud-sessions.md: README.md, «Installation» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
