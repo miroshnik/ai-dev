@@ -3393,6 +3393,48 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи"
+  ],
+  "name": "--cloud — только с --assignment"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи"
+  ],
+  "name": "task close в чекауте диспетчера на main удаляет влитую ветку облачного исполнителя claude/<slug>"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи"
+  ],
+  "name": "бриф облачного исполнителя из github task queue называет через решётку только номер своей задачи, эпик — без решётки"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи"
+  ],
+  "name": "облачный исполнитель влил PR задачи — диспетчер узнаёт об этом без владельца"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи"
+  ],
+  "name": "облачный исполнитель не влил PR (вопрос, сбой) — диспетчер находит его вопрос или State-комментарий в задаче"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue --assignment N --cloud — бриф облачного исполнителя, диспетчер ждёт закрытия задачи"
+  ],
+  "name": "по закрытию задачи облачного исполнителя диспетчер закрывает её локально: факт с --write, Status, удаление влитой ветки, архив сессии исполнителя"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task queue в worktree приложения: облачные исполнители из него не стартуют"
   ],
   "name": "task queue в папке проекта и в worktree агента строки о worktree приложения не печатает"
@@ -11457,6 +11499,48 @@
   "describes": [
    "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
   ],
+  "name": "название queue.cloud скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название queue.cloudClose скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название queue.cloudDispatcher скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название queue.cloudDoc скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название queue.cloudEpic скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
+  "name": "название queue.cloudQuestion скрипты читают из словаря"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Названия, которые пишут и разбирают скрипты, — в locales скилла github, у каждого языка одни ключи"
+  ],
   "name": "название queue.epic скрипты читают из словаря"
  },
  {
@@ -17059,6 +17143,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "skills/github/reference.md: docs/cloud-sessions.md, «The brief» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "skills/github/reference.md: skills/github/SKILL.md, «Git, PRs and merging — mechanics» — есть такой раздел"
  },
  {
@@ -17116,6 +17207,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/github/scripts/github.ts: AGENTS.md, «Task tracking» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/github/scripts/github.ts: docs/cloud-sessions.md, «The brief» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
