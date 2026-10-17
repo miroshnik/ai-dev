@@ -36,7 +36,7 @@
 
 ## Ссылка на раздел документа флоу по названию ведёт на существующий заголовок
 
-<details><summary>✅ 142 теста</summary>
+<details><summary>✅ 145 тестов</summary>
 
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» не пуст
 - ✅ реестр «ссылки «файл + название раздела» в документах флоу и решений спеки, установщике и скриптах скиллов» находит bin/elves.ts → AGENTS.md, «First step of a session», claude/CLAUDE.md → AGENTS.md, «First step of a session», skills/est/scripts/est.ts → skills/est/SKILL.md, «Cloud session», skills/github/scripts/github.ts → skills/github/SKILL.md, «Git, PRs and merging — mechanics», skills/github/reference.md → AGENTS.md, «Estimate and actual — the `est` skill», docs/ci-concurrency.md → AGENTS.md, «CI: parallel tasks», skills/spec/SKILL.md → skills/spec/SKILL.md, «Checks»
@@ -53,6 +53,7 @@
 - ✅ claude/CLAUDE.md: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ docs/ci-concurrency.md: AGENTS.md, «CI: parallel tasks» — есть такой раздел
 - ✅ docs/ci-concurrency.md: AGENTS.md, «Git, PRs and merging» — есть такой раздел
+- ✅ docs/cloud-sessions.md: docs/cloud-sessions.md, «The brief» — есть такой раздел
 - ✅ docs/cloud-sessions.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел
 - ✅ docs/judgment.md: AGENTS.md, «Production and debugging» — есть такой раздел
 - ✅ docs/judgment.md: AGENTS.md, «Tests and code» — есть такой раздел
@@ -75,6 +76,7 @@
 - ✅ skills/dashboard/SKILL.md: skills/dashboard/SKILL.md, «Pitfalls» — есть такой раздел
 - ✅ skills/dashboard/SKILL.md: skills/task-env/SKILL.md, «Local ports and task addresses» — есть такой раздел
 - ✅ skills/dashboard/scripts/sessions.ts: AGENTS.md, «Epic refresh on task close» — есть такой раздел
+- ✅ skills/est/SKILL.md: docs/cloud-sessions.md, «The brief» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «Period summary» — есть такой раздел
 - ✅ skills/est/SKILL.md: skills/est/SKILL.md, «The estimate of a new task» — есть такой раздел
@@ -177,6 +179,7 @@
 - ✅ skills/task-env/reference.md: skills/task-env/reference.md, «The proxy before the rename» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Docker and the sandbox» — есть такой раздел
 - ✅ skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
+- ✅ tests/capabilities/est/est.md: docs/cloud-sessions.md, «The brief» — есть такой раздел
 - ✅ tests/capabilities/task-env/task-env.md: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел
 - ✅ tests/standards/skill-imports/skill-imports.md: AGENTS.md, «Language» — есть такой раздел
 - ✅ tests/standards/task-branch/task-branch.md: AGENTS.md, «Session and branch» — есть такой раздел

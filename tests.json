@@ -1003,6 +1003,20 @@
  {
   "path": "tests/capabilities/est/est.test.ts",
   "describes": [
+   "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
+  ],
+  "name": "первый промпт облачной сессии с `#` только у её задачи, а эпик и соседние задачи без `#` — est fact в облаке связывает транскрипт с задачей"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
+   "В облачной сессии est считает свою часть факта, остальное — ошибка с объяснением"
+  ],
+  "name": "первый промпт с несколькими `#N` — сессия по промпту не связана ни с одной задачей"
+ },
+ {
+  "path": "tests/capabilities/est/est.test.ts",
+  "describes": [
    "Ветка `<type>/<issue>-<slug>` даёт номер и тип задачи"
   ],
   "name": "в канонической ветке номер задачи — первое число после типа, число в слаге номером не считается"
@@ -15946,6 +15960,13 @@
   "describes": [
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
+  "name": "docs/cloud-sessions.md: docs/cloud-sessions.md, «The brief» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
   "name": "docs/cloud-sessions.md: skills/est/SKILL.md, «Cloud session» — есть такой раздел"
  },
  {
@@ -16094,6 +16115,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/dashboard/scripts/sessions.ts: AGENTS.md, «Epic refresh on task close» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "skills/est/SKILL.md: docs/cloud-sessions.md, «The brief» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
@@ -16808,6 +16836,13 @@
    "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
   ],
   "name": "skills/task-env/scripts/task-env.ts: skills/task-env/SKILL.md, «Network subnets» — есть такой раздел"
+ },
+ {
+  "path": "tests/standards/section-refs/section-refs.test.ts",
+  "describes": [
+   "Ссылка на раздел документа флоу по названию ведёт на существующий заголовок"
+  ],
+  "name": "tests/capabilities/est/est.md: docs/cloud-sessions.md, «The brief» — есть такой раздел"
  },
  {
   "path": "tests/standards/section-refs/section-refs.test.ts",
