@@ -128,6 +128,22 @@ and prints the same steps:
    can't be done from the cloud (project fields, estimates of new tasks via
    `est`) — into a State comment for the local session.
 
+**No channel to a local dispatcher** (checked 2026-10-17, #609): a cloud
+executor can't tell the local session that started it that the task is
+merged. `send_message` to a local session is refused —
+`elevated_session_untrusted_device`, then "target session could not be
+verified" on every retry; `create_trigger` (`persistent_session_id`) and
+`get_session` don't take a local session's id (`local_…`); `ListAgents` in
+the cloud sees no sessions of the owner's machine. The owner's step would be
+an approval on a trusted device (`confirm_repository_trust` with the
+`content_digest` of such a refusal — these carried none), by the tool's
+description for one cloud session, i.e. per executor. A path without a
+channel: the dispatcher waits for the task itself — `ci-wait issue <N>` as
+its own background command (checked from the cloud: PASS on a closed task),
+then the `Actual (cloud)` and State comments of the task and the local close.
+Until #609 settles it — the State comment, and the owner asks a local
+session.
+
 ## Push failed — a local session finishes
 
 A cloud session that can't write hands the work over as files: the branch —
