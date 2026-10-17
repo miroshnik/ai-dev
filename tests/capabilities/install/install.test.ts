@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDe
 import { BIN, elves, elvesPackage, bunxPackage, loadedAtStart, npmPackage, REPO, sandbox, snapshot, type ElvesPackage, type Sandbox } from "../../lib/elves.ts";
 import { npmRegistry, type Registry } from "../../lib/registry.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
-import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { SPAWN_TIMEOUT, unprivilegedOwns } from "../../lib/spawn.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -201,13 +201,15 @@ describe("В проект — тонкий флоу: версия пакета, 
 /**
  * Песочница агента не пускает запись в `.claude/skills` (Seatbelt у Claude Code — EPERM): установка на машину
  * обрывается на симлинках, когда копии в `~/.agents/skills` уже легли. Тест закрывает каталог правами — отказ тот же
- * по сути (EACCES).
+ * по сути (EACCES); под root права не запрещают ничего — установщик идёт от непривилегированного пользователя (#598).
  */
 describe("Отказ в записи посреди установки — понятная строка вместо стека, повтор доводит установку", () => {
   const skillsDir = () => path.join(home, ".claude/skills");
-  const lock = () => (mkdirSync(skillsDir(), { recursive: true }), chmodSync(skillsDir(), 0o555));
+  const lock = () => (mkdirSync(skillsDir(), { recursive: true }), unprivilegedOwns(skillsDir()), chmodSync(skillsDir(), 0o555));
+  const install = (args: string[]) => elves(sb, ["install", ...args], { unprivileged: true });
+  const update = () => elves(sb, ["update", "-g"], { unprivileged: true });
   // машина с Claude Code: симлинки скиллов ставятся в ~/.claude/skills
-  beforeEach(() => mkdirSync(path.join(home, ".claude"), { recursive: true }));
+  beforeEach(() => (mkdirSync(path.join(home, ".claude"), { recursive: true }), unprivilegedOwns(tmp)));
   // каталог без права записи не удалить — права возвращаются до уборки песочницы
   afterEach(() => existsSync(skillsDir()) && chmodSync(skillsDir(), 0o755));
 
@@ -235,7 +237,7 @@ describe("Отказ в записи посреди установки — по�
     install(["-g"]);
     rmSync(path.join(skillsDir(), "spec"));
     chmodSync(skillsDir(), 0o555);
-    const r = elves(sb, ["update", "-g"]);
+    const r = update();
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("~/.claude/skills/spec");
     expect(r.stderr).toContain("bunx @miroshnik/elves update -g");
@@ -245,7 +247,7 @@ describe("Отказ в записи посреди установки — по�
     install(["-g"]);
     chmodSync(skillsDir(), 0o555);
     expect(install(["-g"]).code).toBe(0);
-    expect(elves(sb, ["update", "-g"]).code).toBe(0);
+    expect(update().code).toBe(0);
   });
 });
 

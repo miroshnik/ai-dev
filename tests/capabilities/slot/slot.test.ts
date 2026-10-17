@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { elves, sandbox } from "../../lib/elves.ts";
-import { exitOf, SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { exitOf, SPAWN_TIMEOUT, unprivileged, unprivilegedOwns } from "../../lib/spawn.ts";
 import { tmpDir } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
@@ -32,6 +32,11 @@ let running: ChildProcess[];
 let locked: string[];
 /** Текст шима — какой ставит установщик в тонкий проект: один раз на файл. */
 let shim: string;
+/**
+ * `slot` идёт от непривилегированного пользователя — в тестах песочницы: под root права не запрещают запись, и
+ * закрытый каталог очереди не был бы закрыт (#598).
+ */
+let sandboxed = false;
 
 beforeAll(() => {
   const sb = sandbox();
@@ -85,6 +90,7 @@ function envOf(extra: Record<string, string> = {}) {
 /** Каталог без записи — как каталог конфигурации в песочнице агента: читать можно, писать нельзя. */
 function lock(d: string) {
   mkdirSync(d, { recursive: true });
+  if (sandboxed) unprivilegedOwns(dir);
   chmodSync(d, 0o555);
   locked.push(d);
 }
@@ -102,8 +108,10 @@ interface Queued {
   closed: () => boolean;
 }
 
+/** `bun slot.ts …args` — от непривилегированного пользователя в тестах песочницы (`sandboxed`). */
+const slot = (args: string[]): [string, string[]] => (sandboxed ? unprivileged("bun", [SLOT, ...args]) : ["bun", [SLOT, ...args]]);
 /** `slot` фоном: своя группа процессов — тест убивает её целиком. */
-const start = (args: string[], extra: Record<string, string> = {}) => track(spawn("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), detached: true }));
+const start = (args: string[], extra: Record<string, string> = {}) => track(spawn(...slot(args), { cwd: dir, env: envOf(extra), detached: true }));
 /** Окружение скрипта package.json: `node_modules/.bin` проекта первым на PATH, как у `npm run`. */
 const scriptEnv = (extra: Record<string, string> = {}) => envOf({ PATH: `${bin}${path.delimiter}${process.env.PATH}`, ...extra });
 /** Скрипт package.json фоном: shell, как у `npm run`, подключает шим и идёт командой. */
@@ -139,7 +147,7 @@ const waiting = (q: Queued, name: string) => until(() => q.err().includes("slot:
 
 /** Синхронный `slot`; таймаут — чтобы зависание в очереди упало с объяснением, а не таймаутом теста. */
 function run(args: string[], extra: Record<string, string> = {}) {
-  return spawnSync("bun", [SLOT, ...args], { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
+  return spawnSync(...slot(args), { cwd: dir, env: envOf(extra), encoding: "utf8", timeout: PATIENCE });
 }
 
 /** Синхронный скрипт package.json: `sh -c` с шимом перед командой. */
@@ -368,6 +376,9 @@ describe("Без очереди — там, где она лишняя или ж
 });
 
 describe("Песочница агента не роняет очередь", () => {
+  beforeEach(() => ((sandboxed = true), unprivilegedOwns(dir)));
+  afterEach(() => (sandboxed = false));
+
   it("без записи в каталог конфигурации очередь идёт через временный каталог", async () => {
     lock(path.join(config, "slots"));
     const [a, b] = [hold("a"), hold("b")];
