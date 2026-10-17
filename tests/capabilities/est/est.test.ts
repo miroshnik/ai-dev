@@ -1400,8 +1400,8 @@ describe("В облачной сессии est считает свою част�
     expect(parseMarker(r.stdout, "fact")).toMatchObject({ h: null, cov: "none", src: "cloud", session: "session_01Test" });
   });
 
-  /** Транскрипт облачной сессии над #42 в каталоге репозитория `repo` с манифестом `language`; вывод `est fact 42`. */
-  function cloudFact(language: string) {
+  /** Транскрипт облачной сессии с первым промптом `prompt` в каталоге репозитория `repo` с манифестом `language`; вывод `est fact <number>`. */
+  function cloudFact(language: string, prompt = "#42 сделай экспорт", number = 42) {
     const cwd = path.join(dir, "repo");
     mkdirSync(path.join(cwd, ".agents"), { recursive: true });
     writeFileSync(path.join(cwd, ".agents/elves.json"), JSON.stringify({ language }));
@@ -1410,12 +1410,34 @@ describe("В облачной сессии est считает свою част�
     const usage = { input_tokens: 1, output_tokens: 1000, cache_read_input_tokens: 100000, cache_creation_input_tokens: 0 };
     const rec = (hhmm: string, extra: object) => ({ timestamp: `2026-09-01T${hhmm}:00Z`, cwd, gitBranch: "claude/export-x", ...extra });
     writeFileSync(path.join(proj, "11111111-2222-3333-4444-555555555555.jsonl"), jsonl([
-      rec("10:00", { type: "user", origin: { kind: "human" }, message: { role: "user", content: "#42 сделай экспорт" } }),
+      rec("10:00", { type: "user", origin: { kind: "human" }, message: { role: "user", content: prompt } }),
       rec("10:06", { type: "assistant", message: { id: "msg_01", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
       rec("10:12", { type: "assistant", message: { id: "msg_02", model: "claude-opus-5-5", content: [{ type: "text", text: "…" }], usage } }),
     ]));
-    return spawnSync("bun", [EST, "fact", "42"], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
+    return spawnSync("bun", [EST, "fact", String(number)], { cwd, encoding: "utf8", env: { ...process.env, HOME: dir, ELVES_CONFIG_DIR: path.join(dir, "elves"), CLAUDE_CODE_REMOTE: "true", CLAUDE_CODE_REMOTE_SESSION_ID: "cse_01Test" } });
   }
+
+  /**
+   * Первый промпт облачной сессии, которую запустила другая сессия (диспетчер): harness ставит её фон перед заданием, и
+   * est ищет `#N` во всём промпте. Ветку облако назначает само (`claude/<slug>`), так что задачу называет только промпт.
+   */
+  const brief = (background: string, task: string) => `Background (from the session that started this one):\n${background}\n\nTask:\n${task}`;
+
+  it("первый промпт облачной сессии с `#` только у её задачи, а эпик и соседние задачи без `#` — est fact в облаке связывает транскрипт с задачей", () => {
+    const prompt = brief("Диспетчер эпика 40 запустил облачные сессии задач 41, 42 и 43; задача 44 ждёт мержа 42.", "Задача #42 «Экспорт счетов» — https://github.com/o/r/issues/42: сделай её целиком.");
+    const r = cloudFact("ru", prompt);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Факт (облако): 0.2 ч активных в облачной сессии Claude Code, 1 промпт.");
+  });
+
+  it("первый промпт с несколькими `#N` — сессия по промпту не связана ни с одной задачей", () => {
+    const prompt = brief("Диспетчер эпика #40 запустил облачные сессии задач #41, #42 и #43.", "Задача #42 «Экспорт счетов»: сделай её целиком.");
+    for (const n of [40, 41, 42, 43]) {
+      const r = cloudFact("ru", prompt, n);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("Факт недоступен (облако): ");
+    }
+  });
 
   it("est fact в облаке считает часть сессии по её транскрипту в контейнере: «Факт (облако)» с цифрами и маркером части", () => {
     const r = cloudFact("ru");

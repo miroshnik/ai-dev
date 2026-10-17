@@ -61,8 +61,23 @@ Check: in a cloud session of the project, ask the agent to quote a rule from
   the task's questions.
 - **The session title** (`set_session_title`) is stored on the server and
   doesn't get into the transcript: `est` links cloud work to the task only by
-  the branch, `#N` in the first prompt and commit hashes.
+  the branch, the only `#N` in the first prompt (section "The brief") and
+  commit hashes.
 - **The container is temporary**: anything unpushed is lost.
+
+## The brief — `#` only for its task
+
+The cloud names the branch itself (`claude/<slug>`), so `est` links a session
+to its task by the first prompt: it takes every `#N` of the whole prompt —
+with the "Background (from the session that started this one)" block the
+harness puts before the task — and links only by exactly one (#594). Whoever
+writes a cloud session's first prompt — the owner or a dispatcher session —
+names only its task with `#`, in the background too; the epic, other tasks and
+PRs — a number without `#` ("epic 40", "tasks 41 and 43") or a title. The
+executor prompt of `github task queue` has `(epic #M)`: fine for a subagent,
+whose assignment `est` reads by the word "Task", but in a cloud session's
+brief the epic goes without `#`. Two `#N` — `est fact <N>` in the cloud prints
+`Actual unavailable (cloud)` though the transcript is in the container.
 
 ## Closing a task from the cloud
 
@@ -70,8 +85,9 @@ Check: in a cloud session of the project, ask the agent to quote a rule from
 and prints the same steps:
 
 1. `est fact <N>` computes this session's part of the actual from its
-   transcript in the container (linking — the branch `<type>/<N>-…` or `#N`
-   in the first prompt) and prints an `Actual (cloud)` comment
+   transcript in the container (linking — the branch `<type>/<N>-…` or the
+   only `#N` in the first prompt, section "The brief") and prints an
+   `Actual (cloud)` comment
    with hours, tokens, a link to the session and a part marker — post it to
    the issue with a GitHub tool. Project fields (`Actual, h`, tokens, cost)
    are set by the next local session: `est fact <N> --write` or
