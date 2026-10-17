@@ -638,6 +638,86 @@ function restCall(io: Io, args: string[]): Any {
   return res;
 }
 
+/**
+ * A Claude Code cloud session (docs/cloud-sessions.md): its proxy closes GraphQL, `search/…` and Projects v2 — only the
+ * REST of `repos/{owner}/{repo}/…` of the session's repositories.
+ */
+const inCloud = (io: Io) => io.env.CLAUDE_CODE_REMOTE === "true";
+/** The commands with a REST path in the cloud (#603): the rest need GraphQL or the project and refuse there. */
+const CLOUD_COMMANDS = ["task show", "task answer", "task new"];
+
+/**
+ * A REST request of the cloud's path: the payload — JSON on stdin (a description doesn't fit an argument); an error
+ * response is an exception with its message, a missing resource (404) with `missing` — null; an empty answer (204) —
+ * null.
+ */
+function rest(io: Io, route: string, o: { method?: string; payload?: unknown; missing?: boolean } = {}): Any {
+  const what = `${o.method ?? "GET"} ${route}`;
+  const out = io.gh(["api", ...(o.method ? ["-X", o.method] : []), route, ...(o.payload === undefined ? [] : ["--input", "-"])], o.payload === undefined ? undefined : JSON.stringify(o.payload));
+  let res: Any;
+  try {
+    res = out.trim() ? JSON.parse(out) : null;
+  } catch {
+    throw new GhError(`${what}: the response is not JSON: ${out.slice(0, 200)}`);
+  }
+  if (res && !Array.isArray(res) && typeof res.message === "string" && res.id === undefined) {
+    if (o.missing && String(res.status) === "404") return null;
+    throw new GhError(`${what}: ${res.message}`);
+  }
+  return res;
+}
+
+/** A whole REST list: pages of 100 until a shorter one. */
+function restList(io: Io, route: string): Any[] {
+  const out: Any[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const rows: Any[] = rest(io, `${route}${route.includes("?") ? "&" : "?"}per_page=100&page=${page}`) ?? [];
+    out.push(...rows);
+    if (rows.length < 100) break;
+  }
+  return out;
+}
+
+/** `owner/repo` of a REST `repository_url` (`https://api.github.com/repos/owner/repo`). */
+const repoOfUrl = (url: string | undefined, slug: string) => /\/repos\/([^/]+\/[^/]+)$/.exec(url ?? "")?.[1] ?? slug;
+
+/** A REST issue in the shape of the GraphQL answer: the state and its reason in upper case, labels with ids. */
+function restIssueNode(i: Any): Any {
+  return {
+    id: i.node_id,
+    databaseId: i.id,
+    number: i.number,
+    title: i.title,
+    state: String(i.state).toUpperCase(),
+    stateReason: i.state_reason ? String(i.state_reason).toUpperCase() : null,
+    url: i.html_url,
+    body: i.body ?? "",
+    issueType: i.type?.name ? { name: i.type.name } : null,
+    labels: { nodes: (i.labels ?? []).map((l: Any) => ({ id: l.node_id, name: l.name })) },
+    milestone: i.milestone ? { id: i.milestone.node_id, number: i.milestone.number, title: i.milestone.title, open: i.milestone.open_issues ?? 0 } : null,
+  };
+}
+
+/** The issue over REST (#603); not an issue (no such number, a PR) — null. */
+function restIssue(io: Io, slug: string, number: number): Any {
+  const i = rest(io, `repos/${slug}/issues/${number}`, { missing: true });
+  return i && !i.pull_request ? restIssueNode(i) : null;
+}
+
+/** An issue in a REST list (sub-issues, blocked by) in the shape of the GraphQL answer. */
+const restBrief = (x: Any, slug: string) => ({ id: x.node_id, databaseId: x.id, number: x.number, state: String(x.state).toUpperCase(), title: x.title, repository: { nameWithOwner: repoOfUrl(x.repository_url, slug) } });
+const restSubIssues = (io: Io, slug: string, number: number) => ({ nodes: restList(io, `repos/${slug}/issues/${number}/sub_issues`).map((x) => restBrief(x, slug)) });
+
+/** The issue's sub-issues, blocked by and epic over REST, in the shape of the GraphQL answer. */
+function restLinks(io: Io, slug: string, number: number): { subIssues: Any; blockedBy: Any; parent: Any } {
+  const parent = rest(io, `repos/${slug}/issues/${number}/parent`, { missing: true });
+  return {
+    subIssues: restSubIssues(io, slug, number),
+    blockedBy: { nodes: restList(io, `repos/${slug}/issues/${number}/dependencies/blocked_by`).map((x) => restBrief(x, slug)) },
+    parent: parent && restIssueNode(parent),
+  };
+}
+
 /** The real `gh`: an exit code ≠ 0 is an exception with stderr. */
 export function realGh(args: string[], stdin?: string): string {
   const r = spawnSync("gh", args, { input: stdin, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -802,6 +882,8 @@ function mergedIssues(io: Io, slug: string, labels: Label[]): State["labelIssues
 }
 
 function loadLabels(io: Io, slug: string): Label[] {
+  // the cloud (#603) — REST: the labels without their open tasks (task new doesn't need them)
+  if (inCloud(io)) return restList(io, `repos/${slug}/labels`).map((l) => ({ id: l.node_id, name: l.name, color: l.color, description: l.description ?? null, open: { total: 0, numbers: [] } }));
   const [owner, name] = slug.split("/") as [string, string];
   return pages<Any>((after) => graphql(io, Q.RepoLabels, { owner, name, after }).repository.labels).map(({ issues, ...l }) => ({
     ...l,
@@ -837,7 +919,7 @@ export function modelModules(text: string): Record<string, string[]> | string {
 /** Default-branch decisions: spec tree folders by kind, and model modules for architecture. */
 export function loadDecisions(io: Io, slug: string): Decisions {
   const [owner, name] = slug.split("/") as [string, string];
-  const r = graphql(io, Q.SpecDecisions, { owner, name })?.repository ?? {};
+  const r = inCloud(io) ? restSpecTree(io, slug) : (graphql(io, Q.SpecDecisions, { owner, name })?.repository ?? {});
   const dirs = (t: Any): string[] => (t?.entries ?? []).filter((e: Any) => e.type === "tree").map((e: Any) => e.name as string);
   const names = { capability: dirs(r.capabilities), standard: dirs(r.standards), architecture: dirs(r.architecture) };
   let modelError: string | null = null;
@@ -848,6 +930,16 @@ export function loadDecisions(io: Io, slug: string): Decisions {
   }
   for (const k of DECISION_KINDS) names[k] = [...new Set(names[k])].sort();
   return { names, modelError };
+}
+
+/** SpecDecisions over the REST contents of the default branch — the cloud (#603): folders as `tree` entries, the model's text. */
+function restSpecTree(io: Io, slug: string): Any {
+  const dir = (kind: DecisionKind) => {
+    const entries = rest(io, `repos/${slug}/contents/tests/${DECISIONS[kind].dir}`, { missing: true });
+    return Array.isArray(entries) ? { entries: entries.map((e: Any) => ({ name: e.name, type: e.type === "dir" ? "tree" : "blob" })) } : null;
+  };
+  const model = rest(io, `repos/${slug}/contents/${MODEL_PATH}`, { missing: true });
+  return { capabilities: dir("capability"), standards: dir("standard"), architecture: dir("architecture"), model: model?.content ? { text: Buffer.from(model.content, "base64").toString("utf8") } : null };
 }
 
 /**
@@ -1409,6 +1501,9 @@ export function cmdFix(io: Io, slug: string, opts: { confirm: boolean; template:
 
 interface Issue {
   id: string;
+  /** Read in the cloud (#603): the REST id (sub-issues and blocked by take it) and the issue's route — its writes go there. */
+  databaseId?: number;
+  rest?: string;
   number: number;
   title: string;
   state: string;
@@ -1442,6 +1537,7 @@ interface Blocker {
 const blockerRef = (slug: string, b: { number: number; repo: string }) => (b.repo.toLowerCase() === slug.toLowerCase() ? `#${b.number}` : `${b.repo}#${b.number}`);
 
 function loadIssue(io: Io, slug: string, number: number): Issue {
+  if (inCloud(io)) return restLoadIssue(io, slug, number);
   const [owner, name] = slug.split("/");
   const i = graphql(io, Q.IssueRef, { owner, name, number })?.repository?.issue;
   if (!i) throw new GhError(`no issue #${number} in ${slug}`);
@@ -1461,6 +1557,32 @@ function loadIssue(io: Io, slug: string, number: number): Issue {
     prs: (i.closedByPullRequestsReferences?.nodes ?? []).map((p: Any) => ({ number: p.number, state: p.state ?? "", merged: Boolean(p.merged), head: p.headRefName ?? "", base: p.baseRefName ?? "main" })),
     items: (i.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: it.status?.name ?? null })),
     priority: (i.issueFieldValues?.nodes ?? []).find((v: Any) => v?.field?.name === PRIORITY)?.name ?? null,
+  };
+}
+
+/** loadIssue in the cloud (#603) — the repository's REST: no project items, PRs and Priority (an issue field). */
+function restLoadIssue(io: Io, slug: string, number: number): Issue {
+  const i = restIssue(io, slug, number);
+  if (!i) throw new GhError(`no issue #${number} in ${slug}`);
+  const l = restLinks(io, slug, number);
+  return {
+    id: i.id,
+    databaseId: i.databaseId,
+    rest: `repos/${slug}/issues/${number}`,
+    number: i.number,
+    title: i.title,
+    state: i.state,
+    stateReason: i.stateReason,
+    url: i.url,
+    type: i.issueType?.name ?? null,
+    labels: i.labels.nodes.map((x: Any) => x.name),
+    parent: l.parent ? { id: l.parent.id, number: l.parent.number } : null,
+    subIssues: l.subIssues.nodes.map((x: Any) => ({ number: x.number, state: x.state, title: x.title })),
+    blockers: l.blockedBy.nodes.map((b: Any) => ({ number: b.number, state: b.state, repo: b.repository.nameWithOwner })),
+    milestone: i.milestone,
+    prs: [],
+    items: [],
+    priority: null,
   };
 }
 
@@ -1729,8 +1851,10 @@ const sameTitles = (title: string): string[] => [title, ...locale.everyNames().f
 
 export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   const [owner, name] = slug.split("/");
-  const ctx = taskContext(io, slug);
-  const org = ctx.repo.owner.org;
+  // the cloud (#603): the repository's REST without the project — what it can't set, a line for a local session names
+  const cloud = inCloud(io);
+  const ctx = cloud ? null : taskContext(io, slug);
+  const org = ctx ? ctx.repo.owner.org : rest(io, `repos/${slug}`).owner?.type === "Organization";
 
   // All checks come before creating: a task mustn't appear half-made. The type — a name in any dictionary language.
   const type = typeAliases()[task.type.toLowerCase()];
@@ -1742,11 +1866,13 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   } else if (!branchType) throw new GhError(`--branch-type is required for a task: ${TASK_TYPES.join(", ")} — the type of its branch and of its estimate`);
   else if (!TASK_TYPES.includes(branchType)) throw new GhError(`--branch-type: ${TASK_TYPES.join(", ")}`);
   const o = { ...task, type, body: task.body.trim() ? task.body : taskTemplate(type) };
-  const issueType = org ? ctx.repo.owner.issueTypes.find((t) => t.name === o.type && t.isEnabled) : undefined;
-  if (org && !issueType) throw new GhError(`the organization has no enabled type ${q(o.type)} — github project fix`);
+  // in the cloud the organization's types aren't readable (`orgs/…` — 403): the type goes by name, GitHub checks it
+  const issueType = org && ctx ? ctx.repo.owner.issueTypes.find((t) => t.name === o.type && t.isEnabled) : undefined;
+  if (org && ctx && !issueType) throw new GhError(`the organization has no enabled type ${q(o.type)} — github project fix`);
   if (!org && o.priority) throw new GhError("a personal account has no issue fields — no priority is kept, --priority isn't needed");
+  if (org && !ctx && o.priority && !(PRIORITIES as readonly string[]).includes(o.priority)) throw new GhError(`--priority: ${PRIORITIES.join(", ")}`);
   let priority: { fieldId: string; optionId: string; name: string } | null = null;
-  if (org) {
+  if (org && ctx) {
     const f = ctx.repo.owner.issueFields.find((x) => x.name === PRIORITY);
     if (!f) throw new GhError(`the organization has no issue field ${PRIORITY} — github project fix`);
     const want = o.priority ?? DEFAULT_PRIORITY;
@@ -1764,11 +1890,18 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   }
   const blockers = o.blockedBy.map((n) => loadIssue(io, slug, n));
   const needCtx = !!o.milestone || (!org && o.type === N.issueTypes.epic);
-  const repoCtx = needCtx ? graphql(io, Q.TaskContext, { owner, name }).repository : null;
-  const milestone = o.milestone ? (repoCtx.milestones.nodes as { id: string; title: string }[]).find((m) => m.title === o.milestone) : undefined;
+  const restCtx = () => {
+    const label = rest(io, `repos/${slug}/labels/${EPIC_LABEL}`, { missing: true });
+    return { label: label && { id: label.node_id }, milestones: { nodes: restList(io, `repos/${slug}/milestones?state=open`).map((m) => ({ id: m.node_id, number: m.number, title: m.title })) } };
+  };
+  const repoCtx = !needCtx ? null : cloud ? restCtx() : graphql(io, Q.TaskContext, { owner, name }).repository;
+  const milestone = o.milestone ? (repoCtx.milestones.nodes as { id: string; number?: number; title: string }[]).find((m) => m.title === o.milestone) : undefined;
   if (o.milestone && !milestone) throw new GhError(`no open milestone ${q(o.milestone)}`);
+  // `search/issues` in the cloud is 403 («sessions are bound to their configured repositories») — a listing of the open ones
+  const openIssues: Any[] | null = cloud ? restList(io, `repos/${slug}/issues?state=open`).filter((i) => !i.pull_request) : null;
   for (const same of sameTitles(title)) {
-    const dup = (graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${same.replaceAll('"', "")}"` }).search.nodes as Any[]).find((x) => x?.title === same);
+    const found: Any[] = openIssues ?? graphql(io, Q.IssueSearch, { q: `repo:${slug} is:issue is:open in:title "${same.replaceAll('"', "")}"` }).search.nodes;
+    const dup = found.find((x) => x?.title === same);
     if (dup) throw new GhError(`an open task with this title already exists: #${dup.number}${same === title ? "" : ` (${q(same)} — its title before the flow's rename)`}`);
   }
   const wanted = [...new Set(o.labels ?? [])];
@@ -1794,54 +1927,67 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   });
 
   const done: string[] = [];
-  const input: Record<string, unknown> = { repositoryId: ctx.repo.id, title, body: o.body, projectV2Ids: [ctx.project.id] };
-  if (issueType) {
-    input.issueTypeId = issueType.id;
-    done.push(`type ${q(o.type)}`);
-  }
+  // a new label of the repository — its id; in the cloud over REST
+  const createLabel = (label: { name: string; color: string; description: string }): string =>
+    ctx ? (mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...label } }).createLabel.label.id as string) : rest(io, `repos/${slug}/labels`, { method: "POST", payload: label }).node_id;
+  // the issue's labels: GraphQL takes their ids, REST — their names
+  const labels: { id: string; name: string }[] = [];
+  if (issueType || (org && !ctx)) done.push(`type ${q(o.type)}`);
   if (!org && o.type === N.issueTypes.epic) {
     let labelId: string | undefined = repoCtx.label?.id;
     if (!labelId) {
-      labelId = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...epicLabel() } }).createLabel.label.id as string;
+      labelId = createLabel(epicLabel());
       done.push(`created label ${q(EPIC_LABEL)}`);
     }
-    input.labelIds = [labelId];
+    labels.push({ id: labelId, name: EPIC_LABEL });
     done.push(`label ${q(EPIC_LABEL)} — the type in a personal account`);
   }
   if (plan.length) {
-    const ids: string[] = [];
     for (const x of plan) {
       let id = x.label?.id;
       if (!id) {
-        id = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...decisionLabel(x.name, x.kinds) } }).createLabel.label.id as string;
+        id = createLabel(decisionLabel(x.name, x.kinds));
         done.push(`created label ${q(x.name)}`);
       }
-      ids.push(id);
+      labels.push({ id, name: x.name });
     }
-    input.labelIds = [...((input.labelIds as string[] | undefined) ?? []), ...ids];
     // the decision will appear in this task's PR — the label says so instead of failing
     done.push(`labels: ${plan.map((x) => x.name).join(", ")}`, ...plan.flatMap((x) => (x.fresh ? [x.fresh] : [])));
   }
   if (open.length) {
     let id = has(N.labels.questions)?.id;
     if (!id) {
-      id = mutate(io, { op: "CreateLabel", input: { repositoryId: ctx.repo.id, ...questionsLabel() } }).createLabel.label.id as string;
+      id = createLabel(questionsLabel());
       done.push(`created label ${q(N.labels.questions)}`);
     }
     // `--labels` may name it too
-    input.labelIds = [...new Set([...((input.labelIds as string[] | undefined) ?? []), id])];
+    if (!labels.some((l) => l.id === id)) labels.push({ id, name: N.labels.questions });
     done.push(`label ${q(N.labels.questions)} — open questions in the description: ${open.join(", ")}`);
   }
-  if (milestone) input.milestoneId = milestone.id;
-  if (epic) input.parentIssueId = epic.id;
-  if (priority) input.issueFields = [{ fieldId: priority.fieldId, singleSelectOptionId: priority.optionId }];
-  const created = mutate(io, { op: "CreateIssue", input }).createIssue.issue;
-
-  // We set Status ourselves, without waiting for the "Item added to project" workflow.
-  const listed = (created.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: null }));
-  const item = ensureItem(io, ctx, { id: created.id, number: created.number, items: listed }).id;
-  setStatus(io, ctx, item, N.status.backlog);
-  done.push(`project ${q(ctx.project.title)}: ${STATUS} ${q(N.status.backlog)}`);
+  let created: { id: string; databaseId?: number; number: number; title: string; url: string; projectItems?: Any };
+  if (ctx) {
+    const input: Record<string, unknown> = { repositoryId: ctx.repo.id, title, body: o.body, projectV2Ids: [ctx.project.id] };
+    if (issueType) input.issueTypeId = issueType.id;
+    if (labels.length) input.labelIds = labels.map((l) => l.id);
+    if (milestone) input.milestoneId = milestone.id;
+    if (epic) input.parentIssueId = epic.id;
+    if (priority) input.issueFields = [{ fieldId: priority.fieldId, singleSelectOptionId: priority.optionId }];
+    created = mutate(io, { op: "CreateIssue", input }).createIssue.issue;
+    // We set Status ourselves, without waiting for the "Item added to project" workflow.
+    const listed = (created.projectItems?.nodes ?? []).map((it: Any) => ({ id: it.id, projectId: it.project.id, status: null }));
+    const item = ensureItem(io, ctx, { id: created.id, number: created.number, items: listed }).id;
+    setStatus(io, ctx, item, N.status.backlog);
+    done.push(`project ${q(ctx.project.title)}: ${STATUS} ${q(N.status.backlog)}`);
+  } else {
+    const payload: Record<string, unknown> = { title, body: o.body };
+    if (org) payload.type = o.type;
+    if (labels.length) payload.labels = labels.map((l) => l.name);
+    if (milestone) payload.milestone = milestone.number;
+    const i = rest(io, `repos/${slug}/issues`, { method: "POST", payload });
+    created = { id: i.node_id, databaseId: i.id, number: i.number, title: i.title, url: i.html_url };
+    // REST has no parent in the issue's creation — the epic takes it as its sub-issue by the REST id
+    if (epic) rest(io, `repos/${slug}/issues/${epic.number}/sub_issues`, { method: "POST", payload: { sub_issue_id: created.databaseId } });
+  }
   if (priority) done.push(`${PRIORITY} ${q(priority.name)}`);
   if (epic) done.push(`subtask of epic #${epic.number}`);
   for (const b of blockers) {
@@ -1849,7 +1995,8 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
       done.push(`#${b.number} is closed — doesn't block, skipped`);
       continue;
     }
-    mutate(io, { op: "AddBlockedBy", input: { issueId: created.id, blockingIssueId: b.id } });
+    if (ctx) mutate(io, { op: "AddBlockedBy", input: { issueId: created.id, blockingIssueId: b.id } });
+    else rest(io, `repos/${slug}/issues/${created.number}/dependencies/blocked_by`, { method: "POST", payload: { issue_id: b.databaseId } });
     done.push(`blocked by #${b.number}`);
   }
   if (milestone) done.push(`milestone ${q(milestone.title)}`);
@@ -1869,7 +2016,17 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
   io.out(`Created #${created.number} ${created.title} — ${created.url}`);
   for (const d of done) io.out(`+ ${d}`);
   for (const l of epicLabels) io.out(l);
-  if (o.type === N.issueTypes.epic) {
+  const isEpicType = o.type === N.issueTypes.epic;
+  if (!ctx) {
+    // the project and the estimate (est reads the analogs' actuals from the project, it refuses in the cloud) — a local
+    // session's commands; Priority — an issue field, GraphQL only
+    const n = created.number;
+    const local = [`github task status ${n} "${N.status.backlog}" (the project, ${STATUS})`, ...(isEpicType ? [] : [`est estimate ${n} --type ${branchType} --write (${q(N.fields.estimate)})`])];
+    const want = org ? (o.priority ?? DEFAULT_PRIORITY) : null;
+    if (want) local.push(`${PRIORITY} ${q(want)}${epic ? ` and no lower at epic #${epic.number}` : ""} — on the issue page`);
+    io.out(`Next: the cloud has no GitHub Projects (docs/cloud-sessions.md) — a local session: ${local.join("; ")}.`);
+  }
+  if (isEpicType) {
     io.out(`Next: an epic isn't estimated — its ${q(N.fields.estimate)} is the sum of its subtasks' estimates.`);
     // an epic's work goes to the dispatcher on the owner's "yes" (#546), not to a session card per subtask
     io.out(
@@ -1878,7 +2035,7 @@ export function cmdTaskNew(io: Io, slug: string, task: NewTask): number {
     );
     return 0;
   }
-  runEstimate(io, slug, created.number, branchType);
+  if (ctx) runEstimate(io, slug, created.number, branchType);
   if (epic) io.out(`Next: ${q(N.fields.estimate)} of epic #${epic.number} — recompute as the sum of its subtasks' estimates.`);
   // a session with a pinned task won't take a new one into work (pinTask): the owner decides whether to queue it
   const held = pinnedTask(io)?.task;
@@ -1971,6 +2128,38 @@ function prLine(p: ShownPr): string {
 }
 
 /**
+ * IssueShow in the cloud (#603) — the repository's REST in the shape of the GraphQL answer: the issue, its epic with the
+ * epic's tasks, sub-issues, blocked by; no project (Projects v2 — 403) and no Priority (an issue field, GraphQL only).
+ */
+function restIssueShow(io: Io, slug: string, number: number): Any {
+  const i = restIssue(io, slug, number);
+  if (!i) return null;
+  const l = restLinks(io, slug, number);
+  return { ...i, ...l, parent: l.parent && { ...l.parent, subIssues: restSubIssues(io, slug, l.parent.number) } };
+}
+
+/**
+ * The task's PRs in the cloud (#603): GraphQL's links to the task aren't there — the latest open and merged PRs into the
+ * default branch by the task branch or «Closes #N» in the body, as `unlinkedPrs`; an open one's head checks — REST
+ * check-runs and commit statuses in the shape of `HEAD_CHECKS`, for `checkStates`.
+ */
+function restPrs(io: Io, slug: string, number: number): Any[] {
+  const prs: Any[] = rest(io, `repos/${slug}/pulls?state=all&sort=updated&direction=desc&per_page=${RECENT_PRS}`) ?? [];
+  const mine = prs.filter((p) => p.base?.ref === p.base?.repo?.default_branch && (p.state === "open" || p.merged_at) && (isTaskBranch(p.head?.ref ?? "", number) || closingInBody(p.body ?? "").includes(number)));
+  return mine.map((p) => {
+    const open = p.state === "open";
+    const runs: Any[] = open ? (rest(io, `repos/${slug}/commits/${p.head.sha}/check-runs?per_page=100`)?.check_runs ?? []) : [];
+    const statuses: Any[] = open ? (rest(io, `repos/${slug}/commits/${p.head.sha}/status`)?.statuses ?? []) : [];
+    const up = (v: unknown) => (v ? String(v).toUpperCase() : null);
+    const nodes = [
+      ...runs.map((c) => ({ __typename: "CheckRun", name: c.name, status: up(c.status), conclusion: up(c.conclusion), databaseId: c.id, checkSuite: { app: { databaseId: c.app?.id ?? null } } })),
+      ...statuses.map((c) => ({ __typename: "StatusContext", context: c.context, state: up(c.state) })),
+    ];
+    return { number: p.number, state: open ? "OPEN" : "MERGED", merged: !open, isDraft: Boolean(p.draft), headRefName: p.head?.ref ?? "", commits: { nodes: [{ commit: { statusCheckRollup: nodes.length ? { contexts: { nodes } } : null } }] } };
+  });
+}
+
+/**
  * Everything needed to take a task into work in one output, instead of `gh issue view` per piece: the title, type,
  * state, Status and estimate, the epic with its open questions and other open tasks, subtasks, open blockers, the PRs
  * with their checks (GitHub didn't link one yet — found by the branch or «Closes #N», as task close does), the
@@ -1978,7 +2167,8 @@ function prLine(p: ShownPr): string {
  */
 export function cmdTaskShow(io: Io, slug: string, number: number): number {
   const [owner, name] = slug.split("/");
-  const i = graphql(io, Q.IssueShow, { owner, name, number })?.repository?.issue;
+  const cloud = inCloud(io);
+  const i = cloud ? restIssueShow(io, slug, number) : graphql(io, Q.IssueShow, { owner, name, number })?.repository?.issue;
   if (!i) throw new GhError(`no issue #${number} in ${slug}`);
   const labels: string[] = (i.labels?.nodes ?? []).map((l: Any) => l.name);
   // a personal account has no issue types: an epic is the epic label
@@ -1996,8 +2186,8 @@ export function cmdTaskShow(io: Io, slug: string, number: number): number {
   const facts = [
     type,
     i.state === "CLOSED" ? `closed${reason[i.stateReason] ?? ""}` : null,
-    !items.length ? "not in the project" : status ? `${STATUS} ${q(status)}` : `no ${STATUS}`,
-    estimate ? `${q(estimate.field.name)} ${estimate.number}` : `no ${q(N.fields.estimate)}`,
+    cloud ? "no project in the cloud (docs/cloud-sessions.md)" : !items.length ? "not in the project" : status ? `${STATUS} ${q(status)}` : `no ${STATUS}`,
+    cloud ? null : estimate ? `${q(estimate.field.name)} ${estimate.number}` : `no ${q(N.fields.estimate)}`,
     actual ? `${q(actual.field.name)} ${actual.number}` : null,
     priority ? `${PRIORITY} ${priority}` : null,
     i.milestone ? `milestone ${q(i.milestone.title)}` : null,
@@ -2020,8 +2210,8 @@ export function cmdTaskShow(io: Io, slug: string, number: number): number {
   if (blockers.length) out.push(`Blocked by: ${blockers.map((x) => `${blockerRef(slug, { number: x.number, repo: x.repository?.nameWithOwner ?? slug })} ${q(x.title)}`).join(", ")}`);
   // an epic has no PR of its own
   if (!epic) {
-    let prs: ShownPr[] = (i.closedByPullRequestsReferences?.nodes ?? []).filter(Boolean).map((p: Any) => shownPr(p));
-    if (!prs.length && i.state === "OPEN") {
+    let prs: ShownPr[] = (cloud ? restPrs(io, slug, number) : (i.closedByPullRequestsReferences?.nodes ?? []).filter(Boolean)).map((p: Any) => shownPr(p));
+    if (!cloud && !prs.length && i.state === "OPEN") {
       for (const p of unlinkedPrs(io, slug, number).prs) {
         const pr = graphql(io, Q.PrShow, { owner, name, number: p.number })?.repository?.pullRequest;
         if (pr) prs.push(shownPr(pr, p.why));
@@ -2056,7 +2246,8 @@ export function cmdTaskAnswer(io: Io, slug: string, number: number, k: number, a
   const text = answer.trim().replace(/\s*\r?\n\s*/g, " ");
   if (!text) throw new GhError("task answer: expected the answer text after the question number");
   const [owner, name] = slug.split("/");
-  const i = graphql(io, Q.IssueShow, { owner, name, number })?.repository?.issue;
+  const cloud = inCloud(io);
+  const i = cloud ? restIssue(io, slug, number) : graphql(io, Q.IssueShow, { owner, name, number })?.repository?.issue;
   if (!i) throw new GhError(`no issue #${number} in ${slug}`);
   const body: string = i.body ?? "";
   const lines = body.split(/\r?\n/);
@@ -2069,13 +2260,16 @@ export function cmdTaskAnswer(io: Io, slug: string, number: number, k: number, a
   lines[question.first] = lines[question.first]!.replace(/^(\d+\.\s+)/, `$1${auto ? N.autoAnswer : "✅"} `);
   if (question.first === question.last) lines[question.first] += ` ${reply}`;
   else lines.splice(question.last + 1, 0, `${" ".repeat(`${k}. `.length)}${reply}`);
-  mutate(io, { op: "UpdateIssue", input: { id: i.id, body: lines.join(body.includes("\r\n") ? "\r\n" : "\n") } });
+  const next = lines.join(body.includes("\r\n") ? "\r\n" : "\n");
+  if (cloud) rest(io, `repos/${slug}/issues/${number}`, { method: "PATCH", payload: { body: next } });
+  else mutate(io, { op: "UpdateIssue", input: { id: i.id, body: next } });
   io.out(`+ #${number}: question ${k} — ✅ and the answer in the description`);
   const open = questions.filter((x) => !x.answered && x !== question).map((x) => x.k);
   if (open.length) return io.out(`○ #${number}: open questions left: ${open.join(", ")}`), 0;
   const label: Any[] = (i.labels?.nodes ?? []).filter((l: Any) => locale.every((n) => n.labels.questions).includes(l.name));
   if (label.length) {
-    mutate(io, { op: "RemoveLabels", input: { labelableId: i.id, labelIds: label.map((l) => l.id) } });
+    if (cloud) for (const l of label) rest(io, `repos/${slug}/issues/${number}/labels/${encodeURIComponent(l.name)}`, { method: "DELETE" });
+    else mutate(io, { op: "RemoveLabels", input: { labelableId: i.id, labelIds: label.map((l) => l.id) } });
     io.out(`+ #${number}: label ${label.map((l) => q(l.name)).join(", ")} removed — no open questions left`);
   }
   return 0;
@@ -2612,11 +2806,22 @@ function actualizeChecks(): string[] {
 const MEANING_CHECKS = [0, 2, 4];
 
 /**
- * The items of the issue's questions section ("## Questions" in any language of the dictionary): the number, the first
- * line, all the item's non-empty lines and whether it is answered — ✅ in any of its lines; `first` and `last` — the
- * indexes of the item's first and last non-empty line in the description's lines. The dashboard lists the open ones and
- * the answers marked auto, `task actualize` removes the questions label from a task without open ones, `task show`
- * names them, `task answer` puts the answer into the item.
+ * ✅ that answers a question — at the start of its answer: after the item's number (`task answer`), at the start of an
+ * item's line, after the end of the question or a sentence (`?`, `.`, `!`, a dash; closing quotes and markup included),
+ * as answers by hand put it. ✅ inside the text — after a word, in parentheses, quotes or code (a recommendation naming
+ * «✅ auto») — doesn't answer (#603).
+ */
+const ANSWER_MARK_RE = /(?:^\s*(?:\d+\.\s+)?|[?.!—–][»"'*_)`]*\s+)[*_(]*✅/;
+/** A thematic break ends the questions section: the cloud proxy's signature after `---` isn't the last question's (#603). */
+const THEMATIC_BREAK_RE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+
+/**
+ * The items of the issue's questions section ("## Questions" in any language of the dictionary, up to the next section
+ * or a thematic break): the number, the first line, all the item's non-empty lines and whether it is answered — ✅ at
+ * the start of its answer (`ANSWER_MARK_RE`); `first` and `last` — the indexes of the item's first and last non-empty
+ * line in the description's lines. The dashboard lists the open ones and the answers marked auto, `task actualize`
+ * removes the questions label from a task without open ones, `task show` names them, `task answer` puts the answer
+ * into the item.
  */
 export function questionItems(body: string): { k: number; text: string; lines: string[]; answered: boolean; first: number; last: number }[] {
   const section = new RegExp(`^(?:${locale.every((n) => n.sections.questions).map(locale.escapeRe).join("|")})\\s*$`);
@@ -2624,13 +2829,13 @@ export function questionItems(body: string): { k: number; text: string; lines: s
   const from = lines.findIndex((l) => section.test(l));
   if (from < 0) return [];
   const items: { first: number; last: number }[] = [];
-  for (let i = from + 1; i < lines.length && !/^##\s/.test(lines[i]!); i++) {
+  for (let i = from + 1; i < lines.length && !/^##\s/.test(lines[i]!) && !THEMATIC_BREAK_RE.test(lines[i]!); i++) {
     if (/^\d+\.\s/.test(lines[i]!)) items.push({ first: i, last: i });
     else if (items.length && lines[i]!.trim()) items.at(-1)!.last = i;
   }
   return items.map(({ first, last }) => {
     const item = lines.slice(first, last + 1).filter((l) => l.trim());
-    return { k: parseInt(lines[first]!, 10), text: lines[first]!.trim(), lines: item, answered: item.some((l) => l.includes("✅")), first, last };
+    return { k: parseInt(lines[first]!, 10), text: lines[first]!.trim(), lines: item, answered: item.some((l) => ANSWER_MARK_RE.test(l)), first, last };
   });
 }
 
@@ -3213,10 +3418,11 @@ function cleanupBranches(io: Io, number: number, prs: { head: string; base: stri
 // ----------------------------------------------------------------------------
 
 /** The labels the task doesn't have — in one mutation; returns them comma-separated (nothing to add — empty). */
-function addLabels(io: Io, issue: Pick<Issue, "id" | "labels">, names: string[], all: Label[]): string {
+function addLabels(io: Io, issue: Pick<Issue, "id" | "labels" | "rest">, names: string[], all: Label[]): string {
   const missing = names.filter((n) => !issue.labels.includes(n));
   if (!missing.length) return "";
-  mutate(io, { op: "AddLabels", input: { labelableId: issue.id, labelIds: missing.map((n) => all.find((l) => l.name === n)!.id) } });
+  if (issue.rest) rest(io, `${issue.rest}/labels`, { method: "POST", payload: { labels: missing } });
+  else mutate(io, { op: "AddLabels", input: { labelableId: issue.id, labelIds: missing.map((n) => all.find((l) => l.name === n)!.id) } });
   issue.labels.push(...missing);
   return missing.join(", ");
 }
@@ -3823,7 +4029,8 @@ Examples:
 A task by the canon: type, project and Backlog, Priority, epic, blocked by, milestone, decision labels, the questions
 label when the description has a question without ✅ (created if missing); sets the estimate itself (est estimate
 --write with --branch-type: feat, fix, docs, refactor, perf, test, chore, ci, build, research; a bug without it is
-fix, an epic isn't estimated) and prints what was created and the next step.
+fix, an epic isn't estimated) and prints what was created and the next step. A Claude Code cloud session — over the
+repository's REST, without the project: Status, the estimate and an organization's Priority — a line for a local session.
 
 Examples:
   github task new --title "Billing · Export invoices to PDF" --branch-type feat --epic 40 --body-file task.md
@@ -3831,14 +4038,16 @@ Examples:
   "task show": `github task show <N> [--repo owner/repo]
 
 The task in one output: title, type, Status, estimate, the epic with its open questions and tasks, subtasks, open
-blockers, the PRs with their checks, open and answered questions, the description; read-only.
+blockers, the PRs with their checks, open and answered questions, the description; read-only. A cloud session — over the
+repository's REST, without the project's fields; the PRs — by the task branch or «Closes #N».
 
 Examples:
   github task show 42`,
   "task answer": `github task answer <N> <k> "<answer>" [--auto] [--repo owner/repo]
 
 ✅ and «**Answer:** …» at question k of the questions section (--auto — the auto mark), the numbering unchanged; no open
-questions left — the questions label is removed; an answered question is refused.
+questions left — the questions label is removed; an answered question is refused. A question is answered by ✅ at the
+start of its answer, not by ✅ in its text. A cloud session — over the repository's REST.
 
 Examples:
   github task answer 42 1 "Only PDF, no CSV yet"
@@ -4031,20 +4240,21 @@ export function main(argv: string[], io: Io): number {
       io.err(`unknown command «${argv.slice(0, 2).join(" ")}»; expected ${Object.keys(HELP).join(", ")} (github --help)`);
       return 2;
     }
-    if (io.env.CLAUDE_CODE_REMOTE === "true" && group === "task" && cmd === "close") {
+    if (inCloud(io) && group === "task" && cmd === "close") {
       const n = /^#?(\d+)$/.exec(rest.find((a) => !a.startsWith("--")) ?? "")?.[1] ?? "<N>";
       io.err(`cloud session: task close is unavailable to it — no GitHub Projects in the cloud (docs/cloud-sessions.md). The actual — the ${q(N.est.cloud.actual.replace(/:$/, ""))} comment printed by est fact ${n}; ${q(N.status.done)} is set by the project's workflow ${q(WORKFLOW_CLOSED)}; the cloud's branch and container are temporary, nothing to clean up.`);
       return 2;
     }
-    if (io.env.CLAUDE_CODE_REMOTE === "true") {
-      io.err("cloud session: GitHub Projects are unavailable to it (Projects v2 — 403, docs/cloud-sessions.md) — a local session checks and fixes the project");
+    if (inCloud(io) && !CLOUD_COMMANDS.includes(`${group} ${cmd}`)) {
+      io.err(`cloud session: GitHub GraphQL and Projects are unavailable to it (403, docs/cloud-sessions.md) — ${group} ${cmd} runs in a local session; in the cloud — ${CLOUD_COMMANDS.join(", ")} over the repository's REST`);
       return 2;
     }
-    // the repository — under its current name: --repo or origin may still name it as it was before a rename (#560)
+    // the repository — under its current name: --repo or origin may still name it as it was before a rename (#560); the
+    // cloud has no GraphQL, and its session is bound to its repositories by their names
     const repoOf = (v: string | undefined) => {
       const slug = v ?? detectRepo();
       if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new GhError(`invalid --repo «${slug}», expected owner/repo`);
-      return canonicalRepo(io, slug);
+      return inCloud(io) ? slug : canonicalRepo(io, slug);
     };
     if (group === "pr") {
       const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { repo: { type: "string" } } });

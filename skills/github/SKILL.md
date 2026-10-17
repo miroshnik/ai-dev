@@ -42,7 +42,7 @@ types — `admin:org`.
 | Session start, before working with tasks | `project check` — once per session |
 | `check` gave ❌ | `project fix` → UI steps → confirmations → `check` again |
 | Repository without a project | `project fix`: links the owner's project of the same name, otherwise copies the template, otherwise creates one |
-| Cloud session | don't run: Projects v2 are unavailable to it (`docs/cloud-sessions.md`), the script exits with code 2 |
+| Cloud session | `task show`, `task answer`, `task new` — REST, no project (`docs/cloud-sessions.md`); others — code 2 |
 
 Codes: `0` — everything per the canon (for `fix` — and no steps left), `1` —
 there are ❌, steps or errors, `2` — a call or access error, or a cloud session.

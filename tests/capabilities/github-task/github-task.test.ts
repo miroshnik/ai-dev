@@ -6,7 +6,7 @@ import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bu
 import { descSize } from "../../../skills/est/scripts/est.ts";
 import { main, realRun } from "../../../skills/github/scripts/github.ts";
 import type { Io } from "../../../skills/github/scripts/github.ts";
-import { asOrg, epicInProgress, FakeGitHub } from "../../lib/fake-github.ts";
+import { asOrg, CLOUD_SIGNATURE, epicInProgress, FakeGitHub } from "../../lib/fake-github.ts";
 import type { Recording } from "../../lib/fake-github.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
 import { githubOrigin, gitRepo, tmpDir, writeTree } from "../../lib/spec.ts";
@@ -1247,6 +1247,22 @@ describe("task show печатает задачу одним выводом", ()
     expect(lines).toContain("Questions: none");
   });
 
+  // #603: рекомендация вопроса 2 #598 называла «✅ авто» — task queue и task show сочли вопрос отвеченным
+  it("вопрос с ✅ внутри текста — открытый: отвеченным его делает ✅ в начале ответа — после номера, после вопроса или в начале строки пункта", () => {
+    const f = new FakeGitHub(REC);
+    f.issue(47).body = [
+      "## Вопросы",
+      "",
+      "1. Ответ — скриптом или руками (✅ авто, метка вопросов)? **Рекомендация:** скриптом — он ставит «✅ авто» и `✅ auto` сам.",
+      "2. ✅ Кодировка? **Ответ:** UTF-8.",
+      "3. Разделитель? ✅ авто: запятая.",
+      "4. Порог тишины?",
+      "   ✅ авто: 15 мин.",
+      "5. Песочница — ✅ auto: проверено.",
+    ].join("\n");
+    expect(task(f, ["show", "47"]).out.split("\n")).toContain('Questions: open 1; answered 2, 3, 4, 5 — task answer 47 <k> "<answer>" [--auto]');
+  });
+
   it("PR у задачи нет — «PR: none»; задачи нет — ошибка, код 2", () => {
     const f = new FakeGitHub(REC);
     expect(task(f, ["show", "49"]).out.split("\n")).toContain("PR: none");
@@ -1312,6 +1328,138 @@ describe("task answer ставит ответ у вопроса задачи", (
     it("вопроса с таким номером нет — ошибка называет номера вопросов", () => refused(["9", "TSV"], "#47: no question 9 in «## Вопросы»; questions: 1, 2, 3"));
     it("раздела вопросов нет", () => refused(["1", "TSV"], "#47: no «## Вопросы» section with numbered questions", "Что сделать."));
     it("ответ пустой", () => refused(["2"], "task answer: expected the answer text after the question number"));
+  });
+});
+
+/**
+ * Облачной сессии (claude.ai/code) прокси закрывает GraphQL, поиск и Projects v2 — остаётся REST `repos/<репозиторий>/…`.
+ * Скрипт отказывал целиком, и в облачных сессиях #559 и #598 ответ на вопрос и новую задачу делали руками: формат
+ * (✅ авто, метка вопросов, подзадача эпика) держался на внимательности агента (#603). Где REST хватает — он, чего нет
+ * (поля проекта, оценка) — строка для локальной сессии.
+ */
+describe("Облачная сессия: task show, task answer и task new — через REST репозитория", () => {
+  const CLOUD: Partial<Io> = { env: { CLAUDE_CODE_REMOTE: "true" } };
+  const cloud = (rec = REC) => Object.assign(new FakeGitHub(rec), { cloud: true });
+  const writes = (f: FakeGitHub, method: string) => f.rest.filter((x) => x.method === method);
+
+  it("облачная сессия: `task show` — задача, эпик с вопросами, подзадачи, блокеры и PR с чеками через REST репозитория, без полей проекта", () => {
+    const f = cloud();
+    const BODY = "Что сделать.\n\n## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. Кодировка?\n";
+    f.issue(47).body = BODY;
+    f.issue(45).body = "Цель эпика.\n\n## Вопросы\n\n1. Сроки?\n2. ✅ Владелец? **Ответ:** я.\n";
+    f.blockedBy[47] = [49, 46];
+    // ветка облака — не по канону: PR находится по «Closes #47» в теле
+    f.prs[80] = { files: [], closes: [47], head: "claude/export-k2", base: "main", model: null, checks: { tests: "SUCCESS", e2e: "IN_PROGRESS", lint: ["SUCCESS", "FAILURE"] } };
+    f.prs[81] = { files: [], closes: [49], head: "feat/49-cloud", base: "main", model: null };
+    const r = task(f, ["show", "47"], REPO, CLOUD);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")).toEqual([
+      "#47 GitHub · Задача одной командой — github task — https://github.com/miroshnik/elves/issues/47",
+      "no project in the cloud (docs/cloud-sessions.md)",
+      "Epic #45 «GitHub · Скилл github: проект и задачи по канону одной командой» — open questions: 1, other open tasks: 0",
+      "- question 1. Сроки?",
+      "Blocked by: #49 «Стандарт · облачная сессия — скрипты скиллов с Projects v2 выходят с объяснением»",
+      "PR #80 open — checks: 1 ✅, 1 ⏳ (e2e), 1 ❌ (lint)",
+      'Questions: open 2; answered 1 — task answer 47 <k> "<answer>" [--auto]',
+      "",
+      ...BODY.trimEnd().split("\n"),
+    ]);
+    expect(f.rest).toEqual([]);
+    // эпик — его открытые подзадачи
+    expect(task(f, ["show", "45"], REPO, CLOUD).out.split("\n").slice(1, 4)).toEqual(["Эпик · no project in the cloud (docs/cloud-sessions.md)", "Subtasks: open 1 of 3", "- task #47 «GitHub · Задача одной командой — github task»"]);
+  });
+
+  it("облачная сессия: `task answer` ставит ✅ и ответ через REST, подпись прокси в конце описания в последний вопрос не попадает", () => {
+    const f = cloud();
+    const BODY = `Что сделать.\n\n## Вопросы\n\n1. Кодировка?\n2. Разделитель?\n\n${CLOUD_SIGNATURE}`;
+    f.issue(47).body = BODY;
+    const r = task(f, ["answer", "47", "2", "запятая", "--auto"], REPO, CLOUD);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    const want = BODY.replace("2. Разделитель?", "2. ✅ авто Разделитель? **Ответ:** запятая");
+    expect(writes(f, "PATCH")).toEqual([{ method: "PATCH", route: "repos/miroshnik/elves/issues/47", payload: { body: want } }]);
+    // прокси не дописал вторую подпись: она уже в конце
+    expect(f.issue(47).body).toBe(want);
+    expect(r.out.split("\n")).toEqual(["+ #47: question 2 — ✅ and the answer in the description", "○ #47: open questions left: 1"]);
+  });
+
+  it("облачная сессия: ответ на последний открытый вопрос снимает метку вопросов через REST", () => {
+    const f = cloud();
+    f.issue(42).body = "## Вопросы\n\n1. ✅ Формат? **Ответ:** CSV.\n2. Кодировка?\n";
+    const r = task(f, ["answer", "42", "2", "UTF-8."], REPO, CLOUD);
+    expect(r.code).toBe(0);
+    expect(writes(f, "DELETE")).toEqual([{ method: "DELETE", route: `repos/miroshnik/elves/issues/42/labels/${encodeURIComponent("вопросы")}`, payload: undefined }]);
+    expect(f.issue(42).labels.nodes).toEqual([]);
+    expect(r.out.split("\n").at(-1)).toBe("+ #42: label «вопросы» removed — no open questions left");
+    expect(f.mutations).toEqual([]);
+  });
+
+  it("облачная сессия: `task new` заводит подзадачу эпика через REST — sub-issue, blocked by, метки решений и вопросов; Status и оценку называет строкой для локальной сессии", () => {
+    const f = cloud();
+    Object.assign(f.tree, { capabilities: ["billing"] });
+    const questions = f.label("вопросы", "FBCA04", "Есть открытые вопросы в разделе «## Вопросы»");
+    const calls: string[][] = [];
+    const run = (cmd: string, args: string[]) => (calls.push([cmd, ...args]), { status: 0, stdout: "", stderr: "" });
+    const body = "Что сделать.\n\n## Вопросы\n\n1. Формат?\n";
+    const r = task(f, ["new", "--branch-type", "feat", "--title", "Экспорт", "--body", body, "--epic", "45", "--blocked-by", "49,46", "--labels", "billing"], REPO, { ...CLOUD, run });
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    expect(writes(f, "POST")).toEqual([
+      { method: "POST", route: "repos/miroshnik/elves/labels", payload: { name: "billing", color: CAP, description: "Решение: tests/capabilities/billing" } },
+      { method: "POST", route: "repos/miroshnik/elves/issues", payload: { title: "GitHub · Экспорт", body, labels: ["billing", "вопросы"] } },
+      { method: "POST", route: "repos/miroshnik/elves/issues/45/sub_issues", payload: { sub_issue_id: 100561 } },
+      { method: "POST", route: "repos/miroshnik/elves/issues/561/dependencies/blocked_by", payload: { issue_id: 100049 } },
+      { method: "POST", route: "repos/miroshnik/elves/issues/45/labels", payload: { labels: ["billing"] } },
+    ]);
+    expect(f.issue(561).parent).toEqual({ id: f.issue(45).id, number: 45 });
+    expect(f.blockedBy[561]).toEqual([49]);
+    expect(issueLabels(f, 561)).toEqual(["billing", questions.name]);
+    expect(f.mutations).toEqual([]);
+    // est в облаке оценку не считает — её команда в строке для локальной сессии
+    expect(calls).toEqual([]);
+    expect(r.out.split("\n")).toEqual([
+      "Created #561 GitHub · Экспорт — https://github.com/miroshnik/elves/issues/561",
+      "+ created label «billing»",
+      "+ labels: billing",
+      "+ label «вопросы» — open questions in the description: 1",
+      "+ subtask of epic #45",
+      "+ blocked by #49",
+      "+ #46 is closed — doesn't block, skipped",
+      "+ epic #45: billing",
+      'Next: the cloud has no GitHub Projects (docs/cloud-sessions.md) — a local session: github task status 561 "Бэклог" (the project, Status); est estimate 561 --type feat --write («Оценка, ч»).',
+      "Next: «Оценка, ч» of epic #45 — recompute as the sum of its subtasks' estimates.",
+    ]);
+  });
+
+  it("облачная сессия: `task new` в организации — тип issue по имени, Priority — строкой для локальной сессии", () => {
+    const f = cloud(asOrg(REC));
+    const r = task(f, ["new", "--branch-type", "fix", "--title", "Падает экспорт", "--type", "Баг", "--priority", "High"], ORG, CLOUD);
+    expect(r.err).toBe("");
+    expect(writes(f, "POST")).toEqual([{ method: "POST", route: "repos/acme/elves/issues", payload: { title: "Падает экспорт", type: "Баг", body: "## Сценарии\n\n## Вопросы\n" } }]);
+    expect(r.out).toContain("+ type «Баг»");
+    expect(r.out).toContain("; Priority «High» — on the issue page.");
+    // чужое значение Priority — ошибка до создания
+    expect(task(f, ["new", "--branch-type", "fix", "--title", "Падает импорт", "--priority", "P1"], ORG, CLOUD).err).toContain("--priority: Urgent, High, Medium, Low");
+    expect(writes(f, "POST")).toHaveLength(1);
+  });
+
+  it("облачная сессия: дубль `task new` находит листингом открытых задач — поиск GitHub в облаке закрыт", () => {
+    const f = cloud();
+    const r = task(f, ["new", "--branch-type", "feat", "--title", f.issue(49).title], REPO, CLOUD);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("an open task with this title already exists: #49");
+    expect(f.rest).toEqual([]);
+  });
+
+  it("облачная сессия: остальные команды отказывают с объяснением и называют команды с REST-путём", () => {
+    for (const args of [["status", "49", "В работе"], ["queue"], ["drop", "49"]]) {
+      const f = cloud();
+      const r = task(f, args, REPO, CLOUD);
+      expect(r.code).toBe(2);
+      expect(r.err).toBe(`cloud session: GitHub GraphQL and Projects are unavailable to it (403, docs/cloud-sessions.md) — task ${args[0]} runs in a local session; in the cloud — task show, task answer, task new over the repository's REST`);
+      expect(f.rest).toEqual([]);
+    }
   });
 });
 
