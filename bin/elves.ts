@@ -1905,6 +1905,38 @@ function target(global: boolean) {
   return { home, root, installed };
 }
 
+/** What a cloud environment's setup script adds (docs/cloud-sessions.md): Bun not older than the project's, zsh. */
+const CLOUD_BUN = "npm i -g bun@latest";
+// the image has its own /etc/zsh/zshrc: without --force-confold dpkg asks about it and fails without a terminal
+const CLOUD_ZSH = "DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh";
+
+/** a < b for versions `1.4.2`: numeric parts, a pre-release suffix aside. */
+function olderVersion(a: string, b: string) {
+  const [x, y] = [a, b].map((v) => (/^\d+(?:\.\d+)*/.exec(v)?.[0] ?? "").split(".").map(Number));
+  for (let i = 0; i < Math.max(x!.length, y!.length); i++) if ((x![i] ?? 0) !== (y![i] ?? 0)) return (x![i] ?? 0) < (y![i] ?? 0);
+  return false;
+}
+
+/**
+ * A Claude Code cloud session's environment (#598): the image's Bun lags behind the project's `packageManager` (1.4.2
+ * without the `bun check` of 1.4.3: typecheck and tests are red), an Elves clone's tests need zsh
+ * (tests/capabilities/agent-shell) the image doesn't have. The fix is the environment's setup script — the owner's
+ * step; the line names an environment not fixed yet, with the command the session meanwhile runs itself. Doesn't
+ * change the check's code — the environment isn't the flow falling behind.
+ */
+function cloudLines(root: string): string[] {
+  if (!remote()) return [];
+  const pm = packageManager(root);
+  const want = pm.name === "bun" ? pm.version : null;
+  const have = process.versions.bun;
+  const missing: string[] = [];
+  const fix: string[] = [];
+  if (want && have && olderVersion(have, want)) missing.push(`Bun ${have} is older than packageManager bun@${want}`), fix.push(CLOUD_BUN);
+  if (isElvesClone(root) && !onPath("zsh")) missing.push("no zsh for tests/capabilities/agent-shell"), fix.push(CLOUD_ZSH);
+  if (!missing.length) return [];
+  return [`  cloud environment: ${missing.join("; ")} — the owner adds it to the environment's setup script (docs/cloud-sessions.md), the session meanwhile runs it itself: ${fix.join(" && ")}`];
+}
+
 /**
  * Whether the install on the machine (global) or in the project is behind. This package (SRC, the release —
  * `toRelease`) checks a copy on the machine and a project with a dry-run install, a `--link` clone — against
@@ -1915,7 +1947,7 @@ function check(global: boolean): Result {
   const { home, root, installed } = target(global);
   const where = global ? "on the machine" : "in the project";
   // an Elves clone has nothing to compare against, but the session mode is needed in it — as in a project
-  if (!installed && !global && isElvesClone(root)) return { code: 0, text: [`Elves ${where}: not installed — an Elves clone, the canon is at its root`, ...modeLines(root)].join("\n") };
+  if (!installed && !global && isElvesClone(root)) return { code: 0, text: [`Elves ${where}: not installed — an Elves clone, the canon is at its root`, ...cloudLines(root), ...modeLines(root)].join("\n") };
   if (!installed) return { code: 0, text: `Elves ${where}: not installed`, absent: true };
   const clone = global ? linkedClone(home) : null;
   if (clone) return checkLink(home, clone);
@@ -1930,7 +1962,7 @@ function check(global: boolean): Result {
   const compose = global ? { lines: [], violations: false } : composeCheck(root);
   // standards without test:spec — a mismatch update doesn't add either
   const spec = global ? { lines: [], missing: false } : specScript(root);
-  const project = [...warnings, ...compose.lines, ...spec.lines, ...mode];
+  const project = [...warnings, ...compose.lines, ...spec.lines, ...(global ? [] : cloudLines(root)), ...mode];
   const stale = changes.filter((c) => c.op !== "❌" && c.op !== "!");
   const ignored = changes.filter((c) => c.op === "❌");
   if (!stale.length && !ignored.length) return { code: compose.violations || spec.missing ? 1 : 0, compose: compose.violations, spec: spec.missing, text: [`Elves ${where}: up to date (${fresh})`, ...project].join("\n") };

@@ -3478,6 +3478,8 @@ export interface PackageManager {
   berry: boolean;
   /** The manager's own lockfile, otherwise the first one in order; none — null. */
   lockfile: string | null;
+  /** The version `packageManager` declares (`bun@1.4.3` — `1.4.3`); no field or no version — null. */
+  version: string | null;
 }
 
 /**
@@ -3496,12 +3498,12 @@ export function packageManager(dir: string): PackageManager {
   } catch {
     // no package.json or not JSON — no field
   }
-  const declared = /^(bun|pnpm|yarn|npm)@(\d*)/.exec(field);
+  const declared = /^(bun|pnpm|yarn|npm)@((\d*)(?:\.\d+)*)/.exec(field);
   const found = lockfiles.filter(([file]) => has(file));
   const yarnrc = has(".yarnrc.yml");
   const name = (declared?.[1] as PackageManager["name"] | undefined) ?? found[0]?.[1] ?? (yarnrc ? "yarn" : "npm");
-  const berry = name === "yarn" && (declared ? Number(declared[2]) >= 2 : yarnrc);
-  return { name, berry, lockfile: (found.find(([, pm]) => pm === name) ?? found[0])?.[0] ?? null };
+  const berry = name === "yarn" && (declared ? Number(declared[3]) >= 2 : yarnrc);
+  return { name, berry, lockfile: (found.find(([, pm]) => pm === name) ?? found[0])?.[0] ?? null, version: declared?.[2] || null };
 }
 
 /**
