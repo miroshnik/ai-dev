@@ -2208,6 +2208,7 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
     writeFileSync(path.join(path.dirname(file), ".gitignore"), "*\n");
     writeFileSync(file, `bun --no-env-file ${import.meta.path} task queue ${args ? `${args} ` : ""}--repo ${slug}\n`);
   } else io.out("○ session not recognized (no CLAUDE_CODE_SESSION_ID) — not marked as a dispatcher: task status in the executors would pin their tasks");
+  appWorktreeWarning(io);
   // the executor the dispatcher continues with SendMessage — an answered question, a restart — has no lock (#533)
   const executors = handed.flatMap((h) => (h.worktree === null ? [] : [{ number: h.number, worktree: realPath(h.worktree) }]));
   pruneAgentWorktrees(io, slug, (dir) => executors.some((h) => h.worktree === realPath(dir) && isOpen(h.number)));
@@ -2232,6 +2233,25 @@ export function cmdTaskQueue(io: Io, slug: string, o: QueueFilter): number {
 /** A Claude Code agent's worktree (`isolation: "worktree"`): `<checkout>/.claude/worktrees/agent-<id>`, branch `worktree-agent-<id>`. */
 const AGENT_WORKTREE = /[\\/]\.claude[\\/]worktrees[\\/]agent-[^\\/]+$/;
 const AGENT_BRANCH = /^worktree-agent-/;
+/** A session's worktree of the app: `<checkout>/.claude/worktrees/<name>`, not an agent's. */
+const APP_WORKTREE = /[\\/]\.claude[\\/]worktrees[\\/](?!agent-)[^\\/]+$/;
+
+/**
+ * The app starts a cloud session from the branch in the starting session's record (`get_session` → `branch`), not from
+ * git (#588): a session from the app's worktree has its `claude/<slug>-<hash>` there, never pushed — the clone fails, and
+ * a detached checkout doesn't help, the record keeps the branch; a session in the project folder has none — `main`. The
+ * dispatcher gets a `!` line, the queue still goes: subagent executors branch from origin/main in their own worktrees.
+ */
+function appWorktreeWarning(io: Io): void {
+  const top = (io.run ?? realRun)("git", ["rev-parse", "--show-toplevel"], io.cwd).stdout.trim();
+  if (!APP_WORKTREE.test(top)) return;
+  const project = top.replace(/[\\/]\.claude[\\/]worktrees[\\/][^\\/]+$/, "");
+  io.out(
+    `! session in an app worktree ${top}: the app starts its cloud sessions from the branch in the session's record, not from main — ` +
+      `cloud executors from it fail with «The requested branch or commit was not found»; a dispatcher with cloud executors — ` +
+      `a session in the project folder ${project} without a worktree; subagent executors aren't affected`,
+  );
+}
 
 interface Worktree {
   path: string;

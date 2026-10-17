@@ -3107,6 +3107,55 @@ describe("task queue не выдаёт задачу второму исполн�
 });
 
 /**
+ * Облачную сессию приложение стартует с ветки из записи сессии, которая её запускает (`get_session` → `branch`), а не из
+ * git (#588): у сессии из worktree приложения там её ветка `claude/<slug>-<hash>`, не запушенная, — клонирование падает
+ * на «The requested branch or commit was not found», и снять ветку с checkout не помогает: запись её помнит. У сессии в
+ * папке проекта ветки в записи нет — её облачные сессии стартуют с `main`.
+ */
+describe("task queue в worktree приложения: облачные исполнители из него не стартуют", () => {
+  /** Чекаут проекта на main; worktree сессий приложения и агентов — в его `.claude/worktrees`. */
+  function project() {
+    const c = checkout("fix/49-x");
+    temp.push(c.cleanup);
+    // путь — как его называет git: без симлинков временного каталога (/var → /private/var на macOS)
+    const work = realpathSync(c.work);
+    git(work, "switch", "-q", "main");
+    const add = (name: string, opts: string[]) => {
+      const dir = path.join(work, ".claude/worktrees", name);
+      git(work, "worktree", "add", "-q", ...opts, dir, "origin/main");
+      return dir;
+    };
+    /** Строки очереди о worktree приложения, позванной из каталога `cwd`. */
+    const warned = (cwd: string) =>
+      task(new FakeGitHub(REC), ["queue", "--epic", "45"], REPO, { env: { ...inSession(scratch()).env, CLAUDE_CONFIG_DIR: scratch() }, run: noEst, cwd })
+        .out.split("\n")
+        .filter((l) => l.includes("app worktree"));
+    return { work, add, warned };
+  }
+
+  it("task queue в сессии из worktree приложения печатает строку «!»: облачные исполнители из неё не стартуют — диспетчер запустить в папке проекта без worktree", () => {
+    const p = project();
+    const session = p.add("bold-raman-12428f", ["-b", "claude/bold-raman-12428f"]);
+    // ветку сняли, как после task close, — запись сессии её помнит
+    const detached = p.add("calm-turing-0a1b2c", ["--detach"]);
+    for (const dir of [session, detached])
+      expect(p.warned(path.join(dir, ".agents"))).toEqual([
+        `! session in an app worktree ${dir}: the app starts its cloud sessions from the branch in the session's record, not from main — ` +
+          `cloud executors from it fail with «The requested branch or commit was not found»; a dispatcher with cloud executors — ` +
+          `a session in the project folder ${p.work} without a worktree; subagent executors aren't affected`,
+      ]);
+  });
+
+  // без перегиба: worktree агента — не сессия приложения, папка проекта — то, что строка велит
+  it("task queue в папке проекта и в worktree агента строки о worktree приложения не печатает", () => {
+    const p = project();
+    const agent = p.add("agent-a1", ["-b", "worktree-agent-a1"]);
+    expect(p.warned(agent)).toEqual([]);
+    expect(p.warned(p.work)).toEqual([]);
+  });
+});
+
+/**
  * Другую задачу сессия отдавала карточкой новой сессии: её запускал владелец кликом, и сессия о ней больше не знала
  * (#546). Канон, скиллы и их скрипты — источник всего, что агент читает и что печатают команды, — её больше не
  * предлагают: только вопрос владельцу, ставить ли задачу в очередь (на новый эпик — запускать ли диспетчера), а «да» —
