@@ -145,22 +145,22 @@ What the agent gets wrong without the details (all of them — `reference.md`,
 
 "Do all tasks of epic #M", "fix all High bugs", a "yes" to «run the
 dispatcher on epic #M?» (`AGENTS.md`, "Session and branch — one task"): any
-session, its own task stays pinned; `task queue` prints ready
-tasks, each with an indented line — its executor's prompt; `--type`,
-`--priority` — only in an organization. In Claude Code: an executor — `Agent` with
+session, its own task stays pinned; one started for it — in the project
+folder, not a worktree: executors (subagents, cloud sessions) start from
+`main`, the app's worktree gets a `!` line. `task queue` prints ready
+tasks, each with an indented line — its executor's prompt. In Claude Code: an executor — `Agent` with
 `isolation: "worktree"` and `run_in_background: true`, the prompt — the
-indented line as is; at most 3 at once (a number in the request replaces it);
+indented line as is; at most 3 at once;
 `=` — a task in work (In progress, an open PR, handed out to an executor of
 this session), not launched again. Before each launch — `get_usage`: the 5-hour limit at 85% and more —
 no new executors, the running ones finish, then `Remaining: N tasks, the
 limit`. After each executor's answer — `task queue` again: it also removes
-finished executors' worktrees (`+`), dirty or unmerged ones stay (`○`) — no
-manual `git worktree remove`. A question — to the
+finished executors' worktrees (`+`), not by hand. A question — to the
 owner in text; the answer — ✅ in the task's questions section and to the same
 executor with `SendMessage`. After the app restarts — each stopped executor
 is continued with `SendMessage` by its id from the app's notification, not a
 new one (`task resume`). Waits for subagents — it answers again. Failed — a
-comment in the task with what stopped, no restart (the owner's restart:
+task comment with what stopped, no restart (the owner's restart:
 `--assignment` refuses while the previous executor lives); on an external
 blocker — *blocked by* on its issue or
 the `external blocker` label with the reason (`reference.md`,

@@ -728,6 +728,15 @@ subagent — `parentAgentId` without its own `worktreePath` in Claude Code's
 subagent metadata of this session and of the sessions with hand-outs
 (`dispatchers/*.tasks`), at any depth; at work — its transcript
 (`agent-<id>.jsonl`) written in the last 15 minutes.
+A session started to dispatch works in the project folder, not a worktree
+(#588): the app starts a cloud session from the branch in the starting
+session's record (`get_session` → `branch`), not from git — a session from
+the app's worktree has its `claude/<slug>-<hash>` there, never pushed, and the
+clone fails with «The requested branch or commit was not found», a detached
+checkout too; a session in the project folder has none — `main`. In the app's
+worktree (`.claude/worktrees/<name>`, not `agent-*`) the queue prints a `!`
+line with the project folder and still goes, code 0: subagent executors
+branch from origin/main in their own worktrees.
 `--epic N` — the epic's open sub-issues,
 otherwise the repository's open tasks (the first 100 of the search);
 `--type`, `--priority` — only in an organization. It marks the session as a

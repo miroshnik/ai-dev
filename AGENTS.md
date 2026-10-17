@@ -121,11 +121,11 @@ done. The session can be closed.` · `All done, but there are questions: …` ·
   regression and a fix for a green PR are the same task. A new epic — the
   question «run the dispatcher on epic #M?», without In progress.
 - **A dispatcher** — "do all tasks of epic #M", "fix all High bugs", a "yes"
-  — any session, its task stays: `github task queue` lists the ready ones
-  with an executor's prompt each and says what's next; an executor is a
-  background subagent in its own worktree, at most 3 at once. An executor's
-  question — to the owner, the answer into the issue and back to it; failed
-  — a comment in the task, no restart.
+  — any session, its task stays; one started for it — in the project folder,
+  not a worktree: executors start from `main`. `github task queue` — ready
+  ones with executors' prompts; an executor — a background subagent in its
+  worktree, at most 3; its question — to the owner, the answer into the
+  issue and back; failed — a task comment, no restart.
 - **The session is named `#<number> <task title>`** (without a task — by
   meaning, no number) as soon as the task is clear (no tool — ask the user):
   `est` links the session to the task by it.
