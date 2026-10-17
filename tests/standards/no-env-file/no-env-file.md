@@ -18,19 +18,24 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 - в документах флоу — `AGENTS.md`, `claude/CLAUDE.md`, `README.md`, `package.json`, `docs/*.md`, `*.md` скиллов —
   `bun <путь>/scripts/<скрипт>.ts`, которую агент копирует как есть;
 - там же — скрипт пакета под `bun`: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI
-  одинаково (#596). `bun` читает bin сам, мимо его шебанга, и без флага подгрузит env-файлы каталога;
+  одинаково (#596). `bun` читает bin сам, мимо его шебанга, и без флага подгрузит env-файлы каталога. На Yarn 2+ — пакет
+  через bunx, `bunx @miroshnik/elves@"$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)" <скрипт>`, и
+  обёртка очереди — его `slot '<команда>'` (#608): bin `.ts` Yarn 2+ запускает Node-ом, мимо шебанга, при любом
+  `nodeLinker`, а с PnP `node_modules` нет;
 - шебанг bin пакета — через `sh`: `#!/bin/sh` и вторая строка `':' //; exec bun --no-env-file "$0" "$@"` — для `sh`
   запуск Bun с флагом, для TypeScript строка-выражение и комментарий. Голый `elves`, `node_modules/.bin/elves`, скрипт
-  `package.json`, `bunx` и обёртка Yarn 2+ `elves slot '<команда>'` идут через него — без env-файлов (#592). Не
+  `package.json` у npm, pnpm, Bun и Yarn 1 и `bunx` — с ним и обёртка Yarn 2+ — идут через него, без env-файлов
+  (#592); Yarn 2+ сам запускает bin мимо шебанга — Node-ом, и bin не запускается вовсе (#608). Не
   `#!/usr/bin/env bun` — Bun подгрузил бы их, и `elves slot '<команда>'` отдал бы ключи команде; не
   `#!/usr/bin/env -S bun --no-env-file` — `env -S` есть не везде (busybox), bin там не запустился бы вовсе;
 - в коде скриптов скиллов и установщика — команда, которую скрипт печатает (`bun ${…}`, `bun .agents/skills/…`), и
   дочерний процесс `bun` (`spawn("bun", […])`, `process.execPath`);
 - там же — скрипт пакета под `bun` в строках кода: подсказка (`migrate with spec-exceptions: …` харнесса), справка
-  скрипта под именем `elves` и обзор `elves --help` (#602). Строка запуска — одна константа `PACKAGE_RUN`
+  скрипта под именем `elves` и обзор `elves --help` (#602). Строка запуска — константы `PACKAGE_RUN` и `PACKAGE_BUNX`
   (`skills/spec/scripts/package-run.ts`) у установщика, харнесса и справки: `bun --no-env-file node_modules/.bin/elves
-  <скрипт>`. Справку агент копирует как есть: форма та же, что в `package.json` и CI, и версия — пакета проекта, а голый
-  `elves` в shell агента — глобальный пакет машины, если он вообще в PATH. Строки — литералы и шаблоны с `${…}`;
+  <скрипт>`, на Yarn 2+ — пакет через bunx (#608): справка — по `packageManager` проекта, подсказка харнесса — под PnP
+  (`process.versions.pnp`). Справку агент копирует как есть: форма та же, что в `package.json` и CI, и версия — пакета
+  проекта, а голый `elves` в shell агента — глобальный пакет машины, если он вообще в PATH. Строки — литералы и шаблоны с `${…}`;
   комментарий и регулярное выражение — не вывод.
 
 Маска разрешения (`Bash(bun *skills/…)`) — не вызов: `*` покрывает и флаг.
@@ -44,9 +49,10 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 ## Вне охвата
 
 `bunx` (`bunx @miroshnik/elves …`, запасной путь `bunx github:miroshnik/elves …`, хук `SessionStart`, джобы CI без
-зависимостей проекта — `bunx @miroshnik/elves@<версия> spec-…`, `ci.md` скилла spec, #559) флаг не принимает — ни
-`bunx --no-env-file`, ни `bun --no-env-file x` (Bun 1.4.3), — но запускает bin его шебангом: env-файлы снимает шебанг
-(#592).
+зависимостей проекта — `bunx @miroshnik/elves@<версия> spec-…`, `ci.md` скилла spec, #559; скрипты и обёртка очереди
+проекта на Yarn 2+, #608) флаг не принимает — ни `bunx --no-env-file`, ни `bun --no-env-file x` (Bun 1.4.3), — но
+запускает bin его шебангом: env-файлы снимает шебанг (#592; из скрипта Yarn 4 ключ `.env.local` до команды не доходит —
+tests/capabilities/install).
 
 `elves slot --for $$` шима очереди `.agents/slot.sh`: `elves` только печатает переменные очереди, а команда идёт в
 shell скрипта, без env-файлов Bun.

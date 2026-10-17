@@ -22,7 +22,7 @@ import locale from "../../github/scripts/locale.ts";
 import type { Names } from "../../github/scripts/locale.ts";
 import type { Model } from "./architecture.ts";
 import knipHints from "./knip-hints.cjs";
-import { PACKAGE_RUN } from "./package-run.ts";
+import { PACKAGE_BUNX, PACKAGE_RUN } from "./package-run.ts";
 import { commentsOf, decisionFolder, EXCEPTIONS_DIR, exceptionFile, stringsOf } from "./speclib.ts";
 
 /**
@@ -202,7 +202,13 @@ export function marksIn(file: string, text: string): Mark[] {
   return out;
 }
 
-const MIGRATE = `migrate with spec-exceptions: ${PACKAGE_RUN} spec-exceptions`;
+/**
+ * The hint's command — the package's script, as in package.json: under Yarn's PnP (`process.versions.pnp`) there is no
+ * `node_modules/.bin/elves` — the package through bunx (#608). The harness doesn't import the github skill's
+ * `packageManager` (tests/standards/skill-imports); on Yarn 2+ with `node_modules` the agent's shell finds the bin by
+ * `PACKAGE_RUN` — `bun` reads it itself.
+ */
+const MIGRATE = `migrate with spec-exceptions: ${process.versions.pnp ? PACKAGE_BUNX : PACKAGE_RUN} spec-exceptions`;
 
 /**
  * Exceptions of a decision folder — the `exceptions/` directory, a file per exception (`<element>.json`:

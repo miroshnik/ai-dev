@@ -22,14 +22,17 @@ interface File {
 // импорт значения `spawn` (не `spawnSync`) с начала строки: пример кода в строке теста — не импорт
 const SPAWN = /^import\s+\{[^}]*\bspawn\b[^}]*\}\s+from\s+["']node:child_process["']/m;
 const DOCKER_INFO = /["']docker["'],\s*\[\s*["']info["']/;
+// процесс corepack: менеджер пакетов по `packageManager` проекта он скачивает из сети
+const COREPACK = /\bspawn(?:Sync)?\(\s*["']corepack["']/;
 
 /**
- * Причина медленного уровня: тесту нужен демон Docker — он пробует его `docker info`, — или живой сервер — скрипт
- * процессом `spawn`, к которому тест ходит `fetch`. Нет причины — null.
+ * Причина медленного уровня: тесту нужен демон Docker — он пробует его `docker info`, — живой сервер — скрипт
+ * процессом `spawn`, к которому тест ходит `fetch`, — или сеть: менеджер пакетов через corepack. Нет причины — null.
  */
 function reason(text: string): string | null {
   if (DOCKER_INFO.test(text)) return "Docker";
   if (SPAWN.test(text) && /\bfetch\(/.test(text)) return "живой сервер";
+  if (COREPACK.test(text)) return "corepack";
   return null;
 }
 
@@ -90,9 +93,9 @@ function ciTestCommands(workflow: string): string[][] {
   ]);
 }
 
-describe("Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба", () => {
+describe("Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба", () => {
   invariant(it, {
-    registry: "тесты Elves, которым нужен Docker или живой сервер",
+    registry: "тесты Elves, которым нужен Docker, живой сервер или corepack",
     items: tests.filter((f) => reason(f.text)),
     name: (f) => `${f.path} (${reason(f.text)}) — в медленном уровне`,
     key: (f) => f.path,
@@ -100,22 +103,22 @@ describe("Локальный test — быстрый уровень: тесты 
       if (!SLOW.test(f.path)) throw new Error(`${f.path}: ${reason(f.text)} — тест медленного уровня, файл — <имя>.slow.test.ts`);
     },
     violator: { name: "быстрый файл с пробой docker info", item: { path: "tests/capabilities/x/x.test.ts", text: `const up = spawnSync("${"docker"}", ["info"]).status === 0;\n` } },
-    includes: ["tests/capabilities/task-env/task-env.slow.test.ts", "tests/capabilities/dashboard/dashboard.slow.test.ts"],
+    includes: ["tests/capabilities/task-env/task-env.slow.test.ts", "tests/capabilities/dashboard/dashboard.slow.test.ts", "tests/capabilities/install/install.slow.test.ts"],
   });
 
   // без причины медленным тест не становится: иначе в test:slow уходило бы просто медленное и красное
   invariant(it, {
     registry: "медленные тесты Elves",
     items: tests.filter((f) => SLOW.test(f.path)),
-    name: (f) => `${f.path} — медленный по причине: Docker или живой сервер`,
+    name: (f) => `${f.path} — медленный по причине: Docker, живой сервер или corepack`,
     key: (f) => f.path,
     check: (f) => {
-      if (!reason(f.text)) throw new Error(`${f.path}: ни Docker, ни живого сервера — тест быстрого уровня, файл — <имя>.test.ts`);
+      if (!reason(f.text)) throw new Error(`${f.path}: ни Docker, ни живого сервера, ни corepack — тест быстрого уровня, файл — <имя>.test.ts`);
     },
-    violator: { name: "медленный файл без Docker и сервера", item: { path: "tests/capabilities/x/x.slow.test.ts", text: 'it("считает", () => expect(1 + 1).toBe(2));\n' } },
+    violator: { name: "медленный файл без Docker, сервера и corepack", item: { path: "tests/capabilities/x/x.slow.test.ts", text: 'it("считает", () => expect(1 + 1).toBe(2));\n' } },
   });
 
-  it("скрипт test не запускает тесты, которым нужен Docker или живой сервер: файлы *.slow.test.ts идут скриптом test:slow", () => {
+  it("скрипт test не запускает тесты, которым нужен Docker, живой сервер или corepack: файлы *.slow.test.ts идут скриптом test:slow", () => {
     expect(sample([["bun", "run", "test"]])).toEqual(["x.test.ts"]);
     expect(sample([["bun", "run", "test:slow"]])).toEqual(["x.slow.test.ts"]);
   });
@@ -141,15 +144,17 @@ describe("Локальный test — быстрый уровень: тесты 
   });
 
   describe("примеры", () => {
-    it("проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер", () => {
+    it("проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер; процесс corepack — corepack", () => {
       expect(reason(`const up = spawnSync("${"docker"}", ["info", "--format", "{{.ServerVersion}}"]).status === 0;\n`)).toBe("Docker");
       expect(reason('import { spawn, spawnSync } from "node:child_process";\nawait fetch(url);\n')).toBe("живой сервер");
+      expect(reason(`const r = spawnSync("${"corepack"}", ["yarn", "install"], { cwd });\n`)).toBe("corepack");
     });
 
-    it("spawnSync с fetch, spawn без fetch, docker compose config без демона — причины нет", () => {
+    it("spawnSync с fetch, spawn без fetch, docker compose config без демона, слово corepack в тексте — причины нет", () => {
       expect(reason('import { spawnSync } from "node:child_process";\nawait fetch(url);\n')).toBeNull();
       expect(reason('import { spawn } from "node:child_process";\nspawn("bun", [script]);\n')).toBeNull();
       expect(reason(`spawnSync("${"docker"}", ["compose", "config"]);\n`)).toBeNull();
+      expect(reason('const NOTE = "Yarn — corepack по packageManager";\n')).toBeNull();
     });
 
     it("CI с одним test без test:slow — медленный уровень не идёт", () => {
