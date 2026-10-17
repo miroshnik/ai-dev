@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { PACKAGE_RUN } from "../../skills/spec/scripts/package-run.ts";
+
 /**
  * Скрипты флоу с точкой входа и запуск их справки в песочнице — для стандарта `tests/standards/cli-help` и тестов,
  * которым нужны команды скриптов (README, язык справки). Не спека.
@@ -44,11 +46,26 @@ function bash(): string {
 
 /**
  * Команды из обзора скрипта: слова после имени в строке синтаксиса до первого аргумента — `  github task close <N>` →
- * `task close`; слово кончается пробелом или концом строки (`spec-doc report.json` — без команды).
+ * `task close`; слово кончается пробелом или концом строки (`spec-doc report.json` — без команды). Скрипт пакета — после
+ * своей строки запуска: `  bun --no-env-file node_modules/.bin/elves spec-doc …` → `spec-doc` (стандарт no-env-file).
  */
 export function commandsOf(name: string, overview: string): string[] {
-  const re = new RegExp(String.raw`^ {2}${escape(name)}((?: [a-z][a-z0-9-]*)+)(?= |$)`, "gm");
+  const re = new RegExp(String.raw`^ {2}${nameIn(name)}((?: [a-z][a-z0-9-]*)+)(?= |$)`, "gm");
   return [...new Set([...overview.matchAll(re)].map((m) => m[1]!.trim()))];
+}
+
+/** Строка запуска скрипта пакета (`PACKAGE_RUN`) кончается именем bin: у него перед именем — ещё и она. */
+const packaged = (name: string) => PACKAGE_RUN.endsWith(`/${name}`);
+const nameIn = (name: string) => (packaged(name) ? `(?:${escape(PACKAGE_RUN.slice(0, -name.length))})?${escape(name)}` : escape(name));
+
+/**
+ * Строка запуска команды — как её называет обзор скрипта: `github task close`; скрипт пакета —
+ * `bun --no-env-file node_modules/.bin/elves spec-doc` (стандарт no-env-file).
+ */
+export function launchOf(name: string, command: string, overview: string): string {
+  const pkg = `${PACKAGE_RUN} ${command}`;
+  if (command && packaged(name) && new RegExp(String.raw`^ {2}${escape(pkg)}(?= |$)`, "m").test(overview)) return pkg;
+  return [name, command].filter(Boolean).join(" ");
 }
 
 export const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

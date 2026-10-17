@@ -558,6 +558,20 @@ export function commentsOf(source: string, file?: string): [number, string][] {
   return out;
 }
 
+/**
+ * The source's strings as written — literals and templates with their `${…}` — `[start, end]`: what the code prints,
+ * without comments and regular expressions; a template inside a template is inside its span.
+ */
+export function stringSpans(source: string, file?: string): [number, number][] {
+  const out: [number, number][] = [];
+  walkAst(parseCode(source, file).program, (n) => {
+    if (n.type !== "StringLiteral" && n.type !== "TemplateLiteral") return;
+    out.push([n.start, n.end]);
+    return false;
+  });
+  return out;
+}
+
 /** The source's strings known without running: literals and templates without substitutions. */
 export function stringsOf(source: string, file?: string): string[] {
   const out: string[] = [];
