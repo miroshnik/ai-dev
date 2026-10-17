@@ -342,6 +342,7 @@ describe("Проект с копией флоу переезжает на тон
         "jobs:",
         "  tests:",
         "    steps:",
+        "      - run: bun install --frozen-lockfile",
         "      - run: bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts --base origin/main >> \"$GITHUB_STEP_SUMMARY\"",
         "      - run: npx knip --reporter json --reporter .agents/skills/spec/scripts/knip-hints.cjs > .knip.json",
         "",
@@ -382,6 +383,92 @@ describe("Проект с копией флоу переезжает на тон
     expect({ unstaged: git(sb.proj, "diff", "--name-only"), untracked: git(sb.proj, "ls-files", "--others", "--exclude-standard") }).toEqual({ unstaged: "", untracked: "" });
     const c = elves(sb, ["check"], { bin: v2.bin });
     expect(c).toMatchObject({ code: 0, stdout: expect.stringContaining("in the project: up to date (v2026.10.16)") });
+  });
+
+  /**
+   * Джобы `spec-publish` и `spec-diff` из `ci.md` прошлых релизов зависимостей проекта не ставят (#597):
+   * `node_modules/.bin/elves` там нет — скрипт копии идёт пакетом версии проекта через bunx, как во фрагментах `ci.md`.
+   * Джоба, где шаг ставит зависимости, — форма `package.json`; где установку не узнать (локальное действие, составное
+   * действие), — форма без зависимостей, она работает и с ними, и строка `!` для правки руками.
+   */
+  const BUNX = `bunx @miroshnik/elves@"$(jq -r '.devDependencies["@miroshnik/elves"]' package.json)"`;
+  /** update проекта с копией и workflow из строк; шаги run джоб workflow после переезда. */
+  function moveCi(workflow: string[], files: Record<string, string> = {}) {
+    copyInstall(sb.proj);
+    writeTree(sb.proj, { ".github/workflows/ci.yml": workflow.join("\n") + "\n", ...files });
+    gitRepo(sb.proj, { init: false }).commit({}, "chore: копия флоу");
+    const u = elves(sb, ["update"]);
+    const { jobs } = Bun.YAML.parse(read(path.join(sb.proj, ".github/workflows/ci.yml"))) as { jobs: Record<string, { steps: { run?: string }[] }> };
+    return { u, runs: Object.fromEntries(Object.entries(jobs).map(([id, job]) => [id, job.steps.flatMap((s) => s.run ?? [])])) };
+  }
+
+  it("update проекта с копией: скрипт копии в джобе без установки зависимостей — пакет версии проекта через bunx", () => {
+    const { u, runs } = moveCi([
+      "jobs:",
+      "  spec-publish:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "      - uses: oven-sh/setup-bun@v2",
+      '      - run: bun --no-env-file .agents/skills/spec/scripts/spec-publish.ts --source "$MERGE_SHA"',
+      "  spec-diff:",
+      "    steps:",
+      "      - run: |",
+      '          bun .agents/skills/spec/scripts/spec-diff.ts --base "origin/${{ github.base_ref }}" --full >> "$GITHUB_STEP_SUMMARY"',
+    ]);
+    expect(u.code).toBe(0);
+    expect(runs).toEqual({
+      "spec-publish": [`${BUNX} spec-publish --source "$MERGE_SHA"`],
+      "spec-diff": [`${BUNX} spec-diff --base "origin/\${{ github.base_ref }}" --full >> "$GITHUB_STEP_SUMMARY"\n`],
+    });
+    expect(u.stderr).not.toContain("ci.yml");
+  });
+
+  it("update проекта с копией: скрипт копии в джобе с установкой зависимостей — bun --no-env-file node_modules/.bin/elves", () => {
+    const { u, runs } = moveCi([
+      "jobs:",
+      "  spec:",
+      "    steps:",
+      "      - run: bun install --frozen-lockfile",
+      "      - run: bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts --base origin/main",
+      "  docs:",
+      "    steps:",
+      "      - run: |",
+      "          npm ci",
+      "          bun .agents/skills/spec/scripts/spec-doc.ts .spec-report.xml",
+      "  publish:",
+      "    steps:",
+      "      - run: npm i -g wrangler",
+      "      - run: bun .agents/skills/spec/scripts/spec-publish.ts",
+    ]);
+    expect(u.code).toBe(0);
+    expect(runs).toEqual({
+      spec: ["bun install --frozen-lockfile", "bun --no-env-file node_modules/.bin/elves spec-diff --base origin/main"],
+      docs: ["npm ci\nbun --no-env-file node_modules/.bin/elves spec-doc .spec-report.xml\n"],
+      // глобальная установка зависимостей проекта не ставит
+      publish: ["npm i -g wrangler", `${BUNX} spec-publish`],
+    });
+    expect(u.stderr).not.toContain("ci.yml");
+  });
+
+  it("джоба, где установку зависимостей не узнать, — строка ! с файлом и джобой для правки руками", () => {
+    const action = ".github/actions/spec/action.yml";
+    const { u, runs } = moveCi(
+      [
+        "jobs:",
+        "  spec:",
+        "    steps:",
+        "      - uses: ./.github/actions/setup",
+        "      - run: bun .agents/skills/spec/scripts/spec-diff.ts --base origin/main",
+      ],
+      { [action]: ["runs:", "  using: composite", "  steps:", "    - run: bun .agents/skills/spec/scripts/spec-doc.ts", "      shell: bash", ""].join("\n") },
+    );
+    expect(u.code).toBe(0);
+    expect(runs).toEqual({ spec: [`${BUNX} spec-diff --base origin/main`] });
+    expect(read(path.join(sb.proj, action))).toContain(`    - run: ${BUNX} spec-doc\n`);
+    const unknown = "— whether the job installs the project's dependencies is unknown";
+    expect(u.stderr).toContain(`!! .github/workflows/ci.yml, job spec ${unknown}`);
+    expect(u.stderr).toContain(`!! ${action} ${unknown}`);
   });
 
   /** Копия до списка скиллов в манифесте: свои скиллы флоу узнаёт по скиллам Elves. */
