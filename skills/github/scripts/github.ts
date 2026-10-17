@@ -2790,8 +2790,8 @@ function taskBranchesHere(io: Io, slug: string, number: number): string[] {
  * owner's "yes" — unrecorded, its "In progress" would be refused by the session's pin or would pin the session to it.
  * A session pinned to this very task records nothing: the task is its own. A restart while the previous executor or its
  * subagent is alive (`livePredecessors`, #565) — no assignment and no hand-out: the `!` lines and the answer that
- * makes the dispatcher wait, code 1. `cloud` — the brief of a cloud executor (#609), printed by the dispatcher: whole, the
- * cloud refuses the skill's scripts; `#` only at its task (`est` links a cloud session by the only `#N` of its first
+ * makes the dispatcher wait, code 1. `cloud` — the brief of a cloud executor (#609), printed by the dispatcher: whole, `task
+ * queue` refuses in the cloud; `#` only at its task (`est` links a cloud session by the only `#N` of its first
  * prompt — docs/cloud-sessions.md, "The brief"); no restart line — the cloud assigns its own branch. A cloud session
  * can't message a local one, so `Next:` gives the dispatcher the wait for the task's closing and the local close.
  */

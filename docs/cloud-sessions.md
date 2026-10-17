@@ -102,8 +102,8 @@ names only its task with `#`, in the background too; the epic, other tasks and
 PRs — a number without `#` ("epic 40", "tasks 41 and 43") or a title. The
 executor prompt of `github task queue` has `(epic #M)`: fine for a subagent,
 whose assignment `est` reads by the word "Task"; a cloud executor's brief is
-`github task queue --assignment <N> --cloud` — whole (the cloud refuses the
-skill's scripts), the epic and numbers in the title without `#`. Two `#N` —
+`github task queue --assignment <N> --cloud` — whole (`task queue` refuses
+in the cloud), the epic and numbers in the title without `#`. Two `#N` —
 `est fact <N>` in the cloud prints `Actual unavailable (cloud)` though the
 transcript is in the container.
 
