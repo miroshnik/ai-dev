@@ -22,8 +22,9 @@ section at the end). The skill's scripts are the project's package
 next to the project's Node in `spec`, instead of it in `spec-publish` and
 `spec-diff`. A job with the project's dependencies calls them
 `bun --no-env-file node_modules/.bin/elves <script>` — a step doesn't see
-`node_modules/.bin`; `spec-publish` and `spec-diff` don't install the
-project's dependencies — they take the package alone at the project's version,
+`node_modules/.bin` (on Yarn 2+ — the `bunx` form below in every job: PnP
+has no `node_modules`, and Yarn runs the `.ts` bin by Node); `spec-publish`
+and `spec-diff` don't install the project's dependencies — they take the package alone at the project's version,
 `bunx @miroshnik/elves@<version>`: the job with the write token runs no
 install of the project's packages. `spec-diff` is its own light job after
 `spec`: git history, Bun and the merged reports (harness tests are visible only in the
