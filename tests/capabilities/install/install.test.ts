@@ -3,6 +3,7 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readF
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
+import { PACKAGE_BUNX } from "../../../skills/spec/scripts/package-run.ts";
 import { BIN, elves, elvesPackage, bunxPackage, loadedAtStart, npmPackage, REPO, sandbox, snapshot, type ElvesPackage, type Sandbox } from "../../lib/elves.ts";
 import { npmRegistry, type Registry } from "../../lib/registry.ts";
 import { tmpDir, writeTree } from "../../lib/spec.ts";
@@ -484,16 +485,25 @@ describe("Проверки проекта идут очередью машины
 
   /**
    * Yarn 2+ выполняет скрипты своим shell (`@yarnpkg/shell`): в нём нет `.`, `eval` и `export`, и подключить шим нечем.
-   * Там команда остаётся строкой у `elves slot` — knip её не видит, но проверки идут очередью.
+   * Там команда остаётся строкой у slot пакета — knip её не видит, но проверки идут очередью. Пакет — через bunx
+   * (`PACKAGE_BUNX`): bin `.ts` Yarn 2+ запускает Node-ом, мимо шебанга, а с PnP `node_modules` нет (#608); обёртка
+   * до #608 — `elves slot` — переписывается. Вживую, настоящим Yarn, — install.slow.test.ts.
    */
-  it("в проекте на Yarn 2+ команда остаётся строкой у elves slot: shell Yarn не подключает шим", () => {
-    const yarnSlot = (cmd: string) => `elves slot '${cmd}'`;
+  it("в проекте на Yarn 2+ скрипты пакета — через bunx, команда проверки — строкой у его slot: bin .ts Yarn запускает Node-ом, шим его shell не подключает", () => {
+    const yarnSlot = (cmd: string) => `${PACKAGE_BUNX} slot '${cmd}'`;
     const markers: [Record<string, string>, string?][] = [[{ ".yarnrc.yml": "nodeLinker: node-modules\n" }], [{}, "yarn@4.9.1"]];
     for (const [files, packageManager] of markers) {
       rmSync(path.join(proj, ".yarnrc.yml"), { force: true });
-      writeTree(proj, { ...files, "package.json": JSON.stringify({ packageManager, scripts: { test: "vitest run", lint: slot("eslint ."), typecheck: slotString("tsc") } }) });
+      const copy = "bun .agents/skills/spec/scripts/spec-doc.ts .spec-report.xml";
+      writeTree(proj, { ...files, "package.json": JSON.stringify({ packageManager, scripts: { test: "vitest run", lint: slot("eslint ."), typecheck: slotString("tsc"), "test:e2e": "elves slot 'playwright test'", "spec:doc": copy } }) });
       install();
-      expect(scripts()).toEqual({ test: yarnSlot("vitest run"), lint: yarnSlot("eslint ."), typecheck: yarnSlot("tsc") });
+      expect(scripts()).toEqual({
+        test: yarnSlot("vitest run"),
+        lint: yarnSlot("eslint ."),
+        typecheck: yarnSlot("tsc"),
+        "test:e2e": yarnSlot("playwright test"),
+        "spec:doc": `${PACKAGE_BUNX} spec-doc .spec-report.xml`,
+      });
       expect(elves(sb, ["check"]).code).toBe(0);
     }
     writeTree(proj, { "package.json": JSON.stringify({ packageManager: "yarn@1.22.22", scripts: { test: "vitest run" } }) });

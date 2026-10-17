@@ -451,6 +451,31 @@ describe("Проект с копией флоу переезжает на тон
     expect(u.stderr).not.toContain("ci.yml");
   });
 
+  /**
+   * На Yarn 2+ с PnP `yarn install` не кладёт `node_modules/.bin`, а bin `.ts` Yarn 2+ запускает Node-ом при любом
+   * `nodeLinker` (#608): скрипт копии в любой джобе — пакет через bunx, форма package.json проекта; строки `!` нет —
+   * эта форма верна, ставит джоба зависимости или нет.
+   */
+  it("переезд с копии на Yarn 2+ с PnP — джоба CI с установкой зависимостей запускает скрипт пакета", () => {
+    const { u, runs } = moveCi(
+      [
+        "jobs:",
+        "  spec:",
+        "    steps:",
+        "      - run: yarn install --immutable",
+        "      - run: bun --no-env-file .agents/skills/spec/scripts/spec-diff.ts --base origin/main",
+        "  docs:",
+        "    steps:",
+        "      - uses: ./.github/actions/setup",
+        "      - run: bun .agents/skills/spec/scripts/spec-doc.ts .spec-report.xml",
+      ],
+      { "package.json": JSON.stringify({ name: "x", private: true, packageManager: "yarn@4.9.1" }, null, 2) + "\n", ".yarnrc.yml": "nodeLinker: pnp\n" },
+    );
+    expect(u.code).toBe(0);
+    expect(runs).toEqual({ spec: ["yarn install --immutable", `${BUNX} spec-diff --base origin/main`], docs: [`${BUNX} spec-doc .spec-report.xml`] });
+    expect(u.stderr).not.toContain("ci.yml");
+  });
+
   it("джоба, где установку зависимостей не узнать, — строка ! с файлом и джобой для правки руками", () => {
     const action = ".github/actions/spec/action.yml";
     const { u, runs } = moveCi(

@@ -40,8 +40,12 @@ plain command of the script: knip sees its binary as a used dependency, and
 `bun test` gives knip the test files and the `preload` of `bunfig.toml` as
 entries; passed to `slot` as a string, it was hidden, and the project's dead
 code went red from the flow install. Yarn 2+ runs scripts in its own shell,
-without `.`: there the command stays a string of `elves slot`
-(`"test": "elves slot 'vitest run'"`), hidden from knip. Everyone calls the
+without `.`: there the command stays a string of the package's `slot`, hidden
+from knip, and the package goes through bunx at the project's version —
+Yarn 2+ runs a `.ts` bin by Node with any `nodeLinker`, and PnP has no
+`node_modules`:
+`"test": "bunx @miroshnik/elves@\"$(jq -r '.devDependencies[\"@miroshnik/elves\"]' package.json)\" slot 'vitest run'"`
+(`jq` on the machine). Everyone calls the
 scripts — the agent, a human in a terminal, `github pr premerge` — and
 everyone joins one queue. `build` isn't wrapped — the host and Docker run it,
 where the shim or the package may be missing; watch isn't either: it's long and
@@ -64,8 +68,8 @@ for a `package.json` script, and a runner that loads them itself (`bun test`
 — `.env.test`) still does. A script's command doesn't go through `slot.ts`
 at all — it gets the script's environment and the two queue variables:
 `elves slot --for` only prints them. The package's `elves slot '<command>'`
-— the Yarn 2+ wrapper, a direct call from `node_modules/.bin` — goes through
-the bin's shebang: `sh` starts Bun with `--no-env-file`. Not `env = false` in the
+— a direct call from `node_modules/.bin`, the Yarn 2+ wrapper through bunx —
+goes through the bin's shebang: `sh` starts Bun with `--no-env-file`. Not `env = false` in the
 project's `bunfig.toml`:
 it would turn env files off for every `bun` of a Bun project, its own
 `bun test` and `bun run dev` included. The same flag is on every call of a

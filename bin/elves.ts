@@ -81,7 +81,7 @@ import { fileURLToPath } from "node:url";
 
 import { packageManager, specRoots } from "../skills/github/scripts/github.ts";
 import locale from "../skills/github/scripts/locale.ts";
-import { PACKAGE_RUN } from "../skills/spec/scripts/package-run.ts";
+import { PACKAGE_BUNX, PACKAGE_RUN, packageRun } from "../skills/spec/scripts/package-run.ts";
 import { COMPOSE_FILES, formerProxyName, proxyName } from "../skills/task-env/scripts/task-env.ts";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
@@ -195,7 +195,8 @@ The flow of the latest Elves release into the project (the git root or the curre
 ${PACKAGE} of the release in devDependencies of package.json (the project's package manager installs it, the lockfile
 changes too), .agents/elves.json, the machine queue's shim .agents/slot.sh and a block in AGENTS.md linking to the canon
 on the machine; the package.json checks (lint, typecheck, test, test:*) go through the shim, the skills' scripts —
-${PACKAGE_RUN} <script>, without the project's env files. A project with a copy of the flow
+${PACKAGE_RUN} <script>, without the project's env files; on Yarn 2+, which runs the .ts bin by Node, both go through
+the package of the project's version — ${PACKAGE_BUNX} <script>. A project with a copy of the flow
 of an earlier release moves to a thin one: the copy, its symlinks and .gitignore exceptions go, imports and CI paths
 into the copy lead to the package, what else names .agents is listed.
 In a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
@@ -300,11 +301,19 @@ interface Script {
 const loadScript = (cmd: string): Promise<Script> => import(path.join(SRC, SCRIPTS[cmd]!.file));
 
 /**
- * A script's help under the elves name: its synopsis and example lines start with `PACKAGE_RUN <command>` — the agent
- * copies an example as is: the form of package.json and CI and the project's version, while bare `elves` in the agent's
- * shell is the machine's global package, if it's on PATH at all (tests/standards/no-env-file).
+ * The package's script in the current project — the form of its package.json: on Yarn 2+ through bunx (`packageRun`).
+ * The root — by `.git` up from the current directory, without git: help runs no external commands
+ * (tests/standards/cli-help).
  */
-const scriptHelp = async (cmd: string) => (await loadScript(cmd)).HELP.replace(new RegExp(`^( *)${cmd}(?= |$)`, "gm"), `$1${PACKAGE_RUN} ${cmd}`).trimEnd();
+const projectRun = () => packageRun(packageManager(locale.projectRoot(process.cwd())).berry);
+
+/**
+ * A script's help under the elves name: its synopsis and example lines start with the package's script in the project
+ * (`projectRun`: `PACKAGE_RUN <command>`, on Yarn 2+ — `PACKAGE_BUNX <command>`) — the agent copies an example as is:
+ * the form of package.json and CI and the project's version, while bare `elves` in the agent's shell is the machine's
+ * global package, if it's on PATH at all (tests/standards/no-env-file).
+ */
+const scriptHelp = async (cmd: string, run = projectRun()) => (await loadScript(cmd)).HELP.replace(new RegExp(`^( *)${cmd}(?= |$)`, "gm"), `$1${run} ${cmd}`).trimEnd();
 
 /** `elves <script> …`: the script's help or its `main` with the arguments; the exit code is the script's. */
 async function runScript(cmd: string, args: string[]): Promise<number> {
@@ -316,7 +325,8 @@ async function runScript(cmd: string, args: string[]): Promise<number> {
 /** `elves --help`: the synopsis of each command, the scripts' too, and how to run it. */
 async function overview() {
   const synopsis = (h: string) => h.split("\n\n")[0]!.replace(/^/gm, "  ");
-  const scripts = await Promise.all(Object.keys(SCRIPTS).map(scriptHelp));
+  const run = projectRun();
+  const scripts = await Promise.all(Object.keys(SCRIPTS).map((cmd) => scriptHelp(cmd, run)));
   return [
     "elves — the rules and skills of the Elves flow: install, check, update, release, pack; skill scripts at a project's version",
     "",
@@ -324,7 +334,7 @@ async function overview() {
     ...scripts.map(synopsis),
     "",
     "elves <command> --help — the command's details and examples",
-    `Run: ${RUN} <command>; in a project with ${PACKAGE} in devDependencies — ${PACKAGE_RUN} <command>`,
+    `Run: ${RUN} <command>; in a project with ${PACKAGE} in devDependencies — ${run} <command>`,
   ].join("\n");
 }
 
@@ -782,16 +792,18 @@ const SLOT_SHIM_TEXT = [
 const SLOT_WRAPPED = /^\. \.agents\/(?:skills\/slot\/scripts\/)?slot\.sh && ([^]*)$/;
 /**
  * A script wrapped with the command a string argument — the copy's slot.ts by any runtime (node too; with Bun's env
- * files too — without `--no-env-file`), or `elves slot` on Yarn 2+: tools that read package.json scripts (knip) don't
- * see the command.
+ * files too — without `--no-env-file`), or the package's slot on Yarn 2+: `PACKAGE_BUNX slot`, before #608 — `elves
+ * slot`, which Yarn 2+ ran by Node; tools that read package.json scripts (knip) don't see the command.
  */
-const SLOT_STRING = /^(?:(?:node|bun)(?: --no-env-file)? \.agents\/skills\/slot\/scripts\/slot\.ts|elves slot) '((?:[^']|'\\'')*)'$/;
+const SLOT_STRING = new RegExp(String.raw`^(?:(?:node|bun)(?: --no-env-file)? \.agents/skills/slot/scripts/slot\.ts|(?:elves|${locale.escapeRe(PACKAGE_BUNX)}) slot) '((?:[^']|'\\'')*)'$`);
 /** The script's own command, without the slot wrapper of any install. */
 const unslot = (cmd: string) => SLOT_WRAPPED.exec(cmd)?.[1] ?? SLOT_STRING.exec(cmd)?.[1]?.replaceAll("'\\''", "'") ?? cmd;
 /**
  * Yarn 2+ runs package.json scripts in its own shell (`@yarnpkg/shell`) — without `.`, `eval` and `export`, the shim
- * can't be sourced there: the command stays a string argument of `elves slot`, hidden from knip, but in the queue. Yarn
- * 2+ or not — the project's package manager by `packageManager` of the github skill (tests/standards/package-manager).
+ * can't be sourced there: the command stays a string argument of the package's slot, hidden from knip, but in the
+ * queue. The package there — `PACKAGE_BUNX`: Yarn 2+ runs a `.ts` bin by Node, past its shebang, with any `nodeLinker`,
+ * and with PnP there is no `node_modules` (#608). Yarn 2+ or not — the project's package manager by `packageManager` of
+ * the github skill (tests/standards/package-manager).
  */
 const yarnShell = (root: string) => packageManager(root).berry;
 /**
@@ -799,8 +811,8 @@ const yarnShell = (root: string) => packageManager(root).berry;
  * Docker run it, where the shim or the package may be missing; not watch — long-running, it would hold a slot for long.
  */
 const slotted = (name: string) => /^(?:lint|typecheck|test)$|^test:/.test(name) && !name.includes("watch");
-/** A package.json script's command through the machine queue: `. SLOT_SHIM && <command>`, on Yarn 2+ — `elves slot '<command>'`. */
-const slotWrap = (yarn: boolean) => (cmd: string) => (yarn ? `elves slot '${cmd.replaceAll("'", "'\\''")}'` : `. ${SLOT_SHIM} && ${cmd}`);
+/** A package.json script's command through the machine queue: `. SLOT_SHIM && <command>`, on Yarn 2+ — `PACKAGE_BUNX slot '<command>'`. */
+const slotWrap = (yarn: boolean) => (cmd: string) => (yarn ? `${PACKAGE_BUNX} slot '${cmd.replaceAll("'", "'\\''")}'` : `. ${SLOT_SHIM} && ${cmd}`);
 
 /**
  * The shim — the same text in every project: an install of an earlier release (a copy) has none, a stale one is
@@ -828,16 +840,9 @@ const COPY_KNIP_HINTS = /(?:\.\/)?\.agents\/skills\/spec\/scripts\/knip-hints\.c
 const PACKAGE_KNIP_HINTS = `node_modules/${PACKAGE}/skills/spec/scripts/knip-hints.cjs`;
 
 /**
- * The package's script in a CI job that doesn't install the project's dependencies — `node_modules/.bin/elves` isn't
- * there: the package of the project's version through bunx, as in the spec skill's `ci.md` (#597). It works with the
- * dependencies installed too, only fetches the package once more.
- */
-const PACKAGE_BUNX = `bunx ${PACKAGE}@"$(jq -r '.devDependencies["${PACKAGE}"]' package.json)"`;
-
-/**
- * A command that ran the copy's scripts — through the package: `<run> <script>`, `PACKAGE_RUN` by default; a CI job
- * without the project's dependencies — `PACKAGE_BUNX` (`ciFromCopy`). A script that isn't the package's stays —
- * `copyLeftovers` names it.
+ * A command that ran the copy's scripts — through the package: `<run> <script>`, `PACKAGE_RUN` by default; on Yarn 2+
+ * and in a CI job without the project's dependencies — `PACKAGE_BUNX` (`packageRun`, `ciFromCopy`). A script that isn't
+ * the package's stays — `copyLeftovers` names it.
  */
 function fromCopy(text: string, run = PACKAGE_RUN) {
   return text.replace(COPY_SCRIPT, (all, name: string) => (Object.hasOwn(SCRIPTS, name) ? `${run} ${name}` : all)).replace(COPY_KNIP_HINTS, PACKAGE_KNIP_HINTS);
@@ -850,8 +855,8 @@ function fromCopy(text: string, run = PACKAGE_RUN) {
  * knip sees its binary, and `bun test` gives knip the test files and `preload` as entries; the command gets exactly the
  * environment it would without the wrapper, no env files of Bun. A wrapper of a previous install — the copy's slot.sh,
  * the command a string argument of slot.ts, hidden from knip — is rewritten; on Yarn 2+ the string is the wrapper
- * (`yarnShell`). The copy's scripts in any script lead to the package (`fromCopy`). The indentation and the trailing
- * newline stay as they were.
+ * (`yarnShell`). The copy's scripts in any script lead to the package (`fromCopy`), on Yarn 2+ — through bunx
+ * (`packageRun`). The indentation and the trailing newline stay as they were.
  */
 function packageScripts(root: string) {
   const file = path.join(root, "package.json");
@@ -867,6 +872,7 @@ function packageScripts(root: string) {
   if (!scripts || typeof scripts !== "object") return;
   const yarn = yarnShell(root);
   const wrap = slotWrap(yarn);
+  const run = packageRun(yarn);
   const outside: string[] = [];
   const previous: string[] = [];
   const copy: string[] = [];
@@ -874,7 +880,7 @@ function packageScripts(root: string) {
   for (const [name, cmd] of Object.entries(scripts)) {
     if (typeof cmd !== "string") continue;
     const inner = slotted(name) ? unslot(cmd) : cmd;
-    const own = fromCopy(inner);
+    const own = fromCopy(inner, run);
     const want = slotted(name) ? wrap(own) : own;
     if (cmd === want) continue;
     scripts[name] = want;
@@ -888,7 +894,7 @@ function packageScripts(root: string) {
     const notes = [
       outside.length && `checks outside the slot queue: ${outside.join(", ")}`,
       previous.length && `the slot wrapper of a previous install${hidden ? " — knip doesn't see the command" : ""}: ${previous.join(", ")}`,
-      copy.length && `the flow copy's scripts → node_modules/.bin/elves: ${copy.join(", ")}`,
+      copy.length && `the flow copy's scripts → ${yarn ? "the package through bunx" : "node_modules/.bin/elves"}: ${copy.join(", ")}`,
     ];
     return void change("~", file, { note: notes.filter(Boolean).join("; ") });
   }
@@ -897,7 +903,7 @@ function packageScripts(root: string) {
   touch("package.json");
   const wrapped = [...outside, ...previous];
   if (wrapped.length) note(`package.json — checks through the machine queue (slot): ${wrapped.join(", ")}`);
-  if (copy.length) note(`package.json — the flow copy's scripts through the package (${PACKAGE_RUN} <script>): ${copy.join(", ")}`);
+  if (copy.length) note(`package.json — the flow copy's scripts through the package (${run} <script>): ${copy.join(", ")}`);
 }
 
 /**
@@ -1515,9 +1521,10 @@ function jobOfLines(lines: string[]): (string | undefined)[] {
  * project's dependencies — `PACKAGE_RUN`, the form of package.json; one that doesn't (the `spec-publish` and
  * `spec-diff` jobs of earlier `ci.md`) — `PACKAGE_BUNX`. Unknown — a local action, a composite action, a line outside
  * the jobs, not YAML — `PACKAGE_BUNX`, which works either way, and the job in `unknown` for a fix by hand (an empty
- * string — the file itself).
+ * string — the file itself). On Yarn 2+ (`berry`) — `PACKAGE_BUNX` in every job, the form of its package.json: with PnP
+ * `yarn install` puts no `node_modules/.bin` (#608).
  */
-function ciFromCopy(text: string) {
+function ciFromCopy(text: string, berry: boolean) {
   const installs = jobInstalls(text);
   const lines = text.split("\n");
   const jobs = jobOfLines(lines);
@@ -1525,8 +1532,8 @@ function ciFromCopy(text: string) {
   const out = lines.map((line, i) => {
     const job = jobs[i];
     const has = job === undefined ? null : (installs?.get(job) ?? null);
-    const now = fromCopy(line, has ? PACKAGE_RUN : PACKAGE_BUNX);
-    if (has === null && now !== fromCopy(line)) unknown.add(job ?? "");
+    const now = fromCopy(line, has && !berry ? PACKAGE_RUN : PACKAGE_BUNX);
+    if (has === null && !berry && now !== fromCopy(line)) unknown.add(job ?? "");
     return now;
   });
   return { out: out.join("\n"), unknown: [...unknown] };
@@ -1540,15 +1547,17 @@ function ciFromCopy(text: string) {
  */
 function rewriteCopyRefs(root: string) {
   const done: string[] = [];
+  const berry = packageManager(root).berry;
   for (const rel of gitGrep(root, ["-l", "-F", "-e", ".agents/skills/"])) {
     const ci = CI_FILE.test(rel);
     if (!ci && !SOURCE_FILE.test(rel)) continue;
     const file = path.join(root, rel);
     const text = readFileSync(file, "utf8");
-    const { out, unknown } = ci ? ciFromCopy(text) : { out: text.replace(COPY_IMPORT, (_, q: string, mod: string) => `${q}${packageImport(mod)}${q}`), unknown: [] };
+    const { out, unknown } = ci ? ciFromCopy(text, berry) : { out: text.replace(COPY_IMPORT, (_, q: string, mod: string) => `${q}${packageImport(mod)}${q}`), unknown: [] };
     if (out === text) continue;
     if (dry) {
-      change("~", file, { note: ci ? "the flow copy's scripts → the package: node_modules/.bin/elves, a job without dependencies — bunx" : `imports of the flow copy → ${PACKAGE}` });
+      const scripts = berry ? "the package through bunx (Yarn 2+)" : "the package: node_modules/.bin/elves, a job without dependencies — bunx";
+      change("~", file, { note: ci ? `the flow copy's scripts → ${scripts}` : `imports of the flow copy → ${PACKAGE}` });
       continue;
     }
     writeFileSync(file, out);

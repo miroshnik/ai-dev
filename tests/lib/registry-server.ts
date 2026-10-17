@@ -1,8 +1,9 @@
 /**
  * Сервер фейкового реестра npm (tests/lib/registry.ts) — отдельным процессом: тесты зовут установщик и менеджер пакетов
  * синхронно, и сервер в процессе теста ждал бы конца каждого вызова. Отдаёт из каталога `<dir>`: метаданные пакета
- * `@miroshnik/elves` — по файлам `<версия>.tgz` в нём, с адресами tarball'ов на свой порт, и сами tarball'ы. Порт —
- * первой строкой stdout: `PORT <n>`. Не спека.
+ * `@miroshnik/elves` — по файлам `<версия>.tgz` в нём, с адресами tarball'ов на свой порт, и сами tarball'ы; рядом с
+ * tarball'ом `<версия>.json` — package.json версии, как его отдаёт npm в метаданных (`bin` — по нему bunx находит bin).
+ * Порт — первой строкой stdout: `PORT <n>`. Не спека.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -30,7 +31,8 @@ const server = Bun.serve({
             integrity: `sha512-${createHash("sha512").update(data).digest("base64")}`,
             shasum: createHash("sha1").update(data).digest("hex"),
           };
-          return [version, { name: NAME, version, dist }];
+          const manifest = path.join(dir, `${version}.json`);
+          return [version, { ...(existsSync(manifest) ? JSON.parse(readFileSync(manifest, "utf8")) : {}), name: NAME, version, dist }];
         }),
     );
     const latest = Object.keys(versions).sort().at(-1) ?? "";

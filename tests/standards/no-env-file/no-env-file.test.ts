@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { codeOnly, exceptionsIn, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
-import { PACKAGE_RUN } from "../../../skills/spec/scripts/package-run.ts";
+import { PACKAGE_BUNX, PACKAGE_RUN } from "../../../skills/spec/scripts/package-run.ts";
 import { stringSpans } from "../../../skills/spec/scripts/speclib.ts";
 import { SPAWN_TIMEOUT } from "../../lib/spawn.ts";
+import { tmpDir, writeTree } from "../../lib/spec.ts";
 
 setDefaultTimeout(SPAWN_TIMEOUT);
 
@@ -172,6 +173,35 @@ describe("Скрипты флоу под bun не подгружают env-фа�
       return [...synopsis, ...lines(f.text, bare)].map((l) => `${f.file}: ${l}`);
     });
     expect(wrong).toEqual([]);
+  });
+
+  /**
+   * На Yarn 2+ с PnP `node_modules/.bin/elves` нет, а bin `.ts` Yarn 2+ запускает Node-ом при любом `nodeLinker` (#608):
+   * справка в проекте на Yarn 2+ называет форму его package.json — пакет через bunx, по `packageManager` скилла
+   * github. Подсказка харнесса — под PnP: `.pnp.cjs` Yarn ставит рантайму проекта `process.versions.pnp`, а харнесс
+   * `packageManager` не импортирует (tests/standards/skill-imports).
+   */
+  it("справка скрипта пакета elves <скрипт> --help и подсказка харнесса называют форму запуска, которая на Yarn 2+ с PnP находит bin пакета", () => {
+    const { dir, cleanup } = tmpDir();
+    try {
+      const harness = JSON.stringify(path.join(ROOT, "skills/spec/scripts/harness.ts"));
+      writeTree(dir, {
+        "package.json": JSON.stringify({ private: true, packageManager: "yarn@4.9.1" }),
+        "pnp.ts": 'process.versions.pnp = "3";\n',
+        // exceptions.ts прошлого формата — харнесс подсказывает перенос
+        "tests/standards/audit/audit.test.ts": `import { it } from "bun:test";\nimport { invariant } from ${harness};\ninvariant(it, { registry: "r", items: ["a"], key: (x) => x, name: (x) => x, check: () => {}, violator: { name: "v", item: "b" } });\n`,
+        "tests/standards/audit/exceptions.ts": "export default [];\n",
+      });
+      const help = spawnSync(process.execPath, ["--no-env-file", path.join(ROOT, "bin/elves.ts"), "spec-exceptions", "--help"], { cwd: dir, encoding: "utf8" });
+      expect(help.stdout.split("\n")[0]).toBe(`${PACKAGE_BUNX} spec-exceptions [--root DIR]`);
+      const hint = (...preload: string[]) => {
+        const r = spawnSync(process.execPath, ["--no-env-file", "test", ...preload], { cwd: dir, encoding: "utf8" });
+        return /migrate with spec-exceptions: (.+) spec-exceptions$/m.exec(`${r.stdout}${r.stderr}`)?.[1] ?? `${r.stdout}${r.stderr}`;
+      };
+      expect({ pnp: hint("--preload", "./pnp.ts"), node_modules: hint() }).toEqual({ pnp: PACKAGE_BUNX, node_modules: PACKAGE_RUN });
+    } finally {
+      cleanup();
+    }
   });
 
   invariant(it, {
