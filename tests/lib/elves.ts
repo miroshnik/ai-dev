@@ -7,6 +7,7 @@ import { cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { unprivileged } from "./spawn.ts";
 import { gitRepo, tmpDir, writeTree } from "./spec.ts";
 
 export const REPO = fileURLToPath(new URL("../../", import.meta.url));
@@ -57,9 +58,14 @@ export interface Run {
   stderr: string;
 }
 
-/** `bun <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта; input — на stdin. */
-export function elves(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string>; input?: string } = {}): Run {
-  const r = spawnSync(process.execPath, [opts.bin ?? BIN, ...args], { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8", input: opts.input });
+/**
+ * `bun <bin> …args` в песочнице; по умолчанию — установщик этого клона из каталога проекта; input — на stdin;
+ * unprivileged — от непривилегированного пользователя под root (`unprivileged`), песочница — его (`unprivilegedOwns`).
+ */
+export function elves(sb: Sandbox, args: string[], opts: { cwd?: string; bin?: string; env?: Record<string, string>; input?: string; unprivileged?: boolean } = {}): Run {
+  const argv = [opts.bin ?? BIN, ...args];
+  const [cmd, rest] = opts.unprivileged ? unprivileged(process.execPath, argv) : [process.execPath, argv];
+  const r = spawnSync(cmd, rest, { cwd: opts.cwd ?? sb.proj, env: { ...sb.env, ...opts.env }, encoding: "utf8", input: opts.input });
   if (r.error) throw r.error;
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }
