@@ -27,12 +27,13 @@
  * (`agentRules`), skills (`~/.agents/skills/<name>/`, Claude Code — symlinks in `~/.claude/skills`) and the hook. A
  * project is thin (#552): no copy of the flow, the repository holds only `@miroshnik/elves` in devDependencies
  * (PACKAGE: the project's version of the harness and the skills' scripts for its tests and CI), the manifest, the
- * machine queue's shim `.agents/slot.sh` and a block in the project's `AGENTS.md` linking to the canon on the machine;
- * updating the project is bumping the package version — a few lines in the branch of the current task. A project with a
- * copy of an earlier release loads the canon twice until it moves — the hook names it (`twiceLines`); `install` and
- * `update` move it to a thin one: the copy, its symlinks and `.gitignore` exceptions go (`removeCopy`), the imports and
- * CI paths into the copy lead to the package (`rewriteCopyRefs`), the rest that names `.agents` is listed
- * (`copyLeftovers`).
+ * machine queue's shim `.agents/slot.sh`, a block in the project's `AGENTS.md` linking to the canon on the machine and
+ * the cloud session's SessionStart hook in `.claude/settings.json` (`cloudHook`: the cloud doesn't read the machine's
+ * settings, #610); updating the project is bumping the package version — a few lines in the branch of the current task.
+ * A project with a copy of an earlier release loads the canon twice until it moves — the hook names it (`twiceLines`);
+ * `install` and `update` move it to a thin one: the copy, its symlinks and `.gitignore` exceptions go (`removeCopy`),
+ * the imports and CI paths into the copy lead to the package (`rewriteCopyRefs`), the rest that names `.agents` is
+ * listed (`copyLeftovers`).
  * `.agents/elves.json` — on the machine the Elves SHA it was installed from, the list of installed skills (by it a
  * reinstall removes skills Elves no longer has and leaves others' alone), for a machine with `--link` — the clone path;
  * in a project — only `auto`: whether the agent runs a task entirely by itself — answers to questions by
@@ -163,8 +164,16 @@ const BLOCK = [
  * context. The timeout keeps the network from holding up the start; an error doesn't block the session — the "First
  * step of a session" rule in AGENTS.md is the safety net.
  */
-const HOOK_COMMAND = `bunx --silent github:${SOURCE} check --hook 2>&1 || echo "elves check unavailable (exit $?): work by the current flow and say so"`;
-const HOOK = { matcher: "startup|resume|clear", hooks: [{ type: "command", command: HOOK_COMMAND, timeout: 60 }] };
+const CHECK_FALLBACK = 'echo "elves check unavailable (exit $?): work by the current flow and say so"';
+const HOOK_COMMAND = `bunx --silent github:${SOURCE} check --hook 2>&1 || ${CHECK_FALLBACK}`;
+const HOOK_MATCHER = "startup|resume|clear";
+const HOOK: SessionHook = { matcher: HOOK_MATCHER, hooks: [{ type: "command", command: HOOK_COMMAND, timeout: 60 }] };
+
+/** A group of Claude Code's SessionStart hooks in a settings.json. */
+interface SessionHook {
+  matcher: string;
+  hooks: { type: "command"; command: string; timeout: number }[];
+}
 
 /** Flow files in the clone: what `install` installs from it (a git pathspec). */
 const FLOW = ["AGENTS.md", "claude/CLAUDE.md", ":(glob)docs/*.md", "skills"];
@@ -193,8 +202,10 @@ elves install -g [--link]
 
 The flow of the latest Elves release into the project (the git root or the current directory), thin — without a copy:
 ${PACKAGE} of the release in devDependencies of package.json (the project's package manager installs it, the lockfile
-changes too), .agents/elves.json, the machine queue's shim .agents/slot.sh and a block in AGENTS.md linking to the canon
-on the machine; the package.json checks (lint, typecheck, test, test:*) go through the shim, the skills' scripts —
+changes too), .agents/elves.json, the machine queue's shim .agents/slot.sh, a block in AGENTS.md linking to the canon
+on the machine and the cloud session's SessionStart hook in .claude/settings.json — in a Claude Code cloud session
+(CLAUDE_CODE_REMOTE=true) it installs a fresh Bun and the flow onto the session's machine and runs check --hook, outside
+it exits at once; the package.json checks (lint, typecheck, test, test:*) go through the shim, the skills' scripts —
 ${PACKAGE_RUN} <script>, without the project's env files; on Yarn 2+, which runs the .ts bin by Node, both go through
 the package of the project's version — ${PACKAGE_BUNX} <script>. A project with a copy of the flow
 of an earlier release moves to a thin one: the copy, its symlinks and .gitignore exceptions go, imports and CI paths
@@ -205,11 +216,12 @@ fixing CI, merge on green checks (auto in .agents/elves.json, default — no); w
 merge — Bash(gh pr merge *) in ~/.claude/settings.json: the owner adds it, install doesn't change the machine's
 settings. --lang <code> — the project language the agent works in: dialog, tasks, prompts, documents (language in
 .agents/elves.json, a BCP 47 code: ru, en, pt-BR); in a terminal — a question, en by default, without the flag and a
-terminal — the previous one. In an Elves clone writes only auto and language.
+terminal — the previous one. In an Elves clone writes only auto and language, and its cloud hook — with zsh, the flow
+from the clone itself.
 -g — onto the machine: the canon in ~/.agents/elves with Claude Code's rules ~/.claude/rules/elves*.md and the global
 rule files of Codex, Gemini CLI, Copilot, OpenCode and Amp linking to it (someone else's file stays), the skills
-(~/.agents/skills, ~/.claude/skills) and the SessionStart hook; without a terminal too — a cloud environment's setup
-script (CLAUDE_CODE_REMOTE=true) gets the canon and skills without the hook: the cloud doesn't read
+(~/.agents/skills, ~/.claude/skills) and the SessionStart hook; without a terminal too — a cloud session's project hook
+or setup script (CLAUDE_CODE_REMOTE=true) gets the canon and skills without the hook: the cloud doesn't read
 ~/.claude/settings.json. From the npm package (npm i -g / bun add -g ${PACKAGE}) — the release of its version, without
 the network. --link — from an Elves clone: symlinks to the clone instead of copies, edits show up immediately.
 
@@ -988,31 +1000,50 @@ function claudeRules(root: string) {
 }
 
 /**
- * The SessionStart hook in `~/.claude/settings.json` (HOOK): the user's own settings and hooks stay in place, a hook
- * of a previous version (with npx too, with the repository's name before the rename — LEGACY_SOURCE) is replaced, a
- * repeated install doesn't duplicate it. A dry run names what the hook gives: from a terminal `check -g` can't see the
- * agent's shell, a missing hook is how it names a missing Bash environment (tests/capabilities/agent-shell).
+ * A SessionStart hook in `<root>/.claude/settings.json`: the user's own settings and hooks stay in place, a hook of a
+ * previous version (`ours`) is replaced, a repeated install doesn't duplicate it. A dry run names it with `what`.
+ * @returns the file is written
  */
-function claudeHook(home: string) {
-  const file = path.join(home, ".claude/settings.json");
+function sessionHook(root: string, hook: SessionHook, ours: (h: { command?: unknown }) => boolean, what: string): boolean {
+  const file = path.join(root, ".claude/settings.json");
   let settings: { hooks?: Record<string, { hooks?: { command?: unknown }[] }[]> } = {};
   if (existsSync(file)) {
     try {
       settings = JSON.parse(readFileSync(file, "utf8"));
     } catch {
-      return warn(`.claude/settings.json — not JSON: the SessionStart hook isn't installed, add it yourself: ${HOOK_COMMAND}`);
+      return warn(`.claude/settings.json — not JSON: ${what} isn't installed, add it yourself: ${hook.hooks[0]!.command}`), false;
     }
   }
-  const ours = ({ command }: { command?: unknown }) => typeof command === "string" && [SOURCE, LEGACY_SOURCE].some((repo) => command.includes(`${repo} check --hook`));
   const groups = settings.hooks?.SessionStart ?? [];
   const count = groups.flatMap((g) => g.hooks ?? []).filter(ours).length;
-  if (count === 1 && groups.some((g) => JSON.stringify(g) === JSON.stringify(HOOK))) return;
-  if (dry) return change(existsSync(file) ? "~" : "+", file, { note: "the SessionStart hook: the flow check and the agent's Bash environment" });
+  if (count === 1 && groups.some((g) => JSON.stringify(g) === JSON.stringify(hook))) return false;
+  if (dry) return change(existsSync(file) ? "~" : "+", file, { note: what }), false;
   const rest = groups.map((g) => ({ ...g, hooks: (g.hooks ?? []).filter((h) => !ours(h)) })).filter((g) => g.hooks.length);
-  settings.hooks = { ...settings.hooks, SessionStart: [...rest, HOOK] };
+  settings.hooks = { ...settings.hooks, SessionStart: [...rest, hook] };
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
-  note(".claude/settings.json — SessionStart hook: elves check --hook");
+  note(`.claude/settings.json — ${what}`);
+  return true;
+}
+
+/**
+ * The SessionStart hook in `~/.claude/settings.json` (HOOK): a hook of a previous version (with npx too, with the
+ * repository's name before the rename — LEGACY_SOURCE) is replaced. A dry run names what the hook gives: from a
+ * terminal `check -g` can't see the agent's shell, a missing hook is how it names a missing Bash environment
+ * (tests/capabilities/agent-shell).
+ */
+function claudeHook(home: string) {
+  const ours = ({ command }: { command?: unknown }) => typeof command === "string" && [SOURCE, LEGACY_SOURCE].some((repo) => command.includes(`${repo} check --hook`));
+  sessionHook(home, HOOK, ours, "the SessionStart hook: the flow check and the agent's Bash environment");
+}
+
+/**
+ * The cloud session's hook in the project's `.claude/settings.json` (`cloudHook`): a hook of a previous version — by
+ * the cloud guard and the flow check in its command — is replaced; the file goes into the commit with the flow.
+ */
+function projectHook(root: string, clone: boolean) {
+  const ours = ({ command }: { command?: unknown }) => typeof command === "string" && command.includes("CLAUDE_CODE_REMOTE") && command.includes("check --hook");
+  if (sessionHook(root, cloudHook(clone), ours, "the cloud session's SessionStart hook: Bun, the flow and check --hook")) touch(PROJECT_SETTINGS);
 }
 
 /**
@@ -1107,16 +1138,24 @@ function ignoredBy(root: string, paths: string[]) {
   return out;
 }
 
+/** The project's Claude Code settings: the cloud session's hook (`projectHook`). */
+const PROJECT_SETTINGS = ".claude/settings.json";
+
 /**
  * What the install puts into a project and what must go into the commit: the manifest, the shim — without it in the
- * commit a package.json check fails in CI and another checkout (#558, question 4) — and AGENTS.md.
+ * commit a package.json check fails in CI and another checkout (#558, question 4), — AGENTS.md and the settings with
+ * the cloud hook: a cloud session has only what the repository has.
  */
 function flowEntries(root: string) {
-  return [MANIFEST, SLOT_SHIM, "AGENTS.md"].map((p) => ({ path: p, dir: false })).filter((e) => lstat(path.join(root, e.path))?.isDirectory() === e.dir);
+  return [MANIFEST, SLOT_SHIM, "AGENTS.md", PROJECT_SETTINGS].map((p) => ({ path: p, dir: false })).filter((e) => lstat(path.join(root, e.path))?.isDirectory() === e.dir);
 }
 
-/** An exception line for the flow copy's directories — the canon (under the former name too), the skills, `.claude/` — not the thin project's `.agents/elves.json`. */
-const COPY_EXCEPTION = new RegExp(`/(?:${[CANON, FORMER.canon, ".agents/skills", ".claude"].map((p) => p.replaceAll(".", "\\.")).join("|")})/`);
+/**
+ * An exception line for the flow copy's directories — the canon (under the former name too), the skills, their
+ * symlinks in `.claude/rules` and `.claude/skills` — not the thin project's `.agents/elves.json` and the chain of its
+ * `.claude/settings.json` (`!/.claude/`, `/.claude/*`).
+ */
+const COPY_EXCEPTION = new RegExp(`/(?:${[CANON, FORMER.canon, ".agents/skills", ".claude/rules", ".claude/skills"].map((p) => p.replaceAll(".", "\\.")).join("|")})/`);
 
 /** The Elves block of `.gitignore` (or the one under the former name) has exceptions for the flow copy. */
 const copyGiBlock = (text: string) =>
@@ -1284,8 +1323,9 @@ const modeLines = (root: string) => [`  tasks: ${autoOf(root) ? "entirely by its
 const CLONE_NOTE = "an Elves clone: the flow isn't installed into it — the canon is at its root";
 
 /**
- * An Elves clone: of the install it gets only the mode and the language, a manifest of two fields; the task stack
- * settings (`env`), if the clone has them, are carried over as in a project; the manifest under the former name goes.
+ * An Elves clone: of the install it gets only the mode and the language, a manifest of two fields, and its cloud hook
+ * (`cloudHook`) — the clone carries it in its commit, the install writes the same; the task stack settings (`env`), if
+ * the clone has them, are carried over as in a project; the manifest under the former name goes.
  */
 function installClone(root: string, auto: boolean, language: string) {
   const file = path.join(root, MANIFEST);
@@ -1294,6 +1334,7 @@ function installClone(root: string, auto: boolean, language: string) {
   writeFileSync(file, JSON.stringify({ auto, language, ...(env === undefined ? {} : { env }) }, null, 2) + "\n");
   removeFormer(root, FORMER.manifest);
   note(`${MANIFEST} — auto: ${auto}, language: ${language}; ${CLONE_NOTE}`);
+  projectHook(root, true);
 }
 
 /**
@@ -1591,16 +1632,17 @@ function copyLeftovers(root: string) {
 
 /**
  * The project's thin flow (#552): a copy of an earlier release goes, then the manifest, the shim, the AGENTS.md block,
- * the package.json scripts, the files that led into the copy, the package version and the `.gitignore` exceptions. The
- * copy goes first — its manifest lists the skills to remove; the package manager runs after every package.json edit.
- * auto and language — the project's mode and language; only `install` sets them (a flag or a question in the
- * terminal), `update` and `check` go with the manifest's previous value.
+ * the cloud hook (#610), the package.json scripts, the files that led into the copy, the package version and the
+ * `.gitignore` exceptions. The copy goes first — its manifest lists the skills to remove; the package manager runs
+ * after every package.json edit. auto and language — the project's mode and language; only `install` sets them (a flag
+ * or a question in the terminal), `update` and `check` go with the manifest's previous value.
  */
 function installProject(root: string, auto = autoOf(root), language = languageOf(root)) {
   removeCopy(root);
   projectManifest(root, auto, language);
   slotShim(root);
   agentsBlock(root);
+  projectHook(root, false);
   packageScripts(root);
   turboEnv(root);
   rewriteCopyRefs(root);
@@ -1684,8 +1726,8 @@ const remote = () => process.env.CLAUDE_CODE_REMOTE === "true";
  * The machine (#557): the canon `~/.agents/elves/` — a copy or, with `--link`, a symlink to the clone — with Claude
  * Code's rules `~/.claude/rules/elves*.md` (the same `installRules` and `claudeRules` as in a project: what a previous
  * install left under the flow's former name moves), the other agents' rule files (`agentRules`), skills and the hook.
- * Claude Code is on the machine — `~/.claude`, `claude` on PATH or a cloud environment: its setup script runs in a
- * fresh home before Claude Code starts. The cloud doesn't read `~/.claude/settings.json` — no hook there.
+ * Claude Code is on the machine — `~/.claude`, `claude` on PATH or a cloud session: its project hook (`cloudHook`) or
+ * its environment's setup script runs in a fresh home. The cloud doesn't read `~/.claude/settings.json` — no hook there.
  */
 function installGlobal(src: string, linkMode: boolean) {
   const home = os.homedir();
@@ -1912,10 +1954,42 @@ function target(global: boolean) {
   return { home, root, installed };
 }
 
-/** What a cloud environment's setup script adds (docs/cloud-sessions.md): Bun not older than the project's, zsh. */
+/** What a cloud session's environment needs (docs/cloud-sessions.md): Bun not older than the project's, zsh. */
 const CLOUD_BUN = "npm i -g bun@latest";
-// the image has its own /etc/zsh/zshrc: without --force-confold dpkg asks about it and fails without a terminal
-const CLOUD_ZSH = "DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh";
+// the image has no apt lists (2026-10-17: "Unable to locate package zsh") and its own /etc/zsh/zshrc: without
+// --force-confold dpkg asks about it and fails without a terminal
+const CLOUD_ZSH = "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh";
+/** A thin project's flow on the cloud session's machine — the npm package, the latest release. */
+const CLOUD_FLOW = `${CLOUD_BUN} ${PACKAGE} && elves install -g`;
+
+/** A hook step: quiet; failed — a line with what failed and the command for the session, the hook goes on. */
+const hookStep = (cmd: string, what: string, shown = cmd) => `{ ${cmd}; } >/dev/null 2>&1 || echo "Elves cloud hook: ${what} (exit $?) — run: ${shown}"`;
+
+/**
+ * The cloud session's SessionStart hook in a project's `.claude/settings.json` (#610). The cloud runs the project's
+ * hooks — not `~/.claude/settings.json` (#552) — after Claude Code starts, on every start and resume, and the hook does
+ * what an environment's setup script did, without the owner's step: a fresh Bun (the image's lags behind the
+ * project's `packageManager`, `bun upgrade` is 403 there), the flow onto the session's machine and `check --hook` into
+ * the context — the machine's hook (HOOK) isn't there. Outside the cloud it exits at once: the machine's hook runs
+ * there. The canon already on the machine — a setup script, an earlier start in the same VM — nothing to install. A
+ * failed step — a line with its command; the code is always 0: Claude Code drops the output of any other.
+ * An Elves clone (`clone`) installs the flow from itself, `install -g --link` — the canon of the branch, as a clone on
+ * the owner's machine, and npm has no release yet then (only the `0.0.0` stub), — and zsh for its tests
+ * (tests/capabilities/agent-shell).
+ */
+function cloudHook(clone: boolean): SessionHook {
+  const there = '[ -e "$HOME/.claude/rules/elves.md" ]';
+  const elves = clone ? 'bun --no-env-file "$CLAUDE_PROJECT_DIR"/bin/elves.ts' : "elves";
+  const steps = clone
+    ? [
+        `${there} || ${hookStep(CLOUD_BUN, "Bun isn't updated")}`,
+        `command -v zsh >/dev/null || ${hookStep(CLOUD_ZSH, "no zsh for tests/capabilities/agent-shell")}`,
+        hookStep(`${elves} install -g --link`, "the flow isn't installed", "bun --no-env-file bin/elves.ts install -g --link"),
+      ]
+    : [`${there} || { ${CLOUD_FLOW}; } >/dev/null 2>&1 || { echo "Elves cloud hook: the flow isn't installed (exit $?) — run: ${CLOUD_FLOW}"; exit 0; }`];
+  const command = ['[ "$CLAUDE_CODE_REMOTE" = true ] || exit 0', ...steps, `${elves} check --hook 2>&1 || ${CHECK_FALLBACK}`].join("; ");
+  return { matcher: HOOK_MATCHER, hooks: [{ type: "command", command, timeout: 120 }] };
+}
 
 /** a < b for versions `1.4.2`: numeric parts, a pre-release suffix aside. */
 function olderVersion(a: string, b: string) {
@@ -1927,9 +2001,10 @@ function olderVersion(a: string, b: string) {
 /**
  * A Claude Code cloud session's environment (#598): the image's Bun lags behind the project's `packageManager` (1.4.2
  * without the `bun check` of 1.4.3: typecheck and tests are red), an Elves clone's tests need zsh
- * (tests/capabilities/agent-shell) the image doesn't have. The fix is the environment's setup script — the owner's
- * step; the line names an environment not fixed yet, with the command the session meanwhile runs itself. Doesn't
- * change the check's code — the environment isn't the flow falling behind.
+ * (tests/capabilities/agent-shell) the image doesn't have. The project's cloud hook installs them at the session's
+ * start (`cloudHook`, #610); the line names an environment still without them — a project without the hook yet, a
+ * failed step of the hook, a setup script's cache with an older Bun — with the command the session runs itself.
+ * Doesn't change the check's code — the environment isn't the flow falling behind.
  */
 function cloudLines(root: string): string[] {
   if (!remote()) return [];
@@ -1941,7 +2016,7 @@ function cloudLines(root: string): string[] {
   if (want && have && olderVersion(have, want)) missing.push(`Bun ${have} is older than packageManager bun@${want}`), fix.push(CLOUD_BUN);
   if (isElvesClone(root) && !onPath("zsh")) missing.push("no zsh for tests/capabilities/agent-shell"), fix.push(CLOUD_ZSH);
   if (!missing.length) return [];
-  return [`  cloud environment: ${missing.join("; ")} — the owner adds it to the environment's setup script (docs/cloud-sessions.md), the session meanwhile runs it itself: ${fix.join(" && ")}`];
+  return [`  cloud environment: ${missing.join("; ")} — the session runs it itself: ${fix.join(" && ")}; at a cloud session's start the project's SessionStart hook does it (docs/cloud-sessions.md)`];
 }
 
 /**
@@ -2247,8 +2322,9 @@ function twiceLines(home: string, root: string): string[] {
 
 /**
  * The SessionStart hook: the agent's Bash environment, then the machine and the project in one output to the session
- * context, then the wait a resumed session restarts; the code is always 0, errors go to stdout. failed — the latest
- * release couldn't be found: what's installed is "check unavailable", the environment is written all the same.
+ * context, then the wait a resumed session restarts (not in the cloud: no Projects there); the code is always 0, errors
+ * go to stdout. failed — the latest release couldn't be found: what's installed is "check unavailable", the environment
+ * is written all the same.
  */
 function hook(failed?: unknown) {
   const shell = writeAgentShell();
@@ -2268,7 +2344,8 @@ function hook(failed?: unknown) {
   const root = projectRoot();
   const twice = twiceLines(os.homedir(), root);
   if (twice.length) shown.push({ code: 0, text: [...twice, ...(project?.run ? [] : [updateTaskLine(root)])].join("\n") });
-  const resume = resumeLines();
+  // Projects are closed to a cloud session (403): task resume refuses there — a `!` line at every start
+  const resume = remote() ? [] : resumeLines();
   if (!shown.length && !resume.length) return 0;
   const tail = [];
   // the machine's update touches only ~/.agents and the hook — the session does it; a thin project's — a few lines in

@@ -11,29 +11,41 @@ replaces either — a cloud session's container doesn't load the machine.
 
 Only the project repository. The canon, the skills and the agent's memory of
 the user's machine (`~/.agents`, `~/.claude`) aren't there: the flow comes
-from the **setup script** of the claude.ai environment, before Claude Code
-starts (checked in #555):
+from the project's **`SessionStart` hook** — `.claude/settings.json`, which
+`install` and `update` put into a thin project (#610). The cloud runs a
+project's hooks — not `~/.claude/settings.json` — after Claude Code starts,
+on every start and resume. With `CLAUDE_CODE_REMOTE=true` the hook does what
+an environment's setup script did (#555), without the owner's step: `npm i -g
+bun@latest @miroshnik/elves && elves install -g`, then `check --hook` into the
+context; outside the cloud it exits at once. The canon already on the machine
+— nothing to install; a failed step — a line with its command, code 0. An
+Elves clone carries the hook in its commit: Bun, zsh for its tests
+(`tests/capabilities/agent-shell`) and the flow from the clone itself —
+`install -g --link`, the branch's canon, no npm. A fresh start of the clone's
+hook with zsh in place took 4.4 s (2026-10-17: npm about 3 s, `check --hook`
+about 1 s); without zsh `apt-get update` and its install add about 6 s.
 
-```bash
-npm i -g bun@latest @miroshnik/elves && elves install -g
-# an Elves clone's environment: zsh for its tests (tests/capabilities/agent-shell), CI installs it too
-DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh
-```
+- `bun@latest` — the image's Bun lags behind a project's `packageManager`
+  (1.4.2 on 2026-10-16, without the `bun check` of 1.4.3): npm's global
+  directory comes before `~/.bun/bin` in the image's `PATH`, while `bun
+  upgrade` in the session gets 403 from GitHub.
+- **No apt lists in the image** (2026-10-17): `apt-get install zsh` alone —
+  "Unable to locate package"; `apt-get update` first. `--force-confold` — the
+  image has its own `/etc/zsh/zshrc`: without it dpkg asks whether to replace
+  it and fails without a terminal (#598).
+- **npm has no release yet** (2026-10-17): `@miroshnik/elves` there is the
+  `0.0.0` stub without the `elves` command, so a thin project's hook prints
+  "the flow isn't installed (exit 127)" until CI publishes a release (README,
+  "Installation" — the owner's step). The clone's hook doesn't need npm.
+- **The setup script** is optional, a faster start: the environment caches
+  its result for about 7 days, and the hook then installs nothing. Network
+  access — Trusted (the default), about 7 s:
 
-`bun@latest` — the image's Bun lags behind a project's `packageManager` (1.4.2
-on 2026-10-16, without the `bun check` of 1.4.3): npm's global directory comes
-before `~/.bun/bin` in the image's `PATH`, while `bun upgrade` in the session
-gets 403 from GitHub. Network access — Trusted; about 7 s, the environment's
-cache keeps the result for about 7 days. `install -g` with
-`CLAUDE_CODE_REMOTE=true` puts the canon (`~/.agents/elves`, rules
-`~/.claude/rules/elves*.md`) and the skills (`~/.claude/skills`) without the
-hook. The canon and skills are visible from the first turn, but only in
-sessions of an environment with this script: the owner sets the environment up
-on their account. `--force-confold` — the image has its own `/etc/zsh/zshrc`:
-without it dpkg asks whether to replace it and fails without a terminal
-(checked in #598). An environment without Bun or zsh — `check` of a cloud
-session names it with a `cloud environment:` line and the command, which the
-session meanwhile runs itself.
+  ```bash
+  npm i -g bun@latest @miroshnik/elves && elves install -g
+  # an Elves clone's environment: zsh for its tests (tests/capabilities/agent-shell), CI installs it too
+  apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh
+  ```
 
 - **The project's version** — `@miroshnik/elves` in its `devDependencies`,
   only from npm: bun installs it through the session's proxy, `github:` in
@@ -41,16 +53,39 @@ session meanwhile runs itself.
   session: `language` in `.agents/elves.json`, which comes with the clone.
 - **A thin project behind** — updated in the session's task, as locally:
   `bunx @miroshnik/elves update` raises the package version, a few lines into
-  the task's branch.
-- **No hook:** the machine's hook isn't there (the cloud doesn't read
-  `~/.claude/settings.json`), and a project hook isn't needed — the setup
-  script replaces it; `check` — by hand.
+  the task's branch; a project without the hook yet gets it the same way, and
+  until then — `check` by hand.
+- **No machine hook:** the cloud doesn't read `~/.claude/settings.json`; the
+  project's hook runs `check --hook` instead, without `github task resume`
+  (Projects are closed there). An environment without Bun or zsh all the same
+  — `check` names it with a `cloud environment:` line and the command, which
+  the session runs itself.
 - **A project with a copy of the flow** loads the canon twice in the cloud —
   the copy's `.claude/rules` and the setup script's — until its move to the
-  thin project; without a hook nothing names it.
+  thin project; a copy gets no project hook, nothing names it.
 
-Check: in a cloud session of the project, ask the agent to quote a rule from
-`AGENTS.md` and list the skills — `est`, `spec`, `ci-wait` must be there.
+**What is visible at the start** — checked from inside a cloud session
+(2026-10-17, Claude Code 2.1.302, #610), which itself started without the
+hook:
+
+- Skills `install -g --link` put into `~/.claude/skills` mid-session —
+  Claude Code picked them up at once (the skills list in the context
+  changed).
+- Rules `~/.claude/rules/elves*.md` written mid-session didn't reach the
+  context of that turn. By the diagnostics log (`$CLAUDE_CODE_DIAGNOSTICS_FILE`)
+  Claude Code reads memory files at the start of a user turn
+  (`cli_turn_started`, then `memory_files_completed` with `file_count`), so
+  the rules the hook writes before the first turn should load.
+- The clone hook's command, run as Claude Code runs it (`sh -c`, a fresh
+  `HOME`): code 0, the output is `check --hook`'s; outside the cloud — no
+  output.
+
+Still to check — in the first cloud session of the clone after the merge:
+the hook's output in the context; `memory_files_completed` at the first
+`cli_turn_started` has `file_count` 3 (the clone's `.claude/CLAUDE.md` and
+both rules); ask the agent to quote a rule from `AGENTS.md` and list the
+skills — `est`, `spec`, `ci-wait` must be there. The rules didn't load — the
+hook prints the canon (#610, question 2).
 
 ## What the cloud lacks (checked 2026-09-25, 2026-10-17)
 
