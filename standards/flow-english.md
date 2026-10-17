@@ -77,7 +77,7 @@
 (`skills/github/locales`), а комментарии — по-английски, как документы флоу, поэтому кириллицы в коде скриптов нет
 вовсе: файл сверяется целиком, с комментариями.
 
-<details><summary>✅ 30 тестов</summary>
+<details><summary>✅ 31 тест</summary>
 
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» не пуст
 - ✅ реестр «код скриптов скиллов и установщика — skills/*/scripts и bin» находит bin/elves.ts, skills/github/scripts/github.ts, skills/est/scripts/est.ts, skills/spec/scripts/harness.ts
@@ -96,6 +96,7 @@
 - ✅ в skills/spec/scripts/harness.ts нет кириллицы
 - ✅ в skills/spec/scripts/knip-hints.cjs нет кириллицы
 - ✅ в skills/spec/scripts/knip-hints.d.cts нет кириллицы
+- ✅ в skills/spec/scripts/package-run.ts нет кириллицы
 - ✅ в skills/spec/scripts/spec-break.ts нет кириллицы
 - ✅ в skills/spec/scripts/spec-claims.ts нет кириллицы
 - ✅ в skills/spec/scripts/spec-diff.ts нет кириллицы

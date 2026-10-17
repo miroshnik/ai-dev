@@ -9897,6 +9897,13 @@
   "describes": [
    "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
   ],
+  "name": "нарушитель не проходит (команды): скрипт пакета — справка без его строки запуска"
+ },
+ {
+  "path": "tests/standards/cli-help/cli-help.test.ts",
+  "describes": [
+   "Скрипты флоу отвечают на --help и -h: синтаксис с примером, код 0, без сети и без изменений"
+  ],
   "name": "нарушитель не проходит (скрипты): обзор без строки о справке команды"
  },
  {
@@ -10380,6 +10387,13 @@
    "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
   ],
   "name": "в skills/spec/scripts/knip-hints.d.cts нет кириллицы"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Код установщика и скриптов скиллов — сообщения и комментарии — по-английски"
+  ],
+  "name": "в skills/spec/scripts/package-run.ts нет кириллицы"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",
@@ -14404,6 +14418,13 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "skills/spec/scripts/package-run.ts печатает и запускает скрипты флоу с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "skills/spec/scripts/spec-break.ts печатает и запускает скрипты флоу с --no-env-file"
  },
  {
@@ -14496,6 +14517,20 @@
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
   "name": "в README.md скрипты скиллов вызываются с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в bin/ai-dev.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в bin/elves.ts bin пакета под bun вызывается с --no-env-file"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14642,6 +14677,20 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "в skills/dashboard/scripts/dashboard.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/dashboard/scripts/sessions.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "в skills/est/SKILL.md bin пакета под bun вызывается с --no-env-file"
  },
  {
@@ -14664,6 +14713,13 @@
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
   "name": "в skills/est/reference.md скрипты скиллов вызываются с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/est/scripts/est.ts bin пакета под bun вызывается с --no-env-file"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14698,6 +14754,20 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "в skills/github/scripts/github.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/github/scripts/locale.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "в skills/slot/SKILL.md bin пакета под bun вызывается с --no-env-file"
  },
  {
@@ -14706,6 +14776,13 @@
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
   "name": "в skills/slot/SKILL.md скрипты скиллов вызываются с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/slot/scripts/slot.ts bin пакета под bun вызывается с --no-env-file"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14796,6 +14873,118 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "в skills/spec/scripts/architecture.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/c4.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/eslint-config.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/harness.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/knip-hints.cjs bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/knip-hints.d.cts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/package-run.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-break.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-claims.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-diff.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-doc.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-exceptions.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-publish.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-run.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/spec-shard.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "в skills/spec/scripts/speclib.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "в skills/task-env/SKILL.md bin пакета под bun вызывается с --no-env-file"
  },
  {
@@ -14824,7 +15013,21 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "в skills/task-env/scripts/task-env.ts bin пакета под bun вызывается с --no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "вызов скрипта пакета в документах флоу и package.json, который подгрузит env-файлы проекта, — нарушение no-env-file"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "команда скрипта пакета, которую печатает код скриптов и установщика и которая подгрузит env-файлы проекта, — нарушение no-env-file"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14880,6 +15083,13 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "нарушитель не проходит (скрипт пакета): подсказка кода — bin под bun без флага"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "нарушитель не проходит (скрипт пакета): скрипт package.json — bin под bun без флага"
  },
  {
@@ -14901,7 +15111,14 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
-  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит README.md, skills/spec/SKILL.md, skills/spec/reference.md, skills/spec/ci.md (скрипт пакета)"
+  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов — и строки кода скриптов скиллов и установщика» находит README.md, skills/spec/SKILL.md, skills/spec/reference.md, skills/spec/ci.md, skills/spec/scripts/harness.ts, bin/elves.ts (скрипт пакета)"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов — и строки кода скриптов скиллов и установщика» не пуст (скрипт пакета)"
  },
  {
   "path": "tests/standards/no-env-file/no-env-file.test.ts",
@@ -14922,13 +15139,6 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
-  "name": "реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (скрипт пакета)"
- },
- {
-  "path": "tests/standards/no-env-file/no-env-file.test.ts",
-  "describes": [
-   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
-  ],
   "name": "реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/elves.ts (код)"
  },
  {
@@ -14937,6 +15147,13 @@
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
   "name": "реестр «код скриптов скиллов и установщика без комментариев» не пуст (код)"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
+  "name": "справка скрипта пакета под именем elves называет вызов без env-файлов проекта"
  },
  {
   "path": "tests/standards/old-name/old-name.test.ts",
@@ -17718,6 +17935,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/standards/harness-load/harness-load.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/standards/no-env-file/no-env-file.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
