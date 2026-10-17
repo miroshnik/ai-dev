@@ -17,6 +17,9 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 - в документах флоу — `AGENTS.md`, `claude/CLAUDE.md`, `README.md`, `package.json`, `docs/*.md`, `*.md` скиллов —
   `bun <путь>/scripts/<скрипт>.ts`, которую агент копирует как есть;
+- там же — скрипт пакета: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI одинаково (#596).
+  bin `elves` — TypeScript с шебангом `#!/usr/bin/env bun`: голый `elves`, `node_modules/.bin/elves` или `bunx elves`
+  Bun запускает с env-файлами каталога, а флаг поставить некуда;
 - в коде скриптов скиллов и установщика — команда, которую скрипт печатает (`bun ${…}`, `bun .agents/skills/…`), и
   дочерний процесс `bun` (`spawn("bun", […])`, `process.execPath`).
 
@@ -36,3 +39,7 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 не везде (busybox) — установщик там не запустился бы вовсе. Сам он проверок проекта не запускает. Так же —
 `bunx @miroshnik/elves@<версия> spec-…` в джобах CI без зависимостей проекта (`ci.md` скилла spec, #559): в чекауте
 CI env-файлов с ключами нет — `.env.local` не коммитят.
+
+`elves slot --for $$` шима очереди `.agents/slot.sh`: `elves` только печатает переменные очереди, а команда идёт в
+shell скрипта, без env-файлов Bun. Обёртка Yarn 2+ `elves slot '<команда>'` в охвате: там команда идёт в процессе
+`elves`.

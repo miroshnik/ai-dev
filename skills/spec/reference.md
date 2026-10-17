@@ -500,16 +500,18 @@ the project's CI" below.
    Update — `update` in the current task's branch: the package version, a few
    lines; then the reports and `spec:doc --strict`; if the format changed — CI
    publishes the new one after the merge.
-2. **Scripts** in `package.json` — the package's `elves` (Bun runs
-   TypeScript itself, for any project `type`), in CI —
-   `bun --no-env-file node_modules/.bin/elves spec-…`, a job without the
-   project's dependencies — `bunx @miroshnik/elves@<version> spec-…`
-   (`ci.md`). Reports — those the project has:
+2. **Scripts** in `package.json` and CI — the package's `elves` (Bun runs
+   TypeScript itself, for any project `type`) under `bun --no-env-file`: the
+   bin's `#!/usr/bin/env bun` would load the project's env files, and the
+   script would pass their keys on to `gh`, `git` and the checked command
+   (`tests/standards/no-env-file`); a job without the project's
+   dependencies — `bunx @miroshnik/elves@<version> spec-…` (`ci.md`).
+   Reports — those the project has:
    ```json
-   "spec:doc": "elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
-   "spec:diff": "elves spec-diff",
-   "spec:publish": "elves spec-publish",
-   "spec:claims": "elves spec-claims --entries tests/standards/entry-points/entries.ts"
+   "spec:doc": "bun --no-env-file node_modules/.bin/elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
+   "spec:diff": "bun --no-env-file node_modules/.bin/elves spec-diff",
+   "spec:publish": "bun --no-env-file node_modules/.bin/elves spec-publish",
+   "spec:claims": "bun --no-env-file node_modules/.bin/elves spec-claims --entries tests/standards/entry-points/entries.ts"
    ```
    Standards and architecture run once — the `test:spec` script, a fast CI job
    of its own; `test` excludes them, e2e doesn't run them (`checks.md`):

@@ -7,6 +7,7 @@
 
 Тонкий проект берёт харнесс и spec-скрипты из пакета `@miroshnik/elves` в devDependencies, без копии флоу (#556):
 тесты импортируют `@miroshnik/elves/spec/harness` (и модель архитектуры, фрагмент ESLint, `github`), скрипты
-`package.json` и CI зовут `elves spec-doc`, `elves spec-diff` и остальные `spec-*` из `node_modules/.bin`. Версия у
+`package.json` и CI зовут `spec-doc`, `spec-diff` и остальные `spec-*` бином пакета —
+`bun --no-env-file node_modules/.bin/elves <скрипт>`, без env-файлов проекта (#596). Версия у
 агента и у CI одна — версия пакета в lockfile проекта; пути — от каталога проекта, как у скрипта копии. Тест проекта
 идёт под bun test: Bun берёт исходник TypeScript, раннер под Node — сборку для Node (стандарт `harness-load`).
