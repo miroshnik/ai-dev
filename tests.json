@@ -3393,6 +3393,20 @@
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
   "describes": [
+   "task queue в worktree приложения: облачные исполнители из него не стартуют"
+  ],
+  "name": "task queue в папке проекта и в worktree агента строки о worktree приложения не печатает"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task queue в worktree приложения: облачные исполнители из него не стартуют"
+  ],
+  "name": "task queue в сессии из worktree приложения печатает строку «!»: облачные исполнители из неё не стартуют — диспетчер запустить в папке проекта без worktree"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
    "task queue не выдаёт задачу второму исполнителю при живом прежнем"
   ],
   "name": "task queue не выдаёт задачу повторно, пока жив worktree её прежнего исполнителя или его субагентов"
@@ -13159,6 +13173,13 @@
    "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
   ],
   "name": "цитату «Tests beyond scenarios» из skills/spec/reference.md печатает или пишет скрипт"
+ },
+ {
+  "path": "tests/standards/flow-english/flow-english.test.ts",
+  "describes": [
+   "Строки вывода, которые цитируют доки флоу, скрипты печатают дословно"
+  ],
+  "name": "цитату «The requested branch or commit was not found» из skills/github/reference.md печатает или пишет скрипт"
  },
  {
   "path": "tests/standards/flow-english/flow-english.test.ts",

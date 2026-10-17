@@ -118,7 +118,7 @@
 GitHub. Цитата, которой нет в коде, — дрейф: скрипт печатает иначе, и агент ищет строку, которой не будет. Цитата
 сверяется по литеральным кускам между подстановками: каждый кусок со словом — в коде скриптов или в `en.json`.
 
-<details><summary>✅ 184 теста</summary>
+<details><summary>✅ 185 тестов</summary>
 
 - ✅ реестр «цитаты «…» в документах флоу» не пуст
 - ✅ реестр «цитаты «…» в документах флоу» находит already newer, Actual (cloud), closed in 90 days without an actual: N
@@ -185,6 +185,7 @@ GitHub. Цитата, которой нет в коде, — дрейф: скр�
 - ✅ цитату «Task #N» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Task» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Tests beyond scenarios» из skills/spec/reference.md печатает или пишет скрипт
+- ✅ цитату «The requested branch or commit was not found» из skills/github/reference.md печатает или пишет скрипт
 - ✅ цитату «Tokens, M» из skills/est/SKILL.md печатает или пишет скрипт
 - ✅ цитату «Waiting for the owner» из skills/dashboard/SKILL.md печатает или пишет скрипт
 - ✅ цитату «What it's made of» из skills/spec/reference.md печатает или пишет скрипт
