@@ -7926,6 +7926,34 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+  ],
+  "name": "check вне облачной сессии окружение облака не проверяет: Bun старше packageManager — без строки окружения"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+  ],
+  "name": "check облачной сессии в клоне Elves без zsh — строка окружения с командой apt для setup script"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+  ],
+  "name": "check облачной сессии с Bun не старше packageManager и zsh на PATH — без строки окружения"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
+   "check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script"
+  ],
+  "name": "check облачной сессии: Bun старше packageManager проекта — строка окружения с версиями и командой для setup script"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
    "check проекта держит compose-файл правил изоляции стеков задач: нарушение — строка ❌ с правилом и сервисом"
   ],
   "name": "без Docker — строка ○ «not checked» с причиной, код по-прежнему 0"
