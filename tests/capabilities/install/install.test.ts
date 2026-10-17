@@ -71,7 +71,7 @@ function bunProject(fields: Record<string, unknown> = {}) {
  * очереди и блок AGENTS.md; канон и скиллы — на машине. Обновление проекта — подъём версии, а не копия на тысячи строк.
  */
 describe("В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу", () => {
-  it("install в проект без флоу ставит devDependency пакета, .agents/elves.json, шим slot и блок AGENTS.md — без копии флоу", () => {
+  it("install в проект без флоу ставит devDependency пакета, .agents/elves.json, шим slot, блок AGENTS.md и хук облачной сессии — без копии флоу", () => {
     bunProject();
     const r = elves(sb, ["install"], { bin: release.bin, env: registry.env });
     expect(r.stderr).toBe("");
@@ -86,7 +86,7 @@ describe("В проект — тонкий флоу: версия пакета, 
     expect(read(path.join(proj, ".agents/slot.sh"))).toContain("elves slot --for $$");
     expect(read(path.join(proj, "AGENTS.md"))).toContain("Shared rules — `~/.agents/elves/AGENTS.md` on the machine");
     expect(readdirSync(path.join(proj, ".agents")).sort()).toEqual(["elves.json", "slot.sh"]);
-    expect(gone(path.join(proj, ".claude"))).toBe(true);
+    expect(readdirSync(path.join(proj, ".claude"))).toEqual(["settings.json"]);
   });
 
   /** Lockfile проекта установка не заводит: без него менеджер пакетов не запускается, команда — строкой. */
@@ -96,7 +96,7 @@ describe("В проект — тонкий флоу: версия пакета, 
     expect(r.code).toBe(0);
     expect(r.stdout).toContain(`package.json — @miroshnik/elves ${VERSION}; no lockfile — install the dependencies: npm install`);
     expect(JSON.parse(read(path.join(proj, "package.json"))).devDependencies).toEqual({ "@miroshnik/elves": VERSION });
-    expect(readdirSync(proj).sort()).toEqual([".agents", ".git", "AGENTS.md", "package.json"]);
+    expect(readdirSync(proj).sort()).toEqual([".agents", ".claude", ".git", "AGENTS.md", "package.json"]);
   });
 
   it("менеджер пакетов не поставил пакет (нет сети) — версия в package.json, предупреждение с командой, код 0", () => {
@@ -108,9 +108,9 @@ describe("В проект — тонкий флоу: версия пакета, 
   });
 
   /** Ни скриптов, ни тестов на JS — закреплять нечего; канон и скиллы проекту дают машина и блок AGENTS.md. */
-  it("проект без package.json — без devDependency: манифест, шим и блок AGENTS.md", () => {
+  it("проект без package.json — без devDependency: манифест, шим, блок AGENTS.md и хук облачной сессии", () => {
     expect(elves(sb, ["install"], { bin: release.bin }).code).toBe(0);
-    expect(readdirSync(proj).sort()).toEqual([".agents", ".git", "AGENTS.md"]);
+    expect(readdirSync(proj).sort()).toEqual([".agents", ".claude", ".git", "AGENTS.md"]);
     expect(readdirSync(path.join(proj, ".agents")).sort()).toEqual(["elves.json", "slot.sh"]);
   });
 
@@ -276,12 +276,28 @@ describe("Файлы флоу не игнорируются git проекта �
     expect(gitignore()).toBe(text);
   });
 
-  /** Шаблоны, которые прятали файлы копии (`CLAUDE.md`, `.claude/`), тонкому проекту безразличны: его файлы — не там. */
-  it("шаблоны CLAUDE.md и .claude/ тонкому проекту не мешают — исключений нет, .gitignore не меняется", () => {
+  /**
+   * Шаблоны, которые прятали файлы копии (`CLAUDE.md`, `vendor/`), тонкому проекту безразличны: его файлы — не там. А
+   * `.claude/` прячет хук облачной сессии (#610): без него в коммите облачная сессия идёт без флоу — исключение снимает
+   * только `.claude/settings.json`, прочее в `.claude/` игнорируется, как раньше.
+   */
+  it("шаблоны CLAUDE.md и vendor/ тонкому проекту не мешают, .claude/ — исключение только для .claude/settings.json с хуком облачной сессии", () => {
     writeTree(proj, { ".gitignore": "CLAUDE.md\n.claude/\nvendor/\n" });
     expect(install().code).toBe(0);
-    expect(gitignore()).toBe("CLAUDE.md\n.claude/\nvendor/\n");
+    expect(gitignore()).toBe("CLAUDE.md\n.claude/\nvendor/\n\n# elves:begin — flow files git would otherwise ignore; set by `bunx @miroshnik/elves install`, don't edit by hand\n!/.claude/\n/.claude/*\n!/.claude/settings.json\n# elves:end\n");
     expect(ignored()).toEqual([]);
+    // исключение хука — не исключение копии флоу: check не зовёт проект отставшим
+    expect(elves(sb, ["check"]).code).toBe(0);
+  });
+
+  // страховка от перегиба: исключения симлинков копии в .claude/rules — по-прежнему исключения копии, update их уберёт
+  it("исключения .gitignore для симлинков копии в .claude/rules check называет исключениями копии", () => {
+    install();
+    const block = "# elves:begin — flow files git would otherwise ignore; set by `bunx github:miroshnik/elves install`, don't edit by hand\n!/.claude/\n/.claude/*\n!/.claude/rules/\n# elves:end\n";
+    writeTree(proj, { ".gitignore": `.claude/\n\n${block}` });
+    const r = elves(sb, ["check"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("  ~ .gitignore — the flow copy's exceptions — update removes them\n");
   });
 
   /** Шапка блока прошлой версии — по-русски; маркеры begin и end у него те же: по ним установка его находит. */
@@ -735,11 +751,11 @@ describe("На машину (-g) — канон, скиллы и хук: тон�
   });
 
   /**
-   * Setup script окружения claude.ai ставит флоу до запуска Claude Code (#555): под root в свежем HOME, без терминала,
-   * с `CLAUDE_CODE_REMOTE=true`. `~/.claude` там может ещё не быть, а Claude Code будет; `~/.claude/settings.json`
-   * облако не читает — хука там нет.
+   * В облаке флоу ставит хук проекта на старте сессии (#610) или setup script окружения до запуска Claude Code (#555):
+   * под root в свежем HOME, без терминала, с `CLAUDE_CODE_REMOTE=true`. `~/.claude` там может ещё не быть, а Claude
+   * Code будет; `~/.claude/settings.json` облако не читает — хука машины там нет.
    */
-  it("install -g без терминала в пустом HOME ставит канон и скиллы — как setup script облачного окружения", () => {
+  it("install -g без терминала в пустом HOME ставит канон и скиллы — как хук проекта и setup script облачной сессии", () => {
     const r = install(["-g"], proj, { CLAUDE_CODE_REMOTE: "true" });
     expect(r.code).toBe(0);
     expect(r.stderr).toBe("");
@@ -857,6 +873,149 @@ describe("На машину (-g) — канон, скиллы и хук: тон�
 });
 
 /**
+ * Облачная сессия Claude Code — без шага владельца (#610): облако запускает хуки `.claude/settings.json` проекта, а не
+ * `~/.claude/settings.json` (#552), — после запуска Claude Code, на каждом старте и возобновлении. Хук проекта при
+ * `CLAUDE_CODE_REMOTE=true` делает то, что делал setup script окружения: свежий Bun и флоу на машину сессии, затем
+ * `check --hook` — в контекст; вне облака выходит сразу — там работает хук машины. Флоу уже на машине (setup script,
+ * прошлый старт в той же VM) — хук ничего не ставит. Клон Elves флоу не ставит, хук с zsh у него в коммите — тот же,
+ * что пишет установщик; флоу он берёт из самого клона (`install -g --link`). Хук здесь идёт как у Claude Code — `sh -c`
+ * с командой из settings.json, в песочнице с заглушками `npm`, `elves` и `apt-get`, которые пишут свой вызов в журнал.
+ */
+describe("Облачная сессия — хук SessionStart проекта ставит Bun, флоу и zsh: setup script не нужен", () => {
+  const cloud = { CLAUDE_CODE_REMOTE: "true" };
+  const log = () => path.join(tmp, "hook.log");
+  const calls = () => (existsSync(log()) ? read(log()).trim().split("\n").filter(Boolean) : []);
+  /** Заглушка команды в PATH песочницы: пишет свой вызов в журнал, затем body; только встроенные команды sh. */
+  const fake = (name: string, body = "") => writeFileSync(path.join(sb.bin, name), `#!/bin/sh\necho "${name} $*" >> "${log()}"\n${body}\n`, { mode: 0o755 });
+  /** `elves` из npm: install -g кладёт канон на машину, check --hook печатает вывод проверки. */
+  const fakeElves = () => {
+    mkdirSync(path.join(home, ".claude/rules"), { recursive: true });
+    fake("elves", `case "$1" in install) : > "$HOME/.claude/rules/elves.md" ;; check) echo "Elves flow: check --hook" ;; esac`);
+  };
+  type Hook = { matcher?: string; hooks: { command: string; timeout?: number }[] };
+  const settings = (dir: string) => JSON.parse(read(path.join(dir, ".claude/settings.json")));
+  /** Хуки облачной сессии в settings.json каталога — по проверке облака и check --hook. */
+  const cloudHooks = (dir: string): Hook["hooks"] =>
+    (settings(dir).hooks?.SessionStart ?? []).flatMap((g: Hook) => g.hooks).filter((h: { command: string }) => h.command.includes("CLAUDE_CODE_REMOTE") && h.command.includes("check --hook"));
+  /** Команда хука — как её запускает Claude Code: `sh -c` в каталоге проекта с CLAUDE_PROJECT_DIR. */
+  const runHook = (dir: string, extra: Record<string, string> = {}) => {
+    const [hook] = cloudHooks(dir);
+    const r = spawnSync("sh", ["-c", hook!.command], { cwd: dir, env: { ...env, CLAUDE_PROJECT_DIR: dir, ...extra }, encoding: "utf8" });
+    return { code: r.status, stdout: r.stdout, stderr: r.stderr };
+  };
+
+  it("install кладёт тонкому проекту хук SessionStart облачной сессии в .claude/settings.json — свои настройки и хуки проекта на месте, повторная установка хук не дублирует", () => {
+    const mine = { hooks: [{ type: "command", command: "echo мой хук" }] };
+    writeTree(proj, { ".claude/settings.json": JSON.stringify({ permissions: { allow: ["Bash(ls)"] }, hooks: { SessionStart: [mine], Stop: [mine] } }) });
+    install();
+    install();
+    const s = settings(proj);
+    expect(s.permissions).toEqual({ allow: ["Bash(ls)"] });
+    expect(s.hooks.Stop).toEqual([mine]);
+    expect(s.hooks.SessionStart[0]).toEqual(mine);
+    expect(s.hooks.SessionStart).toHaveLength(2);
+    expect(s.hooks.SessionStart[1].matcher).toBe("startup|resume|clear");
+    const hooks = cloudHooks(proj);
+    expect(hooks).toHaveLength(1);
+    expect(hooks[0]!.command).toStartWith('[ "$CLAUDE_CODE_REMOTE" = true ] || exit 0; ');
+    expect(hooks[0]!.command).not.toContain("github:");
+  });
+
+  it("check тонкого проекта без хука облачной сессии — отставание: update добавит его в .claude/settings.json", () => {
+    install();
+    writeTree(proj, { ".claude/settings.json": JSON.stringify({ hooks: {} }) });
+    const r = elves(sb, ["check"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("  ~ .claude/settings.json — the cloud session's SessionStart hook: Bun, the flow and check --hook\n");
+    expect(elves(sb, ["update"]).code).toBe(0);
+    expect(cloudHooks(proj)).toHaveLength(1);
+    expect(elves(sb, ["check"]).code).toBe(0);
+  });
+
+  it("хук облачной сессии вне облака выходит сразу — ничего не ставит и не печатает", () => {
+    install();
+    fake("npm");
+    fakeElves();
+    const r = runHook(proj);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("");
+    expect(calls()).toEqual([]);
+  });
+
+  it("хук облачной сессии в облаке без setup script ставит Bun и флоу — npm i -g bun@latest @miroshnik/elves и elves install -g — и печатает check --hook", () => {
+    install();
+    fake("npm");
+    fakeElves();
+    const r = runHook(proj, cloud);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("Elves flow: check --hook\n");
+    expect(calls()).toEqual(["npm i -g bun@latest @miroshnik/elves", "elves install -g", "elves check --hook"]);
+  });
+
+  it("хук облачной сессии после setup script ничего не ставит — только check --hook", () => {
+    install();
+    fake("npm");
+    fakeElves();
+    writeFileSync(path.join(home, ".claude/rules/elves.md"), "канон\n");
+    const r = runHook(proj, cloud);
+    expect(r.stdout).toBe("Elves flow: check --hook\n");
+    expect(calls()).toEqual(["elves check --hook"]);
+  });
+
+  /** npm без релиза флоу отдаёт заглушку пакета без команды `elves` — установка не удалась, а не сломанный хук. */
+  it("хук облачной сессии: установка не удалась — строка с командой в контексте, код 0", () => {
+    install();
+    fake("npm");
+    let r = runHook(proj, cloud);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("Elves cloud hook: the flow isn't installed (exit 127) — run: npm i -g bun@latest @miroshnik/elves && elves install -g\n");
+    fake("npm", "exit 1");
+    r = runHook(proj, cloud);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("Elves cloud hook: the flow isn't installed (exit 1) — run: npm i -g bun@latest @miroshnik/elves && elves install -g\n");
+  });
+
+  /** Клон песочницы — пакет этого клона с файлами `.claude/`, которые закоммичены в Elves. */
+  function sandboxClone() {
+    const clone = elvesPackage(path.join(tmp, "clone"));
+    for (const rel of execFileSync("git", ["ls-files", "-z", ".claude"], { cwd: REPO, encoding: "utf8" }).split("\0").filter(Boolean)) {
+      mkdirSync(path.dirname(path.join(clone.dir, rel)), { recursive: true });
+      cpSync(path.join(REPO, rel), path.join(clone.dir, rel), { verbatimSymlinks: true });
+    }
+    return clone;
+  }
+
+  it("клон Elves держит в .claude/settings.json хук облачной сессии с zsh — тот же, что пишет установщик", () => {
+    const committed = read(path.join(REPO, ".claude/settings.json"));
+    const [hook] = cloudHooks(REPO);
+    expect(hook!.command).toContain("apt-get install -y -o Dpkg::Options::=--force-confold zsh");
+    expect(hook!.command).toContain('bun --no-env-file "$CLAUDE_PROJECT_DIR"/bin/elves.ts install -g --link');
+    const clone = sandboxClone();
+    writeFileSync(path.join(clone.dir, ".claude/settings.json"), "{}\n");
+    expect(elves(sb, ["install"], { cwd: clone.dir, bin: clone.bin }).code).toBe(0);
+    expect(read(path.join(clone.dir, ".claude/settings.json"))).toBe(committed);
+  });
+
+  it("хук облачной сессии в клоне Elves без zsh ставит его через apt", () => {
+    const clone = sandboxClone();
+    fake("npm");
+    fake("apt-get");
+    const r = runHook(clone.dir, cloud);
+    expect(r.code).toBe(0);
+    expect(calls()).toEqual(["npm i -g bun@latest", "apt-get update", "apt-get install -y -o Dpkg::Options::=--force-confold zsh"]);
+    // флоу — из самого клона: канон машины — симлинк на него, вывод check --hook — в контексте
+    expect(realpathSync(path.join(home, ".claude/rules/elves.md"))).toBe(realpathSync(path.join(clone.dir, "AGENTS.md")));
+    expect(r.stdout).toContain("Elves flow (AGENTS.md, «First step of a session»):\n");
+    expect(r.stdout).toContain("Elves in the project: not installed — an Elves clone");
+    // zsh уже есть, флоу на машине — хук ничего не ставит
+    writeFileSync(path.join(sb.bin, "zsh"), "#!/bin/sh\n", { mode: 0o755 });
+    rmSync(log());
+    expect(runHook(clone.dir, cloud).code).toBe(0);
+    expect(calls()).toEqual([]);
+  });
+});
+
+/**
  * Commit, push и мерж необратимы, поэтому по умолчанию они — по «да» владельца. Проект может разрешить агенту вести
  * задачу целиком самому: ответ хранится в манифесте проекта, а не на машине — его видят облачная сессия и любой
  * агент. Сам вопрос в терминале тестом не покрыт: псевдотерминала без зависимостей у Node нет.
@@ -890,7 +1049,7 @@ describe("Задача целиком без спроса — настройка
   });
 
   /** Клон Elves — сам канон: правила в его корне, копия флоу в нём — лишняя. Режим у него свой, как у проекта. */
-  it("в клоне Elves install флоу не ставит — пишет в .agents/elves.json только auto и language: с флагом — его значение, без флага и терминала — прежнее", () => {
+  it("в клоне Elves install флоу не ставит — пишет в .agents/elves.json только auto и language: с флагом — его значение, без флага и терминала — прежнее; в .claude/settings.json — хук облачной сессии", () => {
     const clone = path.join(tmp, "clone");
     writeTree(clone, { "package.json": JSON.stringify({ name: "@miroshnik/elves" }) });
     execFileSync("git", ["init", "-q"], { cwd: clone });
@@ -900,8 +1059,9 @@ describe("Задача целиком без спроса — настройка
     expect(manifest(clone)).toEqual({ auto: true, language: "en" });
     expect(install(["--no-auto", "--lang", "ru"], clone).code).toBe(0);
     expect(manifest(clone)).toEqual({ auto: false, language: "ru" });
-    expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
+    expect(readdirSync(clone).sort()).toEqual([".agents", ".claude", ".git", "package.json"]);
     expect(readdirSync(path.join(clone, ".agents"))).toEqual(["elves.json"]);
+    expect(readdirSync(path.join(clone, ".claude"))).toEqual(["settings.json"]);
   });
 
   /**
@@ -916,7 +1076,7 @@ describe("Задача целиком без спроса — настройка
       execFileSync("git", ["init", "-q"], { cwd: clone });
       expect(install(["--auto", "--lang", "ru"], clone).code).toBe(0);
       expect(manifest(clone)).toEqual({ auto: true, language: "ru" });
-      expect(readdirSync(clone).sort()).toEqual([".agents", ".git", "package.json"]);
+      expect(readdirSync(clone).sort()).toEqual([".agents", ".claude", ".git", "package.json"]);
       const check = elves(sb, ["check"], { cwd: clone });
       expect(check.code).toBe(0);
       expect(check.stdout).toStartWith("Elves in the project: not installed — an Elves clone, the canon is at its root\n");

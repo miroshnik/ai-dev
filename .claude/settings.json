@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$CLAUDE_CODE_REMOTE\" = true ] || exit 0; [ -e \"$HOME/.claude/rules/elves.md\" ] || { npm i -g bun@latest; } >/dev/null 2>&1 || echo \"Elves cloud hook: Bun isn't updated (exit $?) — run: npm i -g bun@latest\"; command -v zsh >/dev/null || { apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh; } >/dev/null 2>&1 || echo \"Elves cloud hook: no zsh for tests/capabilities/agent-shell (exit $?) — run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh\"; { bun --no-env-file \"$CLAUDE_PROJECT_DIR\"/bin/elves.ts install -g --link; } >/dev/null 2>&1 || echo \"Elves cloud hook: the flow isn't installed (exit $?) — run: bun --no-env-file bin/elves.ts install -g --link\"; bun --no-env-file \"$CLAUDE_PROJECT_DIR\"/bin/elves.ts check --hook 2>&1 || echo \"elves check unavailable (exit $?): work by the current flow and say so\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

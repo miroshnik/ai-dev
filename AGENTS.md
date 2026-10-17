@@ -9,7 +9,7 @@ onto the machine — README, "Installation". A rule or skill change from
 another project's session is a task in Elves (project #6) without that
 project's names, for a separate session; I don't edit an Elves clone from
 someone else's session. A Claude Code **cloud session** sees only the
-repository and its setup script's flow — `docs/cloud-sessions.md`.
+repository and its project hook's flow — `docs/cloud-sessions.md`.
 
 **The repository is public:** no names, owners, paths or numbers of other
 repositories, no colleagues or clients — in files, git history or issues;
