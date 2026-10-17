@@ -1905,3 +1905,55 @@ describe("Прежние имена флоу (ai-dev): update переносит
     expect(r.stdout).toContain("  proxy *.localhost: running under the flow's former name (ai-dev-proxy) — replace it: bun --no-env-file ~/.agents/skills/task-env/scripts/task-env.ts proxy up\n");
   });
 });
+
+/**
+ * Облачная сессия Claude Code (#598): Bun образа отстаёт от `packageManager` проекта (1.4.2 без `bun check` 1.4.3), а
+ * тестам клона Elves нужен zsh (capability `agent-shell`), которого в образе нет. Чинит setup script окружения — шаг
+ * владельца (`docs/cloud-sessions.md`); `check` облачной сессии называет окружение, где его ещё не поправили, строкой с
+ * командой — её же сессия пока запускает сама. Код check строка не меняет: окружение — не отставание флоу.
+ */
+describe("check облачной сессии называет окружение без Bun проекта и zsh — строкой с командой для setup script", () => {
+  const cloud = { CLAUDE_CODE_REMOTE: "true" };
+  const BUN = "npm i -g bun@latest";
+  const ZSH = "DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold zsh";
+  const line = (missing: string, fix: string) => `  cloud environment: ${missing} — the owner adds it to the environment's setup script (docs/cloud-sessions.md), the session meanwhile runs it itself: ${fix}\n`;
+  // клон Elves — по имени пакета; zsh на PATH песочницы — исполняемый файл: check ищет его по PATH
+  const clone = (packageManager: string) => writePkg({ name: "@miroshnik/elves", packageManager });
+  const zsh = () => writeFileSync(path.join(sb.bin, "zsh"), "#!/bin/sh\n", { mode: 0o755 });
+
+  it("check облачной сессии: Bun старше packageManager проекта — строка окружения с версиями и командой для setup script", () => {
+    writePkg({ packageManager: "bun@99.0.0+sha512.0" });
+    elves(sb, ["install"]);
+    const r = elves(sb, ["check"], { env: cloud });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(line(`Bun ${Bun.version} is older than packageManager bun@99.0.0`, BUN));
+    expect(r.stdout).toEndWith(MODE_ASK);
+  });
+
+  it("check облачной сессии в клоне Elves без zsh — строка окружения с командой apt для setup script", () => {
+    clone("bun@99.0.0");
+    const r = elves(sb, ["check"], { env: cloud });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(line(`Bun ${Bun.version} is older than packageManager bun@99.0.0; no zsh for tests/capabilities/agent-shell`, `${BUN} && ${ZSH}`));
+    clone(`bun@${Bun.version}`);
+    expect(elves(sb, ["check"], { env: cloud }).stdout).toContain(line("no zsh for tests/capabilities/agent-shell", ZSH));
+  });
+
+  it("check облачной сессии с Bun не старше packageManager и zsh на PATH — без строки окружения", () => {
+    zsh();
+    for (const version of [Bun.version, "1.0.0"]) {
+      clone(`bun@${version}`);
+      const r = elves(sb, ["check"], { env: cloud });
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain("an Elves clone");
+      expect(r.stdout).not.toContain("cloud environment");
+    }
+  });
+
+  it("check вне облачной сессии окружение облака не проверяет: Bun старше packageManager — без строки окружения", () => {
+    clone("bun@99.0.0");
+    const r = elves(sb, ["check"]);
+    expect(r.stdout).toContain("an Elves clone");
+    expect(r.stdout).not.toContain("cloud environment");
+  });
+});
