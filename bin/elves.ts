@@ -187,8 +187,9 @@ The flow of the latest Elves release into the project (the git root or the curre
 ${PACKAGE} of the release in devDependencies of package.json (the project's package manager installs it, the lockfile
 changes too), .agents/elves.json, the machine queue's shim .agents/slot.sh and a block in AGENTS.md linking to the canon
 on the machine; the package.json checks (lint, typecheck, test, test:*) go through the shim, the skills' scripts —
-elves <script>. A project with a copy of the flow of an earlier release moves to a thin one: the copy, its symlinks and
-.gitignore exceptions go, imports and CI paths into the copy lead to the package, what else names .agents is listed.
+bun --no-env-file node_modules/.bin/elves <script>, without the project's env files. A project with a copy of the flow
+of an earlier release moves to a thin one: the copy, its symlinks and .gitignore exceptions go, imports and CI paths
+into the copy lead to the package, what else names .agents is listed.
 In a terminal asks whether the agent does tasks entirely by itself — answers by recommendation, commit, push,
 fixing CI, merge on green checks (auto in .agents/elves.json, default — no); without a terminal — the --auto or
 --no-auto flag, without the flag the previous answer stays; with auto prints the Claude Code permission rule for the
@@ -311,7 +312,7 @@ async function overview() {
     ...scripts.map(synopsis),
     "",
     "elves <command> --help — the command's details and examples",
-    `Run: ${RUN} <command>; in a project with ${PACKAGE} in devDependencies — elves <command>`,
+    `Run: ${RUN} <command>; in a project with ${PACKAGE} in devDependencies — ${PACKAGE_RUN} <command>`,
   ].join("\n");
 }
 
@@ -815,14 +816,19 @@ const COPY_KNIP_HINTS = /(?:\.\/)?\.agents\/skills\/spec\/scripts\/knip-hints\.c
 const PACKAGE_KNIP_HINTS = `node_modules/${PACKAGE}/skills/spec/scripts/knip-hints.cjs`;
 
 /**
- * A command that ran the copy's scripts — through the package: in package.json `elves <script>` (scripts get
- * `node_modules/.bin` on PATH), in CI — `bun --no-env-file node_modules/.bin/elves <script>` (a step of GitHub Actions
- * doesn't, and `bunx elves` without the package in node_modules would fetch someone else's `elves` from npm; #558,
- * question 2). A script that isn't the package's stays — `copyLeftovers` names it.
+ * The package's script as a command, in package.json and CI alike: the bin `elves` is this file with `#!/usr/bin/env
+ * bun` — bare, Bun loads the project's env files into it, and the script passes their keys on to `gh`, `git` and the
+ * checked command (tests/standards/no-env-file, #596); a step of GitHub Actions doesn't see `node_modules/.bin`, and
+ * `bunx elves` without the package in node_modules would fetch someone else's `elves` from npm (#558, question 2).
  */
-function fromCopy(text: string, ci: boolean) {
-  const run = ci ? "bun --no-env-file node_modules/.bin/elves" : "elves";
-  return text.replace(COPY_SCRIPT, (all, name: string) => (Object.hasOwn(SCRIPTS, name) ? `${run} ${name}` : all)).replace(COPY_KNIP_HINTS, PACKAGE_KNIP_HINTS);
+const PACKAGE_RUN = "bun --no-env-file node_modules/.bin/elves";
+
+/**
+ * A command that ran the copy's scripts — through the package: `PACKAGE_RUN <script>`. A script that isn't the
+ * package's stays — `copyLeftovers` names it.
+ */
+function fromCopy(text: string) {
+  return text.replace(COPY_SCRIPT, (all, name: string) => (Object.hasOwn(SCRIPTS, name) ? `${PACKAGE_RUN} ${name}` : all)).replace(COPY_KNIP_HINTS, PACKAGE_KNIP_HINTS);
 }
 
 /**
@@ -856,7 +862,7 @@ function packageScripts(root: string) {
   for (const [name, cmd] of Object.entries(scripts)) {
     if (typeof cmd !== "string") continue;
     const inner = slotted(name) ? unslot(cmd) : cmd;
-    const own = fromCopy(inner, false);
+    const own = fromCopy(inner);
     const want = slotted(name) ? wrap(own) : own;
     if (cmd === want) continue;
     scripts[name] = want;
@@ -870,7 +876,7 @@ function packageScripts(root: string) {
     const notes = [
       outside.length && `checks outside the slot queue: ${outside.join(", ")}`,
       previous.length && `the slot wrapper of a previous install${hidden ? " — knip doesn't see the command" : ""}: ${previous.join(", ")}`,
-      copy.length && `the flow copy's scripts → elves: ${copy.join(", ")}`,
+      copy.length && `the flow copy's scripts → node_modules/.bin/elves: ${copy.join(", ")}`,
     ];
     return void change("~", file, { note: notes.filter(Boolean).join("; ") });
   }
@@ -879,7 +885,7 @@ function packageScripts(root: string) {
   touch("package.json");
   const wrapped = [...outside, ...previous];
   if (wrapped.length) note(`package.json — checks through the machine queue (slot): ${wrapped.join(", ")}`);
-  if (copy.length) note(`package.json — the flow copy's scripts through the package (elves <script>): ${copy.join(", ")}`);
+  if (copy.length) note(`package.json — the flow copy's scripts through the package (${PACKAGE_RUN} <script>): ${copy.join(", ")}`);
 }
 
 /**
@@ -1451,7 +1457,7 @@ function rewriteCopyRefs(root: string) {
     if (!ci && !SOURCE_FILE.test(rel)) continue;
     const file = path.join(root, rel);
     const text = readFileSync(file, "utf8");
-    const out = ci ? fromCopy(text, true) : text.replace(COPY_IMPORT, (_, q: string, mod: string) => `${q}${packageImport(mod)}${q}`);
+    const out = ci ? fromCopy(text) : text.replace(COPY_IMPORT, (_, q: string, mod: string) => `${q}${packageImport(mod)}${q}`);
     if (out === text) continue;
     if (dry) {
       change("~", file, { note: ci ? "the flow copy's scripts → node_modules/.bin/elves" : `imports of the flow copy → ${PACKAGE}` });

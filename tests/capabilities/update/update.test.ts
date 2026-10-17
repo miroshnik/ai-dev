@@ -363,7 +363,7 @@ describe("Проект с копией флоу переезжает на тон
     expect(read(path.join(sb.proj, ".agents/slot.sh"))).toContain("elves slot --for $$");
     // тесты, конфиги, CI и скрипты — через пакет
     const pkg = JSON.parse(read(path.join(sb.proj, "package.json")));
-    expect(pkg.scripts).toEqual({ test: ". .agents/slot.sh && bun test", "spec:doc": "elves spec-doc .spec-report.xml --strict" });
+    expect(pkg.scripts).toEqual({ test: ". .agents/slot.sh && bun test", "spec:doc": "bun --no-env-file node_modules/.bin/elves spec-doc .spec-report.xml --strict" });
     expect(pkg.devDependencies).toEqual({ "@miroshnik/elves": V2 });
     expect(read(path.join(sb.proj, "bun.lock"))).toContain(`"@miroshnik/elves@${V2}"`);
     expect(read(path.join(sb.proj, "tests/capabilities/orders/orders.test.ts"))).toBe('import { describe, it } from "bun:test";\nimport { invariant } from "@miroshnik/elves/spec/harness";\nimport { projectCommands } from "@miroshnik/elves/github";\n');

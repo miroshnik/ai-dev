@@ -20,10 +20,13 @@ lockfile — только `package.json` и строка с командой: lo
 скиллы флоу из манифеста в `.agents/skills`, симлинки на них в `.claude/skills` и правил в `.claude/rules`, поля копии в
 манифесте и её исключения в `.gitignore` уходят; свои скиллы проекта остаются (#558, вопрос 6). Импорты харнесса,
 модели архитектуры, фрагмента ESLint и github из копии в тестах и конфигах ведут в `exports` пакета
-(`@miroshnik/elves/spec/harness` …), скрипты spec копии — в `elves <скрипт>` в `package.json` и в
-`bun --no-env-file node_modules/.bin/elves <скрипт>` в CI: шаг GitHub Actions не видит `node_modules/.bin`, а
-`bunx elves` без пакета в node_modules скачал бы из npm чужой пакет `elves` (#558, вопрос 2); репортёр knip
-`knip-hints.cjs` — файлом пакета, в `exports` его нет. Что ещё называет `.agents` — исключение `.agents/**` в линтере
+(`@miroshnik/elves/spec/harness` …), скрипты spec копии — в `bun --no-env-file node_modules/.bin/elves <скрипт>`, в
+`package.json` и в CI одинаково (#596): bin пакета — TypeScript с шебангом `#!/usr/bin/env bun`, и голым Bun
+подгрузил бы ему env-файлы проекта, а скрипт отдал бы их ключи `gh`, `git` и проверяемой команде (стандарт
+`no-env-file`); шаг GitHub Actions не видит `node_modules/.bin`, а `bunx elves` без пакета в node_modules скачал бы из
+npm чужой пакет `elves` (#558, вопрос 2). Отвергнуто: bin, который перезапускает себя под `--no-env-file`, — окружение
+родителя уже загружено, ключи файлов пришлось бы вычищать; шебанг `#!/usr/bin/env -S bun --no-env-file` — `env -S` есть
+не везде (busybox). Репортёр knip `knip-hints.cjs` — файлом пакета, в `exports` его нет. Что ещё называет `.agents` — исключение `.agents/**` в линтере
 или форматтере, путь в копию, которого правило не знает, — установка называет строкой с файлом и номером: правка
 руками.
 
