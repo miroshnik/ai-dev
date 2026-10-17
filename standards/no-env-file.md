@@ -20,6 +20,9 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 - в документах флоу — `AGENTS.md`, `claude/CLAUDE.md`, `README.md`, `package.json`, `docs/*.md`, `*.md` скиллов —
   `bun <путь>/scripts/<скрипт>.ts`, которую агент копирует как есть;
+- там же — скрипт пакета: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI одинаково (#596).
+  bin `elves` — TypeScript с шебангом `#!/usr/bin/env bun`: голый `elves`, `node_modules/.bin/elves` или `bunx elves`
+  Bun запускает с env-файлами каталога, а флаг поставить некуда;
 - в коде скриптов скиллов и установщика — команда, которую скрипт печатает (`bun ${…}`, `bun .agents/skills/…`), и
   дочерний процесс `bun` (`spawn("bun", […])`, `process.execPath`).
 
@@ -40,9 +43,13 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 `bunx @miroshnik/elves@<версия> spec-…` в джобах CI без зависимостей проекта (`ci.md` скилла spec, #559): в чекауте
 CI env-файлов с ключами нет — `.env.local` не коммитят.
 
+`elves slot --for $$` шима очереди `.agents/slot.sh`: `elves` только печатает переменные очереди, а команда идёт в
+shell скрипта, без env-файлов Bun. Обёртка Yarn 2+ `elves slot '<команда>'` в охвате: там команда идёт в процессе
+`elves`.
+
 ## Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file
 
-<details><summary>✅ 58 тестов</summary>
+<details><summary>✅ 88 тестов</summary>
 
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (документы)
 - ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит skills/slot/SKILL.md, skills/github/SKILL.md, skills/task-env/SKILL.md, skills/spec/SKILL.md, docs/parallel-checkouts.md, package.json (документы)
@@ -73,6 +80,39 @@ CI env-файлов с ключами нет — `.env.local` не коммит�
 - ✅ в skills/spec/reference.md скрипты скиллов вызываются с --no-env-file
 - ✅ в skills/task-env/SKILL.md скрипты скиллов вызываются с --no-env-file
 - ✅ в skills/task-env/reference.md скрипты скиллов вызываются с --no-env-file
+- ✅ вызов скрипта пакета в документах флоу и package.json, который подгрузит env-файлы проекта, — нарушение no-env-file
+  > bin пакета без флага Bun запускает с env-файлами рабочего каталога, и `elves <скрипт>` из `package.json` отдавал
+  > их ключи `gh`, `git` и проверяемой команде (#596). Форма — как в CI: `bun --no-env-file node_modules/.bin/elves`.
+- ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» не пуст (скрипт пакета)
+- ✅ реестр «документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов» находит README.md, skills/spec/SKILL.md, skills/spec/reference.md, skills/spec/ci.md (скрипт пакета)
+- ✅ нарушитель не проходит (скрипт пакета): скрипт package.json — голый elves
+- ✅ нарушитель не проходит (скрипт пакета): команда скилла — bin из node_modules без bun --no-env-file
+- ✅ в AGENTS.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в README.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в claude/CLAUDE.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в docs/ci-concurrency.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в docs/cloud-sessions.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в docs/judgment.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в docs/parallel-checkouts.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в docs/pr-checks.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в docs/testing.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в package.json скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/ci-wait/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/dashboard/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/est/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/est/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/github/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/github/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/spec/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/spec/canon.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/spec/checks.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/spec/ci.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/spec/migration.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/spec/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/task-env/SKILL.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ в skills/task-env/reference.md скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves \<скрипт>
+- ✅ исключение (скрипт пакета): skills/slot/SKILL.md (#592)
+  > #592 — обёртка Yarn 2+ — elves slot '<команда>' без --no-env-file: команда в слоте получает ключи env-файлов проекта; форму обёртки меняет #592
 - ✅ реестр «код скриптов скиллов и установщика без комментариев» не пуст (код)
 - ✅ реестр «код скриптов скиллов и установщика без комментариев» находит skills/github/scripts/github.ts, skills/task-env/scripts/task-env.ts, skills/spec/scripts/harness.ts, bin/elves.ts (код)
 - ✅ нарушитель не проходит (код): подсказка с командой без флага

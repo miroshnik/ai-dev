@@ -23,10 +23,13 @@ lockfile — только `package.json` и строка с командой: lo
 скиллы флоу из манифеста в `.agents/skills`, симлинки на них в `.claude/skills` и правил в `.claude/rules`, поля копии в
 манифесте и её исключения в `.gitignore` уходят; свои скиллы проекта остаются (#558, вопрос 6). Импорты харнесса,
 модели архитектуры, фрагмента ESLint и github из копии в тестах и конфигах ведут в `exports` пакета
-(`@miroshnik/elves/spec/harness` …), скрипты spec копии — в `elves <скрипт>` в `package.json` и в
-`bun --no-env-file node_modules/.bin/elves <скрипт>` в CI: шаг GitHub Actions не видит `node_modules/.bin`, а
-`bunx elves` без пакета в node_modules скачал бы из npm чужой пакет `elves` (#558, вопрос 2); репортёр knip
-`knip-hints.cjs` — файлом пакета, в `exports` его нет. Что ещё называет `.agents` — исключение `.agents/**` в линтере
+(`@miroshnik/elves/spec/harness` …), скрипты spec копии — в `bun --no-env-file node_modules/.bin/elves <скрипт>`, в
+`package.json` и в CI одинаково (#596): bin пакета — TypeScript с шебангом `#!/usr/bin/env bun`, и голым Bun
+подгрузил бы ему env-файлы проекта, а скрипт отдал бы их ключи `gh`, `git` и проверяемой команде (стандарт
+`no-env-file`); шаг GitHub Actions не видит `node_modules/.bin`, а `bunx elves` без пакета в node_modules скачал бы из
+npm чужой пакет `elves` (#558, вопрос 2). Отвергнуто: bin, который перезапускает себя под `--no-env-file`, — окружение
+родителя уже загружено, ключи файлов пришлось бы вычищать; шебанг `#!/usr/bin/env -S bun --no-env-file` — `env -S` есть
+не везде (busybox). Репортёр knip `knip-hints.cjs` — файлом пакета, в `exports` его нет. Что ещё называет `.agents` — исключение `.agents/**` в линтере
 или форматтере, путь в копию, которого правило не знает, — установка называет строкой с файлом и номером: правка
 руками.
 
@@ -195,7 +198,7 @@ setup script установка шла бы из архива GitHub, а не и
 зовёт любой — Claude, Codex, человек в терминале. `build` не оборачивается — его запускают хостинг и Docker, где
 шима или пакета может не быть; watch — долгий, занял бы слот надолго.
 
-<details><summary>✅ 14 тестов</summary>
+<details><summary>✅ 15 тестов</summary>
 
 - ✅ установка оборачивает lint, typecheck, test и test:* в slot, build и watch — нет
 - ✅ скрипты package.json тонкого проекта идут через шим slot: с elves на PATH — в слоте машины, без elves — как есть, сбой elves роняет скрипт с его кодом
@@ -211,9 +214,15 @@ setup script установка шла бы из архива GitHub, а не и
 - ✅ обёртка прошлой установки — slot.sh копии или команда строкой у slot.ts через node или bun — переписывается, команда та же
   > Копия флоу подключала свой slot.sh; ещё раньше установки передавали команду slot.ts строкой — через node в проекте на
   > Node, через bun без отключения env-файлов, через bun с ним: knip такую команду не видит.
-- ✅ скрипты копии флоу — bun .agents/skills/spec/scripts/\<скрипт>.ts — переписываются на elves \<скрипт>, репортёр knip — на файл пакета
+- ✅ скрипты копии флоу — bun .agents/skills/spec/scripts/\<скрипт>.ts — переписываются на bun --no-env-file node_modules/.bin/elves \<скрипт>, репортёр knip — на файл пакета
   > Скрипты spec копии флоу шли по её пути (`bun .agents/skills/spec/scripts/<скрипт>.ts`), репортёр knip для `report`
-  > харнесса — тоже; в тонком проекте их даёт пакет: `elves <скрипт>` из node_modules/.bin, репортёр — файлом пакета.
+  > харнесса — тоже; в тонком проекте их даёт пакет: `bun --no-env-file node_modules/.bin/elves <скрипт>`, как в CI
+  > (#596), репортёр — файлом пакета.
+- ✅ скрипт spec из package.json тонкого проекта не видит ключей env-файлов рабочего каталога
+  > bin пакета — `bin/elves.ts` с шебангом `#!/usr/bin/env bun`: голый `elves <скрипт>` Bun запускает с env-файлами
+  > рабочего каталога, и скрипт отдаёт их ключи дальше — `spec-break` проверяемой команде, `spec-run` и `spec-publish`
+  > — `gh` и `git` (tests/standards/no-env-file, #596). Скрипт `package.json` идёт как у npm: `sh -c` в корне проекта,
+  > `node_modules/.bin` первым в PATH.
 - ✅ в проекте на Yarn 2+ команда остаётся строкой у elves slot: shell Yarn не подключает шим
   > Yarn 2+ выполняет скрипты своим shell (`@yarnpkg/shell`): в нём нет `.`, `eval` и `export`, и подключить шим нечем.
   > Там команда остаётся строкой у `elves slot` — knip её не видит, но проверки идут очередью.
