@@ -291,7 +291,7 @@ Mechanics the canon refers to; the agent reads them as needed.
 - [`docs/testing.md`](docs/testing.md) — how to test: what runs before a commit and what is left to CI, a run's result by the runner's summary, the environment, e2e without flakes, UI state in the agent's browser — by the DOM, not a screenshot.
 - [`docs/judgment.md`](docs/judgment.md) — judgment and edits: a mistake disguised as an outcome, a label is a claim, editing exactly what was named, "it doesn't reproduce for me".
 - [`docs/parallel-checkouts.md`](docs/parallel-checkouts.md) — parallel worktrees: the full rule, the task's Compose stack and what the compose file holds, callbacks of external services, the runner config, a shared `.git/config` — no `git config` in copies.
-- [`docs/cloud-sessions.md`](docs/cloud-sessions.md) — the Claude Code cloud session: what it can't access and how to close a task from there.
+- [`docs/cloud-sessions.md`](docs/cloud-sessions.md) — the Claude Code cloud session: what it can't access, its brief (`#` only for its task) and how to close a task from there.
 
 ## Repository layout
 
