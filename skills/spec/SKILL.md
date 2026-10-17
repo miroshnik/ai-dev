@@ -196,8 +196,8 @@ each one — `checks.md` next to this file:
 
 The scripts and modules come from the project's package — `@miroshnik/elves`
 in `devDependencies`, committed with its version: the scripts run as
-`elves spec-…` under Bun, a Node project included (in CI —
-`oven-sh/setup-bun@v2`); the modules the project's tests and config import
+`bun --no-env-file node_modules/.bin/elves spec-…`, a Node project included
+(in CI — `oven-sh/setup-bun@v2`); the modules the project's tests and config import
 (`@miroshnik/elves/spec/harness`, `…/spec/architecture`,
 `…/spec/eslint-config`) load under the project's own runner on Node — from
 the package's build. Each step with its details — `reference.md`,
@@ -207,14 +207,14 @@ the package's build. Each step with its details — `reference.md`,
    `bunx @miroshnik/elves install` — the package version, the manifest, the
    shim and the `AGENTS.md` block; update — `update` in the current task's
    branch, a few lines.
-2. **Scripts** in `package.json` — the package's `elves`, in CI —
-   `bun --no-env-file node_modules/.bin/elves spec-…`; reports — those the
-   project has:
+2. **Scripts** in `package.json` and CI — the package's `elves` under
+   `bun --no-env-file`: the bare bin would load the project's env files;
+   reports — those the project has:
    ```json
-   "spec:doc": "elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
-   "spec:diff": "elves spec-diff",
-   "spec:publish": "elves spec-publish",
-   "spec:claims": "elves spec-claims --entries tests/standards/entry-points/entries.ts"
+   "spec:doc": "bun --no-env-file node_modules/.bin/elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",
+   "spec:diff": "bun --no-env-file node_modules/.bin/elves spec-diff",
+   "spec:publish": "bun --no-env-file node_modules/.bin/elves spec-publish",
+   "spec:claims": "bun --no-env-file node_modules/.bin/elves spec-claims --entries tests/standards/entry-points/entries.ts"
    ```
    Standards and architecture run once — the `test:spec` script, a fast CI job
    of its own; `test` excludes them, e2e doesn't run them (`checks.md`):

@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { codeOnly, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
+import { codeOnly, exceptionsIn, invariant, sources } from "../../../skills/spec/scripts/harness.ts";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -33,6 +33,13 @@ const FLAGS = String.raw`((?:\s+--?[\w-]+(?:=[^\s\`'"]+)?)*)`;
 const DOC_CALL = new RegExp(String.raw`\bbun${FLAGS}\s+(?:<[^>\n]+>|[^\s\`'"*()<>]+)/scripts/[\w-]+\.ts\b`, "g");
 /** Команда, которую печатает скрипт: `bun ${путь}`, `bun .agents/skills/…`, `bun skills/…`. */
 const PRINTED = new RegExp(String.raw`\bbun${FLAGS}\s+(?:\$\{|~?/?\.agents/skills/|skills/)`, "g");
+/**
+ * Вызов скрипта пакета — bin `elves` с шебангом `#!/usr/bin/env bun`: `elves spec-doc`, `elves <скрипт>`,
+ * `node_modules/.bin/elves spec-…`, `bunx elves …`. Не вызов: `elves slot --for` шима — команда идёт в shell скрипта, а
+ * `elves` только печатает переменные очереди; пакет через bunx (`bunx @miroshnik/elves@<версия> spec-…`) и `$elves` джобы
+ * CI без зависимостей — «Вне охвата»; команды установщика (`elves install`) проверок проекта не запускают.
+ */
+const PACKAGE_CALL = new RegExp(String.raw`(?:\bbun${FLAGS}\s+)?(?:(?:\.\/)?node_modules\/\.bin\/|(?<![\w/.@$-]))elves\s+(?:spec-|slot\b(?!\s+--for\b)|<)`, "g");
 /** Дочерний процесс bun: `spawn("bun", [скрипт…])`, `spawnSync(process.execPath, […])` — первым аргументом флаг. */
 const SPAWN = /(?:"bun"|process\.execPath)\s*,\s*\[(?!\s*"--no-env-file")/g;
 
@@ -65,6 +72,49 @@ describe("Скрипты флоу под bun не подгружают env-фа�
       { name: "скрипт package.json без флага", item: { file: "package.json", text: `{"scripts":{"test":"bun .agents/skills/slot/scripts/slot.ts 'vitest run'"}}` } },
     ],
     includes: ["skills/slot/SKILL.md", "skills/github/SKILL.md", "skills/task-env/SKILL.md", "skills/spec/SKILL.md", "docs/parallel-checkouts.md", "package.json"],
+  });
+
+  /**
+   * bin пакета без флага Bun запускает с env-файлами рабочего каталога, и `elves <скрипт>` из `package.json` отдавал
+   * их ключи `gh`, `git` и проверяемой команде (#596). Форма — как в CI: `bun --no-env-file node_modules/.bin/elves`.
+   */
+  it("вызов скрипта пакета в документах флоу и package.json, который подгрузит env-файлы проекта, — нарушение no-env-file", () => {
+    const calls = (text: string) => unflagged(text, PACKAGE_CALL).length;
+    const loads = [
+      `"spec:doc": "elves spec-doc .spec-report.xml --strict"`,
+      "`elves <script>`",
+      "`elves spec-…` under Bun",
+      "run: node_modules/.bin/elves spec-diff",
+      "bun ./node_modules/.bin/elves spec-run --artifact spec-reports",
+      "bunx elves spec-publish",
+      `"test": "elves slot 'vitest run'"`,
+    ];
+    const clean = [
+      `"spec:doc": "bun --no-env-file node_modules/.bin/elves spec-doc .spec-report.xml --strict"`,
+      "bun --no-env-file ./node_modules/.bin/elves <script>",
+      "ELVES_SLOT_EXPORT=$(elves slot --for $$)",
+      `elves="bunx @miroshnik/elves@1.2.3"; $elves spec-diff`,
+      "bunx @miroshnik/elves@<version> spec-publish",
+      "bunx @miroshnik/elves install -g",
+      "elves install --auto",
+    ];
+    expect(loads.filter((t) => calls(t) !== 1)).toEqual([]);
+    expect(clean.filter((t) => calls(t) !== 0)).toEqual([]);
+  });
+
+  invariant(it, {
+    rule: "скрипт пакета",
+    registry: "документы флоу — AGENTS.md, claude/CLAUDE.md, README.md, package.json, docs/*.md, *.md скиллов",
+    items: flowDocs(),
+    key: (f) => f.file,
+    name: (f) => `в ${f.file} скрипты пакета вызываются как bun --no-env-file node_modules/.bin/elves <скрипт>`,
+    check: (f) => noUnflagged(f, unflagged(f.text, PACKAGE_CALL), "вызов скрипта пакета"),
+    violator: [
+      { name: "скрипт package.json — голый elves", item: { file: "package.json", text: `{"scripts":{"spec:doc":"elves spec-doc .spec-report.xml --strict"}}` } },
+      { name: "команда скилла — bin из node_modules без bun --no-env-file", item: { file: "skills/x/SKILL.md", text: "```bash\nnode_modules/.bin/elves spec-diff\n```\n" } },
+    ],
+    exceptions: exceptionsIn(),
+    includes: ["README.md", "skills/spec/SKILL.md", "skills/spec/reference.md", "skills/spec/ci.md"],
   });
 
   invariant(it, {
