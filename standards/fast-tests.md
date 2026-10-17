@@ -1,8 +1,8 @@
 <!-- spec-doc: сгенерировано из названий тестов, руками не править -->
 # fast-tests
 
-Локальный `test` — быстрый уровень: тесты, которым нужен Docker или живой сервер, лежат в файлах `*.slow.test.ts` и
-идут скриптом `test:slow`, CI гоняет оба уровня; повторы `gh` в тестах — без настоящих пауз.
+Локальный `test` — быстрый уровень: тесты, которым нужен Docker, живой сервер или сеть corepack, лежат в файлах
+`*.slow.test.ts` и идут скриптом `test:slow`, CI гоняет оба уровня; повторы `gh` в тестах — без настоящих пауз.
 
 Прогон тестов Elves вырос с 45 с (409 тестов, 2026-09-28) до 220–330 с (1 830 тестов). Замер 2026-10-14 под нагрузкой
 машины: из 326 с стеки task-env с настоящим Docker шли 147 с, сервер dashboard — 45 с, из них 44 с — один тест ошибки
@@ -17,16 +17,17 @@ Docker, ни порта на 127.0.0.1 — эти тесты там шумят (
 - `test:spec` — только `tests/standards`, перед `test`: стандарты — статические проверки, им хватает одного прогона
   (скилл `spec`, `checks.md`); в `test` они шли бы второй раз — около 880 тестов, ~3 с (#479).
 - `test:slow` — только `*.slow.test.ts`: локально — когда правка касается того, что они проверяют (стек и прокси
-  task-env, сервер dashboard). CI гоняет все: его `spec:doc` идёт голым `bun test`, по всем файлам, — стандарты в нём
+  task-env, сервер dashboard, проект на Yarn 2+ у install). CI гоняет все: его `spec:doc` идёт голым `bun test`, по всем файлам, — стандарты в нём
   один раз.
 
 Медленный файл лежит в папке решения рядом с быстрым: `<имя>.slow.test.ts`. Для `spec-doc` это тоже главный файл папки,
 как `.e2e.ts`: страница — сначала утверждения быстрого файла, затем медленного. Уровень — по имени файла: `bun test`
 выбирает и пропускает файлы, а не describe.
 
-Причина уровня проверяется в обе стороны: тест, который пробует демон Docker (`docker info`) или запускает скрипт
-сервером (`spawn`) и ходит к нему `fetch`, — в медленном файле; медленный файл без такой причины — нарушение, иначе в
-`test:slow` уходило бы просто медленное или красное.
+Причина уровня проверяется в обе стороны: тест, который пробует демон Docker (`docker info`), запускает скрипт
+сервером (`spawn`) и ходит к нему `fetch` или запускает процесс `corepack`, — в медленном файле; медленный файл без такой
+причины — нарушение, иначе в `test:slow` уходило бы просто медленное или красное. corepack ставит менеджер пакетов по
+`packageManager` проекта из сети — Yarn 2+ вживую (#608): без сети, в песочнице агента, тест шумел бы, как без Docker.
 
 ## Паузы повторов gh
 
@@ -41,20 +42,22 @@ Docker, ни порта на 127.0.0.1 — эти тесты там шумят (
 - Отдельный каталог `tests/slow/`: решение распалось бы на две папки, а папка — дом решения.
 - Бюджет времени на тест: под нагрузкой машины — ложные падения (`tests/standards/spawn-timeout`).
 
-## Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба
+## Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба
 
-<details><summary>✅ 13 тестов</summary>
+<details><summary>✅ 15 тестов</summary>
 
-- ✅ реестр «тесты Elves, которым нужен Docker или живой сервер» не пуст
-- ✅ реестр «тесты Elves, которым нужен Docker или живой сервер» находит tests/capabilities/task-env/task-env.slow.test.ts, tests/capabilities/dashboard/dashboard.slow.test.ts
+- ✅ реестр «тесты Elves, которым нужен Docker, живой сервер или corepack» не пуст
+- ✅ реестр «тесты Elves, которым нужен Docker, живой сервер или corepack» находит tests/capabilities/task-env/task-env.slow.test.ts, tests/capabilities/dashboard/dashboard.slow.test.ts, tests/capabilities/install/install.slow.test.ts
 - ✅ нарушитель не проходит: быстрый файл с пробой docker info
 - ✅ tests/capabilities/dashboard/dashboard.slow.test.ts (живой сервер) — в медленном уровне
+- ✅ tests/capabilities/install/install.slow.test.ts (corepack) — в медленном уровне
 - ✅ tests/capabilities/task-env/task-env.slow.test.ts (Docker) — в медленном уровне
 - ✅ реестр «медленные тесты Elves» не пуст
-- ✅ нарушитель не проходит: медленный файл без Docker и сервера
-- ✅ tests/capabilities/dashboard/dashboard.slow.test.ts — медленный по причине: Docker или живой сервер
-- ✅ tests/capabilities/task-env/task-env.slow.test.ts — медленный по причине: Docker или живой сервер
-- ✅ скрипт test не запускает тесты, которым нужен Docker или живой сервер: файлы *.slow.test.ts идут скриптом test:slow
+- ✅ нарушитель не проходит: медленный файл без Docker, сервера и corepack
+- ✅ tests/capabilities/dashboard/dashboard.slow.test.ts — медленный по причине: Docker, живой сервер или corepack
+- ✅ tests/capabilities/install/install.slow.test.ts — медленный по причине: Docker, живой сервер или corepack
+- ✅ tests/capabilities/task-env/task-env.slow.test.ts — медленный по причине: Docker, живой сервер или corepack
+- ✅ скрипт test не запускает тесты, которым нужен Docker, живой сервер или corepack: файлы *.slow.test.ts идут скриптом test:slow
 - ✅ скрипт test не повторяет test:spec: стандарты Elves идут только скриптом test:spec
   > Стандарты — статические проверки, им хватает одного прогона: перед коммитом идут test:spec, затем test (#479).
 - ✅ CI запускает и быстрый, и медленный уровень
@@ -67,8 +70,8 @@ Docker, ни порта на 127.0.0.1 — эти тесты там шумят (
 
 <details><summary>✅ 4 теста</summary>
 
-- ✅ проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер
-- ✅ spawnSync с fetch, spawn без fetch, docker compose config без демона — причины нет
+- ✅ проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер; процесс corepack — corepack
+- ✅ spawnSync с fetch, spawn без fetch, docker compose config без демона, слово corepack в тексте — причины нет
 - ✅ CI с одним test без test:slow — медленный уровень не идёт
 - ✅ уровни шагом только на push в main — PR их не гоняет
 

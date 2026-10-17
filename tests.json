@@ -4119,6 +4119,20 @@
   "name": "элемент так и не виден — понятная ошибка с тем, что повторить, а не падение"
  },
  {
+  "path": "tests/capabilities/install/install.slow.test.ts",
+  "describes": [
+   "Тонкий проект на Yarn 2+: скрипт пакета и обёртка очереди запускают bin пакета под Bun"
+  ],
+  "name": "install и update на Yarn 2+ с PnP — скрипт пакета в package.json в форме, которая работает без node_modules"
+ },
+ {
+  "path": "tests/capabilities/install/install.slow.test.ts",
+  "describes": [
+   "Тонкий проект на Yarn 2+: скрипт пакета и обёртка очереди запускают bin пакета под Bun"
+  ],
+  "name": "проверка проекта на Yarn 2+ через очередь машины запускает bin пакета под Bun — и с PnP, и с nodeLinker node-modules"
+ },
+ {
   "path": "tests/capabilities/install/install.test.ts",
   "describes": [
    "В проект — тонкий флоу: версия пакета, манифест, шим slot и блок AGENTS.md, без копии флоу"
@@ -4459,7 +4473,7 @@
   "describes": [
    "Проверки проекта идут очередью машины: install оборачивает их скрипты package.json в шим slot"
   ],
-  "name": "в проекте на Yarn 2+ команда остаётся строкой у elves slot: shell Yarn не подключает шим"
+  "name": "в проекте на Yarn 2+ скрипты пакета — через bunx, команда проверки — строкой у его slot: bin .ts Yarn запускает Node-ом, шим его shell не подключает"
  },
  {
   "path": "tests/capabilities/install/install.test.ts",
@@ -8644,6 +8658,13 @@
  {
   "path": "tests/capabilities/update/update.test.ts",
   "describes": [
+   "Проект с копией флоу переезжает на тонкий проект"
+  ],
+  "name": "переезд с копии на Yarn 2+ с PnP — джоба CI с установкой зависимостей запускает скрипт пакета"
+ },
+ {
+  "path": "tests/capabilities/update/update.test.ts",
+  "describes": [
    "Тонкий проект сверяется с версией пакета и обновляется в задаче сессии"
   ],
   "name": "`install` и `update` сохраняют `env` в `.agents/elves.json`"
@@ -10233,7 +10254,7 @@
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
    "примеры"
   ],
   "name": "CI с одним test без test:slow — медленный уровень не идёт"
@@ -10241,23 +10262,23 @@
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
    "примеры"
   ],
-  "name": "spawnSync с fetch, spawn без fetch, docker compose config без демона — причины нет"
+  "name": "spawnSync с fetch, spawn без fetch, docker compose config без демона, слово corepack в тексте — причины нет"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
    "примеры"
   ],
-  "name": "проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер"
+  "name": "проба docker info — Docker; spawn скрипта и fetch к нему — живой сервер; процесс corepack — corepack"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба",
    "примеры"
   ],
   "name": "уровни шагом только на push в main — PR их не гоняет"
@@ -10265,91 +10286,105 @@
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "CI запускает и быстрый, и медленный уровень"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "tests/capabilities/dashboard/dashboard.slow.test.ts (живой сервер) — в медленном уровне"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "tests/capabilities/dashboard/dashboard.slow.test.ts — медленный по причине: Docker или живой сервер"
+  "name": "tests/capabilities/dashboard/dashboard.slow.test.ts — медленный по причине: Docker, живой сервер или corepack"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "tests/capabilities/install/install.slow.test.ts (corepack) — в медленном уровне"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+  ],
+  "name": "tests/capabilities/install/install.slow.test.ts — медленный по причине: Docker, живой сервер или corepack"
+ },
+ {
+  "path": "tests/standards/fast-tests/fast-tests.test.ts",
+  "describes": [
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "tests/capabilities/task-env/task-env.slow.test.ts (Docker) — в медленном уровне"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "tests/capabilities/task-env/task-env.slow.test.ts — медленный по причине: Docker или живой сервер"
+  "name": "tests/capabilities/task-env/task-env.slow.test.ts — медленный по причине: Docker, живой сервер или corepack"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "нарушитель не проходит: быстрый файл с пробой docker info"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "нарушитель не проходит: медленный файл без Docker и сервера"
+  "name": "нарушитель не проходит: медленный файл без Docker, сервера и corepack"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "реестр «медленные тесты Elves» не пуст"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "реестр «тесты Elves, которым нужен Docker или живой сервер» находит tests/capabilities/task-env/task-env.slow.test.ts, tests/capabilities/dashboard/dashboard.slow.test.ts"
+  "name": "реестр «тесты Elves, которым нужен Docker, живой сервер или corepack» находит tests/capabilities/task-env/task-env.slow.test.ts, tests/capabilities/dashboard/dashboard.slow.test.ts, tests/capabilities/install/install.slow.test.ts"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "реестр «тесты Elves, которым нужен Docker или живой сервер» не пуст"
+  "name": "реестр «тесты Elves, которым нужен Docker, живой сервер или corepack» не пуст"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
-  "name": "скрипт test не запускает тесты, которым нужен Docker или живой сервер: файлы *.slow.test.ts идут скриптом test:slow"
+  "name": "скрипт test не запускает тесты, которым нужен Docker, живой сервер или corepack: файлы *.slow.test.ts идут скриптом test:slow"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "скрипт test не повторяет test:spec: стандарты Elves идут только скриптом test:spec"
  },
  {
   "path": "tests/standards/fast-tests/fast-tests.test.ts",
   "describes": [
-   "Локальный test — быстрый уровень: тесты с Docker и живым сервером — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
+   "Локальный test — быстрый уровень: тесты с Docker, живым сервером и corepack — в файлах *.slow.test.ts скрипта test:slow, CI гоняет оба"
   ],
   "name": "скрипты под тестом повторяют gh без настоящих пауз: прогон задаёт ELVES_GH_RETRY_MS=0,0,0, дочерние процессы его наследуют"
  },
@@ -15216,6 +15251,13 @@
   "describes": [
    "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
   ],
+  "name": "справка скрипта пакета elves <скрипт> --help и подсказка харнесса называют форму запуска, которая на Yarn 2+ с PnP находит bin пакета"
+ },
+ {
+  "path": "tests/standards/no-env-file/no-env-file.test.ts",
+  "describes": [
+   "Скрипты флоу под bun не подгружают env-файлы проекта: вызов несёт --no-env-file"
+  ],
   "name": "справка скрипта пакета под именем elves называет вызов без env-файлов проекта"
  },
  {
@@ -17788,6 +17830,13 @@
    "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
   ],
   "name": "tests/capabilities/github-task/github-task.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
+ },
+ {
+  "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
+  "describes": [
+   "Тест, который запускает процессы, не падает от нагрузки машины: таймаут SPAWN_TIMEOUT"
+  ],
+  "name": "tests/capabilities/install/install.slow.test.ts задаёт setDefaultTimeout(SPAWN_TIMEOUT)"
  },
  {
   "path": "tests/standards/spawn-timeout/spawn-timeout.test.ts",
