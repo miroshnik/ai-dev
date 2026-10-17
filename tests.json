@@ -3724,6 +3724,13 @@
   "describes": [
    "task show печатает задачу одним выводом"
   ],
+  "name": "вопрос с ✅ внутри текста — открытый: отвеченным его делает ✅ в начале ответа — после номера, после вопроса или в начале строки пункта"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "task show печатает задачу одним выводом"
+  ],
   "name": "чек зелёный, потом красный на перезапуске — task show называет его красным, как ci-wait"
  },
  {
@@ -4033,6 +4040,55 @@
    "Задачи — на языке проекта из .agents/elves.json чекаута"
   ],
   "name": "эпик без --body — каркас только с разделом вопросов: эпик без кода, сценариев у него нет"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: `task answer` ставит ✅ и ответ через REST, подпись прокси в конце описания в последний вопрос не попадает"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: `task new` в организации — тип issue по имени, Priority — строкой для локальной сессии"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: `task new` заводит подзадачу эпика через REST — sub-issue, blocked by, метки решений и вопросов; Status и оценку называет строкой для локальной сессии"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: `task show` — задача, эпик с вопросами, подзадачи, блокеры и PR с чеками через REST репозитория, без полей проекта"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: дубль `task new` находит листингом открытых задач — поиск GitHub в облаке закрыт"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: остальные команды отказывают с объяснением и называют команды с REST-путём"
+ },
+ {
+  "path": "tests/capabilities/github-task/github-task.test.ts",
+  "describes": [
+   "Облачная сессия: task show, task answer и task new — через REST репозитория"
+  ],
+  "name": "облачная сессия: ответ на последний открытый вопрос снимает метку вопросов через REST"
  },
  {
   "path": "tests/capabilities/github-task/github-task.test.ts",
