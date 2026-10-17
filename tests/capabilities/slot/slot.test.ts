@@ -225,6 +225,22 @@ describe("Команда в слоте — как без него, с долей
   it("код выхода — код команды", () => {
     expect(exitOf(run(["exit 3"]))).toBe(3);
   });
+
+  /**
+   * `elves slot '<команда>'` — прямой вызов из `node_modules/.bin` (#556) и обёртка скрипта на Yarn 2+ (#558): команда
+   * идёт в процессе `elves`, и Bun, подгрузи он env-файлы рабочего каталога, отдал бы их ключи команде. Шебанг bin
+   * запускает Bun с `--no-env-file` (tests/standards/no-env-file, #592).
+   */
+  it("elves slot '<команда>' из node_modules/.bin не отдаёт команде ключи env-файлов рабочего каталога", () => {
+    writeFileSync(path.join(dir, ".env"), "ELVES_DOTENV=dotenv\n");
+    writeFileSync(path.join(dir, ".env.local"), "ELVES_LEAK=prod-key\n");
+    const probe = `echo "[$ELVES_DOTENV|$ELVES_LEAK]"`;
+    // без NODE_ENV, как в терминале: под bun test он `test`, и `.env.local` Bun не берёт
+    const bare = (env: NodeJS.ProcessEnv) => (delete env.NODE_ENV, env);
+    const direct = spawnSync(path.join(bin, "elves"), ["slot", probe], { cwd: dir, env: bare(envOf()), encoding: "utf8", timeout: PATIENCE });
+    const script = spawnSync("sh", ["-c", `elves slot '${probe}'`], { cwd: dir, env: bare(scriptEnv()), encoding: "utf8", timeout: PATIENCE });
+    for (const r of [direct, script]) expect({ code: exitOf(r), stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: "[|]\n", stderr: "" });
+  });
 });
 
 /**

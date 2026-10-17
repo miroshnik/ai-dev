@@ -63,7 +63,9 @@ would get without the wrapper: `npm run` and `bun run` don't load env files
 for a `package.json` script, and a runner that loads them itself (`bun test`
 — `.env.test`) still does. A script's command doesn't go through `slot.ts`
 at all — it gets the script's environment and the two queue variables:
-`elves slot --for` only prints them. Not `env = false` in the
+`elves slot --for` only prints them. The package's `elves slot '<command>'`
+— the Yarn 2+ wrapper, a direct call from `node_modules/.bin` — goes through
+the bin's shebang: `sh` starts Bun with `--no-env-file`. Not `env = false` in the
 project's `bunfig.toml`:
 it would turn env files off for every `bun` of a Bun project, its own
 `bun test` and `bun run dev` included. The same flag is on every call of a

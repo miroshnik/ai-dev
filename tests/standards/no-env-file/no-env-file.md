@@ -17,9 +17,13 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 - в документах флоу — `AGENTS.md`, `claude/CLAUDE.md`, `README.md`, `package.json`, `docs/*.md`, `*.md` скиллов —
   `bun <путь>/scripts/<скрипт>.ts`, которую агент копирует как есть;
-- там же — скрипт пакета: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI одинаково (#596).
-  bin `elves` — TypeScript с шебангом `#!/usr/bin/env bun`: голый `elves`, `node_modules/.bin/elves` или `bunx elves`
-  Bun запускает с env-файлами каталога, а флаг поставить некуда;
+- там же — скрипт пакета под `bun`: `bun --no-env-file node_modules/.bin/elves <скрипт>`, в `package.json` и CI
+  одинаково (#596). `bun` читает bin сам, мимо его шебанга, и без флага подгрузит env-файлы каталога;
+- шебанг bin пакета — через `sh`: `#!/bin/sh` и вторая строка `':' //; exec bun --no-env-file "$0" "$@"` — для `sh`
+  запуск Bun с флагом, для TypeScript строка-выражение и комментарий. Голый `elves`, `node_modules/.bin/elves`, скрипт
+  `package.json`, `bunx` и обёртка Yarn 2+ `elves slot '<команда>'` идут через него — без env-файлов (#592). Не
+  `#!/usr/bin/env bun` — Bun подгрузил бы их, и `elves slot '<команда>'` отдал бы ключи команде; не
+  `#!/usr/bin/env -S bun --no-env-file` — `env -S` есть не везде (busybox), bin там не запустился бы вовсе;
 - в коде скриптов скиллов и установщика — команда, которую скрипт печатает (`bun ${…}`, `bun .agents/skills/…`), и
   дочерний процесс `bun` (`spawn("bun", […])`, `process.execPath`).
 
@@ -33,13 +37,10 @@ Node-проекте `.env.local` часто несёт прод-ключи из 
 
 ## Вне охвата
 
-Установщик под `bunx` (`bunx @miroshnik/elves …`, запасной путь `bunx github:miroshnik/elves …`, хук
-`SessionStart`): `bunx` подгружает env-файлы и флаг не принимает — ни `bunx --no-env-file`, ни
-`bun --no-env-file x` (Bun 1.4.3). Помог бы только shebang `#!/usr/bin/env -S bun --no-env-file`, а `env -S` есть
-не везде (busybox) — установщик там не запустился бы вовсе. Сам он проверок проекта не запускает. Так же —
-`bunx @miroshnik/elves@<версия> spec-…` в джобах CI без зависимостей проекта (`ci.md` скилла spec, #559): в чекауте
-CI env-файлов с ключами нет — `.env.local` не коммитят.
+`bunx` (`bunx @miroshnik/elves …`, запасной путь `bunx github:miroshnik/elves …`, хук `SessionStart`, джобы CI без
+зависимостей проекта — `bunx @miroshnik/elves@<версия> spec-…`, `ci.md` скилла spec, #559) флаг не принимает — ни
+`bunx --no-env-file`, ни `bun --no-env-file x` (Bun 1.4.3), — но запускает bin его шебангом: env-файлы снимает шебанг
+(#592).
 
 `elves slot --for $$` шима очереди `.agents/slot.sh`: `elves` только печатает переменные очереди, а команда идёт в
-shell скрипта, без env-файлов Bun. Обёртка Yarn 2+ `elves slot '<команда>'` в охвате: там команда идёт в процессе
-`elves`.
+shell скрипта, без env-файлов Bun.

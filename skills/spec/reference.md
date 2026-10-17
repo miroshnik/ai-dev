@@ -501,11 +501,11 @@ the project's CI" below.
    lines; then the reports and `spec:doc --strict`; if the format changed — CI
    publishes the new one after the merge.
 2. **Scripts** in `package.json` and CI — the package's `elves` (Bun runs
-   TypeScript itself, for any project `type`) under `bun --no-env-file`: the
-   bin's `#!/usr/bin/env bun` would load the project's env files, and the
-   script would pass their keys on to `gh`, `git` and the checked command
-   (`tests/standards/no-env-file`); a job without the project's
-   dependencies — `bunx @miroshnik/elves@<version> spec-…` (`ci.md`).
+   TypeScript itself, for any project `type`) under `bun --no-env-file`: `bun`
+   reads the bin itself, past its shebang, and without the flag would load the
+   project's env files — the script would pass their keys on to `gh`, `git`
+   and the checked command (`tests/standards/no-env-file`); a job without the
+   project's dependencies — `bunx @miroshnik/elves@<version> spec-…` (`ci.md`).
    Reports — those the project has:
    ```json
    "spec:doc": "bun --no-env-file node_modules/.bin/elves spec-doc .spec-report.json .spec-playwright.json .spec-claims.xml --strict",

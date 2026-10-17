@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/bin/sh
+':' //; exec bun --no-env-file "$0" "$@"
 /**
  * elves — installs the flow: the shared rules, references and all Elves skills into a project or onto the machine;
  * checks whether an install has fallen behind the latest Elves release, updates it and cuts a release.
@@ -13,6 +14,11 @@
  *   bun <Elves clone>/bin/elves.ts release             — cut a release: a tag and the list of flow changes
  *   bun <Elves checkout>/bin/elves.ts pack <tag>       — CI on the release tag: the npm package @miroshnik/elves
  *   elves spec-doc … · elves slot --for <PID>          — a project with the package: the skills' scripts at its version
+ *
+ * The shebang goes through `sh`: the second line — `exec bun --no-env-file` for sh, a string and a comment for TypeScript
+ * — starts Bun without the project's env files however the bin is called (`elves`, `node_modules/.bin/elves`, a
+ * package.json script, bunx), and `elves slot '<command>'` doesn't pass their keys on to the command; not `#!/usr/bin/env
+ * -S bun --no-env-file` — `env -S` isn't everywhere (busybox) (tests/standards/no-env-file, #592).
  *
  * The layout is as with skills (`npx skills`), on the machine (`-g`, #557): the canon `~/.agents/elves/` (AGENTS.md,
  * claude/CLAUDE.md, docs/*.md) with Claude Code's rules `~/.claude/rules/elves*.md` — they load without the
@@ -816,9 +822,9 @@ const COPY_KNIP_HINTS = /(?:\.\/)?\.agents\/skills\/spec\/scripts\/knip-hints\.c
 const PACKAGE_KNIP_HINTS = `node_modules/${PACKAGE}/skills/spec/scripts/knip-hints.cjs`;
 
 /**
- * The package's script as a command, in package.json and CI alike: the bin `elves` is this file with `#!/usr/bin/env
- * bun` — bare, Bun loads the project's env files into it, and the script passes their keys on to `gh`, `git` and the
- * checked command (tests/standards/no-env-file, #596); a step of GitHub Actions doesn't see `node_modules/.bin`, and
+ * The package's script as a command, in package.json and CI alike: `bun` reads the bin itself, past its shebang, and
+ * without the flag would load the project's env files into it — the script would pass their keys on to `gh`, `git` and
+ * the checked command (tests/standards/no-env-file, #596); a step of GitHub Actions doesn't see `node_modules/.bin`, and
  * `bunx elves` without the package in node_modules would fetch someone else's `elves` from npm (#558, question 2).
  */
 const PACKAGE_RUN = "bun --no-env-file node_modules/.bin/elves";
